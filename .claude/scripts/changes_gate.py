@@ -287,6 +287,33 @@ def check_r04_foreshadowing(changes: dict[str, Any], db_path: Path) -> list[Fail
     return failures
 
 
+MAX_TRUST_DELTA = 30
+
+
+def check_r05_relationships(changes: dict[str, Any], db_path: Path) -> list[Failure]:
+    """R5: 单章关系信任度变化不超过 ±MAX_TRUST_DELTA。"""
+    failures = []
+    for i, ev in enumerate(changes.get("character_state_changes", []) or []):
+        if not isinstance(ev, dict):
+            continue
+        rel_changes = ev.get("relationship_changes", {}) or {}
+        if not isinstance(rel_changes, dict):
+            continue
+        for target, info in rel_changes.items():
+            if not isinstance(info, dict):
+                continue
+            delta = info.get("trust_delta")
+            if delta is None:
+                continue
+            if abs(delta) > MAX_TRUST_DELTA:
+                failures.append(Failure(
+                    rule_id="R5",
+                    severity="blocking",
+                    message=f"character_state_changes[{i}].relationship_changes['{target}']: trust_delta={delta} 超过 ±{MAX_TRUST_DELTA}",
+                ))
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CHANGES 协议门禁")
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
@@ -310,6 +337,7 @@ def main() -> int:
         if args.db:
             check_failures.extend(check_r03_entities(parsed, Path(args.db)))
             check_failures.extend(check_r04_foreshadowing(parsed, Path(args.db)))
+            check_failures.extend(check_r05_relationships(parsed, Path(args.db)))
         result.failures.extend(check_failures)
         result.passed = not any(f.severity == "blocking" for f in result.failures)
 
