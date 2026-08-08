@@ -16,7 +16,8 @@ def test_db(tmp_path: Path) -> Path:
             type TEXT,
             canonical_name TEXT,
             is_protagonist INTEGER DEFAULT 0,
-            is_archived INTEGER DEFAULT 0
+            is_archived INTEGER DEFAULT 0,
+            current_json TEXT
         );
         CREATE TABLE aliases (
             alias TEXT,
@@ -45,11 +46,11 @@ def test_db(tmp_path: Path) -> Path:
         );
 
         INSERT INTO entities VALUES
-            ('C-001', 'character', '陈默', 1, 0),
-            ('C-002', 'character', '王玄之', 0, 0),
-            ('L-001', 'location', '论剑台', 0, 0),
-            ('F-001', 'faction', '青云宗', 0, 0),
-            ('I-001', 'item', '照夜古镜', 0, 0);
+            ('C-001', 'character', '陈默', 1, 0, NULL),
+            ('C-002', 'character', '王玄之', 0, 0, NULL),
+            ('L-001', 'location', '论剑台', 0, 0, NULL),
+            ('F-001', 'faction', '青云宗', 0, 0, NULL),
+            ('I-001', 'item', '照夜古镜', 0, 0, NULL);
 
         INSERT INTO aliases VALUES
             ('陈默', 'C-001', 'character'),

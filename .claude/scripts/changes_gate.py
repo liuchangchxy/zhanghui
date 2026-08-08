@@ -383,6 +383,74 @@ def check_r06_unregistered(text: str, changes: dict[str, Any], registered: set[s
     return []
 
 
+# R7: 物品状态机——合法转移图
+ITEM_STATE_TRANSITIONS: dict[str | None, set[str]] = {
+    None: {"active", "lost", "destroyed", "sealed"},
+    "active": {"active", "lost", "destroyed", "sealed"},
+    "lost": {"active", "destroyed"},
+    "sealed": {"active", "destroyed", "lost"},
+    "destroyed": set(),  # destroyed 是终态
+}
+
+
+def _load_item_state(db_path: Path) -> dict[str, str]:
+    """从 index.db 读取每个 item 的当前 status。
+
+    兼容 entities.current_json 字段（JSON 里有 status key）。
+    """
+    if not Path(db_path).exists():
+        return {}
+    conn = sqlite3.connect(db_path)
+    state: dict[str, str] = {}
+    try:
+        for row in conn.execute(
+            "SELECT id, current_json FROM entities WHERE type='item'"
+        ):
+            item_id, raw_json = row[0], row[1]
+            if not raw_json:
+                continue
+            import json as _json
+            try:
+                cur = _json.loads(raw_json)
+            except _json.JSONDecodeError:
+                continue
+            if isinstance(cur, dict):
+                status = cur.get("status")
+                if isinstance(status, str):
+                    state[item_id] = status
+    except sqlite3.OperationalError:
+        pass
+    finally:
+        conn.close()
+    return state
+
+
+def check_r07_item_state(changes: dict[str, Any], db_path: Path) -> list[Failure]:
+    """R7: 物品状态转移合法——按 ITEM_STATE_TRANSITIONS 校验。"""
+    failures: list[Failure] = []
+    item_state = _load_item_state(db_path)
+    for i, ev in enumerate(changes.get("item_transfers", []) or []):
+        if not isinstance(ev, dict):
+            continue
+        item_id = ev.get("item_id")
+        new_status = ev.get("new_status")
+        if not item_id or not new_status:
+            continue  # 没 ID/新状态就不强制校验
+        prev_status = item_state.get(item_id)
+        legal_next = ITEM_STATE_TRANSITIONS.get(prev_status, set())
+        # legal_next 为空（如 destroyed 是终态）或 new_status 不在合法集合内，均视为非法
+        if not legal_next or new_status not in legal_next:
+            failures.append(Failure(
+                rule_id="R7",
+                severity="blocking",
+                message=(
+                    f"item_transfers[{i}]: '{item_id}' 从 '{prev_status}' → "
+                    f"'{new_status}' 非法转移，合法目标：{sorted(legal_next)}"
+                ),
+            ))
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CHANGES 协议门禁")
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
@@ -407,6 +475,7 @@ def main() -> int:
             check_failures.extend(check_r03_entities(parsed, Path(args.db)))
             check_failures.extend(check_r04_foreshadowing(parsed, Path(args.db)))
             check_failures.extend(check_r05_relationships(parsed, Path(args.db)))
+            check_failures.extend(check_r07_item_state(parsed, Path(args.db)))
         result.failures.extend(check_failures)
         result.passed = not any(f.severity == "blocking" for f in result.failures)
 
