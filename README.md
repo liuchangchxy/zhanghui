@@ -1,0 +1,72 @@
+# ai写小说工具开发
+
+为 webnovel-writer Claude Code 插件做的个人 skill 叠加层。解决三个具体痛点：
+1. 长篇一致性崩坏
+2. AI 味重
+3. 流程繁琐
+
+## 项目结构
+
+```
+ai写小说工具开发/
+├── .claude/                  ← 核心实现（git tracked）
+│   ├── scripts/
+│   │   ├── changes_gate.py        CHANGES 协议 8 项校验 (R1-R8)
+│   │   ├── text_humanizer.py      AI 词/弱化副词检测（from novel-creator-skill, MIT）
+│   │   ├── check-ai-patterns.js   破折号/预告腔等实战漏网句式（from oh-story, MIT）
+│   │   ├── normalize-punctuation.js  标点规范化
+│   │   └── tests/                 40 个 pytest 测试
+│   ├── references/
+│   │   ├── changes-protocol.md    8 字段定义
+│   │   ├── changes-examples.md    完整/极简/错误示例
+│   │   └── deslop/                3 份 anti-slop 参考文档
+│   └── skills/
+│       ├── webnovel-write/skill.md    改造：注入 Step 4.5 + 4.6
+│       ├── webnovel-fast-write/       新增：跳过 reviewer 的快车道
+│       └── webnovel-deslop-check/     新增：写后独立扫描
+├── docs/
+│   └── superpowers/
+│       ├── specs/2026-08-08-webnovel-writer-fork-design.md
+│       └── plans/2026-08-08-webnovel-writer-fork-impl.md
+├── ai-webnovel-repos/        本地参考（不在 git 里）
+└── 小说写作/                 工作目录（不在 git 里）
+```
+
+## 安装（已经是项目级 skill，本仓库不能直接复用）
+
+要把这个工具用到你自己的项目，需要：
+
+1. 新建一个项目文件夹，比如 `~/novel-test-1/`
+2. 在那个文件夹里建软链：
+   ```bash
+   ln -sf ~/ai写小说工具开发/.claude ./claude
+   ```
+3. 启动 `claude`（新会话）
+4. 项目级 skill 会被自动加载，无需修改
+
+测试环境已建好：`~/novel-test-1/`，里面有 `测试指南.md`。
+
+## 文档
+
+- **设计文档**：`docs/superpowers/specs/2026-08-08-webnovel-writer-fork-design.md`
+- **实施计划**：`docs/superpowers/plans/2026-08-08-webnovel-writer-fork-impl.md`
+
+## 测试
+
+```bash
+cd .claude/scripts && python3 -m pytest tests/ -v
+```
+
+40 个测试覆盖 R1-R8 单元校验 + 10 个集成测试（5 正例 + 5 反例）。
+
+## 三个 skill 的功能
+
+| Skill | 跳过什么 | 保留什么 |
+|---|---|---|
+| `/webnovel-write` | 无（完整流程） | 全部 |
+| `/webnovel-fast-write` | Step 2B 风格转译 + Step 3 reviewer + Step 4 polish | Step 4.5 CHANGES + 4.6 anti-slop |
+| `/webnovel-deslop-check` | 写流程 | 仅扫描任意已有章节 |
+
+## CHANGES 协议
+
+每章末尾追加 `<chapter_changes>...</chapter_changes>` 块，8 个顶级字段声明本章对设定集/人物/物品/伏笔的所有变更。详见 `changes-protocol.md`。
