@@ -44,3 +44,41 @@ def test_r02_fails_on_invalid_item_status():
     failures = check_r02_enums(changes)
     assert len(failures) == 1
     assert failures[0].rule_id == "R2"
+
+
+def test_r02_fails_on_invalid_time_progression_importance():
+    """Issue 1: time_progression.importance must validate against ENUM_TIME_IMPORTANCE."""
+    changes = {
+        "time_progression": {"importance": "urgent"}  # 非法
+    }
+    failures = check_r02_enums(changes)
+    assert len(failures) == 1
+    assert failures[0].rule_id == "R2"
+    assert "time_progression.importance" in failures[0].message
+
+
+def test_r02_fails_on_none_importance_in_new_plot_points():
+    """Issue 3: importance is REQUIRED in new_plot_points (consistent with character_state_changes)."""
+    changes = {
+        "new_plot_points": [
+            {"importance": None}  # None 应触发失败
+        ]
+    }
+    failures = check_r02_enums(changes)
+    assert len(failures) == 1
+    assert failures[0].rule_id == "R2"
+    assert "new_plot_points" in failures[0].message
+
+
+def test_r02_includes_valid_set_in_message_for_new_plot_points():
+    """Issue 2: failure message for storyline must include sorted valid set."""
+    changes = {
+        "new_plot_points": [
+            {"storyline": "foo", "importance": "normal"}  # 非法 storyline；importance 提供有效值避免噪声
+        ]
+    }
+    failures = check_r02_enums(changes)
+    assert len(failures) == 1
+    assert failures[0].rule_id == "R2"
+    # sorted(ENUM_STORYLINE) == ['character_arc', 'main', 'sub']
+    assert "['character_arc', 'main', 'sub']" in failures[0].message

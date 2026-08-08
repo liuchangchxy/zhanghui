@@ -163,15 +163,25 @@ def check_r02_enums(changes: dict[str, Any]) -> list[Failure]:
                 failures.append(Failure(
                     rule_id="R2",
                     severity="blocking",
-                    message=f"new_plot_points[{i}].storyline='{sl}' 非法",
+                    message=f"new_plot_points[{i}].storyline='{sl}' 非法，取值应为 {sorted(ENUM_STORYLINE)}",
                 ))
             imp = ev.get("importance")
-            if imp is not None and imp not in ENUM_IMPORTANCE:
+            if imp not in ENUM_IMPORTANCE:
                 failures.append(Failure(
                     rule_id="R2",
                     severity="blocking",
-                    message=f"new_plot_points[{i}].importance='{imp}' 非法",
+                    message=f"new_plot_points[{i}].importance='{imp}' 非法，取值应为 {sorted(ENUM_IMPORTANCE)}",
                 ))
+
+    tp = changes.get("time_progression")
+    if isinstance(tp, dict):
+        tpi = tp.get("importance")
+        if tpi not in ENUM_TIME_IMPORTANCE:
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"time_progression.importance='{tpi}' 非法，取值应为 {sorted(ENUM_TIME_IMPORTANCE)}",
+            ))
 
     return failures
 
