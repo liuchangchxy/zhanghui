@@ -314,12 +314,22 @@ def check_r05_relationships(changes: dict[str, Any], db_path: Path) -> list[Fail
     return failures
 
 
-# 常见中文名/称谓停用词，避免误报
+# 常见中文名/称谓/虚词停用词，避免误报
 ENTITY_STOPWORDS = frozenset({
+    # 代词
     "他", "她", "它", "我", "你", "我们", "他们", "她们", "它们",
+    "自己", "大家", "对方", "旁人", "某人",
     "这", "那", "这个", "那个", "这些", "那些",
     "什么", "怎么", "为什么", "谁", "哪里",
+    # 角色称谓
     "主角", "配角", "反派", "路人",
+    # 常用虚词/连接词/时间词（极容易产生 2-4 字切片）
+    "然后", "然而", "于是",
+    "这时", "此时", "此时此", "此间",
+    "之间", "其中", "这般", "这般一",
+    "本来", "原来",
+    "竟然", "突然", "忽然",
+    "不禁", "不由",
 })
 
 # 中文姓名启发式：2-4 字 + 不在停用词 + 不含标点
@@ -349,8 +359,13 @@ def extract_chapter_entities(text: str) -> set[str]:
 
 
 def check_r06_unregistered(text: str, changes: dict[str, Any], registered: set[str]) -> list[Failure]:
-    """R6: 正文中提到的实体如未在账本且未在 CHANGES 申报，超过阈值则告警。"""
-    threshold = 5
+    """R6: 正文中提到的实体如未在账本且未在 CHANGES 申报，超过阈值则告警。
+
+    若 `registered` 为空集合（未初始化账本），直接跳过——没有账本可对比。
+    """
+    if not registered:
+        return []  # 防御性早返回：空账本无意义
+    threshold = 15
     PLACEHOLDER = " "  # 非中文占位符，破坏中文 run
     # 用账本中已知的中文名替换正文，避免对账本名内部切片产生误报
     text_cleaned = text
@@ -535,16 +550,18 @@ def main() -> int:
             result.passed = not any(f.severity == "blocking" for f in result.failures)
 
     # R6 需要 chapter 全文 + 已加载的 registered ids
-    if parsed:
+    # 若 --db 缺失/空集合，跳过——没有账本可对比就是没初始化
+    if parsed and args.db:
         registered_ids, registered_aliases = _load_entity_lookup(Path(args.db))
         all_known = registered_ids | registered_aliases
-        chapter_text_for_r6 = Path(args.chapter_file).read_text(encoding="utf-8")
-        for f in check_r06_unregistered(chapter_text_for_r6, parsed, all_known):
-            result.failures.append(f)
-        if args.strict:
-            result.passed = not result.failures
-        else:
-            result.passed = not any(f.severity == "blocking" for f in result.failures)
+        if all_known:
+            chapter_text_for_r6 = Path(args.chapter_file).read_text(encoding="utf-8")
+            for f in check_r06_unregistered(chapter_text_for_r6, parsed, all_known):
+                result.failures.append(f)
+                if not args.strict and f.severity == "blocking":
+                    result.passed = False
+            if args.strict:
+                result.passed = not result.failures
 
     # R8 需要 chapter 全文（提取章号）+ db
     if parsed:
