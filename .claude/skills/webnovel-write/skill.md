@@ -191,6 +191,16 @@ cat "${SKILL_ROOT}/../../references/shared/core-constraints.md"
 输出：
 - 章节草稿（可进入 Step 2B 或 Step 3）。
 
+### Step 2A 末尾追加：CHANGES 协议声明
+
+Step 2A 生成章节正文后，**必须在正文末尾追加一个 `<chapter_changes>...</chapter_changes>` 块**，
+包含本章对设定集/人物/物品/伏笔的所有结构化变更。
+
+字段定义见 `.claude/references/changes-protocol.md`。
+示例见 `.claude/references/changes-examples.md`。
+
+8 个顶级字段必须全部显式存在（即使无变化也要写 `[]` 或 `null`）。
+
 ### Step 2B：风格适配（`--fast` / `--minimal` 跳过）
 
 执行前加载：
@@ -273,6 +283,41 @@ cat "${SKILL_ROOT}/references/writing/typesetting.md"
 输出：
 - 润色后正文（覆盖章节文件）
 - 变更摘要（至少含：修复项、保留项、deviation、`anti_ai_force_check`）
+
+### Step 4.5：CHANGES 协议门禁
+
+执行命令：
+
+```bash
+python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/changes_gate.py \
+    --chapter-file 正文/第{NNNN}章-{title_safe}.md \
+    --db .webnovel/index.db \
+    --json
+```
+
+**判定逻辑**：
+- `passed=true`：进入 Step 5（data-agent）。
+- `passed=false`：读取 `failures` 列表，把每条规则的报错反馈给主流程 LLM，要求**只重写 `<chapter_changes>` 块**（不改正文）。最多 2 次。
+- 2 次仍未通过：记录到 `.webnovel/tmp/changes_gate_failures.jsonl`，人工介入后走 `/webnovel-resume`。
+
+### Step 4.6：anti-slop 扫描
+
+并行执行两个扫描器：
+
+```bash
+python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/text_humanizer.py \
+    detect --chapter-file 正文/第{NNNN}章-{title_safe}.md
+
+node ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/check-ai-patterns.js \
+    --check --fail-on=blocking \
+    正文/第{NNNN}章-{title_safe}.md
+```
+
+**判定逻辑**：
+- blocking 命中：退回 Step 4 重写正文（**保留 CHANGES 块**）。最多 2 次。
+- advisory 命中：写入 `.story-system/anti_patterns.json`，继续流程。
+
+可选关闭：在命令前加 `--skip-deslop`。
 
 ### Step 5：Data Agent（状态与索引回写）
 
