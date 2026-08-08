@@ -2,6 +2,8 @@
 import json
 import subprocess
 import sys
+import tempfile
+import uuid
 from pathlib import Path
 
 import pytest
@@ -11,19 +13,22 @@ GATE_SCRIPT = ROOT / "scripts" / "changes_gate.py"
 
 
 def run_gate(chapter_text: str, db_path: Path, *extra_args: str) -> dict:
-    chapter_file = Path("/tmp/_test_chapter.md")
-    chapter_file.write_text(chapter_text, encoding="utf-8")
-    cmd = [
-        sys.executable, str(GATE_SCRIPT),
-        "--chapter-file", str(chapter_file),
-        "--db", str(db_path),
-        "--json",
-        *extra_args,
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode not in (0, 1):
-        pytest.fail(f"gate crashed: stderr={result.stderr}")
-    return json.loads(result.stdout)
+    chapter_file = Path(tempfile.gettempdir()) / f"_test_chapter_{uuid.uuid4().hex[:8]}.md"
+    try:
+        chapter_file.write_text(chapter_text, encoding="utf-8")
+        cmd = [
+            sys.executable, str(GATE_SCRIPT),
+            "--chapter-file", str(chapter_file),
+            "--db", str(db_path),
+            "--json",
+            *extra_args,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode not in (0, 1):
+            pytest.fail(f"gate crashed: stderr={result.stderr}")
+        return json.loads(result.stdout)
+    finally:
+        chapter_file.unlink(missing_ok=True)
 
 
 def make_chapter(changes_obj) -> str:
