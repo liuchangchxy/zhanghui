@@ -186,10 +186,67 @@ def check_r02_enums(changes: dict[str, Any]) -> list[Failure]:
     return failures
 
 
+def _load_entity_lookup(db_path: Path) -> tuple[set[str], set[str]]:
+    """从 index.db 加载所有合法 ID 和 alias。"""
+    if not Path(db_path).exists():
+        # db 不存在时返回空集——所有引用都会被标记为未知（由调用方决定是否阻塞）
+        return set(), set()
+    conn = sqlite3.connect(db_path)
+    ids = set()
+    aliases = set()
+    try:
+        for row in conn.execute("SELECT id FROM entities WHERE is_archived = 0"):
+            ids.add(row[0])
+        for row in conn.execute("SELECT alias FROM aliases"):
+            aliases.add(row[0])
+    finally:
+        conn.close()
+    return ids, aliases
+
+
+def check_r03_entities(changes: dict[str, Any], db_path: Path) -> list[Failure]:
+    """R3: 实体引用合法（ID 或 alias 都接受）。"""
+    failures = []
+    valid_ids, valid_aliases = _load_entity_lookup(db_path)
+    if not valid_ids and not valid_aliases:
+        # db 不可用，跳过此规则
+        return failures
+
+    def check_ref(ref: Any, location: str) -> None:
+        if not isinstance(ref, str):
+            return
+        if ref in valid_ids or ref in valid_aliases:
+            return
+        failures.append(Failure(
+            rule_id="R3",
+            severity="blocking",
+            message=f"{location}: 引用 '{ref}' 不在账本",
+        ))
+
+    for i, ev in enumerate(changes.get("character_state_changes", []) or []):
+        if isinstance(ev, dict):
+            check_ref(ev.get("character_id"), f"character_state_changes[{i}].character_id")
+
+    for i, ev in enumerate(changes.get("new_plot_points", []) or []):
+        if isinstance(ev, dict):
+            for j, char_id in enumerate(ev.get("involved_characters", []) or []):
+                check_ref(char_id, f"new_plot_points[{i}].involved_characters[{j}]")
+
+    for i, ev in enumerate(changes.get("location_state_changes", []) or []):
+        if isinstance(ev, dict):
+            check_ref(ev.get("location_id"), f"location_state_changes[{i}].location_id")
+
+    for i, ev in enumerate(changes.get("faction_state_changes", []) or []):
+        if isinstance(ev, dict):
+            check_ref(ev.get("faction_id"), f"faction_state_changes[{i}].faction_id")
+
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CHANGES 协议门禁")
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
-    parser.add_argument("--db", required=True, help="webnovel-writer index.db 路径")
+    parser.add_argument("--db", default="", help="webnovel-writer index.db 路径（可选，未初始化项目可省略）")
     parser.add_argument("--json", action="store_true", help="输出 JSON 格式")
     parser.add_argument("--rule", help="只跑指定规则（如 R1）")
     parser.add_argument("--strict", action="store_true", help="advisory 也算 blocking")
@@ -206,6 +263,8 @@ def main() -> int:
         check_failures = []
         for check_fn in (check_r01_protocol, check_r02_enums):
             check_failures.extend(check_fn(parsed))
+        if args.db:
+            check_failures.extend(check_r03_entities(parsed, Path(args.db)))
         result.failures.extend(check_failures)
         result.passed = not any(f.severity == "blocking" for f in result.failures)
 
