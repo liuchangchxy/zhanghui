@@ -59,11 +59,15 @@ class GateResult:
 
 
 def extract_changes_block(chapter_text: str) -> str | None:
-    """从章节文本里识别 CHANGES 容器。"""
+    """从章节文本里识别 CHANGES 容器。
+
+    当 LLM 给出多个候选块时，采用最后一个（修正版）。
+    """
     for pattern in CHANGE_PATTERNS:
-        m = pattern.search(chapter_text)
-        if m:
-            return m.group(1).strip()
+        matches = pattern.findall(chapter_text)
+        if matches:
+            # Use the LAST block (when LLM provides alternatives, the last is the corrected one)
+            return matches[-1].strip()
     # 兜底：末尾 JSON
     tail = chapter_text.rstrip().split("\n\n")[-1].strip()
     if tail.startswith("{") and tail.endswith("}"):
@@ -83,6 +87,8 @@ def repair_changes_json(raw: str) -> str:
     # 单引号 → 双引号（仅在键/值的引号位置）
     s = re.sub(r"'([^'\n]+?)'\s*:", r'"\1":', s)
     s = re.sub(r":\s*'([^'\n]+?)'", r': "\1"', s)
+    # Remove trailing commas before closing brackets/braces（LLM 经常输出末尾逗号）
+    s = re.sub(r",(\s*[}\]])", r"\1", s)
     # 缺尾引号自动闭合：扫描所有 key 后面是否缺引号
     # （简化版：依赖 LLM 输出时遵守 json 格式；此处不实现复杂修复）
     return s
@@ -122,56 +128,133 @@ def check_r01_protocol(changes: dict[str, Any]) -> list[Failure]:
     return failures
 
 
+def _iter_array_field(
+    changes: dict[str, Any],
+    field_name: str,
+    failures: list[Failure] | None = None,
+    rule_id: str = "R2",
+) -> list[tuple[int, Any]]:
+    """迭代 array field。
+
+    - field 缺失或 None：返回空（兼容历史 `or []` 语义，不报错）
+    - field 是 list：正常 enumerate
+    - field 是其他类型（bool/dict/str/...）：返回空并可记录 R2 失败
+    """
+    raw = changes.get(field_name)
+    if raw is None:
+        return []  # 缺失/None — 跳过（历史行为）
+    if not isinstance(raw, list):
+        if failures is not None:
+            failures.append(Failure(
+                rule_id=rule_id,
+                severity="blocking",
+                message=f"{field_name} 必须是数组，当前类型：{type(raw).__name__}",
+            ))
+        return []
+    return list(enumerate(raw))
+
+
 def check_r02_enums(changes: dict[str, Any]) -> list[Failure]:
-    """R2: 枚举值合法。"""
+    """R2: 枚举值合法。
+
+    容忍非 list 类型（bool/dict 不会崩溃），仅在 list 的元素非 dict 时报错。
+    """
     failures = []
 
-    for i, ev in enumerate(changes.get("character_state_changes", []) or []):
-        if isinstance(ev, dict):
-            imp = ev.get("importance")
-            if imp not in ENUM_IMPORTANCE:
-                failures.append(Failure(
-                    rule_id="R2",
-                    severity="blocking",
-                    message=f"character_state_changes[{i}].importance='{imp}' 非法，取值应为 {sorted(ENUM_IMPORTANCE)}",
-                ))
+    for i, ev in _iter_array_field(changes, "character_state_changes", failures):
+        if not isinstance(ev, dict):
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"character_state_changes[{i}] 必须是对象，实际为 {type(ev).__name__}",
+            ))
+            continue
+        imp = ev.get("importance")
+        if imp not in ENUM_IMPORTANCE:
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"character_state_changes[{i}].importance='{imp}' 非法，取值应为 {sorted(ENUM_IMPORTANCE)}",
+            ))
 
-    for i, ev in enumerate(changes.get("foreshadowing_actions", []) or []):
-        if isinstance(ev, dict):
-            act = ev.get("action")
-            if act not in ENUM_ACTION:
-                failures.append(Failure(
-                    rule_id="R2",
-                    severity="blocking",
-                    message=f"foreshadowing_actions[{i}].action='{act}' 非法，取值应为 {sorted(ENUM_ACTION)}",
-                ))
+    for i, ev in _iter_array_field(changes, "foreshadowing_actions", failures):
+        if not isinstance(ev, dict):
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"foreshadowing_actions[{i}] 必须是对象，实际为 {type(ev).__name__}",
+            ))
+            continue
+        act = ev.get("action")
+        # 缺失或 null action 跳过 — R4 会通过 foreshadow_id 校验
+        if act is None:
+            continue
+        if act not in ENUM_ACTION:
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"foreshadowing_actions[{i}].action='{act}' 非法，取值应为 {sorted(ENUM_ACTION)}",
+            ))
 
-    for i, ev in enumerate(changes.get("item_transfers", []) or []):
-        if isinstance(ev, dict):
-            st = ev.get("new_status")
-            if st not in ENUM_ITEM_STATUS:
-                failures.append(Failure(
-                    rule_id="R2",
-                    severity="blocking",
-                    message=f"item_transfers[{i}].new_status='{st}' 非法，取值应为 {sorted(ENUM_ITEM_STATUS)}",
-                ))
+    for i, ev in _iter_array_field(changes, "item_transfers", failures):
+        if not isinstance(ev, dict):
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"item_transfers[{i}] 必须是对象，实际为 {type(ev).__name__}",
+            ))
+            continue
+        st = ev.get("new_status")
+        # 缺失或 null new_status 跳过 — R7 也会容忍
+        if st is None:
+            continue
+        if st not in ENUM_ITEM_STATUS:
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"item_transfers[{i}].new_status='{st}' 非法，取值应为 {sorted(ENUM_ITEM_STATUS)}",
+            ))
 
-    for i, ev in enumerate(changes.get("new_plot_points", []) or []):
-        if isinstance(ev, dict):
-            sl = ev.get("storyline")
-            if sl is not None and sl not in ENUM_STORYLINE:
-                failures.append(Failure(
-                    rule_id="R2",
-                    severity="blocking",
-                    message=f"new_plot_points[{i}].storyline='{sl}' 非法，取值应为 {sorted(ENUM_STORYLINE)}",
-                ))
-            imp = ev.get("importance")
-            if imp not in ENUM_IMPORTANCE:
-                failures.append(Failure(
-                    rule_id="R2",
-                    severity="blocking",
-                    message=f"new_plot_points[{i}].importance='{imp}' 非法，取值应为 {sorted(ENUM_IMPORTANCE)}",
-                ))
+    for i, ev in _iter_array_field(changes, "new_plot_points", failures):
+        if not isinstance(ev, dict):
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"new_plot_points[{i}] 必须是对象，实际为 {type(ev).__name__}",
+            ))
+            continue
+        sl = ev.get("storyline")
+        if sl is not None and sl not in ENUM_STORYLINE:
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"new_plot_points[{i}].storyline='{sl}' 非法，取值应为 {sorted(ENUM_STORYLINE)}",
+            ))
+        imp = ev.get("importance")
+        if imp not in ENUM_IMPORTANCE:
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"new_plot_points[{i}].importance='{imp}' 非法，取值应为 {sorted(ENUM_IMPORTANCE)}",
+            ))
+
+    for i, ev in _iter_array_field(changes, "location_state_changes", failures):
+        if not isinstance(ev, dict):
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"location_state_changes[{i}] 必须是对象，实际为 {type(ev).__name__}",
+            ))
+            continue
+
+    for i, ev in _iter_array_field(changes, "faction_state_changes", failures):
+        if not isinstance(ev, dict):
+            failures.append(Failure(
+                rule_id="R2",
+                severity="blocking",
+                message=f"faction_state_changes[{i}] 必须是对象，实际为 {type(ev).__name__}",
+            ))
+            continue
 
     tp = changes.get("time_progression")
     if isinstance(tp, dict):
@@ -186,31 +269,47 @@ def check_r02_enums(changes: dict[str, Any]) -> list[Failure]:
     return failures
 
 
-def _load_entity_lookup(db_path: Path) -> tuple[set[str], set[str]]:
-    """从 index.db 加载所有合法 ID 和 alias。"""
-    if not Path(db_path).exists():
-        # db 不存在时返回空集——所有引用都会被标记为未知（由调用方决定是否阻塞）
-        return set(), set()
+def _load_entity_lookup(db_path: Path) -> tuple[set[str], set[str], bool]:
+    """从 index.db 加载所有合法 ID 和 alias。
+
+    Returns: (ids, aliases, tables_ok)
+      - tables_ok=False 表示 db 文件缺失或表不存在，调用方应跳过规则。
+      - tables_ok=True 但 ids/aliases 为空表示这是空项目（新项目），调用方**不应**跳过。
+    """
+    if not Path(db_path).is_file():
+        return set(), set(), False
     conn = sqlite3.connect(db_path)
     ids = set()
     aliases = set()
+    tables_ok = False
     try:
-        for row in conn.execute("SELECT id FROM entities WHERE is_archived = 0"):
-            ids.add(row[0])
-        for row in conn.execute("SELECT alias FROM aliases"):
-            aliases.add(row[0])
+        try:
+            # 探针：先快速确认表存在，避免后期崩溃
+            conn.execute("SELECT 1 FROM entities LIMIT 1")
+            conn.execute("SELECT 1 FROM aliases LIMIT 1")
+            tables_ok = True
+            for row in conn.execute("SELECT id FROM entities WHERE is_archived = 0"):
+                ids.add(row[0])
+            for row in conn.execute("SELECT alias FROM aliases"):
+                aliases.add(row[0])
+        except sqlite3.OperationalError:
+            pass  # tables don't exist — treat as unavailable
     finally:
         conn.close()
-    return ids, aliases
+    return ids, aliases, tables_ok
 
 
 def check_r03_entities(changes: dict[str, Any], db_path: Path) -> list[Failure]:
-    """R3: 实体引用合法（ID 或 alias 都接受）。"""
+    """R3: 实体引用合法（ID 或 alias 都接受）。
+
+    Bug 10 修复：也检查 item_transfers[].item_id 和 item_transfers[].from_holder/to_holder。
+    """
     failures = []
-    valid_ids, valid_aliases = _load_entity_lookup(db_path)
-    if not valid_ids and not valid_aliases:
-        # db 不可用，跳过此规则
+    valid_ids, valid_aliases, tables_ok = _load_entity_lookup(db_path)
+    if not tables_ok:
+        # db 不可用（不存在或表缺失），跳过
         return failures
+    # 若 tables_ok=True 但 valid_ids/valid_aliases 都为空（空项目），继续校验（不跳过）
 
     def check_ref(ref: Any, location: str) -> None:
         if not isinstance(ref, str):
@@ -223,48 +322,71 @@ def check_r03_entities(changes: dict[str, Any], db_path: Path) -> list[Failure]:
             message=f"{location}: 引用 '{ref}' 不在账本",
         ))
 
-    for i, ev in enumerate(changes.get("character_state_changes", []) or []):
+    for i, ev in _iter_array_field(changes, "character_state_changes"):
         if isinstance(ev, dict):
             check_ref(ev.get("character_id"), f"character_state_changes[{i}].character_id")
 
-    for i, ev in enumerate(changes.get("new_plot_points", []) or []):
+    for i, ev in _iter_array_field(changes, "new_plot_points"):
         if isinstance(ev, dict):
             for j, char_id in enumerate(ev.get("involved_characters", []) or []):
                 check_ref(char_id, f"new_plot_points[{i}].involved_characters[{j}]")
 
-    for i, ev in enumerate(changes.get("location_state_changes", []) or []):
+    for i, ev in _iter_array_field(changes, "location_state_changes"):
         if isinstance(ev, dict):
             check_ref(ev.get("location_id"), f"location_state_changes[{i}].location_id")
 
-    for i, ev in enumerate(changes.get("faction_state_changes", []) or []):
+    for i, ev in _iter_array_field(changes, "faction_state_changes"):
         if isinstance(ev, dict):
             check_ref(ev.get("faction_id"), f"faction_state_changes[{i}].faction_id")
+
+    # Bug 10: R3 也检查 item_transfers 中的 item_id
+    for i, ev in _iter_array_field(changes, "item_transfers"):
+        if isinstance(ev, dict):
+            check_ref(ev.get("item_id"), f"item_transfers[{i}].item_id")
+            check_ref(ev.get("from_holder"), f"item_transfers[{i}].from_holder")
+            check_ref(ev.get("to_holder"), f"item_transfers[{i}].to_holder")
 
     return failures
 
 
-def _load_foreshadowing_state(db_path: Path) -> dict[str, str]:
-    if not Path(db_path).exists():
-        return {}
+def _load_foreshadowing_state(db_path: Path) -> tuple[dict[str, str], bool]:
+    """Returns: (state_dict, tables_ok)"""
+    if not Path(db_path).is_file():
+        return {}, False
     conn = sqlite3.connect(db_path)
-    state = {}
+    state: dict[str, str] = {}
+    tables_ok = False
     try:
-        for row in conn.execute("SELECT id, status FROM foreshadowing"):
-            state[row[0]] = row[1]
+        try:
+            conn.execute("SELECT 1 FROM foreshadowing LIMIT 1")
+            tables_ok = True
+            for row in conn.execute("SELECT id, status FROM foreshadowing"):
+                state[row[0]] = row[1]
+        except sqlite3.OperationalError:
+            pass
     finally:
         conn.close()
-    return state
+    return state, tables_ok
 
 
 def check_r04_foreshadowing(changes: dict[str, Any], db_path: Path) -> list[Failure]:
-    """R4: 伏笔 ID 必须存在 + 不能重复 payoff。"""
-    failures = []
-    fs_state = _load_foreshadowing_state(db_path)
-    if not fs_state:
-        return failures  # db 不可用，跳过
+    """R4: 伏笔 ID 必须存在 + 不能重复 payoff。
 
-    for i, ev in enumerate(changes.get("foreshadowing_actions", []) or []):
+    Bug 7 修复：fs_state 为空但表存在（空项目）时不跳过。
+    """
+    failures = []
+    fs_state, tables_ok = _load_foreshadowing_state(db_path)
+    if not tables_ok:
+        return failures  # db 不可用（缺失或表不存在），跳过
+    # 若表存在但无伏笔行（空项目），继续校验
+
+    for i, ev in _iter_array_field(changes, "foreshadowing_actions"):
         if not isinstance(ev, dict):
+            failures.append(Failure(
+                rule_id="R4",
+                severity="blocking",
+                message=f"foreshadowing_actions[{i}] 必须是对象，实际为 {type(ev).__name__}",
+            ))
             continue
         fid = ev.get("foreshadow_id")
         action = ev.get("action")
@@ -291,9 +413,12 @@ MAX_TRUST_DELTA = 30
 
 
 def check_r05_relationships(changes: dict[str, Any], db_path: Path) -> list[Failure]:
-    """R5: 单章关系信任度变化不超过 ±MAX_TRUST_DELTA。"""
+    """R5: 单章关系信任度变化不超过 ±MAX_TRUST_DELTA。
+
+    Bug 2 修复：trust_delta 类型守卫（接受 int/float，拒绝 str/list/dict/bool）。
+    """
     failures = []
-    for i, ev in enumerate(changes.get("character_state_changes", []) or []):
+    for i, ev in _iter_array_field(changes, "character_state_changes"):
         if not isinstance(ev, dict):
             continue
         rel_changes = ev.get("relationship_changes", {}) or {}
@@ -304,6 +429,17 @@ def check_r05_relationships(changes: dict[str, Any], db_path: Path) -> list[Fail
                 continue
             delta = info.get("trust_delta")
             if delta is None:
+                continue
+            # 类型守卫：仅接受 int/float，拒绝 bool (Python 中 bool 是 int 的子类)
+            if isinstance(delta, bool) or not isinstance(delta, (int, float)):
+                failures.append(Failure(
+                    rule_id="R5",
+                    severity="blocking",
+                    message=(
+                        f"character_state_changes[{i}].relationship_changes['{target}']"
+                        f".trust_delta={delta!r} 必须是数字，当前类型：{type(delta).__name__}"
+                    ),
+                ))
                 continue
             if abs(delta) > MAX_TRUST_DELTA:
                 failures.append(Failure(
@@ -358,11 +494,20 @@ def extract_chapter_entities(text: str) -> set[str]:
     return candidates
 
 
+def _is_r6_enabled() -> bool:
+    import os
+    return bool(os.environ.get("WEBNOVEL_ENABLE_R6"))
+
+
 def check_r06_unregistered(text: str, changes: dict[str, Any], registered: set[str]) -> list[Failure]:
     """R6: 正文中提到的实体如未在账本且未在 CHANGES 申报，超过阈值则告警。
 
-    若 `registered` 为空集合（未初始化账本），直接跳过——没有账本可对比。
+    **默认禁用**。Bug 4 修复：2-4 字符滑动窗口对任何正常中文正文都会产生
+    大量误报（停用词表的子串、停用词交叉切片等），阈值再高也无意义。
+    通过环境变量 ``WEBNOVEL_ENABLE_R6=1`` 可显式开启。
     """
+    if not _is_r6_enabled():
+        return []  # 默认禁用（参看对抗式审查报告 CRITICAL Bug #4）
     if not registered:
         return []  # 防御性早返回：空账本无意义
     threshold = 15
@@ -413,7 +558,7 @@ def _load_item_state(db_path: Path) -> dict[str, str]:
 
     兼容 entities.current_json 字段（JSON 里有 status key）。
     """
-    if not Path(db_path).exists():
+    if not Path(db_path).is_file():
         return {}
     conn = sqlite3.connect(db_path)
     state: dict[str, str] = {}
@@ -444,7 +589,7 @@ def check_r07_item_state(changes: dict[str, Any], db_path: Path) -> list[Failure
     """R7: 物品状态转移合法——按 ITEM_STATE_TRANSITIONS 校验。"""
     failures: list[Failure] = []
     item_state = _load_item_state(db_path)
-    for i, ev in enumerate(changes.get("item_transfers", []) or []):
+    for i, ev in _iter_array_field(changes, "item_transfers"):
         if not isinstance(ev, dict):
             continue
         item_id = ev.get("item_id")
@@ -477,7 +622,7 @@ def _extract_chapter_number(chapter_text: str) -> int | None:
 
 
 def _load_timeline(db_path: Path) -> dict[int, str]:
-    if not Path(db_path).exists():
+    if not Path(db_path).is_file():
         return {}
     conn = sqlite3.connect(db_path)
     state = {}
@@ -523,11 +668,18 @@ def main() -> int:
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
     parser.add_argument("--db", default="", help="webnovel-writer index.db 路径（可选，未初始化项目可省略）")
     parser.add_argument("--json", action="store_true", help="输出 JSON 格式")
-    parser.add_argument("--rule", help="只跑指定规则（如 R1）")
+    # Bug 11: --rule 已移除（从未实现），用户可通过环境变量控制 R6（WEBNOVEL_ENABLE_R6）
     parser.add_argument("--strict", action="store_true", help="advisory 也算 blocking")
     args = parser.parse_args()
 
-    chapter_text = Path(args.chapter_file).read_text(encoding="utf-8")
+    chapter_path = Path(args.chapter_file)
+    # Bug 12: 用 is_file() 而非 exists()，避免 --chapter-file 指向目录
+    if not chapter_path.is_file():
+        print(json.dumps({"passed": False, "failures": [
+            {"rule_id": "R0", "severity": "blocking", "message": f"章节文件不存在或不是文件：{args.chapter_file}"}
+        ]}, ensure_ascii=False) if args.json else f"FAILED: 章节文件不存在或不是文件：{args.chapter_file}")
+        return 1
+    chapter_text = chapter_path.read_text(encoding="utf-8")
     parsed, err = parse_changes(chapter_text)
     result = GateResult(passed=True, parsed_changes=parsed)
     if err:
@@ -539,37 +691,44 @@ def main() -> int:
         for check_fn in (check_r01_protocol, check_r02_enums):
             check_failures.extend(check_fn(parsed))
         if args.db:
-            check_failures.extend(check_r03_entities(parsed, Path(args.db)))
-            check_failures.extend(check_r04_foreshadowing(parsed, Path(args.db)))
-            check_failures.extend(check_r05_relationships(parsed, Path(args.db)))
-            check_failures.extend(check_r07_item_state(parsed, Path(args.db)))
+            db_p = Path(args.db)
+            # Bug 12: --db 必须为文件而非目录
+            if db_p.is_file():
+                check_failures.extend(check_r03_entities(parsed, db_p))
+                check_failures.extend(check_r04_foreshadowing(parsed, db_p))
+                check_failures.extend(check_r05_relationships(parsed, db_p))
+                check_failures.extend(check_r07_item_state(parsed, db_p))
         result.failures.extend(check_failures)
         if args.strict:
             result.passed = not result.failures
         else:
             result.passed = not any(f.severity == "blocking" for f in result.failures)
 
-    # R6 需要 chapter 全文 + 已加载的 registered ids
-    # 若 --db 缺失/空集合，跳过——没有账本可对比就是没初始化
-    if parsed and args.db:
-        registered_ids, registered_aliases = _load_entity_lookup(Path(args.db))
-        all_known = registered_ids | registered_aliases
-        if all_known:
-            chapter_text_for_r6 = Path(args.chapter_file).read_text(encoding="utf-8")
-            for f in check_r06_unregistered(chapter_text_for_r6, parsed, all_known):
-                result.failures.append(f)
-                if not args.strict and f.severity == "blocking":
-                    result.passed = False
-            if args.strict:
-                result.passed = not result.failures
+    # R6 需要 chapter 全文 + 已加载的 registered ids + 显式开启
+    # Bug 4: R6 默认禁用（高误报），仅在 WEBNOVEL_ENABLE_R6 设置时运行
+    if parsed and args.db and _is_r6_enabled():
+        db_p = Path(args.db)
+        if db_p.is_file():
+            registered_ids, registered_aliases, tables_ok = _load_entity_lookup(db_p)
+            all_known = registered_ids | registered_aliases
+            if all_known:
+                chapter_text_for_r6 = chapter_path.read_text(encoding="utf-8")
+                for f in check_r06_unregistered(chapter_text_for_r6, parsed, all_known):
+                    result.failures.append(f)
+                    if not args.strict and f.severity == "blocking":
+                        result.passed = False
+                if args.strict:
+                    result.passed = not result.failures
 
     # R8 需要 chapter 全文（提取章号）+ db
     if parsed:
-        chapter_text_for_r8 = Path(args.chapter_file).read_text(encoding="utf-8")
+        chapter_text_for_r8 = chapter_text
         chapter_num = _extract_chapter_number(chapter_text_for_r8) or 0
         if args.db:
-            for f in check_r08_timeline(parsed, Path(args.db), chapter_num):
-                result.failures.append(f)
+            db_p = Path(args.db)
+            if db_p.is_file():
+                for f in check_r08_timeline(parsed, db_p, chapter_num):
+                    result.failures.append(f)
         if args.strict:
             result.passed = not result.failures
         else:
