@@ -451,6 +451,58 @@ def check_r07_item_state(changes: dict[str, Any], db_path: Path) -> list[Failure
     return failures
 
 
+# R8: 时间线连贯——本章不应声明与上一章冲突的时间
+import re as _re_time
+
+
+def _extract_chapter_number(chapter_text: str) -> int | None:
+    """从章节文件正文里提取章号。"""
+    m = _re_time.search(r"第\s*(\d+)\s*章", chapter_text)
+    return int(m.group(1)) if m else None
+
+
+def _load_timeline(db_path: Path) -> dict[int, str]:
+    if not Path(db_path).exists():
+        return {}
+    conn = sqlite3.connect(db_path)
+    state = {}
+    try:
+        for row in conn.execute("SELECT chapter, time_anchor FROM timeline ORDER BY chapter"):
+            state[row[0]] = row[1]
+    except sqlite3.OperationalError:
+        pass
+    finally:
+        conn.close()
+    return state
+
+
+def check_r08_timeline(changes: dict[str, Any], db_path: Path, current_chapter: int) -> list[Failure]:
+    """R8: 时间线连贯——本章不应声明与上一章冲突的时间。"""
+    failures = []
+    tp = changes.get("time_progression")
+    if not tp or not isinstance(tp, dict):
+        return failures
+    elapsed = (tp.get("elapsed_time") or "").strip()
+    if not elapsed:
+        return failures
+
+    timeline = _load_timeline(db_path)
+    if not timeline:
+        return failures  # db 不可用跳过
+
+    # 简单启发式：检测"回到"、"倒退"等关键词
+    suspicious_keywords = ["回到", "倒退", "前一年", "三年前", "十年前"]
+    if any(kw in elapsed for kw in suspicious_keywords):
+        # 进一步要求上一章存在
+        if (current_chapter - 1) in timeline:
+            failures.append(Failure(
+                rule_id="R8",
+                severity="advisory",  # 注意：启发式不确定，用 advisory
+                message=f"time_progression.elapsed_time='{elapsed}' 含倒退关键词，请人工确认",
+            ))
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CHANGES 协议门禁")
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
@@ -477,7 +529,10 @@ def main() -> int:
             check_failures.extend(check_r05_relationships(parsed, Path(args.db)))
             check_failures.extend(check_r07_item_state(parsed, Path(args.db)))
         result.failures.extend(check_failures)
-        result.passed = not any(f.severity == "blocking" for f in result.failures)
+        if args.strict:
+            result.passed = not result.failures
+        else:
+            result.passed = not any(f.severity == "blocking" for f in result.failures)
 
     # R6 需要 chapter 全文 + 已加载的 registered ids
     if parsed:
@@ -486,7 +541,22 @@ def main() -> int:
         chapter_text_for_r6 = Path(args.chapter_file).read_text(encoding="utf-8")
         for f in check_r06_unregistered(chapter_text_for_r6, parsed, all_known):
             result.failures.append(f)
-        result.passed = not any(f.severity == "blocking" for f in result.failures)
+        if args.strict:
+            result.passed = not result.failures
+        else:
+            result.passed = not any(f.severity == "blocking" for f in result.failures)
+
+    # R8 需要 chapter 全文（提取章号）+ db
+    if parsed:
+        chapter_text_for_r8 = Path(args.chapter_file).read_text(encoding="utf-8")
+        chapter_num = _extract_chapter_number(chapter_text_for_r8) or 0
+        if args.db:
+            for f in check_r08_timeline(parsed, Path(args.db), chapter_num):
+                result.failures.append(f)
+        if args.strict:
+            result.passed = not result.failures
+        else:
+            result.passed = not any(f.severity == "blocking" for f in result.failures)
 
     if args.json:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
