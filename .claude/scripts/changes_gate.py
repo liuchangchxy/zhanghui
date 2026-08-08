@@ -101,6 +101,81 @@ def parse_changes(chapter_text: str) -> tuple[dict[str, Any] | None, str | None]
     return parsed, None
 
 
+# R1 + R2: 校验
+ENUM_IMPORTANCE = frozenset({"normal", "important", "critical"})
+ENUM_ACTION = frozenset({"setup", "payoff"})
+ENUM_STORYLINE = frozenset({"main", "sub", "character_arc"})
+ENUM_ITEM_STATUS = frozenset({"active", "lost", "destroyed", "sealed"})
+ENUM_TIME_IMPORTANCE = frozenset({"normal", "important", "critical"})
+
+
+def check_r01_protocol(changes: dict[str, Any]) -> list[Failure]:
+    """R1: 8 个顶级字段必须显式存在。"""
+    failures = []
+    for field_name in REQUIRED_TOP_LEVEL_FIELDS:
+        if field_name not in changes:
+            failures.append(Failure(
+                rule_id="R1",
+                severity="blocking",
+                message=f"缺少必填字段：{field_name}",
+            ))
+    return failures
+
+
+def check_r02_enums(changes: dict[str, Any]) -> list[Failure]:
+    """R2: 枚举值合法。"""
+    failures = []
+
+    for i, ev in enumerate(changes.get("character_state_changes", []) or []):
+        if isinstance(ev, dict):
+            imp = ev.get("importance")
+            if imp not in ENUM_IMPORTANCE:
+                failures.append(Failure(
+                    rule_id="R2",
+                    severity="blocking",
+                    message=f"character_state_changes[{i}].importance='{imp}' 非法，取值应为 {sorted(ENUM_IMPORTANCE)}",
+                ))
+
+    for i, ev in enumerate(changes.get("foreshadowing_actions", []) or []):
+        if isinstance(ev, dict):
+            act = ev.get("action")
+            if act not in ENUM_ACTION:
+                failures.append(Failure(
+                    rule_id="R2",
+                    severity="blocking",
+                    message=f"foreshadowing_actions[{i}].action='{act}' 非法，取值应为 {sorted(ENUM_ACTION)}",
+                ))
+
+    for i, ev in enumerate(changes.get("item_transfers", []) or []):
+        if isinstance(ev, dict):
+            st = ev.get("new_status")
+            if st not in ENUM_ITEM_STATUS:
+                failures.append(Failure(
+                    rule_id="R2",
+                    severity="blocking",
+                    message=f"item_transfers[{i}].new_status='{st}' 非法，取值应为 {sorted(ENUM_ITEM_STATUS)}",
+                ))
+
+    for i, ev in enumerate(changes.get("new_plot_points", []) or []):
+        if isinstance(ev, dict):
+            sl = ev.get("storyline")
+            if sl is not None and sl not in ENUM_STORYLINE:
+                failures.append(Failure(
+                    rule_id="R2",
+                    severity="blocking",
+                    message=f"new_plot_points[{i}].storyline='{sl}' 非法",
+                ))
+            imp = ev.get("importance")
+            if imp is not None and imp not in ENUM_IMPORTANCE:
+                failures.append(Failure(
+                    rule_id="R2",
+                    severity="blocking",
+                    message=f"new_plot_points[{i}].importance='{imp}' 非法",
+                ))
+
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CHANGES 协议门禁")
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
@@ -116,6 +191,13 @@ def main() -> int:
     if err:
         result.passed = False
         result.failures.append(Failure(rule_id="R0", severity="blocking", message=err))
+
+    if parsed:
+        check_failures = []
+        for check_fn in (check_r01_protocol, check_r02_enums):
+            check_failures.extend(check_fn(parsed))
+        result.failures.extend(check_failures)
+        result.passed = not any(f.severity == "blocking" for f in result.failures)
 
     if args.json:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
