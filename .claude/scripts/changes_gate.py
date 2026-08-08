@@ -314,6 +314,75 @@ def check_r05_relationships(changes: dict[str, Any], db_path: Path) -> list[Fail
     return failures
 
 
+# 常见中文名/称谓停用词，避免误报
+ENTITY_STOPWORDS = frozenset({
+    "他", "她", "它", "我", "你", "我们", "他们", "她们", "它们",
+    "这", "那", "这个", "那个", "这些", "那些",
+    "什么", "怎么", "为什么", "谁", "哪里",
+    "主角", "配角", "反派", "路人",
+})
+
+# 中文姓名启发式：2-4 字 + 不在停用词 + 不含标点
+ENTITY_PATTERN = re.compile(r"[一-龥]{2,4}")
+_CHINESE_RUN_PATTERN = re.compile(r"[一-龥]+")
+
+
+def extract_chapter_entities(text: str) -> set[str]:
+    """从正文提取可能的实体名（启发式）。
+
+    对每个连续中文 run，枚举所有 2-4 字窗口作为候选。
+    """
+    candidates = set()
+    for run in _CHINESE_RUN_PATTERN.finditer(text):
+        s = run.group()
+        L = len(s)
+        if L < 2:
+            continue
+        for n in (2, 3, 4):
+            if L < n:
+                continue
+            for i in range(L - n + 1):
+                sub = s[i:i+n]
+                if sub not in ENTITY_STOPWORDS:
+                    candidates.add(sub)
+    return candidates
+
+
+def check_r06_unregistered(text: str, changes: dict[str, Any], registered: set[str]) -> list[Failure]:
+    """R6: 正文中提到的实体如未在账本且未在 CHANGES 申报，超过阈值则告警。"""
+    threshold = 5
+    PLACEHOLDER = " "  # 非中文占位符，破坏中文 run
+    # 用账本中已知的中文名替换正文，避免对账本名内部切片产生误报
+    text_cleaned = text
+    for name in registered:
+        if isinstance(name, str) and re.fullmatch(ENTITY_PATTERN, name):
+            if name in text_cleaned:
+                text_cleaned = text_cleaned.replace(name, PLACEHOLDER * len(name))
+
+    mentioned = extract_chapter_entities(text_cleaned)
+
+    # 申报了的实体也算已知
+    declared = set()
+    for ev in changes.get("character_state_changes", []) or []:
+        if isinstance(ev, dict):
+            cid = ev.get("character_id")
+            if cid:
+                declared.add(cid)
+    for ev in changes.get("new_plot_points", []) or []:
+        if isinstance(ev, dict):
+            for cid in ev.get("involved_characters", []) or []:
+                declared.add(cid)
+
+    unregistered = mentioned - registered - declared
+    if len(unregistered) > threshold:
+        return [Failure(
+            rule_id="R6",
+            severity="blocking",
+            message=f"正文中出现 {len(unregistered)} 个未登记实体（阈值 {threshold}）：{sorted(unregistered)[:10]}...",
+        )]
+    return []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CHANGES 协议门禁")
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
@@ -339,6 +408,15 @@ def main() -> int:
             check_failures.extend(check_r04_foreshadowing(parsed, Path(args.db)))
             check_failures.extend(check_r05_relationships(parsed, Path(args.db)))
         result.failures.extend(check_failures)
+        result.passed = not any(f.severity == "blocking" for f in result.failures)
+
+    # R6 需要 chapter 全文 + 已加载的 registered ids
+    if parsed:
+        registered_ids, registered_aliases = _load_entity_lookup(Path(args.db))
+        all_known = registered_ids | registered_aliases
+        chapter_text_for_r6 = Path(args.chapter_file).read_text(encoding="utf-8")
+        for f in check_r06_unregistered(chapter_text_for_r6, parsed, all_known):
+            result.failures.append(f)
         result.passed = not any(f.severity == "blocking" for f in result.failures)
 
     if args.json:
