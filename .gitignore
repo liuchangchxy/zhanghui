@@ -1,0 +1,20 @@
+# Upstream / external repos (do not snapshot — they are read-only references)
+ai-webnovel-repos/
+
+# Upstream skills / plugin sources pulled in for reference only
+.claude/sources/
+.claude/plugins/
+
+# Python / Node build artifacts
+__pycache__/
+*.pyc
+node_modules/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Backup directory (no longer used — git is at root)
+/.claude-backup/
