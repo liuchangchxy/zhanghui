@@ -243,6 +243,50 @@ def check_r03_entities(changes: dict[str, Any], db_path: Path) -> list[Failure]:
     return failures
 
 
+def _load_foreshadowing_state(db_path: Path) -> dict[str, str]:
+    if not Path(db_path).exists():
+        return {}
+    conn = sqlite3.connect(db_path)
+    state = {}
+    try:
+        for row in conn.execute("SELECT id, status FROM foreshadowing"):
+            state[row[0]] = row[1]
+    finally:
+        conn.close()
+    return state
+
+
+def check_r04_foreshadowing(changes: dict[str, Any], db_path: Path) -> list[Failure]:
+    """R4: 伏笔 ID 必须存在 + 不能重复 payoff。"""
+    failures = []
+    fs_state = _load_foreshadowing_state(db_path)
+    if not fs_state:
+        return failures  # db 不可用，跳过
+
+    for i, ev in enumerate(changes.get("foreshadowing_actions", []) or []):
+        if not isinstance(ev, dict):
+            continue
+        fid = ev.get("foreshadow_id")
+        action = ev.get("action")
+        if fid not in fs_state:
+            failures.append(Failure(
+                rule_id="R4",
+                severity="blocking",
+                message=f"foreshadowing_actions[{i}].foreshadow_id='{fid}' 不在账本",
+            ))
+            continue
+        current_status = fs_state[fid]
+        # 状态机：setup 可以反复 setup（强化伏笔），payoff 后不能再 payoff
+        if action == "payoff" and current_status == "paid":
+            failures.append(Failure(
+                rule_id="R4",
+                severity="blocking",
+                message=f"foreshadowing_actions[{i}]: '{fid}' 已被回收，不能再次 payoff",
+            ))
+
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CHANGES 协议门禁")
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
@@ -265,6 +309,7 @@ def main() -> int:
             check_failures.extend(check_fn(parsed))
         if args.db:
             check_failures.extend(check_r03_entities(parsed, Path(args.db)))
+            check_failures.extend(check_r04_foreshadowing(parsed, Path(args.db)))
         result.failures.extend(check_failures)
         result.passed = not any(f.severity == "blocking" for f in result.failures)
 
