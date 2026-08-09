@@ -319,6 +319,14 @@ node ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/check-ai-patterns.js \
 
 可选关闭：在命令前加 `--skip-deslop`。
 
+**重要前提**：
+1. **两个工具都假定输入是 UTF-8 文本**。对 binary / GBK / UTF-16 / 截断 UTF-8 输入，
+   `text_humanizer.py detect` 会把字节当字符处理并输出 `ok: true`（已知限制，
+   工具是外部的，未在 fork 中修复）。若章节文件 > 50KB，应先确认编码。
+2. **anti-slop 是启发式，不是合同**。两个工具的判定可能不一致（humanizer 对
+   long-paragraph 不报警，check-ai-patterns 对 binary 会报警）。blocking 项
+   都需要人工 review 一次，再决定是改稿还是放过。
+
 ### Step 5：Data Agent（状态与索引回写）
 
 使用 Task 调用 `data-agent`，参数：

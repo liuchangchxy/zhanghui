@@ -138,3 +138,82 @@ def test_r03_does_not_crash_on_bool_array(test_db: Path):
     changes = {"item_transfers": True}
     failures = check_r03_entities(changes, test_db)
     assert isinstance(failures, list)
+
+
+# === Bug A 回归（第一性原理 A2.3 / A7.1）：db 不可用时 R3 不再静默跳过 ===
+# 单元层 R3 仍返回空（避免破坏现有测试），但 main() 必须发出 R0 loud fail。
+# 下面 3 个测试通过 CLI 子进程验证 main() 的行为。
+import json
+import subprocess
+import sys
+import tempfile
+import uuid
+
+
+def _run_gate(cli_chapter: str, db_path: Path) -> dict:
+    chapter_file = Path(tempfile.gettempdir()) / f"_r3bug_{uuid.uuid4().hex[:8]}.md"
+    try:
+        chapter_file.write_text(cli_chapter, encoding="utf-8")
+        cmd = [sys.executable, str(Path(__file__).resolve().parent.parent / "changes_gate.py"),
+               "--chapter-file", str(chapter_file),
+               "--db", str(db_path), "--json"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        assert result.returncode in (0, 1), f"rc={result.returncode}; stderr={result.stderr!r}"
+        if not result.stdout.strip():
+            return {}
+        return json.loads(result.stdout)
+    finally:
+        chapter_file.unlink(missing_ok=True)
+
+
+_BUG_A_CHAPTER = """# 第5章
+
+<chapter_changes>
+{"character_state_changes":[{"character_id":"NONEXISTENT","importance":"important"}],"new_plot_points":[],"foreshadowing_actions":[],"location_state_changes":[],"faction_state_changes":[],"time_progression":null,"item_transfers":[],"unresolved_questions":[]}
+</chapter_changes>
+"""
+
+
+def test_r03_fails_when_db_is_dev_null():
+    """A2.3 / A7.1: --db=/dev/null 过去 R3 静默通过 → 现在必须 R0 loud fail。"""
+    if not Path("/dev/null").exists():
+        import pytest
+        pytest.skip("no /dev/null on this platform")
+    data = _run_gate(_BUG_A_CHAPTER, Path("/dev/null"))
+    assert data.get("passed") is False
+    assert any("R0" in f["rule_id"] for f in data.get("failures", []))
+    # 且 R3 **不应该**继续说"未在账本" —— 因为 db 根本无效
+    assert not any("R3" in f["rule_id"] for f in data.get("failures", [])), data
+
+
+def test_r03_fails_when_db_is_etc_passwd():
+    """A2.2 / A7.2: --db=/etc/passwd 过去 DatabaseError traceback → 现在 R0 loud fail。"""
+    if not Path("/etc/passwd").is_file():
+        import pytest
+        pytest.skip("no /etc/passwd on this platform")
+    data = _run_gate(_BUG_A_CHAPTER, Path("/etc/passwd"))
+    assert data.get("passed") is False
+    assert any("R0" in f["rule_id"] for f in data.get("failures", []))
+    assert not any("R3" in f["rule_id"] for f in data.get("failures", [])), data
+
+
+def test_r03_fails_when_db_has_no_entities_table(tmp_path: Path):
+    """A2.3 矩阵: db 缺 entities 表 → R0 loud fail（不再 R3 静默通过）。"""
+    import sqlite3
+    db = tmp_path / "no_entities.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE some_other_table (id TEXT)")
+    conn.commit(); conn.close()
+    data = _run_gate(_BUG_A_CHAPTER, db)
+    assert data.get("passed") is False
+    assert any("R0" in f["rule_id"] for f in data.get("failures", []))
+    assert not any("R3" in f["rule_id"] for f in data.get("failures", [])), data
+
+
+def test_r03_fails_when_db_is_empty_file(tmp_path: Path):
+    """A2.3 矩阵: 0 字节 db → R0 loud fail。"""
+    db = tmp_path / "zero.db"
+    db.write_bytes(b"")
+    data = _run_gate(_BUG_A_CHAPTER, db)
+    assert data.get("passed") is False
+    assert any("R0" in f["rule_id"] for f in data.get("failures", []))

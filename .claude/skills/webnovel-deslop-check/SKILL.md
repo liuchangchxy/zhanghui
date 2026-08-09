@@ -71,3 +71,11 @@ advisory 项汇总到末尾表格。
 - 不改正文（这是 reviewer-like skill 的工作，不属于本 skill）
 - 不调用 reviewer subagent
 - 不写 CHANGES 校验（CHANGES 是写前用的，本 skill 是写后用的）
+
+## 已知工具限制
+
+- **两个工具都假定输入是 UTF-8 文本**。`text_humanizer.py` 在 binary / GBK /
+  UTF-16 / 截断 UTF-8 输入上不会报警（会把字节当字符处理并返回 `ok: true`），
+  `check-ai-patterns.js` 在 binary 上会触发 long-paragraph advisory。
+- **anti-slop 是启发式，不是合同**。建议在把扫描结果并入报告前，对 > 50KB
+  或非 UTF-8 编码的章节文件做一次人工 sanity check。

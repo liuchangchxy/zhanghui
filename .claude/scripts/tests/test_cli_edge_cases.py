@@ -94,7 +94,7 @@ def test_chapter_file_not_exists(tmp_path: Path):
 
 
 def test_no_rule_argument_accepts(test_db: Path):
-    """Bug 11: --rule 参数已被移除，调用应正常（unrecognized args 除外）。"""
+    """回归: 不传 --rule 时跑全部规则，合法 CHANGES 应通过。"""
     changes = {f: [] for f in [
         "character_state_changes", "new_plot_points", "foreshadowing_actions",
         "location_state_changes", "faction_state_changes",
@@ -103,6 +103,62 @@ def test_no_rule_argument_accepts(test_db: Path):
     changes["time_progression"] = None
     result = run_gate(make_chapter(changes), test_db)
     assert result["passed"] is True, result
+
+
+# === Bug E 回归（第一性原理 A5.3）：恢复并真正实现 --rule 过滤 ===
+def test_rule_flag_filters_to_only_r1(test_db: Path):
+    """同时违反 R1（缺字段）+ R2（错枚举）+ R3（错 ID）时，--rule R1 应只保留 R1。"""
+    # 故意触发多个规则
+    changes = {
+        "character_state_changes": [{"character_id": "Z-999", "importance": "BAD_ENUM"}],
+        "new_plot_points": [], "foreshadowing_actions": [],
+        "location_state_changes": [], "faction_state_changes": [],
+        "time_progression": None, "item_transfers": [],
+        # 缺 unresolved_questions → R1
+    }
+    result = run_gate(make_chapter(changes), test_db, "--rule", "R1")
+    assert result["passed"] is False
+    assert {f["rule_id"] for f in result["failures"]} == {"R1"}, result
+
+
+def test_rule_flag_filters_to_multiple_rules(test_db: Path):
+    """--rule R2,R3 应同时报告两类违规。"""
+    changes = {
+        "character_state_changes": [{"character_id": "Z-999", "importance": "BAD_ENUM"}],
+        "new_plot_points": [], "foreshadowing_actions": [],
+        "location_state_changes": [], "faction_state_changes": [],
+        "time_progression": None, "item_transfers": [],
+        "unresolved_questions": [],
+    }
+    result = run_gate(make_chapter(changes), test_db, "--rule", "R2,R3")
+    assert result["passed"] is False
+    rule_ids = {f["rule_id"] for f in result["failures"]}
+    assert rule_ids == {"R2", "R3"}, result
+
+
+def test_rule_flag_unknown_value_raises_r0(test_db: Path):
+    """未知规则名是新的攻击向量（把所有 failure 过滤光 → 静默通过），必须 R0 loud fail。"""
+    changes = {f: [] for f in [
+        "character_state_changes", "new_plot_points", "foreshadowing_actions",
+        "location_state_changes", "faction_state_changes",
+        "item_transfers", "unresolved_questions"
+    ]}
+    changes["time_progression"] = None
+    result = run_gate(make_chapter(changes), test_db, "--rule", "R99")
+    assert result["passed"] is False
+    assert any(f["rule_id"] == "R0" and "未知规则" in f["message"]
+               for f in result["failures"]), result
+
+
+def test_rule_flag_keeps_r0_even_when_filtered_out(test_db: Path):
+    """R0（基础设施错误）必须永远保留，否则 --rule R1 会藏起解析错误。"""
+    # 不含 <chapter_changes> → 触发 R0
+    chapter = "# 第1章\n散文中没有任何 CHANGES 容器\n"
+    result = run_gate(chapter, test_db, "--rule", "R3")
+    assert result["passed"] is False
+    assert any(f["rule_id"] == "R0" for f in result["failures"]), result
+    # R3 不应被触发（没人引用）
+    assert not any(f["rule_id"] == "R3" for f in result["failures"])
 
 
 def test_trailing_comma_passes(test_db: Path):
