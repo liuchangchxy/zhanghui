@@ -36,6 +36,47 @@ class FakeBlockedImplAdapter(BaseAdapter):
     status = AdapterStatus.BLOCKED_IMPLEMENTATION
 
 
+class FakeLiveWithSetupAdapter(BaseAdapter):
+    """Adapter that is LIVE_WITH_SETUP but raises RuntimeError — the
+    orchestrator should call fetch() and the exception handler should
+    record it as an AdapterError (NOT short-circuit before the call)."""
+    platform = "live_with_setup"
+    strategy = Strategy.WEBFETCH
+    status = AdapterStatus.LIVE_WITH_SETUP
+
+    def fetch(self, category, period, top):
+        raise RuntimeError("Playwright not installed: pip install playwright")
+
+
+def test_run_scan_calls_fetch_for_live_with_setup_adapter(tmp_path: Path, monkeypatch):
+    """LIVE_WITH_SETUP adapters MUST have fetch() invoked (the
+    orchestrator does NOT short-circuit before the call). Any
+    RuntimeError becomes an AdapterError — no silent 0-book result."""
+    from scripts.scan import ADAPTER_REGISTRY
+    monkeypatch.setitem(ADAPTER_REGISTRY, "needs_setup", FakeLiveWithSetupAdapter)
+
+    parser = build_parser()
+    args = parser.parse_args([
+        "--platform", "needs_setup",
+        "--category", "玄幻",
+        "--period", "weekly",
+        "--top", "3",
+        "--output-dir", str(tmp_path),
+    ])
+
+    rc = run_scan(args)
+    # RuntimeError -> AdapterError -> total_errors >= 1 -> exit 1
+    assert rc == 1
+
+    import json
+    payload = json.loads((tmp_path / "books.json").read_text())
+    assert payload["meta"]["total_books"] == 0
+    assert payload["meta"]["total_errors"] == 1
+    err = payload["errors"][0]
+    assert err["platform"] == "needs_setup"
+    assert "pip install playwright" in err["message"]
+
+
 def test_build_parser_defaults():
     parser = build_parser()
     args = parser.parse_args([])

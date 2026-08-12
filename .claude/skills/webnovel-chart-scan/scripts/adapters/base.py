@@ -16,12 +16,17 @@ class AdapterStatus(str, Enum):
     """Honest declaration of whether an adapter actually fetches data today.
 
     - LIVE: fetches real data from upstream right now
+    - LIVE_WITH_SETUP: fetches real data after a one-time user setup
+      step (e.g. ``pip install playwright``); orchestrator still calls
+      ``fetch()`` and the user-facing RuntimeError surfaces if the setup
+      was skipped
     - BLOCKED_EXTERNAL: endpoint dead / anti-bot — needs upstream-side or
       infra-side work, cannot be fixed in this repo alone
-    - BLOCKED_IMPLEMENTATION: needs code work in this repo (Playwright
-      install, parser rewrite, etc.) — see KNOWN_LIMITATIONS.md
+    - BLOCKED_IMPLEMENTATION: needs code work in this repo (parser
+      rewrite, etc.) — see KNOWN_LIMITATIONS.md
     """
     LIVE = "live"
+    LIVE_WITH_SETUP = "live_with_setup"
     BLOCKED_EXTERNAL = "blocked_external"
     BLOCKED_IMPLEMENTATION = "blocked_implementation"
 

@@ -133,7 +133,10 @@ def run_scan(args: argparse.Namespace) -> int:
         for category in categories:
             for period in periods:
                 try:
-                    if adapter.status != AdapterStatus.LIVE:
+                    if adapter.status in (
+                        AdapterStatus.BLOCKED_EXTERNAL,
+                        AdapterStatus.BLOCKED_IMPLEMENTATION,
+                    ):
                         # Blocked adapter — don't even try fetch().
                         # Record a human-readable explanation so the
                         # report surfaces WHY this attempt produced
@@ -161,6 +164,11 @@ def run_scan(args: argparse.Namespace) -> int:
                         continue
                     if args.verbose:
                         print(f"[{platform}/{category}/{period}] fetching top {args.top}...", file=sys.stderr)
+                    # LIVE and LIVE_WITH_SETUP both call fetch() — the
+                    # latter will raise RuntimeError at runtime if its
+                    # optional setup (e.g. playwright install) was
+                    # skipped, which the orchestrator's exception handler
+                    # turns into an AdapterError with a clear message.
                     raw_books = adapter.fetch(category, period, top=args.top)
                     for raw in raw_books:
                         books.append(raw_to_bookitem(raw, platform=adapter.platform, period=period))

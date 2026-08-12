@@ -20,7 +20,7 @@ from scripts.adapters.base import AdapterStatus
 
 
 def test_ciweimao_adapter_is_live():
-    """Sanity check: ciweimao must still be the only LIVE adapter."""
+    """Sanity check: ciweimao must still be a LIVE adapter."""
     a = CiweimaoAdapter()
     assert a.status == AdapterStatus.LIVE
     assert a.platform == "ciweimao"

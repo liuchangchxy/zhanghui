@@ -23,6 +23,7 @@ def test_strategy_enum_values():
 
 def test_adapter_status_enum_values():
     assert AdapterStatus.LIVE.value == "live"
+    assert AdapterStatus.LIVE_WITH_SETUP.value == "live_with_setup"
     assert AdapterStatus.BLOCKED_EXTERNAL.value == "blocked_external"
     assert AdapterStatus.BLOCKED_IMPLEMENTATION.value == "blocked_implementation"
 
@@ -52,6 +53,21 @@ def test_base_adapter_default_fetch_raises_for_blocked_subclass():
     a = BlockedAdapter()
     with pytest.raises(NotImplementedError, match="blocked_external"):
         a.fetch("玄幻", "weekly", 5)
+
+
+def test_live_with_setup_status_is_distinct_from_live():
+    """LIVE_WITH_SETUP must be a distinct enum value (not aliased to
+    LIVE) so the orchestrator and reports can tell them apart."""
+
+    class SetupAdapter(BaseAdapter):
+        platform = "setup_test"
+        strategy = Strategy.WEBFETCH
+        status = AdapterStatus.LIVE_WITH_SETUP
+
+    a = SetupAdapter()
+    assert a.status is not AdapterStatus.LIVE
+    assert a.status is AdapterStatus.LIVE_WITH_SETUP
+    assert a.status.value == "live_with_setup"
 
 
 def test_adapter_fetch_returns_list_of_rawbook():
