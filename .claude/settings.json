@@ -1,5 +1,55 @@
 {
   "enabledPlugins": {
     "webnovel-writer": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python3 .claude/scripts/changes_gate.py*)",
+      "Bash(python3 .claude/scripts/tracking_query.py*)",
+      "Bash(python3 .claude/scripts/style_fingerprint.py*)",
+      "Bash(node .claude/scripts/check-ai-patterns.js*)",
+      "Bash(node .claude/scripts/normalize-punctuation.js*)",
+      "Bash(python3 .claude/plugins/webnovel-writer/scripts/webnovel.py*)",
+      "Bash(python3 .claude/plugins/webnovel-writer/scripts/data_modules/*)",
+      "Bash(node .claude/plugins/webnovel-writer/skills/webnovel-style-profile/*)",
+      "Bash(python -X utf8 .claude/plugins/webnovel-writer/scripts/webnovel.py*)",
+      "Bash(ls -la*)",
+      "Bash(cat *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(mkdir *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(pytest*)",
+      "Bash(pip install*)"
+    ]
+  },
+  "model": "sonnet",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR:-${PWD}}/.claude/plugins/webnovel-writer/hooks/session_start.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR:-${PWD}}/.claude/plugins/webnovel-writer/hooks/guard_runtime_write.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
   }
 }

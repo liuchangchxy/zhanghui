@@ -145,6 +145,7 @@ python3 scripts/text_humanizer.py report --chapter-file 03_manuscript/第15章.m
 
 # 生成两遍式润色 prompt（供复制给 Claude 执行）
 python3 scripts/text_humanizer.py prompt --chapter-file 03_manuscript/第15章.md
+
 ```
 
 `continue-write` 会自动在生成门禁产物时调用 `detect`，结果写入 `copyedit_report.md`，供 `/校稿` 步骤参考。

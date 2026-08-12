@@ -10,7 +10,7 @@ allowed-tools: Read Write Edit Grep Bash Task
 
 - 以稳定流程产出可发布章节：优先使用 `正文/第{NNNN}章-{title_safe}.md`，无标题时回退 `正文/第{NNNN}章.md`。
 - 默认章节字数目标：2000-2500（用户或大纲明确覆盖时从其约定）。
-- 保证审查、润色、数据回写完整闭环，避免“写完即丢上下文”。
+- 保证审查、润色、数据回写完整闭环，避免"写完即丢上下文"。
 - 输出直接可被后续章节消费的结构化数据：`review_metrics`、`summaries`、`chapter_meta`。
 
 ## 执行原则
@@ -45,8 +45,8 @@ allowed-tools: Read Write Edit Grep Bash Task
 ## 引用加载等级（strict, lazy）
 
 - L0：未进入对应步骤前，不加载任何参考文件。
-- L1：每步仅加载该步“必读”文件。
-- L2：仅在触发条件满足时加载“条件必读/可选”文件。
+- L1：每步仅加载该步"必读"文件。
+- L2：仅在触发条件满足时加载"条件必读/可选"文件。
 
 路径约定：
 - `references/...` 相对当前 skill 目录。
@@ -86,11 +86,20 @@ allowed-tools: Read Write Edit Grep Bash Task
 - `references/writing/genre-hook-payoff-library.md`
   - 用途：电竞/直播文/克苏鲁的钩子与微兑现快速库。
   - 触发：Step 1 题材命中 `esports/livestream/cosmic-horror` 时必读。
+- `../../skills/webnovel-init/references/creativity/shuangwen-deep.md`
+  - 用途：爽文节奏与质量检查表（爽点密度、打脸合理性、金手指约束、避坑）。
+  - 触发：Step 1 题材命中爽文相关 canonical（玄幻/仙侠/都市/历史/科幻/游戏）时按需加载。
+- `../../skills/webnovel-init/references/creativity/shuangwen-opening.md`
+  - 用途：爽文黄金开篇五法则（前 3 章结构）。
+  - 触发：Step 1 写第 1-3 章时题材命中爽文 canonical 时必读。
+- `../../skills/webnovel-init/references/creativity/shuangwen-faceslap.md`
+  - 用途：装逼打脸五步递进模板与反转六原则。
+  - 触发：Step 1 写打脸/装逼章节时题材命中爽文 canonical 时按需加载。
 
 ### writing（问题定向加读）
 
 - `references/writing/combat-scenes.md`
-  - 触发：战斗章或审查命中“战斗可读性/镜头混乱”。
+  - 触发：战斗章或审查命中"战斗可读性/镜头混乱"。
 - `references/writing/dialogue-writing.md`
   - 触发：审查命中 OOC、对话说明书化、对白辨识差。
 - `references/writing/emotion-psychology.md`
@@ -124,17 +133,39 @@ allowed-tools: Read Write Edit Grep Bash Task
 环境设置（bash 命令执行前）：
 ```bash
 export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
-export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is required}/scripts"
+export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PROJECT_DIR:-$PWD}}/.claude/plugins/webnovel-writer/scripts"
 export SKILL_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is required}/skills/webnovel-write"
 
 python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" preflight
 export PROJECT_ROOT="$(python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+
 ```
 
 **硬门槛**：`preflight` 必须成功。它统一校验 `CLAUDE_PLUGIN_ROOT` 派生出的 `SKILL_ROOT` / `SCRIPTS_DIR`、`webnovel.py`、`extract_chapter_context.py` 和解析出的 `PROJECT_ROOT`。任一失败都立即阻断。
 
+**调用 tracking_query.py**（R4b 伏笔紧急度预检，写前执行）：
+- 当项目已写章节数 ≥ 3（即 `${PROJECT_ROOT}/正文/` 下已有 ≥ 3 个章节文件），且 `progress.current_chapter > 3` 时，执行：
+  ```bash
+  python3 ${CLAUDE_PROJECT_DIR:-${PWD}}/.claude/scripts/tracking_query.py \
+      --project "${PROJECT_ROOT}" \
+      --chapter ${chapter_num} \
+      --md
+  ```
+- 输出（活跃伏笔 + 超期伏笔）追加到 Step 1 任务书的"活跃伏笔"section，作为本章写作的"必承接"约束。
+- 工具执行失败（exit code != 0）只记录警告，不阻断——best-effort。
+
+**个人语料检测**（best-effort，不阻断）：
+- 检测 `${PROJECT_ROOT}/设定集/个人语料.md` 是否存在（H-R4-15 锚定基线目录：用户先在 `${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/个人语料.md` 填写并保存，init 会自动复制为 `${PROJECT_ROOT}/设定集/个人语料.md`）。
+- 存在 → 在 Step 1 任务书与 Step 2A 写作执行包中追加一段"个人表达指纹约束"（≤ 200 字摘要），作为可选 L1 prompt 注入；不替代题材/大纲/设定硬约束
+- 不存在 → 跳过，不报错
+
+**写作宪法加载**（H-R4-16，best-effort，不阻断）：
+- init 不把 `templates/写作宪法.md` 写入项目状态；宪法仅作为 init 对话窗口的风格底线参考。
+- webnovel-write 在 Step 0 重新加载 `${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/写作宪法.md` 作为 L1 prompt 注入的一部分（与"个人语料"互不替代：前者是作者风格底线，后者是个人表达指纹）。
+- 文件不存在 → 跳过，不报错。
+
 输出：
-- “已就绪输入”与“缺失输入”清单；缺失则阻断并提示先补齐。
+- "已就绪输入"与"缺失输入"清单；缺失则阻断并提示先补齐。
 
 ### Step 0.5：工作流断点记录（best-effort，不阻断）
 
@@ -143,6 +174,7 @@ python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wor
 python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow start-step --step-id "Step 1" --step-name "Context Agent" || true
 python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-step --step-id "Step 1" --artifacts '{"ok":true}' || true
 python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-task --artifacts '{"ok":true}' || true
+
 ```
 
 要求：
@@ -163,17 +195,18 @@ python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wor
 - 输出必须同时包含：
   - 7 板块任务书（目标/冲突/承接/角色/场景约束/伏笔/追读力）；
   - Context Contract 全字段（目标/阻力/代价/本章变化/未闭合问题/开头类型/情绪节奏/信息密度/过渡章判定/追读力设计）；
-  - Step 2A 可直接消费的“写作执行包”（章节节拍、不可变事实清单、禁止事项、终检清单）。
-- 合同与任务书出现冲突时，以“大纲与设定约束更严格者”为准。
+  - Step 2A 可直接消费的"写作执行包"（章节节拍、不可变事实清单、禁止事项、终检清单）。
+- 合同与任务书出现冲突时，以"大纲与设定约束更严格者"为准。
 
 输出：
-- 单一“创作执行包”（任务书 + Context Contract + 直写提示词），供 Step 2A 直接消费，不再拆分独立 Step 1.5。
+- 单一"创作执行包"（任务书 + Context Contract + 直写提示词），供 Step 2A 直接消费，不再拆分独立 Step 1.5。
 
 ### Step 2A：正文起草
 
 执行前必须加载：
 ```bash
 cat "${SKILL_ROOT}/../../references/shared/core-constraints.md"
+
 ```
 
 硬要求：
@@ -206,11 +239,12 @@ Step 2A 生成章节正文后，**必须在正文末尾追加一个 `<chapter_ch
 执行前加载：
 ```bash
 cat "${SKILL_ROOT}/references/style-adapter.md"
+
 ```
 
 硬要求：
 - 只做表达层转译，不改剧情事实、事件顺序、角色行为结果、设定规则。
-- 对“模板腔、说明腔、机械腔”做定向改写，为 Step 4 留出问题修复空间。
+- 对"模板腔、说明腔、机械腔"做定向改写，为 Step 4 留出问题修复空间。
 
 输出：
 - 风格化正文（覆盖原章节文件）。
@@ -220,12 +254,13 @@ cat "${SKILL_ROOT}/references/style-adapter.md"
 执行前加载：
 ```bash
 cat "${SKILL_ROOT}/references/step-3-review-gate.md"
+
 ```
 
 调用约束：
 - 必须用 `Task` 调用审查 subagent，禁止主流程伪造审查结论。
 - 可并行发起审查，统一汇总 `issues/severity/overall_score`。
-- 默认使用 `auto` 路由：根据“本章执行合同 + 正文信号 + 大纲标签”动态选择审查器。
+- 默认使用 `auto` 路由：根据"本章执行合同 + 正文信号 + 大纲标签"动态选择审查器。
 
 核心审查器（始终执行）：
 - `consistency-checker`
@@ -244,6 +279,7 @@ cat "${SKILL_ROOT}/references/step-3-review-gate.md"
 审查指标落库（必做）：
 ```bash
 python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" index save-review-metrics --data "@${PROJECT_ROOT}/.webnovel/tmp/review_metrics.json"
+
 ```
 
 review_metrics 字段约束（当前工作流约定只传以下字段）：
@@ -258,6 +294,7 @@ review_metrics 字段约束（当前工作流约定只传以下字段）：
   "report_file": "审查报告/第100-100章审查报告.md",
   "notes": "单个字符串；selected_checkers / timeline_gate / anti_ai_force_check 等扩展信息压成单行文本写入此字段"
 }
+
 ```
 - `notes` 在当前执行契约中必须是单个字符串，不得传入对象或数组。
 - 当前工作流不额外传入其它顶层字段；脚本侧未在此处做新增硬校验。
@@ -272,6 +309,7 @@ review_metrics 字段约束（当前工作流约定只传以下字段）：
 ```bash
 cat "${SKILL_ROOT}/references/polish-guide.md"
 cat "${SKILL_ROOT}/references/writing/typesetting.md"
+
 ```
 
 执行顺序：
@@ -293,12 +331,18 @@ python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/changes_gate.py \
     --chapter-file 正文/第{NNNN}章-{title_safe}.md \
     --db .webnovel/index.db \
     --json
+
 ```
 
 **判定逻辑**：
 - `passed=true`：进入 Step 5（data-agent）。
 - `passed=false`：读取 `failures` 列表，把每条规则的报错反馈给主流程 LLM，要求**只重写 `<chapter_changes>` 块**（不改正文）。最多 2 次。
 - 2 次仍未通过：记录到 `.webnovel/tmp/changes_gate_failures.jsonl`，人工介入后走 `/webnovel-resume`。
+
+**调 changes_gate.py R4b**（advisory 子规则，不阻塞）：
+- `changes_gate.py` 默认 `--json` 已启用 `R4b`（伏笔超期 advisory），阈值 20 章。
+- 输出 `severity=advisory` 的 failures **不阻塞门禁**（`passed` 仍为 `true`），但需记录到 `.webnovel/tmp/r4b_advisories.jsonl`，作为下一章的"必须考虑回收"信号。
+- R4b advisory 仅提示，不要求本章立即修复——避免和创作节奏冲突。
 
 ### Step 4.6：anti-slop 扫描
 
@@ -311,6 +355,7 @@ python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/text_humanizer.py \
 node ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/check-ai-patterns.js \
     --check --fail-on=blocking \
     正文/第{NNNN}章-{title_safe}.md
+
 ```
 
 **判定逻辑**：
@@ -318,6 +363,19 @@ node ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/check-ai-patterns.js \
 - advisory 命中：写入 `.story-system/anti_patterns.json`，继续流程。
 
 可选关闭：在命令前加 `--skip-deslop`。
+
+**anti-slop 双引擎仲裁规则**（解决同一处文本被两边各报一次的 conflict resolution）：
+
+两个扫描器对同一章可能给出重叠但不一致的判定（例如"仿佛"在 `text_humanizer.py` 报"AI 高频词"frequency-based，在 `check-ai-patterns.js` 报"套词密度 tic"density-based）。仲裁规则如下：
+
+1. **frequency-based finding 优先于 density-based finding**。`text_humanizer.py` 给的是绝对命中次数 + 每千字密度，证据链更精确；`check-ai-patterns.js` 的密度 tic 只是阈值告警（min_hits + per_kilo 双门槛），可能把零散的合规用法一并扫进去。冲突时以 `text_humanizer.py` 的命中次数 + 原文上下文为准决定是否改稿。
+2. **任一工具报 critical / blocking → 触发整章重写**。critical 是硬级别（必须修），blocking 同 critical（必须退回 Step 4）。advisory 是软级别（提示，不阻断）。
+3. **warning 级别（advisory）→ 标 advisory 不阻断**。advisory 项写入 `.story-system/anti_patterns.json`，不退回 Step 4，但作者应在下一轮迭代中处理。
+4. **advisory 命中数 ≤ 2 → 放行**，> 2 但同类别聚集 → 主动改稿。同一 chapter 内同类 advisory 聚集（如同时报 "long-paragraph"、"cliche-density-tic"、"metaphor-density-tic"）说明文风系统性问题，不只是局部。
+5. **工具彼此各管一段**：density-only finding（`check-ai-patterns.js` 独有，如 long-paragraph / period-stutter / micro-action-tic / action-list-tic / quote-emphasis-tic）和 frequency-only finding（`text_humanizer.py` 独有，如意义膨胀 / 论文式段落结构 / 排比三连）互不覆盖，重叠时按规则 1 仲裁。
+6. **人工最终裁决**：两个工具都是启发式，按 1-5 处理后作者应扫一眼原文 sanity check，再决定是改稿还是放过。不允许"两工具都没报就一定安全"——双盲区是已知 gap。
+
+执行建议：先把 `text_humanizer.py` 的 `severity=high` 和 `check-ai-patterns.js` 的 `--fail-on=blocking` 输出做并集，再按规则 1 仲裁重叠，最后按规则 2/3 决定是否退回 Step 4。
 
 **重要前提**：
 1. **两个工具都假定输入是 UTF-8 文本**。对 binary / GBK / UTF-16 / 截断 UTF-8 输入，
@@ -381,6 +439,7 @@ Step 5 失败隔离规则：
 ```bash
 git add .
 git -c i18n.commitEncoding=UTF-8 commit -m "第{chapter_num}章: {title}"
+
 ```
 
 规则：
@@ -409,6 +468,7 @@ test -f "${PROJECT_ROOT}/正文/第${chapter_padded}章.md"
 test -f "${PROJECT_ROOT}/.webnovel/summaries/ch${chapter_padded}.md"
 python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" index get-recent-review-metrics --limit 1
 tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || true
+
 ```
 
 成功标准：
@@ -430,4 +490,4 @@ tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || t
    - 审查缺失：只重跑 Step 3 并落库；
    - 润色失真：恢复 Step 2A 输出并重做 Step 4；
    - 摘要/状态缺失：只重跑 Step 5；
-3. 重新执行“验证与交付”全部检查，通过后结束。
+3. 重新执行"验证与交付"全部检查，通过后结束。

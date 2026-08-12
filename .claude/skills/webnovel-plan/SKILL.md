@@ -9,7 +9,7 @@ Purpose: refine 总纲 into volume + chapter outlines. Do not redesign the globa
 Setting policy: 先基于 init 产出的总纲+世界观补齐设定集基线；再在卷纲完成后，直接对现有设定集做增量补充。
 
 ## Project Root Guard
-- Claude Code 的“工作区根目录”不一定等于“书项目根目录”。常见结构：工作区为 `D:\wk\xiaoshuo`，书项目为 `D:\wk\xiaoshuo\凡人资本论`。
+- Claude Code 的"工作区根目录"不一定等于"书项目根目录"。常见结构：工作区为 `D:\wk\xiaoshuo`，书项目为 `D:\wk\xiaoshuo\凡人资本论`。
 - 必须先解析 `PROJECT_ROOT` 为真实书项目根（必须包含 `.webnovel/state.json`），后续所有读写路径都以该目录为准。
 
 环境设置（bash 命令执行前）：
@@ -29,6 +29,7 @@ fi
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 
 export PROJECT_ROOT="$(python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+
 ```
 
 ## References（按步骤导航）
@@ -66,6 +67,7 @@ Use progressive disclosure and load only what current step requires:
 ```bash
 cat "$PROJECT_ROOT/.webnovel/state.json"
 cat "$PROJECT_ROOT/大纲/总纲.md"
+
 ```
 
 Optional (only if they exist):
@@ -80,7 +82,7 @@ Optional (only if they exist):
 If 总纲.md lacks volume ranges / core conflict / climax, ask the user to fill those before proceeding.
 
 ## 2) Build setting baseline from 总纲 + 世界观
-目标：在不推翻现有内容的前提下，让设定集从“骨架模板”进入“可规划可写作”的基线状态。
+目标：在不推翻现有内容的前提下，让设定集从"骨架模板"进入"可规划可写作"的基线状态。
 
 输入来源：
 - `大纲/总纲.md`
@@ -91,7 +93,7 @@ If 总纲.md lacks volume ranges / core conflict / climax, ask the user to fill 
 
 执行规则（必须）：
 - 只做增量补齐，不清空、不重写整文件。
-- 优先补齐“可执行字段”：角色定位、势力关系、能力边界、代价规则、反派层级映射。
+- 优先补齐"可执行字段"：角色定位、势力关系、能力边界、代价规则、反派层级映射。
 - 若总纲与现有设定冲突，先列冲突并阻断，等待用户裁决后再改。
 
 基线补齐最小要求：
@@ -106,23 +108,25 @@ If 总纲.md lacks volume ranges / core conflict / climax, ask the user to fill 
 If 总纲缺少卷名/章节范围/核心冲突/卷末高潮，先补问并更新总纲，再继续。
 
 ## 4) Generate volume beat sheet (节拍表)
-目标：先把本卷“承诺→危机递增→中段反转→最低谷→大兑现+新钩子”钉死，避免卷中段漂移。
+目标：先把本卷"承诺→危机递增→中段反转→最低谷→大兑现+新钩子"钉死，避免卷中段漂移。
 
 Load template:
 ```bash
 cat "${SKILL_ROOT}/../../templates/output/大纲-卷节拍表.md"
+
 ```
 
 Must satisfy (hard requirements):
 - **中段反转（必填）**：不得留空；若无，写 `无（理由：...）`
 - **危机链**：至少 3 次递增（表格 1-3 行不得空）
-- **卷末新钩子**：必须能落到“最后一章的章末未闭合问题”
+- **卷末新钩子**：必须能落到"最后一章的章末未闭合问题"
 
 Write output:
 ```bash
 @'
 {beat_sheet_content}
 '@ | Set-Content -Encoding UTF8 "$PROJECT_ROOT/大纲/第{volume_id}卷-节拍表.md"
+
 ```
 
 Completion criteria:
@@ -136,6 +140,7 @@ Completion criteria:
 Load template:
 ```bash
 cat "${SKILL_ROOT}/../../templates/output/大纲-卷时间线.md"
+
 ```
 
 Must satisfy (hard requirements):
@@ -148,6 +153,7 @@ Write output:
 @'
 {timeline_content}
 '@ | Set-Content -Encoding UTF8 "$PROJECT_ROOT/大纲/第{volume_id}卷-时间线.md"
+
 ```
 
 Completion criteria:
@@ -160,21 +166,25 @@ Load genre profile and apply standards:
 ```bash
 cat "${SKILL_ROOT}/../../references/genre-profiles.md"
 cat "${SKILL_ROOT}/../../references/shared/strand-weave-pattern.md"
+
 ```
 
 Optional (only if爽点结构需要细化):
 ```bash
 cat "${SKILL_ROOT}/../../references/shared/cool-points-guide.md"
+
 ```
 
 Optional (only if需要补强卷级冲突链与强度分层):
 ```bash
 cat "${SKILL_ROOT}/references/outlining/conflict-design.md"
+
 ```
 
 Load beat sheet (must exist):
 ```bash
 cat "$PROJECT_ROOT/大纲/第{volume_id}卷-节拍表.md"
+
 ```
 
 Extract for current genre:
@@ -202,6 +212,7 @@ Based on genre profile, distribute chapters:
 For 电竞/直播文/克苏鲁, apply dedicated volume pacing template:
 ```bash
 cat "${SKILL_ROOT}/references/outlining/genre-volume-pacing.md"
+
 ```
 
 ### 爽点密度规划策略
@@ -218,6 +229,7 @@ Based on genre profile:
 If idea_bank.json exists:
 ```bash
 cat "$PROJECT_ROOT/.webnovel/idea_bank.json"
+
 ```
 
 Calculate trigger frequency:
@@ -260,6 +272,7 @@ Use this template and fill from 总纲 + idea_bank:
 ## 约束触发规划（如有）
 - 反套路规则：每 N 章触发一次
 - 硬约束：贯穿全卷
+
 ```
 
 ## 6) Generate chapter outlines (batched)
@@ -272,11 +285,13 @@ Batching rule:
 Optional (only if需要钩子/节奏细分):
 ```bash
 cat "${SKILL_ROOT}/../../references/reading-power-taxonomy.md"
+
 ```
 
 Optional (only if需要章节微结构/标题策略细化):
 ```bash
 cat "${SKILL_ROOT}/references/outlining/chapter-planning.md"
+
 ```
 
 ### Chapter generation strategy
@@ -334,6 +349,7 @@ Chapter format (include 反派层级 for context-agent):
 - 本章变化: {30字以内，优先可量化变化}
 - 章末未闭合问题: {30字以内}
 - 钩子: {类型} - {30字以内}
+
 ```
 
 **时间字段说明**：
@@ -346,8 +362,8 @@ Chapter format (include 反派层级 for context-agent):
 - **倒计时状态**：若存在倒计时事件，标注推进情况（D-N → D-(N-1)）
 
 **字段说明**：
-- **章末未闭合问题**：本章结尾必须保留的“未闭合决策/问题”，用于驱动读者点下一章。
-  - 规则：必须与 **钩子** 的类型/强度一致；不得出现“钩子很强但问题很虚”的错配。
+- **章末未闭合问题**：本章结尾必须保留的"未闭合决策/问题"，用于驱动读者点下一章。
+  - 规则：必须与 **钩子** 的类型/强度一致；不得出现"钩子很强但问题很虚"的错配。
 - **钩子**：本章应设置的章末钩子（规划用）
   - 例：悬念钩 - 神秘人身份即将揭晓
   - 意思是：本章结尾要设置这个悬念钩子
@@ -359,10 +375,11 @@ Save after each batch:
 @'
 {batch_content}
 '@ | Add-Content -Encoding UTF8 "$PROJECT_ROOT/大纲/第{volume_id}卷-详细大纲.md"
+
 ```
 
 ## 7) Enrich existing setting files from volume outline
-目标：卷纲写完后，把本卷新增事实写回“现有设定集文件”，确保后续写作可直接读取。
+目标：卷纲写完后，把本卷新增事实写回"现有设定集文件"，确保后续写作可直接读取。
 
 输入来源：
 - `大纲/第{volume_id}卷-节拍表.md`
@@ -441,6 +458,7 @@ Update state (include chapters range):
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" update-state -- \
   --volume-planned {volume_id} \
   --chapters-range "{start}-{end}"
+
 ```
 
 Final check:
@@ -454,7 +472,7 @@ Final check:
 
 ### Hard fail conditions (must stop)
 - 节拍表文件不存在或为空
-- 节拍表中段反转缺失（未按“必填/无（理由）”规则填写）
+- 节拍表中段反转缺失（未按"必填/无（理由）"规则填写）
 - **时间线表文件不存在或为空**
 - 章纲文件不存在或为空
 - 任一章节缺少：目标/阻力/代价/时间锚点/章内时间跨度/与上章时间差/爽点/Strand/反派层级/视角/关键实体/本章变化/章末未闭合问题/钩子

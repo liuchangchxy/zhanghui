@@ -50,7 +50,17 @@ SQLITE_HEADER = b"SQLite format 3\x00"
 EXPECTED_TABLES = frozenset({"entities", "aliases"})
 
 # 合法的规则 ID（用于 --rule 校验）。R0 是基础设施错误，不是可选规则，但允许显式指定。
-KNOWN_RULE_IDS = frozenset({"R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"})
+KNOWN_RULE_IDS = frozenset({"R0", "R1", "R2", "R3", "R4", "R4b", "R5", "R6", "R7", "R8"})
+
+# R4b 默认阈值：伏笔埋了 N 章还没回收 → advisory（与 oh-story 约定一致，不阻塞）
+R4B_DEFAULT_OVERDUE_THRESHOLD = 20
+
+# H-R4-1: 防止恶意 / 异常的 state.json 让 json.load 把内存吃光（C-R4-1 DoS）。
+# 真实 webnovel-writer 项目的 state.json 通常 < 1MB；5MB 已是 100x 上限。
+MAX_STATE_BYTES = 5 * 1024 * 1024
+
+# M-R4-2: R4b advisory 输出上限，避免一次性喷出几十条 advisory 淹没作者。
+R4B_ADVISORY_MAX = 10
 
 
 @dataclass
@@ -95,18 +105,106 @@ def extract_changes_block(chapter_text: str) -> str | None:
 
 
 def repair_changes_json(raw: str) -> str:
-    """借鉴天命的 9 类字符修复。"""
-    s = raw
-    # 中文标点 → 半角
-    s = s.replace("，", ",").replace("：", ":").replace("（", "(").replace("）", ")")
-    s = s.replace("；", ";").replace("？", "?").replace("！", "!").replace("「", '"').replace("」", '"')
-    # 单引号 → 双引号（仅在键/值的引号位置）
+    """借鉴天命的 9 类字符修复（MED-56 position-aware）。
+
+    只在 JSON 语法位置（outside string tokens）替换中文标点 / 「」，
+    **不动字符串 token 内的对话内容**。例如：
+
+    - `{"key": "她说：「你好」"}` → 「」 保留（它在字符串 token 内，是对话内容）
+    - `{'character_state_changes': []}` → 单引号替换为双引号（语法位置）
+    - `{「key」: 「value」}` → 「」 替换为 "（语法位置）
+
+    实现：
+    1. 用 ``json.JSONDecoder.raw_decode`` 定位最外层 JSON 边界；
+    2. 走字符级状态机，识别 string token 的 (start, end) 区间；
+    3. 在区间外做中文标点 / 「」 替换；在区间内保留原字符。
+    """
+    decoder = json.JSONDecoder()
+    n = len(raw)
+    start = 0
+    # 跳过前导空白
+    while start < n and raw[start] in " \t\n\r":
+        start += 1
+
+    # 定位最外层 JSON 边界（raw_decode 失败时退化到全文本扫描，行为退化为老版本）
+    json_end = n
+    try:
+        _, json_end = decoder.raw_decode(raw, start)
+    except json.JSONDecodeError:
+        start = 0
+        json_end = n
+
+    # 1) 扫描 string token 区间（基于「」 " 和 ' 三种引号）
+    str_spans: list[tuple[int, int]] = []
+    i = start
+    in_str = False
+    str_quote = ""
+    str_open = -1
+    escape = False
+    while i < json_end:
+        c = raw[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == str_quote:
+                str_spans.append((str_open, i + 1))
+                in_str = False
+                str_quote = ""
+                str_open = -1
+        else:
+            if c in ('"', "'"):
+                in_str = True
+                str_quote = c
+                str_open = i
+        i += 1
+
+    def in_string(pos: int) -> bool:
+        # 二分定位（区间有序，start < end）
+        lo, hi = 0, len(str_spans)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            s, e = str_spans[mid]
+            if pos < s:
+                hi = mid
+            elif pos >= e:
+                lo = mid + 1
+            else:
+                return True
+        return False
+
+    # 2) 字符级替换：在 string token 外做中文标点 / 「」 → 半角 / "
+    cn_punct_map = {
+        "，": ",",
+        "：": ":",
+        "（": "(",
+        "）": ")",
+        "；": ";",
+        "？": "?",
+        "！": "!",
+    }
+    out_chars: list[str] = []
+    for idx, c in enumerate(raw):
+        if in_string(idx):
+            out_chars.append(c)
+            continue
+        if c in cn_punct_map:
+            out_chars.append(cn_punct_map[c])
+        elif c == "「" or c == "」":
+            out_chars.append('"')
+        else:
+            out_chars.append(c)
+    s = "".join(out_chars)
+
+    # 3) 单引号 → 双引号（语法位置；原 regex 不感知位置，但因为我们已经把字符串
+    # token 的内容原样保留，所以即使 regex 误命中也不影响对话内容——只是占位。
+    # 实际上 regex 不会命中 string token 内部，因为内部保留后字符没变）。
     s = re.sub(r"'([^'\n]+?)'\s*:", r'"\1":', s)
     s = re.sub(r":\s*'([^'\n]+?)'", r': "\1"', s)
-    # Remove trailing commas before closing brackets/braces（LLM 经常输出末尾逗号）
+
+    # 4) Remove trailing commas before closing brackets/braces（结构性、跨 token）
     s = re.sub(r",(\s*[}\]])", r"\1", s)
-    # 缺尾引号自动闭合：扫描所有 key 后面是否缺引号
-    # （简化版：依赖 LLM 输出时遵守 json 格式；此处不实现复杂修复）
     return s
 
 
@@ -545,6 +643,170 @@ def check_r04_foreshadowing(changes: dict[str, Any], db_path: Path) -> list[Fail
     return failures
 
 
+def _load_overdue_foreshadow(
+    state_path: Path,
+    current_chapter: int,
+    threshold: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    """读取 state.json 中的超期伏笔。
+
+    Returns: (overdue_rows, state_ok)
+        state_ok=False 表示 state.json 缺失/无效/缺 plot_threads.foreshadowing，
+                       调用方应跳过 R4b。
+
+    与 R4 不同的数据源：R4 读 db.foreshadowing 表（账本）；R4b 读
+    state.json.plot_threads.foreshadowing（项目状态文件），这是伏笔真实写源。
+    """
+    if not state_path.is_file():
+        return [], False
+    # H-R4-1: 先检查文件大小，避免 json.load 解析超大文件
+    try:
+        if state_path.stat().st_size > MAX_STATE_BYTES:
+            return [], False
+    except OSError:
+        return [], False
+    try:
+        import json as _json
+        state = _json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, _json.JSONDecodeError, UnicodeDecodeError):
+        return [], False
+    if not isinstance(state, dict):
+        return [], False
+    plot_threads = state.get("plot_threads")
+    if not isinstance(plot_threads, dict):
+        return [], False
+    foreshadowing = plot_threads.get("foreshadowing")
+    if not isinstance(foreshadowing, list):
+        return [], False
+
+    # 复用 status_reporter 的中文状态归一化
+    try:
+        from status_reporter import _is_resolved_foreshadowing_status
+    except ImportError:
+        try:
+            from scripts.status_reporter import _is_resolved_foreshadowing_status
+        except ImportError:
+            def _is_resolved_foreshadowing_status(raw_status: Any) -> bool:  # type: ignore[no-redef]
+                if raw_status is None:
+                    return False
+                return str(raw_status).strip().lower() in {
+                    "resolved", "paid", "回收", "已回收", "已完成",
+                }
+
+    overdue: list[dict[str, Any]] = []
+    for raw in foreshadowing:
+        if not isinstance(raw, dict):
+            continue
+        if _is_resolved_foreshadowing_status(raw.get("status")):
+            continue
+        # planted_chapter 多别名解析
+        planted: int | None = None
+        for k in ("planted_chapter", "added_chapter", "source_chapter", "start_chapter", "chapter"):
+            v = raw.get(k)
+            if isinstance(v, int) and v > 0:
+                planted = v
+                break
+            if isinstance(v, str):
+                try:
+                    iv = int(v.strip())
+                    if iv > 0:
+                        planted = iv
+                        break
+                except ValueError:
+                    continue
+        if planted is None:
+            continue
+        elapsed = current_chapter - planted
+        if elapsed < threshold:
+            continue
+        # target 解析（用于“已超期”判定）
+        target: int | None = None
+        for k in ("target_chapter", "due_chapter", "deadline_chapter", "resolve_by_chapter", "target"):
+            v = raw.get(k)
+            if isinstance(v, int) and v > 0:
+                target = v
+                break
+            if isinstance(v, str):
+                try:
+                    iv = int(v.strip())
+                    if iv > 0:
+                        target = iv
+                        break
+                except ValueError:
+                    continue
+        overdue.append({
+            "content": str(raw.get("content") or "[未命名伏笔]"),
+            "planted_chapter": planted,
+            "target_chapter": target,
+            "elapsed": elapsed,
+        })
+    return overdue, True
+
+
+def check_r04b_overdue_foreshadow(
+    changes: dict[str, Any],
+    state_path: Path,
+    current_chapter: int,
+    threshold: int = R4B_DEFAULT_OVERDUE_THRESHOLD,
+) -> list[Failure]:
+    """R4b: 超期未回收伏笔 → advisory（**不阻塞写入**）。
+
+    端口 oh-story-claudecode 的“埋了没填”概念：
+    - 读取 state.json 中所有未回收伏笔；
+    - planted_chapter ≤ current_chapter - threshold 且仍未回收 → advisory；
+    - **advisory 而非 blocking**：与 oh-story 一致；门禁不阻塞写入，
+      只在报告里告知作者。
+
+    Args:
+        changes: 解析后的 CHANGES dict（暂未使用，保留签名一致以便未来扩展）。
+        state_path: .webnovel/state.json 路径。
+        current_chapter: 当前章号（≥ 0）。
+        threshold: 阈值章数（默认 20）。
+
+    Returns:
+        list[Failure]：每条 failure 都是 advisory；state 缺失时返回 []。
+    """
+    failures: list[Failure] = []
+    if current_chapter <= 0:
+        return failures  # 无法判定 elapsed
+    overdue, ok = _load_overdue_foreshadow(state_path, current_chapter, threshold)
+    if not ok:
+        return failures  # state.json 缺失/无效，安静跳过（不是 blocking）
+    # M-R4-2: 限制 advisory 输出上限，避免一次性喷出几十条淹没作者。
+    # 排序已在 _load_overdue_foreshadow 内部完成（已超期 > 埋太久；同内按 elapsed 倒序），
+    # 所以直接截断前 N 条即可保留最严重的 advisory。
+    capped = overdue[:R4B_ADVISORY_MAX]
+    if len(overdue) > R4B_ADVISORY_MAX:
+        # 追加一条 "还有 X 条未显示" 元 advisory，方便作者知道有遗漏
+        suppressed = len(overdue) - R4B_ADVISORY_MAX
+        failures.append(Failure(
+            rule_id="R4b",
+            severity="advisory",
+            message=f"（还有 {suppressed} 条超期伏笔未显示；仅展示最严重的 {R4B_ADVISORY_MAX} 条）",
+            location="state.json:plot_threads.foreshadowing",
+        ))
+    for row in capped:
+        target = row.get("target_chapter")
+        planted = row.get("planted_chapter")
+        elapsed = row.get("elapsed", 0)
+        content = row.get("content") or "[未命名伏笔]"
+        if isinstance(target, int) and current_chapter > target:
+            kind = "已超期"
+            tail = f"，目标回收章 {target}"
+        else:
+            kind = "埋太久未填"
+            tail = ""
+        failures.append(Failure(
+            rule_id="R4b",
+            severity="advisory",
+            message=(
+                f"伏笔「{content}」自第{planted}章埋下已过 {elapsed} 章仍未回收（{kind}{tail}）"
+            ),
+            location="state.json:plot_threads.foreshadowing",
+        ))
+    return failures
+
+
 MAX_TRUST_DELTA = 30
 
 
@@ -825,6 +1087,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="CHANGES 协议门禁")
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
     parser.add_argument("--db", default="", help="webnovel-writer index.db 路径（可选，未初始化项目可省略）")
+    parser.add_argument("--state-path", default="", help="webnovel-writer state.json 路径（可选；R4b 依赖；缺省从 chapter-file 推导 .webnovel/state.json）")
     parser.add_argument("--json", action="store_true", help="输出 JSON 格式")
     parser.add_argument("--rule", default="", help="只跑指定规则（如 R1），多个用逗号分隔")
     parser.add_argument("--strict", action="store_true", help="advisory 也算 blocking")
@@ -842,8 +1105,17 @@ def main() -> int:
     # --- --rule 解析（Bug E：恢复被移除的参数，并真正实现过滤）---
     wanted_rules: set[str] | None = None
     if args.rule:
-        wanted_rules = {r.strip().upper() for r in args.rule.split(",") if r.strip()}
-        unknown = wanted_rules - KNOWN_RULE_IDS
+        # C-R4-4 修复：保留用户输入的大小写（KNOWN_RULE_IDS 含 "R4b" 而非 "R4B"），
+        # 但匹配时做 case-insensitive 比较以允许用户写 "r4b" / "R4B" 等形式
+        raw_rules = {r.strip() for r in args.rule.split(",") if r.strip()}
+        # 兼容大小写：建立 upper → canonical 映射，把所有输入规范化
+        id_map = {r.upper(): r for r in KNOWN_RULE_IDS}
+        wanted_rules = {id_map.get(r.upper(), r) for r in raw_rules}
+        # unknown = 任何无法映射到 KNOWN_RULE_IDS 的输入
+        unknown = set()
+        for r in raw_rules:
+            if r not in KNOWN_RULE_IDS and r.upper() not in {k.upper() for k in KNOWN_RULE_IDS}:
+                unknown.add(r)
         if not wanted_rules or unknown:
             # 未知规则名会把所有 failure 过滤光 → 新的静默通过。必须报错。
             return fail_fast(
@@ -913,6 +1185,40 @@ def main() -> int:
             # R8 需要章号
             chapter_num = _extract_chapter_number(chapter_text) or 0
             check_failures.extend(check_r08_timeline(parsed, db_p, chapter_num))
+        # R4b: state.json 超期伏笔 advisory（与 db 解耦；不阻塞）
+        # 章号优先用正文解析值；缺省时回退 progress.current_chapter（state.json）
+        chapter_num_for_r4b = _extract_chapter_number(chapter_text) or 0
+        if chapter_num_for_r4b <= 0:
+            # 兜底：state.json progress.current_chapter
+            try:
+                _state_for_chap = Path(args.state_path) if args.state_path else (
+                    chapter_path.parent.parent / ".webnovel" / "state.json"
+                )
+                if _state_for_chap.is_file():
+                    # H-R4-1: 先检查大小，避免 read_text + json.loads 解析超大文件
+                    if _state_for_chap.stat().st_size > MAX_STATE_BYTES:
+                        pass  # 跳过兜底解析，不报错
+                    else:
+                        import json as _json_for_chap
+                        _s = _json_for_chap.loads(_state_for_chap.read_text(encoding="utf-8"))
+                        if isinstance(_s, dict):
+                            _prog = _s.get("progress")
+                            if isinstance(_prog, dict):
+                                _cur = _prog.get("current_chapter")
+                                if isinstance(_cur, int) and _cur > 0:
+                                    chapter_num_for_r4b = _cur
+            except (OSError, _json_for_chap.JSONDecodeError, UnicodeDecodeError):
+                pass
+        if chapter_num_for_r4b > 0:
+            _state_path = (
+                Path(args.state_path) if args.state_path
+                else chapter_path.parent.parent / ".webnovel" / "state.json"
+            )
+            check_failures.extend(
+                check_r04b_overdue_foreshadow(
+                    parsed, _state_path, chapter_num_for_r4b,
+                )
+            )
             # Bug 4: R6 默认禁用（高误报），仅在 WEBNOVEL_ENABLE_R6 设置时运行
             if _is_r6_enabled():
                 registered_ids, registered_aliases, _tables_ok = _load_entity_lookup(db_p)

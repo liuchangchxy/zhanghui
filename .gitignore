@@ -3,11 +3,15 @@ ai-webnovel-repos/
 
 # Upstream skills / plugin sources pulled in for reference only
 .claude/sources/
-.claude/plugins/
+
+# Vendored plugin (kept in git so `git clone` actually works — self-use)
+# 取消下面这行以让 .claude/plugins/ 跟着 git 走（M-C1 修复）
+# .claude/plugins/
 
 # Python / Node build artifacts
 __pycache__/
 *.pyc
+.pytest_cache/
 node_modules/
 
 # OS / editor cruft
@@ -18,3 +22,6 @@ node_modules/
 
 # Backup directory (no longer used — git is at root)
 /.claude-backup/
+
+# 项目级状态指针（指向本机绝对路径，不应进 git）
+.claude/.webnovel-current-project

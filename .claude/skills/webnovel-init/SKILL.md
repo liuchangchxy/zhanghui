@@ -8,14 +8,14 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
 
 ## 目标
 
-- 通过结构化交互收集足够信息，避免“先生成再返工”。
+- 通过结构化交互收集足够信息，避免"先生成再返工"。
 - 产出可落地项目骨架：`.webnovel/state.json`、`设定集/*`、`大纲/总纲.md`、`.webnovel/idea_bank.json`。
 - 保证后续 `/webnovel-plan` 与 `/webnovel-write` 可直接运行。
 
 ## 执行原则
 
 1. 先收集，再生成；未过充分性闸门，不执行 `init_project.py`。
-2. 分波次提问，每轮只问“当前缺失且会阻塞下一步”的信息。
+2. 分波次提问，每轮只问"当前缺失且会阻塞下一步"的信息。
 3. 允许调用 `Read/Grep/Bash/Task/AskUserQuestion/WebSearch/WebFetch` 辅助收集。
 4. 用户已明确的信息不重复问；冲突信息优先让用户裁决。
 5. Deep 模式优先完整性，允许慢一点，但禁止漏关键字段。
@@ -25,21 +25,23 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
 采用分级加载，避免一次性灌入全部资料：
 
 - L0：未确认任务前，不预加载参考。
-- L1：每个阶段仅加载该阶段“必读”文件。
+- L1：每个阶段仅加载该阶段"必读"文件。
 - L2：仅在题材、金手指、创意约束触发条件满足时加载扩展参考。
 - L3：市场趋势类、时效类资料仅在用户明确要求时加载。
 
 路径约定：
 - `references/...` 相对当前 skill 目录（`${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/references/...`）。
-- `templates/...` 相对插件根目录（`${CLAUDE_PLUGIN_ROOT}/templates/...`）。
+- `templates/...` 相对当前 skill 目录（`${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/...`）—— H-R4-14 修正：templates 是 skill 的一部分，跟着 skill 走；不要写成 `${CLAUDE_PLUGIN_ROOT}/templates/...`，否则 plugin 与本地两份副本会指向不同目录。
 
 默认加载清单：
 - L1（启动前）：`references/genre-tropes.md`
+- L1（按需）：`templates/写作宪法.md` —— 仅当用户尚未提供时加载，作为风格底线占位
 - L2（按需）：
   - 题材模板：`templates/genres/{genre}.md`
-  - 金手指：`../../templates/golden-finger-templates.md`
+  - 金手指：`templates/golden-finger-templates.md`
   - 世界观：`references/worldbuilding/faction-systems.md`
-  - 创意约束：按下方“逐文件引用清单”触发加载
+  - 创意约束：按下方"逐文件引用清单"触发加载
+  - 爽文深度：`references/creativity/shuangwen-deep.md` / `shuangwen-opening.md` / `shuangwen-faceslap.md` —— 题材命中爽文相关 canonical（玄幻/都市/仙侠/历史 等）时按需加载
 - L3（显式请求）：
   - `references/creativity/market-trends-2026.md`
 
@@ -94,7 +96,7 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
   - 触发：Step 1 用户提及平台或商业目标时加载。
 - `references/creativity/market-trends-2026.md`
   - 用途：时间敏感市场趋势参考。
-  - 触发：仅用户明确要求“参考当下趋势”时加载。
+  - 触发：仅用户明确要求"参考当下趋势"时加载。
 - `references/creativity/anti-trope-xianxia.md`
   - 用途：反套路库（修仙/玄幻/高武/西幻）。
   - 触发：题材命中对应映射时加载。
@@ -107,6 +109,15 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
 - `references/creativity/anti-trope-rules-mystery.md`
   - 用途：反套路库（规则/悬疑/灵异/克苏鲁）。
   - 触发：题材命中对应映射时加载。
+- `references/creativity/shuangwen-deep.md`
+  - 用途：爽文类型核心特征、常见流派、爽点节奏、质量检查、避坑。
+  - 触发：题材命中爽文相关 canonical（玄幻/仙侠/都市/历史/科幻/游戏 等）或用户显式选择"爽文"时加载。
+- `references/creativity/shuangwen-opening.md`
+  - 用途：爽文黄金开篇五法则（动态切入/冲突前置/滴灌信息/限人物/快显金手指）。
+  - 触发：题材命中爽文 canonical 时必读；亦可作为开篇 Step 1 的写作前置参考。
+- `references/creativity/shuangwen-faceslap.md`
+  - 用途：装逼打脸五步递进法（上门被拒/冷眼相待/当众羞辱/对比/强迫分手 + 反转爆发）。
+  - 触发：题材命中爽文 canonical 时必读；写打脸剧情时按需重读。
 
 ## 工具策略（按需）
 
@@ -118,7 +129,7 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
 - `WebFetch`：用于抓取已确定来源页面内容并做事实核验。
 - 外部检索触发条件：
   - 用户明确要求参考市场趋势或平台风向；
-  - 创意约束需要“时间敏感依据”；
+  - 创意约束需要"时间敏感依据"；
   - 对题材信息存在明显不确定。
 
 ## 交互流程（Deep）
@@ -134,6 +145,7 @@ if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/scripts" ]; t
   exit 1
 fi
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
+
 ```
 
 必须做：
@@ -147,9 +159,10 @@ export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
   - `references/system-data-flow.md`（用于校对 init 产物与 plan/write 输入链路）
   - `references/genre-tropes.md`
   - `templates/genres/`（仅在用户选定题材后按需读取）
-
-输出：
-- 进入 Deep 采集前的“已知信息清单”和“待收集清单”。
+- **创作宪法加载**：`templates/写作宪法.md`（仅检测存在性，不强制内容）
+  - 存在 → 作为风格底线参考，L1 常驻
+  - 不存在 → 不阻断，但在 Step 6 提示用户可填写以固化风格底线
+- **创作宪法落库约定（H-R4-16）**：宪法是作者主观意图，写库反而约束太多；**init 不把 `templates/写作宪法.md` 复制到项目状态**，仅在 init 对话窗口作为风格底线参考。后续 `/webnovel-write` 的 Step 0 会重新加载它（按 `${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/写作宪法.md` 路径）作为 L1 prompt 注入的一部分。
 
 ### Step 1：故事核与商业定位
 
@@ -184,15 +197,19 @@ export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 收集项（可选）：
 - 主角原型标签（成长型/复仇型/天才流等）
 - 多主角分工
+- **个人语料**（Step 2 末检测 `${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/个人语料.md` 是否存在；H-R4-15 锚定基线目录）：
+  - 用户先在 `${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/个人语料.md` 填写并保存（这是基线目录）。
+  - 存在 → 复制为 `${PROJECT_ROOT}/设定集/个人语料.md`，记入"个人表达指纹"清单，由后续 `/webnovel-write` 触发时注入（实际注入时机为 write 的 Step 1 任务书与 Step 2A 写作执行包，详见 webnovel-write/SKILL.md 的"个人语料检测"段；init 本身只复制文件，不做注入）。
+  - 不存在 → 提示用户："如需在写作时注入个人语料风格，请先在 `${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/个人语料.md` 填写并保存，init 会自动复制为 `${PROJECT_ROOT}/设定集/个人语料.md`"。
 
 ### Step 3：金手指与兑现机制
 
 收集项（必收）：
-- 金手指类型（可为“无金手指”）
+- 金手指类型（可为"无金手指"）
 - 名称/系统名（无则留空）
 - 风格（硬核/诙谐/黑暗/克制等）
 - 可见度（谁知道）
-- 不可逆代价（必须有代价或明确“无+理由”）
+- 不可逆代价（必须有代价或明确"无+理由"）
 - 成长节奏（慢热/中速/快节奏）
 
 收集项（条件必收）：
@@ -232,11 +249,11 @@ export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 5. 用户选择最终方案，或拒绝并给出原因。
 
 备注：
-- 若用户要求“贴近当下市场”，可触发外部检索并标注时间戳。
+- 若用户要求"贴近当下市场"，可触发外部检索并标注时间戳。
 
 ### Step 6：一致性复述与最终确认
 
-必须输出“初始化摘要草案”并让用户确认：
+必须输出"初始化摘要草案"并让用户确认：
 - 故事核（题材/一句话故事/核心冲突）
 - 主角核（欲望/缺陷）
 - 金手指核（能力与代价）
@@ -305,6 +322,7 @@ export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
     "opening_hook": ""
   }
 }
+
 ```
 
 ## 充分性闸门（必须通过）
@@ -315,7 +333,7 @@ export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 2. 目标规模可计算（字数或章数至少一个）。
 3. 主角姓名 + 欲望 + 缺陷完整。
 4. 世界规模 + 力量体系类型完整。
-5. 金手指类型已确定（允许“无金手指”）。
+5. 金手指类型已确定（允许"无金手指"）。
 6. 创意约束已确定：
    - 反套路规则 1 条
    - 硬约束至少 2 条
@@ -368,6 +386,7 @@ python "${SCRIPTS_DIR}/webnovel.py" init \
   --antagonist-level "{antagonist_level}" \
   --target-reader "{target_reader}" \
   --platform "{platform}"
+
 ```
 
 ### 2) 写入 `idea_bank.json`
@@ -390,6 +409,7 @@ python "${SCRIPTS_DIR}/webnovel.py" init \
     "opening_hook": ""
   }
 }
+
 ```
 
 ### 3) Patch 总纲
@@ -410,6 +430,7 @@ test -f "{project_root}/.webnovel/state.json"
 find "{project_root}/设定集" -maxdepth 1 -type f -name "*.md"
 test -f "{project_root}/大纲/总纲.md"
 test -f "{project_root}/.webnovel/idea_bank.json"
+
 ```
 
 成功标准：

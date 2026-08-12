@@ -29,12 +29,14 @@ if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/dashboard" ];
   exit 1
 fi
 export DASHBOARD_DIR="${CLAUDE_PLUGIN_ROOT}/dashboard"
+
 ```
 
 ### Step 1：安装依赖（首次）
 
 ```bash
 python -m pip install -r "${DASHBOARD_DIR}/requirements.txt" --quiet
+
 ```
 
 ### Step 2：解析项目根目录并准备 Python 模块路径
@@ -57,12 +59,14 @@ if [ ! -f "${DASHBOARD_DIR}/frontend/dist/index.html" ]; then
   echo "请重新安装插件或联系维护者修复发布包。" >&2
   exit 1
 fi
+
 ```
 
 ### Step 3：启动 Dashboard
 
 ```bash
 python -m dashboard.server --project-root "${PROJECT_ROOT}"
+
 ```
 
 启动后会自动打开浏览器访问 `http://127.0.0.1:8765`。
@@ -71,6 +75,7 @@ python -m dashboard.server --project-root "${PROJECT_ROOT}"
 
 ```bash
 python -m dashboard.server --project-root "${PROJECT_ROOT}" --no-browser
+
 ```
 
 ## 注意事项

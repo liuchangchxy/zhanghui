@@ -8,7 +8,7 @@ allowed-tools: Read Grep Write Edit Bash Task AskUserQuestion
 
 ## Project Root Guard（必须先确认）
 
-- Claude Code 的“工作区根目录”不一定等于“书项目根目录”。常见结构：工作区为 `D:\wk\xiaoshuo`，书项目为 `D:\wk\xiaoshuo\凡人资本论`。
+- Claude Code 的"工作区根目录"不一定等于"书项目根目录"。常见结构：工作区为 `D:\wk\xiaoshuo`，书项目为 `D:\wk\xiaoshuo\凡人资本论`。
 - 必须先解析真实书项目根（必须包含 `.webnovel/state.json`），后续所有读写路径都以该目录为准。
 
 环境设置（bash 命令执行前）：
@@ -28,6 +28,7 @@ fi
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 
 export PROJECT_ROOT="$(python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+
 ```
 
 ## 0.5 工作流断点（best-effort，不得阻断主流程）
@@ -37,6 +38,7 @@ export PROJECT_ROOT="$(python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WOR
 推荐（bash）：
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow start-task --command webnovel-review --chapter {end} || true
+
 ```
 
 Step 映射（必须与 `workflow_manager.py get_pending_steps("webnovel-review")` 对齐）：
@@ -53,6 +55,7 @@ Step 记录模板（bash，失败不阻断）：
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow start-step --step-id "Step 1" --step-name "加载参考" || true
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-step --step-id "Step 1" --artifacts '{"ok":true}' || true
+
 ```
 
 ## Review depth
@@ -73,30 +76,34 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow co
 ## Reference Loading Levels (strict, lazy)
 
 - L0: 先确定审查深度（Core / Full），再加载参考。
-- L1: 只加载 References 区的“必读”条目。
-- L2: 仅在问题定位需要时加载 References 区的“可选”条目。
+- L1: 只加载 References 区的"必读"条目。
+- L2: 仅在问题定位需要时加载 References 区的"可选"条目。
 
 **必读**:
 ```bash
 cat "${SKILL_ROOT}/../../references/shared/core-constraints.md"
+
 ```
 
 **建议（Full 或需要时）**:
 ```bash
 cat "${SKILL_ROOT}/../../references/shared/cool-points-guide.md"
 cat "${SKILL_ROOT}/../../references/shared/strand-weave-pattern.md"
+
 ```
 
 **可选**:
 ```bash
 cat "${SKILL_ROOT}/references/common-mistakes.md"
 cat "${SKILL_ROOT}/references/pacing-control.md"
+
 ```
 
 ## Step 2: 加载项目状态（若存在）
 
 ```bash
 cat "$PROJECT_ROOT/.webnovel/state.json"
+
 ```
 
 ## Step 3: 并行调用检查员（Task）
@@ -134,6 +141,7 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 
 ## 改进建议
 - 可执行的修复建议
+
 ```
 
 **审查指标 JSON（用于趋势统计）**:
@@ -155,6 +163,7 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
   "report_file": "审查报告/第{start}-{end}章审查报告.md",
   "notes": ""
 }
+
 ```
 
 注意：此处只生成审查指标 JSON；落库见 Step 5。
@@ -163,6 +172,7 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" index save-review-metrics --data '@review_metrics.json'
+
 ```
 
 ## Step 6: 写回审查记录到 state.json（必做）
@@ -170,6 +180,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" index save-
 将审查报告记录写回 `state.json.review_checkpoints`，用于后续追踪与回溯（依赖 `update_state.py --add-review`）：
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" update-state -- --add-review "{start}-{end}" "审查报告/第{start}-{end}章审查报告.md"
+
 ```
 
 ## Step 7: 处理关键问题
@@ -179,7 +190,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" update-stat
 - B) 仅保存报告，稍后处理
 
 若用户选择 A：
-- 输出“返工清单”（逐条 critical 问题 → 定位 → 最小修复动作 → 注意事项）
+- 输出"返工清单"（逐条 critical 问题 → 定位 → 最小修复动作 → 注意事项）
 - 如用户明确授权可直接修改正文文件，则用 `Edit` 对对应章节文件做最小修复，并建议重新运行一次 `/webnovel-review` 验证
 
 若用户选择 B：
@@ -191,4 +202,5 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" update-stat
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow start-step --step-id "Step 8" --step-name "收尾" || true
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-step --step-id "Step 8" --artifacts '{"ok":true}' || true
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-task --artifacts '{"ok":true}' || true
+
 ```

@@ -90,6 +90,7 @@ Expected: PASS
 
 **5. REFACTOR** (if needed)
 **6. COMMIT** `git add/commit`
+
 ```
 
 ### 5. Frontmatter & Script
@@ -107,6 +108,7 @@ parent: "[path]"
 children: []
 tags: ["keyword1"]
 ---
+
 ```
 
 ### 5.5. Plan Document Header (REQUIRED)
@@ -129,6 +131,7 @@ tags: ["keyword1"]
 **Tech Stack:** [Key technologies/libraries]
 
 ---
+
 ```
 
 **Purpose**:

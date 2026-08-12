@@ -8,7 +8,7 @@ allowed-tools: Read Bash AskUserQuestion
 
 ## Project Root Guard（必须先确认）
 
-- Claude Code 的“工作区根目录”不一定等于“书项目根目录”。常见结构：工作区为 `D:\wk\xiaoshuo`，书项目为 `D:\wk\xiaoshuo\凡人资本论`。
+- Claude Code 的"工作区根目录"不一定等于"书项目根目录"。常见结构：工作区为 `D:\wk\xiaoshuo`，书项目为 `D:\wk\xiaoshuo\凡人资本论`。
 - 必须先解析真实书项目根（必须包含 `.webnovel/state.json`），后续所有读写路径都以该目录为准。
 
 环境设置（bash 命令执行前）：
@@ -28,6 +28,7 @@ fi
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 
 export PROJECT_ROOT="$(python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+
 ```
 
 ## Workflow Checklist
@@ -43,6 +44,7 @@ Copy and track progress:
 - [ ] Step 5: 展示恢复选项 (AskUserQuestion)
 - [ ] Step 6: 执行恢复
 - [ ] Step 7: 继续任务 (可选)
+
 ```
 
 ---
@@ -63,6 +65,7 @@ Copy and track progress:
 
 ```bash
 cat "${SKILL_ROOT}/references/workflow-resume.md"
+
 ```
 
 **核心原则**（读取后应用）：
@@ -74,6 +77,7 @@ cat "${SKILL_ROOT}/references/workflow-resume.md"
 
 ```bash
 cat "${SKILL_ROOT}/references/system-data-flow.md"
+
 ```
 
 ## Step 3: 确认上下文充足
@@ -102,7 +106,8 @@ cat "${SKILL_ROOT}/references/system-data-flow.md"
 ## Step 4: 检测中断状态
 
 ```bash
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow detect
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" run-ledger detect
+
 ```
 
 **输出情况**：
@@ -139,20 +144,23 @@ A) 删除半成品，从Step 1重新开始（推荐）
 B) 回滚到Ch6，放弃Ch7所有进度
 
 请选择（A/B）：
+
 ```
 
 ## Step 6: 执行恢复
 
 **选项 A - 删除重来**（推荐）：
 ```bash
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow cleanup --chapter {N} --confirm
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow clear
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" run-ledger cleanup --chapter {N} --confirm
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" run-ledger clear
+
 ```
 
 **选项 B - Git 回滚**：
 ```bash
 git -C "$PROJECT_ROOT" reset --hard ch{N-1:04d}
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow clear
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" run-ledger clear
+
 ```
 
 ## Step 7: 继续任务（可选）
@@ -160,6 +168,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow clea
 如用户选择立即继续：
 ```bash
 /{original_command} {original_args}
+
 ```
 
 ---
@@ -172,6 +181,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow clea
 恢复选项：
 A) 重新执行双章审查（成本：~$0.15）⚠️
 B) 跳过审查，继续下一章（可后续补审）
+
 ```
 
 ### Step 4 中断（部分状态）
@@ -181,6 +191,7 @@ B) 跳过审查，继续下一章（可后续补审）
 
 A) 检查并修复 state.json
 B) 回滚到上一章（安全）
+
 ```
 
 ### 长时间中断（>1小时）
@@ -190,6 +201,7 @@ B) 回滚到上一章（安全）
 
 上下文丢失风险高
 建议重新开始而非续写
+
 ```
 
 ---

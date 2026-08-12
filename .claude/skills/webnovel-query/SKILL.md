@@ -8,7 +8,7 @@ allowed-tools: Read Grep Bash AskUserQuestion
 
 ## Project Root Guard（必须先确认）
 
-- Claude Code 的“工作区根目录”不一定等于“书项目根目录”。常见结构：工作区为 `D:\wk\xiaoshuo`，书项目为 `D:\wk\xiaoshuo\凡人资本论`。
+- Claude Code 的"工作区根目录"不一定等于"书项目根目录"。常见结构：工作区为 `D:\wk\xiaoshuo`，书项目为 `D:\wk\xiaoshuo\凡人资本论`。
 - 必须先解析真实书项目根（必须包含 `.webnovel/state.json`），后续所有读写路径都以该目录为准。
 - **禁止**在插件目录 `${CLAUDE_PLUGIN_ROOT}/` 下读取或写入项目文件
 
@@ -29,6 +29,7 @@ fi
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 
 export PROJECT_ROOT="$(python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+
 ```
 
 ## Workflow Checklist
@@ -43,6 +44,7 @@ Copy and track progress:
 - [ ] Step 4: 确认上下文充足
 - [ ] Step 5: 执行查询
 - [ ] Step 6: 格式化输出
+
 ```
 
 ---
@@ -79,27 +81,32 @@ Do not load two or more L2 files unless the user request clearly spans multiple 
 **所有查询必须执行**：
 ```bash
 cat "${SKILL_ROOT}/references/system-data-flow.md"
+
 ```
 
 **伏笔查询额外执行**：
 ```bash
 cat "${SKILL_ROOT}/references/advanced/foreshadowing.md"
+
 ```
 
 **节奏查询额外执行**：
 ```bash
 cat "${SKILL_ROOT}/../../references/shared/strand-weave-pattern.md"
+
 ```
 
 **标签格式查询额外执行**：
 ```bash
 cat "${SKILL_ROOT}/references/tag-specification.md"
+
 ```
 
 ## Step 3: 加载项目数据
 
 ```bash
 cat "$PROJECT_ROOT/.webnovel/state.json"
+
 ```
 
 ## Step 4: 确认上下文充足
@@ -134,6 +141,7 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 **紧急度公式**：
 ```
 紧急度 = (已过章节 / 目标章节) × 层级权重
+
 ```
 
 **状态判定**：
@@ -144,6 +152,7 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 **快速分析**：
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" status -- --focus urgency
+
 ```
 
 ### 金手指状态
@@ -161,6 +170,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" status -- --f
 **快速分析**：
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" status -- --focus strand
+
 ```
 
 **检查警告**：
@@ -189,4 +199,5 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" status -- --f
 
 ## ⚠️ 数据一致性检查
 {state.json 与静态文件的差异}
+
 ```

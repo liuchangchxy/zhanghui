@@ -39,12 +39,12 @@ ai写小说工具开发/
 1. 新建一个项目文件夹，比如 `~/novel-test-1/`
 2. 在那个文件夹里建软链：
    ```bash
-   ln -sf ~/ai写小说工具开发/.claude ./claude
+   ln -sfn ~/ai写小说工具开发/.claude ./.claude
    ```
 3. 启动 `claude`（新会话）
 4. 项目级 skill 会被自动加载，无需修改
 
-测试环境已建好：`~/novel-test-1/`，里面有 `测试指南.md`。
+测试环境未自带（请按上面第 1-2 步手动建一个）。
 
 ## 文档
 
@@ -59,6 +59,19 @@ cd .claude/scripts && python3 -m pytest tests/ -v
 
 40 个测试覆盖 R1-R8 单元校验 + 10 个集成测试（5 正例 + 5 反例）。
 
+## 排错流程
+
+```bash
+# 1. 先跑 doctor 做项目体检
+/webnovel-doctor --deep
+
+# 2. hook 误伤合法操作时的逃生口
+WEBNOVEL_DISABLE_RUNTIME_GUARD_HOOK=1 /webnovel-write   # 临时绕过 guard_runtime_write hook
+
+# 3. 查看 token 用量
+ls .webnovel/observability/ 2>/dev/null
+```
+
 ## 三个 skill 的功能
 
 | Skill | 跳过什么 | 保留什么 |
@@ -66,6 +79,8 @@ cd .claude/scripts && python3 -m pytest tests/ -v
 | `/webnovel-write` | 无（完整流程） | 全部 |
 | `/webnovel-fast-write` | Step 2B 风格转译 + Step 3 reviewer + Step 4 polish | Step 4.5 CHANGES + 4.6 anti-slop |
 | `/webnovel-deslop-check` | 写流程 | 仅扫描任意已有章节 |
+| `/webnovel-resume` | 无 | workflow 断点恢复（用 `run-ledger` 子命令）|
+| `/webnovel-style-profile` | 无 | 文风指纹 + 漂移检测（≥ 3 章时建基线）|
 
 ## CHANGES 协议
 

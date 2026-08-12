@@ -55,6 +55,7 @@
   ]
 }
 </chapter_changes>
+
 ```
 
 ## 极简示例
@@ -74,6 +75,7 @@
   "unresolved_questions": []
 }
 </chapter_changes>
+
 ```
 
 ## 错误示例（会被门禁打回）
@@ -100,4 +102,5 @@
 
 <!-- trust_delta 超阈值 -->
 {"character_state_changes": [{"character_id": "C-001", "relationship_changes": {"C-002": {"trust_delta": 100}}}]}
+
 ```

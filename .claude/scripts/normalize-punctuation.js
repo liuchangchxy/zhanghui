@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 // Forked from oh-story-claudecode (MIT License). Used for personal AI-novel workflow.
+//
+// ⚠️ WARNING (M-C7, 第五轮审查):
+// 本脚本会直接覆写源文件（fs.writeFileSync），无确认、无 backup、无 git dry-run。
+// 误跑可能造成正文节奏标记不可逆丢失。
+// 推荐用法：先 git commit 当前状态，再跑本脚本。
+// 或直接改用 webnovel-deslop-check 集成的 polish 流程。
 'use strict';
 
 const fs = require('fs');

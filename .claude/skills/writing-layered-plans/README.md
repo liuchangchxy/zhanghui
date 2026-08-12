@@ -30,6 +30,7 @@
 我需要为 XXX 添加 YYY 功能。
 需求已明确：...
 请生成详细的实施计划。
+
 ```
 
 ## 技能关系
@@ -42,6 +43,7 @@ interactive-planning (父)
             ├── Explore Phase
             ├── Design Phase
             └── 详细 TDD 任务
+
 ```
 
 ## 与 writing-plans 的区别
@@ -79,10 +81,12 @@ Run: `pytest test.py`
 Expected: PASS
 
 **Step 5: Commit**
+
 ```bash
 git add file.py
 git commit -m "feat: add function"
 ```
+
 ```
 
 ## 相关文件

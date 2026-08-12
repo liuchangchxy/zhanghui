@@ -19,6 +19,7 @@ allowed-tools: Read Write Bash
 ## 输入
 ```bash
 /webnovel-learn "本章的危机钩设计很有效，悬念拉满"
+
 ```
 
 ## 输出
@@ -32,6 +33,7 @@ allowed-tools: Read Write Bash
     "learned_at": "2026-02-02T12:00:00Z"
   }
 }
+
 ```
 
 ## 执行流程

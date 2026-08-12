@@ -17,6 +17,7 @@ purpose: 重定向到权威版本
 
 ```bash
 cat "${SKILL_ROOT}/../webnovel-query/references/system-data-flow.md"
+
 ```
 
 ## 快速参考
@@ -32,6 +33,7 @@ cat "${SKILL_ROOT}/../webnovel-query/references/system-data-flow.md"
     ├── workflow_state.json # 工作流断点
     ├── index.db            # SQLite 索引
     └── archive/            # 归档数据
+
 ```
 
 ### 当前结构核心变化

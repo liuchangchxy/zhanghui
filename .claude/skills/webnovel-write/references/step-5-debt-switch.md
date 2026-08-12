@@ -11,6 +11,7 @@
 
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" index accrue-interest --current-chapter {chapter_num}
+
 ```
 
 ## 执行后要求

@@ -23,6 +23,7 @@ purpose: 项目初始化和状态查询时加载，理解数据结构
     ├── vectors.db          # RAG 向量数据库
     ├── summaries/          # 章节摘要（chNNNN.md）
     └── archive/            # 归档数据（不活跃角色/已回收伏笔）
+
 ```
 
 ## 架构变更说明
@@ -55,6 +56,7 @@ purpose: 项目初始化和状态查询时加载，理解数据结构
         └── 写入 summaries/chNNNN.md（章节摘要）
 
 Context Agent (读) ←→ index.db + state.json ←→ Data Agent (写)
+
 ```
 
 ## 脚本/模块职责速查
@@ -116,6 +118,7 @@ Context Agent (读) ←→ index.db + state.json ←→ Data Agent (写)
    → 风格样本评估
 
 7. Git 备份（强制）
+
 ```
 
 > `update_state.py` 用于手动/脚本化更新 `progress`/`protagonist_state`/`strand_tracker` 等字段；主流程通常由 Data Agent 在处理数据链时同步推进进度。
@@ -149,6 +152,7 @@ Context Agent (读) ←→ index.db + state.json ←→ Data Agent (写)
   "chapter_meta": {},
   "_migrated_to_sqlite": true
 }
+
 ```
 
 > **当前结构说明**: entities_v3、alias_index、state_changes、structured_relationships 已迁移到 index.db，不再存储在 state.json 中。
@@ -204,6 +208,7 @@ CREATE TABLE relationships (
 CREATE TABLE chapters (...);
 CREATE TABLE scenes (...);
 CREATE TABLE appearances (...);
+
 ```
 
 ## Data Agent AI 提取流程
@@ -237,6 +242,7 @@ CREATE TABLE appearances (...);
     {"type": "势力", "id": "faction_tianyunzong"}
   ]
 }
+
 ```
 
 同一别名可映射到多个实体，消歧时根据 type 或上下文判断。
@@ -251,6 +257,7 @@ CREATE TABLE appearances (...);
 ```bash
 cat "$PROJECT_ROOT/.webnovel/state.json" | jq '.progress'
 # 输出: { "current_chapter": 45, "total_words": 135000 }
+
 ```
 </output>
 </example>
@@ -264,6 +271,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index get-ent
 
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index get-core-entities
 # 输出: 所有核心实体（主角 + tier=核心/重要）
+
 ```
 </output>
 </example>
@@ -274,6 +282,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index get-cor
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index get-by-alias --alias "天云宗"
 # 输出: [{"id": "loc_tianyunzong", "type": "地点"}, {"id": "faction_tianyunzong", "type": "势力"}]
+
 ```
 </output>
 </example>
@@ -284,6 +293,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index get-by-
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index get-state-changes --entity "xiaoyan" --limit 10
 # 输出: [{entity_id, field, old_value, new_value, reason, chapter}, ...]
+
 ```
 </output>
 </example>
@@ -294,6 +304,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index get-sta
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index get-relationships --entity "xiaoyan"
 # 输出: [{from_entity, to_entity, type, description, chapter}, ...]
+
 ```
 </output>
 </example>
@@ -303,6 +314,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index get-rel
 <output>
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" status -- --focus urgency
+
 ```
 </output>
 </example>
@@ -312,6 +324,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" status -- --f
 <output>
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index entity-appearances --entity "lintian"
+
 ```
 </output>
 </example>
@@ -322,6 +335,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" index entity-
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" migrate -- --backup
 # 自动备份 state.json，迁移数据到 index.db，精简 state.json
+
 ```
 </output>
 </example>

@@ -41,6 +41,7 @@
   "key_event": "关键事件描述",
   "importance": "normal | important | critical"
 }
+
 ```
 
 ### new_plot_points[i]
@@ -53,6 +54,7 @@
   "importance": "normal | important | critical",
   "storyline": "main | sub | character_arc"
 }
+
 ```
 
 ### foreshadowing_actions[i]
@@ -62,6 +64,7 @@
   "foreshadow_id": "F1-001",
   "action": "setup | payoff"
 }
+
 ```
 
 ### location_state_changes[i]
@@ -73,6 +76,7 @@
   "event": "事件描述",
   "importance": "normal | important | critical"
 }
+
 ```
 
 ### faction_state_changes[i]
@@ -84,6 +88,7 @@
   "event": "事件描述",
   "importance": "normal | important | critical"
 }
+
 ```
 
 ### time_progression
@@ -95,6 +100,7 @@
   "key_time_event": "主角抵港三日",
   "importance": "normal | important | critical"
 }
+
 ```
 
 ### item_transfers[i]
@@ -109,6 +115,7 @@
   "event": "转移事件描述",
   "importance": "normal | important | critical"
 }
+
 ```
 
 ### unresolved_questions[i]
@@ -120,4 +127,5 @@
   "target_payoff_chapter": 50,
   "importance": "normal | important | critical"
 }
+
 ```

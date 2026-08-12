@@ -2,7 +2,7 @@
 
 ## 调用约束（硬规则）
 
-- 必须使用 `Task` 调用审查 subagent，禁止主流程直接内联“自审结论”。
+- 必须使用 `Task` 调用审查 subagent，禁止主流程直接内联"自审结论"。
 - 审查任务可并行发起，必须在全部返回后统一聚合。
 - `overall_score` 必须来自聚合结果，不可主观估分。
 - 单章写作场景下，统一传入：`{chapter, chapter_file, project_root}`。
@@ -34,14 +34,14 @@
 - `reader-pull-checker`：当满足任一条件时启用
   - 非过渡章；
   - 有明确未闭合问题/期待锚点；
-  - 用户显式要求“追读力审查”。
+  - 用户显式要求"追读力审查"。
 - `high-point-checker`：当满足任一条件时启用
   - 关键章/高潮章/卷末章；
   - 正文出现战斗、反杀、打脸、身份揭露、大反转等高光信号。
 - `pacing-checker`：当满足任一条件时启用
   - 章号 >= 10；
   - 最近章节存在明显节奏失衡风险；
-  - 用户显式要求“节奏审查”。
+  - 用户显式要求"节奏审查"。
 
 ## Task 调用模板（示意）
 
@@ -54,6 +54,7 @@ if mode != "minimal":
   if trigger_pacing: selected.append("pacing-checker")
 
 parallel Task(agent, {chapter, chapter_file, project_root}) for agent in selected
+
 ```
 
 ## 输出契约（统一）
@@ -81,12 +82,14 @@ parallel Task(agent, {chapter, chapter_file, project_root}) for agent in selecte
 - 高优先级问题: {N} 个
 - 综合评分: {score}
 - 可进入润色: {是/否}
+
 ```
 
 ## 审查指标落库（必做）
 
 ```bash
 python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" index save-review-metrics --data "@${PROJECT_ROOT}/.webnovel/tmp/review_metrics.json"
+
 ```
 
 review_metrics 文件字段约束（当前工作流约定只传以下字段）：
@@ -128,6 +131,7 @@ if len(critical_timeline) > 0:
     return BLOCKED
 else:
     通过: "时间线检查通过"
+
 ```
 
 **修复指引**：

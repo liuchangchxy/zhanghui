@@ -28,6 +28,7 @@ purpose: 任务恢复时加载，指导中断恢复流程
 
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow detect
+
 ```
 
 ### Phase 2: 询问用户
@@ -45,12 +46,14 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow dete
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow cleanup --chapter {N} --confirm
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow clear
 /webnovel-write {N}
+
 ```
 
 **选项 B**: 回滚到上一章
 ```bash
 git reset --hard ch{N-1:04d}
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" workflow clear
+
 ```
 
 ## 为什么删除而不续写？
