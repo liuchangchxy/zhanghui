@@ -1,5 +1,5 @@
-# Upstream / external repos (do not snapshot — they are read-only references)
-ai-webnovel-repos/
+# Reference repository moved to ~/References/ai-webnovel-repos/ (2026-08-12)
+# — no longer needs gitignore exclusion since it's outside the repo.
 
 # Upstream skills / plugin sources pulled in for reference only
 .claude/sources/

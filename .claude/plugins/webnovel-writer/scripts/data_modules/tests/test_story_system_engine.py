@@ -19,11 +19,19 @@ def _write_csv(path, headers, rows):
 
 
 def _make_local_tmp_path() -> Path:
-    base_dir = Path(__file__).resolve().parents[4] / ".tmp_story_system_engine"
-    base_dir.mkdir(exist_ok=True)
-    tmp_dir = base_dir / f"case_{uuid.uuid4().hex}"
-    tmp_dir.mkdir()
-    return tmp_dir
+    # Create a per-call temp dir under the OS temp area (typically
+    # /tmp/pytest-of-<user>/ on Linux/macOS), NOT inside the repo.
+    #
+    # Previously this helper wrote case_<uuid>/ under
+    # <repo>/.tmp_story_system_engine/ with no teardown, which accumulated
+    # 230+ CSV files across repeated runs and polluted the working tree.
+    # The OS temp dir is cleaned by `pytest --cache-clear` or OS reboot.
+    #
+    # Prefer pytest's `tmp_path` fixture in new tests.
+    import tempfile
+
+    tmp_root = tempfile.mkdtemp(prefix="story_system_engine_")
+    return Path(tmp_root)
 
 
 def test_story_system_routes_explicit_genre_and_collects_anti_patterns():

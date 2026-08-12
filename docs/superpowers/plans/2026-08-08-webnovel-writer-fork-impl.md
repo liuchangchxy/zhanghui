@@ -1,5 +1,7 @@
 # webnovel-writer 个人 fork 实施计划
 
+> **注意（2026-08-12）**：本文是历史快照。下列所有 `/Users/chang/Desktop/webnovel-tool-lab/...` 路径反映 2026-08-08 实施时的工作区；当前工具仓在 `/Users/chang/Desktop/ai写小说工具开发/`，参考仓库在 `~/References/ai-webnovel-repos/`，小说项目在 `~/Desktop/根源牌序/`。本文件保留原路径以维持可追溯性，未做替换。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 基于现有 webnovel-writer 插件，构建项目级 skill 叠加层，解决三个具体痛点：长篇一致性、AI 味重、流程繁琐。
