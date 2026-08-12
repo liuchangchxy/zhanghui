@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.adapters.base import BaseAdapter
+from scripts.adapters.base import BaseAdapter, AdapterStatus
 from scripts.schema import ScanResult, ScanMeta, AdapterError
 from scripts.normalize import raw_to_bookitem
 from scripts.output import write_scan_result
@@ -133,6 +133,32 @@ def run_scan(args: argparse.Namespace) -> int:
         for category in categories:
             for period in periods:
                 try:
+                    if adapter.status != AdapterStatus.LIVE:
+                        # Blocked adapter — don't even try fetch().
+                        # Record a human-readable explanation so the
+                        # report surfaces WHY this attempt produced
+                        # zero books (no silent failure).
+                        reason = {
+                            AdapterStatus.BLOCKED_EXTERNAL: (
+                                f"{adapter.platform} 平台外部阻塞 "
+                                f"（endpoint dead 或 anti-bot 拦截），"
+                                f"需要 v0.2 解决"
+                            ),
+                            AdapterStatus.BLOCKED_IMPLEMENTATION: (
+                                f"{adapter.platform} 平台实现未完成 "
+                                f"（详见 KNOWN_LIMITATIONS.md），"
+                                f"需要 v0.2 解决"
+                            ),
+                        }[adapter.status]
+                        errors.append(AdapterError(
+                            platform=platform, category=category, period=period,
+                            stage=adapter.strategy.value,
+                            message=reason,
+                            occurred_at=datetime.now(timezone.utc),
+                        ))
+                        if args.verbose:
+                            print(f"[{platform}/{category}/{period}] SKIPPED ({adapter.status.value}): {reason}", file=sys.stderr)
+                        continue
                     if args.verbose:
                         print(f"[{platform}/{category}/{period}] fetching top {args.top}...", file=sys.stderr)
                     raw_books = adapter.fetch(category, period, top=args.top)

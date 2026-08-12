@@ -1,95 +1,54 @@
-"""Tests for the fanqie adapter (Strategy.VENDOR, Playwright-backed).
+"""Tests for the fanqie adapter metadata (Strategy.VENDOR).
 
-NOTE on real upstream shape (2026-08-12):
-    The vendored ``scrape_fanqie_ranks.run_scraper`` returns a dict whose
-    book entries use these keys (verified against the upstream's daily
-    ``data/latest_ranks.json``):
+Status: BLOCKED_IMPLEMENTATION (verified 2026-08-13).
 
-        { "title": str, "author": str, "reads": str,
-          "intro": str, "cover": str, "url": str }
+    The vendored subset needs Playwright + Chromium installed:
 
-    There is no ``bookName``/``bookId``/``category``/``rank`` field at
-    book level (the category lives one level up at ``{"name", "books": [...]}"``,
-    and rank is just list index). The Task-8 spec's sample used the
-    non-existent ``bookName``/``bookId``/``rank`` keys; we follow the
-    real upstream shape instead (see Task-7 review lesson).
+        pip install playwright && playwright install chromium
+
+    Until then the adapter raises NotImplementedError immediately
+    without attempting to import playwright — so import/parser tests
+    are no longer applicable. Only the metadata + immediate-raise test
+    remain.
 """
-from __future__ import annotations
-
-import pytest
-
-from scripts.adapters.fanqie import FanqieAdapter, parse_fanqie_rank_list
-
-
-# Real-shape sample: matches the upstream's books[*] entries exactly.
-SAMPLE_FANQIE_RANK = [
-    {
-        "title": "领主：我在苦痛世界，养成少女",
-        "author": "嘎嘎乱写",
-        "reads": "44万",
-        "intro": "穿越中世纪，成为一名叫“菲尔德”的贵族。",
-        "cover": "https://p3-reading-sign.fqnovelpic.com/novel-pic/xxx",
-        "url": "https://fanqienovel.com/page/7320218217488600126",
-    },
-]
-
-
-def test_parse_fanqie_rank_list():
-    books = parse_fanqie_rank_list(SAMPLE_FANQIE_RANK, top=10)
-    assert len(books) == 1
-    assert books[0].title == "领主：我在苦痛世界，养成少女"
-    assert books[0].author == "嘎嘎乱写"
-    assert books[0].intro.startswith("穿越中世纪")
-    assert books[0].cover_url and books[0].cover_url.startswith("https://")
-    assert books[0].detail_url and "fanqienovel.com/page/" in books[0].detail_url
-    assert books[0].rank_position == 1
+from scripts.adapters.fanqie import FanqieAdapter
+from scripts.adapters.base import AdapterStatus
 
 
 def test_fanqie_adapter_metadata():
     a = FanqieAdapter()
     assert a.platform == "fanqie"
     assert a.strategy.value == "vendor"
-
-
-def test_fanqie_adapter_fetch_missing_playwright(monkeypatch):
-    """If Playwright is not importable, fetch() must raise a clear RuntimeError,
-    not a bare ModuleNotFoundError (per the spec)."""
-    a = FanqieAdapter()
-
-    import builtins
-
-    real_import = builtins.__import__
-
-    def _fake_import(name, *args, **kwargs):
-        if name == "vendor.fanqie_rank_tracker.scrape_fanqie_ranks":
-            raise ImportError("simulated: playwright not installed")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", _fake_import)
-    with pytest.raises(RuntimeError, match="Playwright"):
-        # category="all" is the only value accepted by fanqie VENDOR; the
-        # import-failure path we want to exercise is downstream of that.
-        a.fetch(category="all", period="daily", top=10)
-
-
-def test_parse_fanqie_rank_list_truncates_to_top():
-    raw = SAMPLE_FANQIE_RANK * 5  # 5 copies
-    books = parse_fanqie_rank_list(raw, top=3)
-    assert len(books) == 3
-    assert [b.rank_position for b in books] == [1, 2, 3]
-
-
-def test_parse_fanqie_rank_list_handles_missing_fields():
-    """Parser must tolerate missing keys (real data sometimes omits intro)."""
-    books = parse_fanqie_rank_list([{"title": "孤儿"}], top=10)
-    assert len(books) == 1
-    assert books[0].title == "孤儿"
-    assert books[0].author == ""
-    assert books[0].rank_position == 1
+    assert a.status == AdapterStatus.BLOCKED_IMPLEMENTATION
 
 
 def test_fanqie_adapter_raises_for_specific_category():
-    """传具体分类时应显式报错，不静默吞掉（与 zongheng 一致）。"""
+    """Even BLOCKED_IMPLEMENTATION adapters should still raise for
+    unsupported category values (defensive — pre-existing behavior
+    preserved)."""
     a = FanqieAdapter()
-    with pytest.raises(NotImplementedError, match="does not support category"):
+    try:
         a.fetch("玄幻", "weekly", 10)
+    except NotImplementedError as e:
+        msg = str(e)
+        # Must mention either the category restriction (legacy) or the
+        # BLOCKED_IMPLEMENTATION reason (new). Both contain the
+        # substring "KNOWN_LIMITATIONS.md" or "Playwright".
+        assert ("Playwright" in msg) or ("does not support category" in msg)
+        return
+    raise AssertionError("FanqieAdapter.fetch should raise NotImplementedError (status=BLOCKED_IMPLEMENTATION)")
+
+
+def test_fanqie_adapter_fetch_raises_immediately_without_playwright():
+    """fetch(category='all', ...) must raise before any Playwright import.
+    Verifies the BLOCKED_IMPLEMENTATION short-circuit prevents the
+    vendored import path from running."""
+    a = FanqieAdapter()
+    try:
+        a.fetch(category="all", period="daily", top=10)
+    except NotImplementedError as e:
+        msg = str(e)
+        assert "Playwright" in msg
+        assert "KNOWN_LIMITATIONS.md" in msg
+        return
+    raise AssertionError("FanqieAdapter.fetch should raise NotImplementedError before importing playwright")

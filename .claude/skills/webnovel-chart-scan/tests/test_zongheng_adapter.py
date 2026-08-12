@@ -1,61 +1,32 @@
-import json
-from pathlib import Path
-import httpx
-import pytest
+"""Tests for the zongheng adapter metadata (Strategy.DIRECT_API).
 
-from scripts.adapters.zongheng import ZonghengAdapter, parse_rank_response
+Status: BLOCKED_EXTERNAL (verified 2026-08-13).
 
-
-def test_parse_rank_response_extracts_basic_fields():
-    fixture = json.loads(
-        (Path(__file__).parent / "fixtures" / "zongheng_rank_details.json").read_text()
-    )
-    books = parse_rank_response(fixture, top=5)
-    assert len(books) == 5
-    assert all(b.platform_book_id for b in books)
-    assert all(b.title for b in books)
-    assert all(b.author for b in books)
-    assert all(b.rank_position is not None for b in books)
+    The publicly documented endpoint
+    https://www.zongheng.com/api/rank/details returns HTTP 404. Until
+    the Nuxt SSR scraping fallback lands in v0.2 the adapter raises
+    NotImplementedError immediately — so network/parser tests are no
+    longer applicable. Only the metadata test remains.
+"""
+from scripts.adapters.zongheng import ZonghengAdapter
+from scripts.adapters.base import AdapterStatus
 
 
 def test_zongheng_adapter_metadata():
     a = ZonghengAdapter()
     assert a.platform == "zongheng"
     assert a.strategy.value == "direct_api"
+    assert a.status == AdapterStatus.BLOCKED_EXTERNAL
 
 
-def test_zongheng_adapter_fetch_uses_httpx(monkeypatch):
-    """mock httpx.get，验证 URL 和 headers 正确。"""
-    captured = {}
-
-    def fake_get(url, **kwargs):
-        captured["url"] = url
-        captured["headers"] = kwargs.get("headers", {})
-        captured["params"] = kwargs.get("params", {})
-
-        class Resp:
-            def __init__(self):
-                self.status_code = 200
-
-            def json(self):
-                return {"data": {"bookList": []}}
-
-            def raise_for_status(self):
-                pass
-
-        return Resp()
-
-    monkeypatch.setattr(httpx, "get", fake_get)
+def test_zongheng_adapter_fetch_raises_immediately_without_network():
+    """fetch() must raise before any HTTP request — no silent fallback."""
     a = ZonghengAdapter()
-    a.fetch("all", "weekly", 10)  # zongheng 不支持 category 过滤
-
-    assert "zongheng.com" in captured["url"]
-    assert captured["headers"].get("User-Agent", "").startswith("Mozilla")
-    assert captured["params"].get("pageSize") == 10
-
-
-def test_zongheng_adapter_raises_for_specific_category():
-    """传具体分类时应显式报错，不静默吞掉。"""
-    a = ZonghengAdapter()
-    with pytest.raises(NotImplementedError, match="does not support category"):
-        a.fetch("玄幻", "weekly", 10)
+    try:
+        a.fetch("all", "weekly", 10)
+    except NotImplementedError as e:
+        msg = str(e)
+        assert "404" in msg
+        assert "KNOWN_LIMITATIONS.md" in msg
+        return
+    raise AssertionError("ZonghengAdapter.fetch should raise NotImplementedError (status=BLOCKED_EXTERNAL)")

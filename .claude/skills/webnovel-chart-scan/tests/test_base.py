@@ -1,11 +1,12 @@
 import pytest
-from scripts.adapters.base import BaseAdapter, Strategy
+from scripts.adapters.base import BaseAdapter, Strategy, AdapterStatus
 from scripts.schema import RawBook
 
 
 class FakeAdapter(BaseAdapter):
     platform = "fake"
     strategy = Strategy.DIRECT_API
+    status = AdapterStatus.LIVE
 
     def fetch(self, category, period, top):
         return [
@@ -20,13 +21,37 @@ def test_strategy_enum_values():
     assert Strategy.WEBFETCH.value == "webfetch"
 
 
-def test_adapter_subclass_must_implement_fetch():
-    class IncompleteAdapter(BaseAdapter):
-        platform = "x"
-        strategy = Strategy.WEBFETCH
+def test_adapter_status_enum_values():
+    assert AdapterStatus.LIVE.value == "live"
+    assert AdapterStatus.BLOCKED_EXTERNAL.value == "blocked_external"
+    assert AdapterStatus.BLOCKED_IMPLEMENTATION.value == "blocked_implementation"
 
-    with pytest.raises(TypeError):
-        IncompleteAdapter()  # 不能实例化抽象类
+
+def test_base_adapter_default_status_is_live():
+    """Default status on BaseAdapter is LIVE; subclasses override."""
+
+    class PlainAdapter(BaseAdapter):
+        def fetch(self, category, period, top):
+            return []
+
+    a = PlainAdapter()
+    assert a.status == AdapterStatus.LIVE
+
+
+def test_base_adapter_default_fetch_raises_for_blocked_subclass():
+    """A subclass that doesn't override fetch() can still be instantiated;
+    calling fetch() then raises NotImplementedError with the status in
+    the message (orchestrator short-circuits before reaching this in
+    production, but the placeholder is the safety net)."""
+
+    class BlockedAdapter(BaseAdapter):
+        platform = "blocked_test"
+        strategy = Strategy.VENDOR
+        status = AdapterStatus.BLOCKED_EXTERNAL
+
+    a = BlockedAdapter()
+    with pytest.raises(NotImplementedError, match="blocked_external"):
+        a.fetch("玄幻", "weekly", 5)
 
 
 def test_adapter_fetch_returns_list_of_rawbook():
