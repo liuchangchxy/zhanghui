@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 PLATFORMS = Literal["qidian", "fanqie", "zongheng", "qimao", "ciweimao"]
 PERIODS = Literal["daily", "weekly", "monthly"]
 STATUSES = Literal["serial", "completed"]
-ERROR_STAGES = Literal["vendor", "direct_api", "webfetch", "normalize"]
+ERROR_STAGES = Literal["vendor", "hybrid", "direct_api", "webfetch", "normalize"]
 
 
 class RawBook(BaseModel):

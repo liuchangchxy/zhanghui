@@ -58,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="扫网文平台分类榜单（起点/番茄/纵横/七猫/刺猬猫）",
     )
     parser.add_argument("--platform", default="all", help="逗号分隔，例 qidian,fanqie 或 all")
-    parser.add_argument("--category", default="all", help="分类名或 all（多分类用逗号）")
+    parser.add_argument("--category", default="all", help="分类名（'all' 表示全部，传 'all' 字面量给各 adapter）或具体分类")
     parser.add_argument("--top", type=int, default=50, help="每榜前 N 本，≤100")
     parser.add_argument("--period", default="weekly", help="daily,weekly,monthly（多值用逗号）")
     parser.add_argument("--output-dir", type=Path, default=Path("./chart-scan"))
@@ -73,6 +73,17 @@ def _parse_list(value: str, all_values: list[str], label: str) -> list[str]:
     invalid = [i for i in items if i not in all_values]
     if invalid:
         raise ValueError(f"{label} 包含无效值 {invalid}; 有效: {all_values}")
+    return items
+
+
+def _parse_categories(value: str) -> list[str]:
+    """--category handling: 'all' is a literal string passed to adapters,
+    not a list of all known categories. Adapters that support category filtering
+    (ciweimao) handle 'all' themselves; adapters that don't (fanqie/zongheng/qimao)
+    accept 'all' as the only valid value."""
+    if value == "all":
+        return ["all"]  # single literal, not expansion
+    items = [v.strip() for v in value.split(",") if v.strip()]
     return items
 
 
@@ -98,7 +109,7 @@ def run_scan(args: argparse.Namespace) -> int:
 
     _ensure_registry()
     platforms = _parse_platforms(args.platform)
-    categories = _parse_list(args.category, ALL_CATEGORIES, "category")
+    categories = _parse_categories(args.category)
     periods = _parse_list(args.period, ALL_PERIODS, "period")
 
     books = []
@@ -126,7 +137,7 @@ def run_scan(args: argparse.Namespace) -> int:
                         print(f"[{platform}/{category}/{period}] fetching top {args.top}...", file=sys.stderr)
                     raw_books = adapter.fetch(category, period, top=args.top)
                     for raw in raw_books:
-                        books.append(raw_to_bookitem(raw, platform=platform, period=period))
+                        books.append(raw_to_bookitem(raw, platform=adapter.platform, period=period))
                 except Exception as e:
                     if args.verbose:
                         print(f"[{platform}/{category}/{period}] FAILED: {e}", file=sys.stderr)

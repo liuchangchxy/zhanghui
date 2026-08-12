@@ -7,7 +7,7 @@ from scripts.scan import build_parser, run_scan, ADAPTER_REGISTRY
 
 
 class FakeAdapter(BaseAdapter):
-    platform = "fake"
+    platform = "qidian"
     strategy = Strategy.DIRECT_API
 
     def fetch(self, category, period, top):
@@ -50,6 +50,7 @@ def test_run_scan_collects_books_and_writes_files(tmp_path: Path, monkeypatch):
     payload = json.loads((tmp_path / "books.json").read_text())
     assert payload["meta"]["total_books"] == 3
     assert all(b["title"].startswith("book-") for b in payload["books"])
+    assert all(b["platform"] == "qidian" for b in payload["books"])
 
 
 def test_run_scan_returns_zero_on_partial_failure(tmp_path: Path, monkeypatch):

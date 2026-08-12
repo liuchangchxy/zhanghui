@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from pydantic import ValidationError
 
 from scripts.schema import RawBook, BookItem, PLATFORMS, PERIODS
 
@@ -35,7 +34,7 @@ def normalize_category(platform: PLATFORMS, category: str) -> str:
 
 def raw_to_bookitem(raw: RawBook, platform: PLATFORMS, period: PERIODS) -> BookItem:
     intro = raw.intro[:INTRO_MAX_LEN] if raw.intro else ""
-    fields = dict(
+    return BookItem(
         id=build_book_id(platform, raw.platform_book_id),
         platform=platform,
         title=raw.title,
@@ -52,13 +51,3 @@ def raw_to_bookitem(raw: RawBook, platform: PLATFORMS, period: PERIODS) -> BookI
         period=period,
         fetched_at=datetime.now(timezone.utc),
     )
-    try:
-        return BookItem(**fields)
-    except ValidationError:
-        # Fallback: when a value can't be validated by Pydantic (e.g., a test
-        # adapter injects a non-standard platform string, or a future field
-        # validator rejects an unexpected shape), construct the BookItem without
-        # validation. This is safer than crashing because partial scan results
-        # are still useful, but callers should know the resulting object
-        # bypasses runtime validation.
-        return BookItem.model_construct(**fields)
