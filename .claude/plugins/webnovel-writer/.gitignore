@@ -33,3 +33,10 @@ Thumbs.db
 scripts/.tmp_pytest/
 scripts/.tmp_pytest_manual/
 scripts/zzz_test.db*
+
+# Test fixture scratch (conftest redirects tempfile to <repo>/.tmp/pytest/)
+.tmp/
+
+# Frontend build artifacts (Vite/React dashboard)
+dashboard/frontend/dist/
+dashboard/frontend/node_modules/
