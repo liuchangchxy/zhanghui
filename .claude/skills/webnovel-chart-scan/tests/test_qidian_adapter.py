@@ -1,4 +1,4 @@
-"""Tests for the qidian adapter (Strategy.VENDOR).
+"""Tests for the qidian adapter (Strategy.HYBRID).
 
 NOTE on real endpoint (2026-08-12):
     https://www.qidian.com/all returns HTTP 202 with a probe.js anti-bot
@@ -40,7 +40,7 @@ def test_parse_qidian_list_json_extracts_fields():
 def test_qidian_adapter_metadata():
     a = QidianAdapter()
     assert a.platform == "qidian"
-    assert a.strategy.value == "vendor"
+    assert a.strategy.value == "hybrid"
 
 
 def test_qidian_adapter_fetch_calls_qidian_endpoint(monkeypatch):

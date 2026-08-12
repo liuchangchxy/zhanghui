@@ -1,9 +1,14 @@
-"""起点中文网 adapter — VENDOR strategy via httpx.
+"""起点中文网 adapter — HYBRID strategy via httpx.
 
-The Strategy enum value is ``VENDOR`` because the parsing layer borrows
+The Strategy enum value is ``HYBRID`` because the adapter borrows
 field-name conventions from the vendored upstream
-``saudadez21/novel-downloader`` (see ``vendor/novel-downloader/qidian_subset/``).
-However, qidian.com is fronted by an anti-bot probe (HTTP 202 + probe.js)
+``saudadez21/novel-downloader`` (see ``vendor/novel-downloader/qidian_subset/``)
+but does NOT import from it. Network I/O uses ``httpx`` directly, just like
+``DIRECT_API`` adapters. ``HYBRID`` distinguishes this case: parsing-layer
+conventions sourced from a vendored reference, but no actual vendored
+imports.
+
+qidian.com is fronted by an anti-bot probe (HTTP 202 + probe.js)
 that requires RC4-signed cookies — exactly the mechanism implemented in
 the upstream's ``searcher.py``. This adapter currently hits the spec'd
 public endpoint with a browser User-Agent; a future revision should
@@ -91,7 +96,7 @@ def parse_qidian_list_json(payload: dict, top: int) -> list[RawBook]:
 
 class QidianAdapter(BaseAdapter):
     platform = "qidian"
-    strategy = Strategy.VENDOR
+    strategy = Strategy.HYBRID
 
     def fetch(self, category: str, period: str, top: int) -> list[RawBook]:
         chan_id = QIDIAN_CATEGORY_IDS.get(category, -1)  # -1 = 全部

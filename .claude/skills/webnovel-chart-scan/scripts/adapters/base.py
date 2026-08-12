@@ -6,7 +6,8 @@ from scripts import normalize as _normalize_module
 
 
 class Strategy(str, Enum):
-    VENDOR = "vendor"
+    VENDOR = "vendor"           # imports from vendored submodule
+    HYBRID = "hybrid"           # uses httpx + reference to vendored code
     DIRECT_API = "direct_api"
     WEBFETCH = "webfetch"
 
