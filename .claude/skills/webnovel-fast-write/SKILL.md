@@ -39,6 +39,7 @@ allowed-tools: Read Write Edit Grep Bash Task
 7. **Step 5 data-agent**：调用 `webnovel-writer:data-agent` subagent 产出 extraction_result 等 3 份 artifact。
 8. **Step 5.2 chapter-commit**：调用 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py chapter-commit`。
 9. **Step 6 备份**：调用 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py backup`。
+10. **Step 7 可选修订**（PR 3 引入）：如果存在 `.webnovel/review/ch${NNNN}.json` 且含 blocking issue，询问用户是否走 `/webnovel-revise`。默认不调——因为本 skill 是"信任方向的快车道"，重写交还用户决策。
 
 ## 跳过步骤
 
