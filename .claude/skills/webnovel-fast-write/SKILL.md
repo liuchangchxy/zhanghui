@@ -28,13 +28,17 @@ allowed-tools: Read Write Edit Grep Bash Task
 按顺序执行：
 
 1. **Step 0 预检**：调用 `${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py preflight` + `placeholder-scan`。
-2. **Step 1 context-agent**：调用 `webnovel-writer:context-agent` subagent 生成 7 段任务书。
-3. **Step 2A 起草**：主流程生成正文 + 末尾追加 `<chapter_changes>...</chapter_changes>` 块。
-4. **Step 4.5 CHANGES 校验**：调用 `python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/changes_gate.py ...`（详见主 skill 的 Step 4.5）。
-5. **Step 4.6 anti-slop 扫描**：调用 `text_humanizer.py` + `check-ai-patterns.js`（详见主 skill 的 Step 4.6）。
-6. **Step 5 data-agent**：调用 `webnovel-writer:data-agent` subagent 产出 extraction_result 等 3 份 artifact。
-7. **Step 5.2 chapter-commit**：调用 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py chapter-commit`。
-8. **Step 6 备份**：调用 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py backup`。
+2. **Step 0.5 snapshot 校验**（PR 1 引入）：调用 `python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/snapshot_manager.py verify ${chapter} --project-root .`。
+   - exit 0：继续
+   - exit 1（漂移）：log warning 但不阻断，向用户报告 `drifted_files` / `added_files` / `missing_files`，等用户裁决后再继续
+   - exit 2（infrastructure error）：阻断，要求用户先 freeze
+3. **Step 1 context-agent**：调用 `webnovel-writer:context-agent` subagent 生成 7 段任务书。
+4. **Step 2A 起草**：主流程生成正文 + 末尾追加 `<chapter_changes>...</chapter_changes>` 块。
+5. **Step 4.5 CHANGES 校验**：调用 `python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/changes_gate.py ...`（详见主 skill 的 Step 4.5）。
+6. **Step 4.6 anti-slop 扫描**：调用 `text_humanizer.py` + `check-ai-patterns.js`（详见主 skill 的 Step 4.6）。
+7. **Step 5 data-agent**：调用 `webnovel-writer:data-agent` subagent 产出 extraction_result 等 3 份 artifact。
+8. **Step 5.2 chapter-commit**：调用 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py chapter-commit`。
+9. **Step 6 备份**：调用 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py backup`。
 
 ## 跳过步骤
 
