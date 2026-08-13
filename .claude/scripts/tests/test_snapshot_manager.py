@@ -103,3 +103,86 @@ def test_freeze_fails_when_no_settings_or_outline(tmp_path: Path):
     result = run_snapshot("freeze", "1", cwd=tmp_path)
     assert result.returncode == 2
     assert "no snapshot-eligible files" in result.stderr.lower() or "找不到" in result.stderr
+
+
+# === verify ===
+def test_verify_returns_ok_when_unchanged(tmp_path: Path):
+    """freeze 后立即 verify → exit 0, ok=true。"""
+    (tmp_path / "大纲").mkdir()
+    (tmp_path / "大纲" / "总纲.md").write_text("v1", encoding="utf-8")
+    assert run_snapshot("freeze", "1", cwd=tmp_path).returncode == 0
+    result = run_snapshot("verify", "1", cwd=tmp_path)
+    assert result.returncode == 0
+    out = json.loads(result.stdout)
+    assert out["ok"] is True
+    assert out["drifted_files"] == []
+    assert out["missing_files"] == []
+    assert out["added_files"] == []
+
+
+def test_verify_detects_modified_file(tmp_path: Path):
+    """modify 一个文件后 verify → exit 1, drifted_files 列出该文件。"""
+    (tmp_path / "大纲").mkdir()
+    f = tmp_path / "大纲" / "总纲.md"
+    f.write_text("v1", encoding="utf-8")
+    run_snapshot("freeze", "1", cwd=tmp_path)
+    f.write_text("v2 — 修改过", encoding="utf-8")
+    result = run_snapshot("verify", "1", cwd=tmp_path)
+    assert result.returncode == 1
+    out = json.loads(result.stdout)
+    assert out["ok"] is False
+    assert "大纲/总纲.md" in out["drifted_files"]
+
+
+def test_verify_detects_added_and_deleted_files(tmp_path: Path):
+    """新增/删除文件 → added_files / missing_files 反映。"""
+    (tmp_path / "大纲").mkdir()
+    (tmp_path / "大纲" / "总纲.md").write_text("x", encoding="utf-8")
+    (tmp_path / "设定集").mkdir()
+    (tmp_path / "设定集" / "陈默.md").write_text("y", encoding="utf-8")
+    run_snapshot("freeze", "1", cwd=tmp_path)
+    # 新增一个
+    (tmp_path / "设定集" / "王玄之.md").write_text("z", encoding="utf-8")
+    # 删除一个
+    (tmp_path / "设定集" / "陈默.md").unlink()
+
+    result = run_snapshot("verify", "1", cwd=tmp_path)
+    assert result.returncode == 1
+    out = json.loads(result.stdout)
+    assert "设定集/王玄之.md" in out["added_files"]
+    assert "设定集/陈默.md" in out["missing_files"]
+
+
+def test_verify_fails_when_snapshot_missing(tmp_path: Path):
+    """不存在的章节 → exit 2。"""
+    (tmp_path / "大纲").mkdir()
+    result = run_snapshot("verify", "999", cwd=tmp_path)
+    assert result.returncode == 2
+
+
+# === list ===
+def test_list_returns_all_snapshots(tmp_path: Path):
+    """freeze 多个章节 → list 全部返回。"""
+    (tmp_path / "大纲").mkdir()
+    (tmp_path / "大纲" / "总纲.md").write_text("x", encoding="utf-8")
+    for n in (1, 3, 7):
+        run_snapshot("freeze", str(n), cwd=tmp_path)
+    result = run_snapshot("list", cwd=tmp_path)
+    assert result.returncode == 0
+    out = json.loads(result.stdout)
+    chapters = {s["chapter"] for s in out["snapshots"]}
+    assert chapters == {1, 3, 7}
+
+
+# === diff ===
+def test_diff_shows_drifted_file_list(tmp_path: Path):
+    """diff 输出当前 vs snapshot 的差异文件清单（包含状态）。"""
+    (tmp_path / "大纲").mkdir()
+    (tmp_path / "大纲" / "总纲.md").write_text("v1", encoding="utf-8")
+    run_snapshot("freeze", "1", cwd=tmp_path)
+    (tmp_path / "大纲" / "总纲.md").write_text("v2", encoding="utf-8")
+    result = run_snapshot("diff", "1", cwd=tmp_path)
+    assert result.returncode in (0, 1)  # diff 本身不强制失败
+    out = json.loads(result.stdout)
+    statuses = {f["path"]: f["status"] for f in out["files"]}
+    assert statuses.get("大纲/总纲.md") == "modified"

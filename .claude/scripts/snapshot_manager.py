@@ -166,6 +166,115 @@ def _not_implemented(name: str) -> int:
     return EXIT_INFRA
 
 
+def _load_manifest(project_root: Path, chapter: int) -> Manifest | None:
+    snap_dir = _chapter_dir(project_root, chapter)
+    p = snap_dir / "manifest.json"
+    if not p.is_file():
+        return None
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    return Manifest(
+        version=raw["version"],
+        chapter=raw["chapter"],
+        frozen_at=raw["frozen_at"],
+        project_root=raw["project_root"],
+        files=[FileEntry(**f) for f in raw["files"]],
+    )
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root).resolve()
+    manifest = _load_manifest(project_root, args.chapter)
+    if manifest is None:
+        print(f"[snapshot] 找不到 ch{args.chapter:04d} 的 manifest", file=sys.stderr)
+        return EXIT_INFRA
+
+    current_files = discover_files(project_root)
+    current_rels = {p.relative_to(project_root).as_posix(): p for p in current_files}
+
+    snap_paths = {f.path for f in manifest.files}
+    cur_paths = set(current_rels.keys())
+
+    drifted: list[str] = []
+    for f in manifest.files:
+        cur = current_rels.get(f.path)
+        if cur is None:
+            continue  # 在 missing 里
+        h = hashlib.sha256()
+        h.update(cur.read_bytes())
+        if h.hexdigest() != f.sha256:
+            drifted.append(f.path)
+
+    missing = sorted(snap_paths - cur_paths)
+    added = sorted(cur_paths - snap_paths)
+
+    ok = not (drifted or missing or added)
+    print(json.dumps({
+        "ok": ok,
+        "chapter": args.chapter,
+        "drifted_files": sorted(drifted),
+        "missing_files": missing,
+        "added_files": added,
+    }, ensure_ascii=False))
+    return EXIT_OK if ok else EXIT_DRIFT
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root).resolve()
+    snap_root = project_root / ".webnovel" / "snapshots"
+    snapshots: list[dict[str, Any]] = []
+    if snap_root.is_dir():
+        for d in sorted(snap_root.iterdir()):
+            if not d.is_dir():
+                continue
+            m = _load_manifest(project_root, int(d.name[2:]))
+            if m is None:
+                continue
+            snapshots.append({
+                "chapter": m.chapter,
+                "frozen_at": m.frozen_at,
+                "file_count": len(m.files),
+                "path": str(d.relative_to(project_root)),
+            })
+    print(json.dumps({"snapshots": snapshots}, ensure_ascii=False))
+    return EXIT_OK
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root).resolve()
+    manifest = _load_manifest(project_root, args.chapter)
+    if manifest is None:
+        print(f"[snapshot] 找不到 ch{args.chapter:04d} 的 manifest", file=sys.stderr)
+        return EXIT_INFRA
+
+    current_files = discover_files(project_root)
+    current_rels = {p.relative_to(project_root).as_posix(): p for p in current_files}
+
+    rows: list[dict[str, Any]] = []
+    snap_paths = {f.path for f in manifest.files}
+    cur_paths = set(current_rels.keys())
+
+    for f in manifest.files:
+        cur = current_rels.get(f.path)
+        if cur is None:
+            rows.append({"path": f.path, "status": "deleted"})
+            continue
+        h = hashlib.sha256()
+        h.update(cur.read_bytes())
+        if h.hexdigest() != f.sha256:
+            rows.append({"path": f.path, "status": "modified"})
+        else:
+            rows.append({"path": f.path, "status": "unchanged"})
+
+    for p in sorted(cur_paths - snap_paths):
+        rows.append({"path": p, "status": "added"})
+
+    print(json.dumps({
+        "chapter": args.chapter,
+        "files": rows,
+    }, ensure_ascii=False))
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="workflow snapshot 管理器")
     parser.add_argument(
@@ -179,17 +288,16 @@ def main(argv: list[str] | None = None) -> int:
     p_freeze.add_argument("chapter", type=int, help="章节号")
     p_freeze.set_defaults(func=cmd_freeze)
 
-    # 其他子命令占位，后续 task 填充
     p_verify = sub.add_parser("verify", help="校验 N 章快照是否漂移")
     p_verify.add_argument("chapter", type=int)
-    p_verify.set_defaults(func=lambda a: _not_implemented("verify"))
+    p_verify.set_defaults(func=cmd_verify)
 
     p_list = sub.add_parser("list", help="列出所有快照")
-    p_list.set_defaults(func=lambda a: _not_implemented("list"))
+    p_list.set_defaults(func=cmd_list)
 
     p_diff = sub.add_parser("diff", help="显示当前 vs 快照的文件差异清单")
     p_diff.add_argument("chapter", type=int)
-    p_diff.set_defaults(func=lambda a: _not_implemented("diff"))
+    p_diff.set_defaults(func=cmd_diff)
 
     args = parser.parse_args(argv)
     return args.func(args)
