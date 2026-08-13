@@ -186,3 +186,63 @@ def test_diff_shows_drifted_file_list(tmp_path: Path):
     out = json.loads(result.stdout)
     statuses = {f["path"]: f["status"] for f in out["files"]}
     assert statuses.get("大纲/总纲.md") == "modified"
+
+
+# === C1: CLI argument parsing ===
+def test_project_root_flag_after_subcommand(tmp_path: Path):
+    """--project-root 必须跟在 subcommand 之后（用户实际使用方式）。"""
+    (tmp_path / "大纲").mkdir()
+    (tmp_path / "大纲" / "总纲.md").write_text("x", encoding="utf-8")
+    result = run_snapshot("freeze", "1", "--project-root", str(tmp_path))
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert (tmp_path / ".webnovel" / "snapshots" / "ch0001").is_dir()
+
+
+def test_usage_error_returns_exit_code_3(tmp_path: Path):
+    """未知的 subcommand → 退出码 3（用法错误），不与 EXIT_INFRA=2 冲突。"""
+    result = run_snapshot("bogus", "1", cwd=tmp_path)
+    assert result.returncode == 3
+
+
+def test_usage_error_missing_chapter_arg(tmp_path: Path):
+    """freeze 缺 chapter 参数 → 退出码 3。"""
+    (tmp_path / "大纲").mkdir()
+    result = run_snapshot("freeze", cwd=tmp_path)
+    assert result.returncode == 3
+
+
+# === C7 / I7: freeze clears stale snapshot dir ===
+def test_freeze_clears_stale_files_from_prior_freeze(tmp_path: Path):
+    """重复 freeze 不同文件时，第二次 freeze 后目录里只含第二次的文件。"""
+    (tmp_path / "大纲").mkdir()
+    (tmp_path / "大纲" / "总纲.md").write_text("v1", encoding="utf-8")
+    (tmp_path / "设定集").mkdir()
+    (tmp_path / "设定集" / "陈默.md").write_text("v1", encoding="utf-8")
+
+    # 第一次 freeze
+    r1 = run_snapshot("freeze", "1", cwd=tmp_path)
+    assert r1.returncode == 0
+    snap = tmp_path / ".webnovel" / "snapshots" / "ch0001"
+    assert (snap / "设定集" / "陈默.md").is_file()
+
+    # 删除原文（模拟"改设定后重新 freeze"）
+    (tmp_path / "设定集" / "陈默.md").unlink()
+    # 第二次 freeze → 不应残留陈默.md
+    r2 = run_snapshot("freeze", "1", cwd=tmp_path)
+    assert r2.returncode == 0
+    assert not (snap / "设定集" / "陈默.md").exists(), "ghost file should be cleared"
+    assert (snap / "大纲" / "总纲.md").is_file()
+
+
+# === I8: project_root 必须是相对路径，不是绝对路径 ===
+def test_manifest_project_root_is_relative(tmp_path: Path):
+    """manifest.project_root 应为 '.'（相对），不暴露本机绝对路径。"""
+    (tmp_path / "大纲").mkdir()
+    (tmp_path / "大纲" / "总纲.md").write_text("x", encoding="utf-8")
+    r = run_snapshot("freeze", "1", cwd=tmp_path)
+    assert r.returncode == 0
+    manifest = json.loads(
+        (tmp_path / ".webnovel" / "snapshots" / "ch0001" / "manifest.json").read_text()
+    )
+    assert manifest["project_root"] == "."
+    assert not manifest["project_root"].startswith("/"), "不应暴露绝对路径"

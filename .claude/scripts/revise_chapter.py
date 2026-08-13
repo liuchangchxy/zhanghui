@@ -49,9 +49,13 @@ SECTION_PATTERN = re.compile(r"^##\s+(§\d+)\b", re.MULTILINE)
 
 
 def extract_section(text: str, section_id: str) -> str:
-    """从正文中提取 §N 段（从 ## §N 行到下一个 ## 之前）。"""
+    r"""从正文中提取 §N 段（从 ## §N 行到下一个 ## 之前）。
+
+    用 (?!\d) 而非 \b 作为边界 —— CJK 字符在 Python re 里被当作 \w，
+    所以 "§2冲突" 在 §2 后是 \w 字符，\b 不会触发；用 (?!\d) 防止 §2 匹配到 §20。
+    """
     pattern = re.compile(
-        rf"^(##\s+{re.escape(section_id)}\b.*?)(?=^##\s|\Z)",
+        rf"^(##\s+{re.escape(section_id)}(?!\d).*?)(?=^##\s|\Z)",
         re.MULTILINE | re.DOTALL,
     )
     m = pattern.search(text)
@@ -60,16 +64,50 @@ def extract_section(text: str, section_id: str) -> str:
     return m.group(1).rstrip() + "\n"
 
 
+_RANGE_PATTERN = re.compile(r"^§(\d+)\s*-\s*§(\d+)$")
+
+
+def _expand_section_id(loc: str) -> list[str]:
+    """把 location 展开为 §N 段 ID 列表。
+
+    - '§3' → ['§3']
+    - '§2-§5' → ['§2', '§3', '§4', '§5']
+    - '§2-§5 第2-5段' → ['§2', '§3', '§4', '§5']
+    - '第3段' → []
+    """
+    loc = loc.strip()
+    if not loc.startswith("§"):
+        return []
+
+    # 取第一个 token（处理 "§2-§5 第2-5段说明" 这类带说明的）
+    head = loc.split()[0]
+
+    # 范围：§2-§5
+    m = _RANGE_PATTERN.match(head)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        if lo > hi:
+            lo, hi = hi, lo  # 容错：颠倒顺序
+        return [f"§{n}" for n in range(lo, hi + 1)]
+
+    # 单个 §N（后面可能紧跟中文，如 "§2冲突"）
+    m2 = re.match(r"^(§\d+)", head)
+    if m2:
+        return [m2.group(1)]
+    return []
+
+
 def build_revise_plan(
     chapter_text: str,
     contract: RejectionContract,
 ) -> dict[str, str]:
-    """返回 {section_id: 原内容} —— 只包含 contract 里出现的段。"""
+    """返回 {section_id: 原内容} —— 只包含 contract 里出现的段。
+
+    §2-§5 范围会展开为 §2/§3/§4/§5。
+    """
     plan: dict[str, str] = {}
     for issue in contract.issues:
-        loc = issue.location.strip()
-        if loc.startswith("§"):
-            section_id = loc.split()[0]  # "§2-§5" → "§2-§5"
+        for section_id in _expand_section_id(issue.location):
             if section_id not in plan:
                 content = extract_section(chapter_text, section_id)
                 if content:
@@ -81,15 +119,21 @@ def apply_revised_sections(
     original: str,
     revised: dict[str, str],
 ) -> str:
-    """把原文中标记的段替换成 revised[section_id]，其他原样。"""
+    r"""把原文中标记的段替换成 revised[section_id]，其他原样。
+
+    用 (?!\d) 而非 \b —— CJK 字符在 Python re 里被当作 \w，
+    所以 "§2冲突" 在 §2 后是 \w 字符，\b 不会触发；用 (?!\d) 防止 §2 匹配到 §20。
+    """
     out = original
     for section_id, new_content in revised.items():
         pattern = re.compile(
-            rf"^(##\s+{re.escape(section_id)}\b.*?)(?=^##\s|\Z)",
+            rf"^(##\s+{re.escape(section_id)}(?!\d).*?)(?=^##\s|\Z)",
             re.MULTILINE | re.DOTALL,
         )
         if pattern.search(out):
-            out = pattern.sub(new_content.rstrip() + "\n\n", out, count=1)
+            # 用 lambda 防止 backslash/group reference 在 re.sub 里被展开
+            replacement = new_content.rstrip() + "\n\n"
+            out = pattern.sub(lambda _: replacement, out, count=1)
         else:
             # §N 段在原文里找不到 —— 追加到末尾（罕见，但要兜底）
             out = out.rstrip() + "\n\n" + new_content
@@ -114,14 +158,26 @@ def call_llm_for_revision(
     instruction: str,
     model: str,
 ) -> str:
-    """调 Claude API 重写一个段。"""
+    """调 Claude API 重写一个段。
+
+    Raises:
+        RuntimeError: 缺 ANTHROPIC_API_KEY / SDK 未安装 / LLM 返回空 / 被截断 / 拒绝
+    """
     if not _HAS_ANTHROPIC:
         raise RuntimeError(
-            "需要 anthropic SDK：pip install anthropic "
-            "(或设置 ANTHROPIC_API_KEY 后用 requests 调 REST API)"
+            "需要 anthropic SDK：pip install anthropic"
         )
 
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY 环境变量未设置或为空。"
+            "请设置你的 Anthropic API key：\n"
+            "  export ANTHROPIC_API_KEY=sk-ant-...\n"
+            "（不要把 key 直接写在代码里）"
+        )
+
+    client = anthropic.Anthropic()
     user_msg = (
         f"## 待重写段: {section_id}\n\n"
         f"### 原文\n{original}\n\n"
@@ -130,12 +186,36 @@ def call_llm_for_revision(
     )
     resp = client.messages.create(
         model=model,
-        max_tokens=2048,
+        max_tokens=8192,
         system=REVISION_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_msg}],
     )
+
+    # C6: 检查 stop_reason —— 拒绝 / 截断 → 抛错，不静默吞掉
+    if getattr(resp, "stop_reason", None) in ("refusal", "max_tokens"):
+        raise RuntimeError(
+            f"LLM 重写 §{section_id} 失败: stop_reason={resp.stop_reason}（refusal 或截断）"
+        )
+
     text = "".join(b.text for b in resp.content if hasattr(b, "text"))
-    return text.strip()
+    text = text.strip()
+
+    # C6: 拒绝空响应
+    if not text:
+        raise RuntimeError(
+            f"LLM 重写 §{section_id} 返回空内容（可能 refusal 或 SDK 异常）"
+        )
+
+    # C6: 拒绝无标题的响应（apply_revised_sections 无法定位段）
+    # 宽松匹配：## §N ... / ## §N: ... / ## §N标题（中文紧跟也行）
+    if not re.search(rf"^##\s+{re.escape(section_id)}\b", text, re.MULTILINE):
+        # 兜底：section_id 是 "§N"，再试不带 \b 的中文紧跟情形
+        if f"## {section_id}" not in text:
+            raise RuntimeError(
+                f"LLM 重写 §{section_id} 的输出不含 ## {section_id} 标题，无法替换。响应前 80 字: {text[:80]!r}"
+            )
+
+    return text
 
 
 # === CLI ===
@@ -149,6 +229,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=None,
                         help="输出文件（默认 <chapter>.revised.md）")
     parser.add_argument("--model", default="claude-sonnet-4-5")
+    parser.add_argument(
+        "--include-advisory",
+        action="store_true",
+        default=False,
+        help="包含非 blocking 的建议性 issue（默认 False：只处理 blocking）",
+    )
     args = parser.parse_args(argv)
 
     if not args.chapter_file.is_file():
@@ -170,7 +256,9 @@ def main(argv: list[str] | None = None) -> int:
     # 区分：用 issues[0] 是否含 fix_hint 字段判断（reviewer JSON 有，contract 也有；
     # 但 reviewer 的 description 是长文本，contract 的是短文本 — 不易区分）。
     # 实用策略：都走 build_contract_from_reviewer_output，它能容忍两种形态（contract JSON 缺字段时会填空）。
-    contract = build_contract_from_reviewer_output(raw, include_advisory=True)
+    contract = build_contract_from_reviewer_output(
+        raw, include_advisory=args.include_advisory,
+    )
 
     try:
         validate_contract(contract)
@@ -181,6 +269,10 @@ def main(argv: list[str] | None = None) -> int:
     chapter_text = args.chapter_file.read_text(encoding="utf-8")
     plan = build_revise_plan(chapter_text, contract)
     target_text = targets_text(contract)
+
+    # I5: contract 有 issue 但一个 §N 都没解析出来 → 退出非零
+    has_resolvable_sections = bool(plan)
+    has_any_issues = bool(contract.issues)
 
     output_payload: dict[str, Any] = {
         "dry_run": args.dry_run,
@@ -193,25 +285,37 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         print(json.dumps(output_payload, ensure_ascii=False, indent=2))
+        if has_any_issues and not has_resolvable_sections:
+            print("[revise] contract 有 issue 但没有 §N 段能解析", file=sys.stderr)
+            return EXIT_INVALID
         return EXIT_OK
 
-    # 真实重写：每个 section 单独调 LLM
+    if has_any_issues and not has_resolvable_sections:
+        print("[revise] contract 有 issue 但没有 §N 段能解析", file=sys.stderr)
+        return EXIT_INVALID
+
+    # 真实重写：每个 section 调一次 LLM（同一段的所有 fix_hint 合并为一条指令）
+    # 复用 rejection_contract.targets_text() 的按 location 聚合模式
     revised: dict[str, str] = {}
+    grouped: dict[str, list[str]] = {}
+    order: list[str] = []
     for issue in contract.issues:
-        loc = issue.location.strip()
-        section_id = loc.split()[0]
-        if section_id in revised:
-            # 同一段有多个 issue，合并 fix_hint
-            existing = revised[section_id]
-            revised[section_id] = call_llm_for_revision(
-                section_id, plan.get(section_id, ""),
-                f"{existing}\n[附加] {issue.fix_hint}",
-                args.model,
+        # 把 location 展开为段 ID 列表（§2-§5 → §2..§5）
+        for section_id in _expand_section_id(issue.location):
+            if section_id not in grouped:
+                order.append(section_id)
+                grouped[section_id] = []
+            grouped[section_id].append(
+                f"[{issue.severity.value}/{issue.category}] {issue.fix_hint}"
             )
-        elif section_id in plan:
-            revised[section_id] = call_llm_for_revision(
-                section_id, plan[section_id], issue.fix_hint, args.model,
-            )
+
+    for section_id in order:
+        if section_id not in plan:
+            continue
+        joined_hints = "\n".join(grouped[section_id])
+        revised[section_id] = call_llm_for_revision(
+            section_id, plan[section_id], joined_hints, args.model,
+        )
 
     new_text = apply_revised_sections(chapter_text, revised)
     out_path = args.output or args.chapter_file.with_suffix(".revised.md")

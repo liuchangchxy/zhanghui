@@ -25,3 +25,6 @@ node_modules/
 
 # 项目级状态指针（指向本机绝对路径，不应进 git）
 .claude/.webnovel-current-project
+
+# Snapshot 目录：每个章节一份完整副本，会膨胀仓库且与项目本身重复
+.webnovel/snapshots/

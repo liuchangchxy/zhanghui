@@ -27,6 +27,7 @@ python3 .claude/scripts/snapshot_manager.py verify <chapter> --project-root .
 - 退出码 1 = 漂移（修改过 / 新增 / 删除），主流程**不阻断**，但会在日志里 warning：
   > `[snapshot] ch0001 设定已漂移：1 个文件被修改、0 个新增、0 个删除。是否需要 re-snapshot？`
 - 退出码 2 = infrastructure error（snapshot 目录不存在 / manifest 损坏），需要人工处理
+- 退出码 3 = 用法错误（参数解析失败；与 infrastructure error 区分，避免 caller 误判）
 
 ## 漂移了怎么办
 

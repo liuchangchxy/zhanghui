@@ -139,7 +139,7 @@ def merge_contracts(contracts: Iterable[RejectionContract]) -> RejectionContract
     return RejectionContract(
         chapter=chapter,
         issues=merged_issues,
-        source="+".join({c.source for c in contracts}),
+        source="+".join(sorted({c.source for c in contracts})),
     )
 
 

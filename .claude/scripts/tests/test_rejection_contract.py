@@ -145,3 +145,23 @@ def test_targets_text_groups_by_location():
     # 第5段有两条 fix_hint
     seg5 = targets.split("第5段")[1]
     assert "改口语" in seg5 and "换典故" in seg5
+
+
+def test_merge_contracts_source_is_sorted():
+    """I4: source 字段拼接前应 sorted()，避免 set 顺序导致结果不稳定。"""
+    a = RejectionContract(chapter=1, issues=[
+        IssueRef(Severity.HIGH, "other", "x", "x", "x", True),
+    ], source="reviewer")
+    b = RejectionContract(chapter=1, issues=[
+        IssueRef(Severity.HIGH, "other", "y", "y", "y", True),
+    ], source="anti-slop")
+    c = RejectionContract(chapter=1, issues=[
+        IssueRef(Severity.HIGH, "other", "z", "z", "z", True),
+    ], source="data-agent")
+    # 故意以非字母顺序传入
+    merged = merge_contracts([c, a, b])
+    # sorted: anti-slop < data-agent < reviewer
+    assert merged.source == "anti-slop+data-agent+reviewer"
+    # 反向传入也得同样结果
+    merged2 = merge_contracts([b, c, a])
+    assert merged2.source == "anti-slop+data-agent+reviewer"

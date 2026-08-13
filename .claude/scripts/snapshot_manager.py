@@ -31,6 +31,8 @@ MANIFEST_VERSION = 1
 EXIT_OK = 0
 EXIT_DRIFT = 1
 EXIT_INFRA = 2
+# 用法错误（argparse 解析失败）——与 EXIT_INFRA 区分，避免 caller 误判为 missing manifest
+EXIT_USAGE = 3
 
 
 @dataclass
@@ -82,7 +84,7 @@ def build_manifest(chapter: int, files: list[str], project_root: Path) -> Manife
         version=MANIFEST_VERSION,
         chapter=chapter,
         frozen_at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
-        project_root=str(project_root),
+        project_root=".",  # 存相对路径（"."），避免不同机器上 manifest 不可移植
         files=file_entries,
     )
 
@@ -129,11 +131,10 @@ def cmd_freeze(args: argparse.Namespace) -> int:
 
     chapter = args.chapter
     snap_dir = _chapter_dir(project_root, chapter)
+    # Clear stale dir to avoid ghost files from prior freezes
     if snap_dir.exists():
-        print(
-            f"[snapshot] 警告: {snap_dir} 已存在，将被覆盖",
-            file=sys.stderr,
-        )
+        import shutil
+        shutil.rmtree(snap_dir)
 
     rels = [p.relative_to(project_root).as_posix() for p in files]
     manifest = build_manifest(chapter, rels, project_root)
@@ -276,28 +277,53 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="workflow snapshot 管理器")
-    parser.add_argument(
+    # 用 parent parser 共享 --project-root，避免 argparse 退出码 2 与 EXIT_INFRA=2 冲突
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
         "--project-root",
         default=str(Path.cwd()),
         help="项目根目录（默认 CWD）",
     )
+
+    parser = argparse.ArgumentParser(
+        description="workflow snapshot 管理器",
+        # 不让父 parser 处理 --help，子 parser 自己处理
+        parents=[],
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_freeze = sub.add_parser("freeze", help="冻结 N 章的 设定集+大纲")
+    p_freeze = sub.add_parser(
+        "freeze", help="冻结 N 章的 设定集+大纲", parents=[common]
+    )
     p_freeze.add_argument("chapter", type=int, help="章节号")
     p_freeze.set_defaults(func=cmd_freeze)
 
-    p_verify = sub.add_parser("verify", help="校验 N 章快照是否漂移")
+    p_verify = sub.add_parser(
+        "verify", help="校验 N 章快照是否漂移", parents=[common]
+    )
     p_verify.add_argument("chapter", type=int)
     p_verify.set_defaults(func=cmd_verify)
 
-    p_list = sub.add_parser("list", help="列出所有快照")
+    p_list = sub.add_parser(
+        "list", help="列出所有快照", parents=[common]
+    )
     p_list.set_defaults(func=cmd_list)
 
-    p_diff = sub.add_parser("diff", help="显示当前 vs 快照的文件差异清单")
+    p_diff = sub.add_parser(
+        "diff", help="显示当前 vs 快照的文件差异清单", parents=[common]
+    )
     p_diff.add_argument("chapter", type=int)
     p_diff.set_defaults(func=cmd_diff)
+
+    # 拦截 argparse 错误（unknown args / missing args），用 EXIT_USAGE 退出，避免与 EXIT_INFRA=2 冲突。
+    # 注意：必须同时覆盖主 parser 和每个 subparser —— subparser 解析失败时调的是自己的 error()。
+    def _usage_error(message: str) -> None:
+        # 打印到 stderr 并退出 EXIT_USAGE
+        print(f"[snapshot] 用法错误: {message}", file=sys.stderr)
+        sys.exit(EXIT_USAGE)
+
+    for p in (parser, p_freeze, p_verify, p_list, p_diff):
+        p.error = _usage_error  # type: ignore[assignment]
 
     args = parser.parse_args(argv)
     return args.func(args)
