@@ -34,6 +34,9 @@ allowed-tools: Read Write Edit Grep Bash Task
    - exit 2（infrastructure error）：阻断，要求用户先 freeze
 3. **Step 1 context-agent**：调用 `webnovel-writer:context-agent` subagent 生成 7 段任务书。
 4. **Step 2A 起草**：主流程生成正文 + 末尾追加 `<chapter_changes>...</chapter_changes>` 块。
+   - **PR 2 接入**：在喂给主 LLM 之前，先调用 `python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/context_slice.py read writer ${chapter}`（或 Read 源码后用 Python 等价调用），按白名单加载 writer slice 的文件，作为 context 注入。
+   - context-agent 的"五段写作任务书"作为 instruction 不变；writer slice 的文件作为参考输入。
+   - 不再一次性 Read 全本大纲/设定/所有章节。
 5. **Step 4.5 CHANGES 校验**：调用 `python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/changes_gate.py ...`（详见主 skill 的 Step 4.5）。
 6. **Step 4.6 anti-slop 扫描**：调用 `text_humanizer.py` + `check-ai-patterns.js`（详见主 skill 的 Step 4.6）。
 7. **Step 5 data-agent**：调用 `webnovel-writer:data-agent` subagent 产出 extraction_result 等 3 份 artifact。
