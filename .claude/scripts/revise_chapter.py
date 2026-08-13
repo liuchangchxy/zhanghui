@@ -16,10 +16,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
 from typing import Any
+
+try:
+    import anthropic  # type: ignore
+    _HAS_ANTHROPIC = True
+except ImportError:
+    _HAS_ANTHROPIC = False
 
 # 把同目录下的 rejection_contract.py 加进来
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -90,19 +97,45 @@ def apply_revised_sections(
 
 
 # === LLM 调用（PR 3 阶段先做占位，真实 prompt 在 smoke test 时调） ===
+# 真实 LLM 调用（通过 anthropic SDK）
+REVISION_SYSTEM_PROMPT = """你是网文局部重写器。
+输入是一章正文的某个段落（## §N 标题）和一条修复指令。
+要求：
+1. 只输出重写后的段落，必须保留 ## §N 标题
+2. 保持原文风格一致（不要 AI 化、不要加入未声明的设定）
+3. 严格遵循 fix_hint，不要扩大改动范围
+4. 修复完成后，整段字数与原段差距控制在 ±30% 以内
+"""
+
+
 def call_llm_for_revision(
     section_id: str,
     original: str,
     instruction: str,
     model: str,
 ) -> str:
-    """调 LLM 重写一个段。返回新段（不含 markdown 标题之外的元数据）。
+    """调 Claude API 重写一个段。"""
+    if not _HAS_ANTHROPIC:
+        raise RuntimeError(
+            "需要 anthropic SDK：pip install anthropic "
+            "(或设置 ANTHROPIC_API_KEY 后用 requests 调 REST API)"
+        )
 
-    PR 3 阶段：先返回原内容 + 一行 marker，证明链路通。
-    TODO: 替换为真实 Claude API 调用（用 anthropic SDK 或 curl）。
-    """
-    # 占位：直接拼一个标记，便于 smoke test 验证替换发生
-    return f"## {section_id}（待 LLM 重写）\n\n[REVISE-MARKER] 收到 instruction: {instruction[:50]}\n\n原内容前 30 字: {original[:30]}\n"
+    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    user_msg = (
+        f"## 待重写段: {section_id}\n\n"
+        f"### 原文\n{original}\n\n"
+        f"### 修复指令\n{instruction}\n\n"
+        f"请只输出重写后的段落（含 ## {section_id} 标题），不要输出其他文本。"
+    )
+    resp = client.messages.create(
+        model=model,
+        max_tokens=2048,
+        system=REVISION_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_msg}],
+    )
+    text = "".join(b.text for b in resp.content if hasattr(b, "text"))
+    return text.strip()
 
 
 # === CLI ===

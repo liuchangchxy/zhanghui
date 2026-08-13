@@ -174,3 +174,64 @@ def test_apply_revised_sections_replaces_only_marked_sections():
     assert '"嘿！你小子！"' in new_text
     # 旧内容消失
     assert '"好久不见。"玄之说' not in new_text
+
+
+def test_call_llm_for_revision_uses_anthropic_messages_api(monkeypatch):
+    """call_llm_for_revision 必须调 anthropic SDK（mock 验证 prompt 字段）。"""
+    sys.path.insert(0, str(REVISE_SCRIPT.parent))
+    import revise_chapter
+
+    captured = {}
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            captured["kwargs"] = kwargs
+            class FakeResp:
+                content = [type("Block", (), {"text": "## §2（新文）"})()]
+            return FakeResp()
+
+    class FakeAnthropic:
+        def __init__(self, *a, **kw):
+            pass
+        @property
+        def messages(self):
+            return FakeMessages()
+
+    monkeypatch.setattr(revise_chapter, "anthropic", type("X", (), {"Anthropic": FakeAnthropic})())
+
+    result = revise_chapter.call_llm_for_revision(
+        section_id="§2",
+        original="原文内容",
+        instruction="补 200 字战斗",
+        model="claude-sonnet-4-5",
+    )
+    assert "新文" in result
+    kw = captured["kwargs"]
+    assert kw["model"] == "claude-sonnet-4-5"
+    # 必须包含原内容 + 修复指令 + 段 ID
+    user_msg = kw["messages"][0]["content"]
+    assert "原文内容" in user_msg
+    assert "补 200 字战斗" in user_msg
+    assert "§2" in user_msg
+
+
+def test_call_llm_for_revision_keeps_section_heading():
+    """LLM 输出必须保留 ## §N 标题（否则 apply_revised_sections 无法定位）。"""
+    sys.path.insert(0, str(REVISE_SCRIPT.parent))
+    import revise_chapter
+
+    class FakeMessages:
+        def create(self, **kwargs):
+            class FakeResp:
+                content = [type("Block", (), {"text": "## §3（新文）\n\n正文"})()]
+            return FakeResp()
+
+    class FakeAnthropic:
+        def __init__(self, *a, **kw): pass
+        @property
+        def messages(self): return FakeMessages()
+
+    import importlib
+    revise_chapter.anthropic = type("X", (), {"Anthropic": FakeAnthropic})
+    result = revise_chapter.call_llm_for_revision("§3", "x", "y", "claude-sonnet-4-5")
+    assert result.startswith("## §3") or "## §3" in result.split("\n", 1)[0]
