@@ -5,12 +5,20 @@ Status: LIVE (verified 2026-08-13, after mobile-subdomain bypass).
     The desktop site ``www.qidian.com`` returns HTTP 202 + a probe.js
     challenge for every URL — including the public rank/category pages.
     The vendored upstream ``vendor/novel-downloader/qidian_subset/searcher.py``
-    implements an RC4 cookie construction (``_calc_cookies``) intended to
-    bypass the challenge, but verification on 2026-08-13 showed that the
-    cookies do NOT actually bypass modern probe.js. The vendored searcher
-    silently swallows the resulting 202 as a generic Exception, returning
-    an empty string — i.e. the vendored reference is also broken against
-    modern qidian.com.
+    contains an RC4 cookie construction (``_calc_cookies``) attempt, but
+    verified 2026-08-13 that it does NOT bypass modern probe.js. The
+    vendored searcher silently swallows the resulting 202 as a generic
+    Exception, returning an empty string — i.e. the vendored reference
+    is also broken against modern qidian.com.
+
+    Runtime bypass is m.qidian.com mobile subdomain (see below).
+
+    The v0.1.3 release had ported the vendored RC4 helper into a local
+    ``qidian_cookies.py`` for traceability. v0.1.4 deletes that file
+    (it is dead code — verified not to bypass probe.js, and the runtime
+    path doesn't need it). The vendored
+    ``vendor/novel-downloader/qidian_subset/searcher.py`` remains the
+    single source of truth for the RC4 helper if it is ever re-needed.
 
     The runtime bypass that DOES work is using the **mobile subdomain**
     (``m.qidian.com``) with an iPhone Safari User-Agent. Mobile pages are
@@ -21,11 +29,9 @@ Status: LIVE (verified 2026-08-13, after mobile-subdomain bypass).
         URL pattern: https://m.qidian.com/rank       (all-categories rank)
                      https://m.qidian.com/category/<id>  (per-category list)
 
-    ``qidian_cookies.py`` is kept as a faithful port of the vendored
-    RC4 helper for traceability / future-proofing (in case qidian ever
-    reopens the cookie-bypass path), but it is NOT the runtime code path
-    used here. See the module docstring in ``qidian_cookies.py`` for
-    the RC4 verification record.
+    Note: m.qidian.com rank page returns 5 books per tab; --top > 5 will
+    silently truncate. Documented in KNOWN_LIMITATIONS.md "Known data
+    gaps".
 
 Period -> tab mapping:
     The ``/rank`` page renders 9 tabs (月票榜/畅销榜/阅读榜/书友榜/推荐榜/

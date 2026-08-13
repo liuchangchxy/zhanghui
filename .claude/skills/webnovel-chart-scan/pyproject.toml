@@ -1,6 +1,6 @@
 [project]
 name = "webnovel-chart-scan"
-version = "0.1.3"
+version = "0.1.4"
 description = "扫 5 个网文平台分类榜单的 Claude Code skill"
 requires-python = ">=3.11"
 dependencies = [

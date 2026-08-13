@@ -1,5 +1,19 @@
 """刺猬猫 (ciweimao) adapter — WEBFETCH strategy via httpx + BeautifulSoup.
 
+Status: BLOCKED_EXTERNAL (verified 2026-08-13).
+
+    Live re-verification on 2026-08-13 (4 minutes after a first success)
+    showed ciweimao.com now responds to ``/book_list/*`` requests with a
+    307 redirect to ``/signup/man_machine_verify`` (a man-machine CAPTCHA
+    page). Captcha bypass is a separate work item — likely needs
+    Playwright + hCaptcha solver (similar to fanqie).
+
+    The adapter is kept as a faithful WEBFETCH implementation against
+    the historical HTML shape so future captcha-bypass work has a parser
+    reference. The orchestrator short-circuits on
+    ``AdapterStatus.BLOCKED_EXTERNAL`` and never calls ``fetch()`` at
+    runtime — but the body is preserved in case v0.2 re-opens the path.
+
 NOTE on URL/HTML structure (2026-08-12):
     The spec'd URL pattern ``/category/<encoded-name>`` returned HTTP 404 at
     task implementation time. Real category URLs on ciweimao.com use
@@ -28,7 +42,7 @@ from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 
-from scripts.adapters.base import BaseAdapter, Strategy
+from scripts.adapters.base import BaseAdapter, Strategy, AdapterStatus
 from scripts.schema import RawBook
 
 CIWEIMAO_BASE = "https://www.ciweimao.com"
@@ -153,6 +167,13 @@ def parse_category_html(html: str, top: int) -> list[RawBook]:
 class CiweimaoAdapter(BaseAdapter):
     platform = "ciweimao"
     strategy = Strategy.WEBFETCH
+    # v0.1.4: relabeled from LIVE after live re-verification on
+    # 2026-08-13 showed ciweimao.com now gates /book_list/* with a
+    # 307 redirect to /signup/man_machine_verify (a CAPTCHA page).
+    # The orchestrator short-circuits and records an AdapterError
+    # with the v0.2 fix path instead of running fetch() into a
+    # captcha wall. See KNOWN_LIMITATIONS.md.
+    status = AdapterStatus.BLOCKED_EXTERNAL
 
     def fetch(self, category: str, period: str, top: int) -> list[RawBook]:
         slug = CATEGORY_SLUG_MAP.get(category, CATEGORY_SLUG_MAP["玄幻"])

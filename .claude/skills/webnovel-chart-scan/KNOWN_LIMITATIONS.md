@@ -1,4 +1,4 @@
-# Known Limitations (v0.1.3)
+# Known Limitations (v0.1.4)
 
 Last updated: 2026-08-13
 
@@ -12,93 +12,122 @@ Each platform adapter is explicitly marked with `status`:
 
 | Platform | Status | Why | Enable path |
 |----------|--------|-----|-------------|
-| **ciweimao** (刺猬猫) | LIVE (degraded) | httpx + BS4 against real HTML works, but site has begun gating `/book_list/*` with a man-machine CAPTCHA redirect (observed 2026-08-13). Captcha bypass is a separate item — see "Captcha regressions" below. | n/a (until captcha is solved) |
-| **fanqie** (番茄) | LIVE_WITH_SETUP | Needs Playwright + chromium install | `pip install playwright && playwright install chromium` |
-| **qimao** (七猫) | LIVE | Vendored regex rewrite fixed (v0.1.2); unchanged | n/a |
+| **ciweimao** (刺猬猫) | 🔴 BLOCKED_EXTERNAL | Captcha 307 (man-machine verify) added 2026-08-13 — `/book_list/*` now redirects to `/signup/man_machine_verify` even minutes after a first success | v0.2: Playwright + hCaptcha solver, or alternative endpoint |
+| **fanqie** (番茄) | 🔴 BLOCKED_IMPLEMENTATION | Even with Playwright installed, vendored `run_scraper` is a site-wide JSON dump that doesn't match our per-(category, period, top) signature — needs a thin adapter over `run_scraper` | v0.2: read dump file (vendor/fanqie_rank_tracker/data/fanqie_all_ranks_YYYYMMDD.json) and slice by category |
+| **qimao** (七猫) | LIVE | Vendored regex rewrite fixed (v0.1.2); shared Nuxt SSR parser in `scripts/nuxt_parser.py` | n/a |
 | **qidian** (起点) | LIVE | Mobile-subdomain bypass — `https://m.qidian.com/rank` and `/category/catid<id>` return server-rendered HTML with the iPhone Safari User-Agent (no probe.js) | n/a |
-| **zongheng** (纵横) | LIVE | Nuxt SSR scraping — `/rank?nav=new-book&rankType=4` returns 200 with `window.__NUXT__` payload containing all 6 rank lists | n/a |
+| **zongheng** (纵横) | LIVE | Nuxt SSR scraping — `/rank?nav=new-book&rankType=4` returns 200 with `window.__NUXT__` payload containing all 6 rank lists; uses shared parser | n/a |
 
-5/5 platforms are LIVE or LIVE_WITH_SETUP. No BLOCKED_EXTERNAL.
+3/5 platforms are LIVE. 2/5 are blocked (1 external, 1 implementation).
 
-## v0.1.3 changelog (2026-08-13)
+## Test counts (verified 2026-08-13)
 
-### Fix: qidian (起点) — port RC4 cookie helper + mobile-subdomain bypass
+- Fast tests (default, `pytest tests/`): 89 — all pass; no skips
+- Slow tests (`pytest -m slow`): 10 — 8 pass (qidian ×3, qimao ×2, zongheng ×3), 2 skipped (ciweimao captcha-regression HTTP smoke tests; @pytest.mark.skip)
+- Total: 99
 
-The vendored upstream at `vendor/novel-downloader/qidian_subset/searcher.py`
-implements an RC4 cookie construction (`_calc_cookies`) intended to bypass
-qidian.com's probe.js anti-bot. Verification on 2026-08-13 showed:
+Skipped at runtime by `addopts = "-m 'not slow'"` in `pyproject.toml`. Run
+slow tests explicitly with `pytest -m slow` once you have network access
+and want to verify the LIVE adapters.
 
-  - The vendored RC4 cookies do NOT actually bypass modern probe.js.
-    Both with and without the cookies, `https://www.qidian.com/...`
-    returns HTTP 202 + `https://www.qidian.com/C2WF946J0/probe.js`.
-  - The vendored searcher silently catches the failure and returns an
-    empty string — so even when the vendored upstream "succeeds" it's
-    actually returning nothing.
+## v0.1.4 changelog (2026-08-13)
+
+### Critical fixes (adversarial review v0.1.3 -> v0.1.4)
+
+- **C1: ciweimao relabeled LIVE -> BLOCKED_EXTERNAL.** Live re-verification
+  on 2026-08-13 (4 minutes after a first success) showed ciweimao.com
+  now gates `/book_list/*` with a 307 redirect to
+  `/signup/man_machine_verify`. The adapter is preserved (parser intact)
+  but the orchestrator short-circuits and records an actionable
+  AdapterError instead of running `fetch()` into a captcha wall. Live
+  tests marked `@pytest.mark.skip` so CI doesn't fail.
+- **C2: `scripts/adapters/qidian_cookies.py` + `tests/test_qidian_cookies.py`
+  deleted.** The vendored
+  `vendor/novel-downloader/qidian_subset/searcher.py` contains the
+  RC4 cookie helper as the single source of truth — the local port
+  was dead code (does not bypass modern probe.js, verified 2026-08-13).
+  `qidian.py` docstring updated to point readers at the vendored path
+  for traceability.
+- **C3: fanqie relabeled LIVE_WITH_SETUP -> BLOCKED_IMPLEMENTATION.**
+  The vendored `run_scraper` is site-wide and `fetch()` raises
+  `RuntimeError` even with Playwright installed — that is a code-side
+  gap, not a one-time setup issue. v0.2 work item: thin adapter over
+  `run_scraper`.
+
+### Important fixes
+
+- **I1: `scripts/nuxt_parser.py` extracted.** Shared between qimao +
+  zongheng (was duplicated verbatim in both adapters). Public API:
+  `scan_balanced`, `split_top_level_csv`, `parse_nuxt_payload`. Tests
+  moved to `tests/test_nuxt_parser.py`.
+- **I2: qidian --top truncation documented.** See "Known data gaps"
+  below.
+- **I3: qimao word_count gap documented.** See below.
+- **I4: zongheng intro empty gap documented.** See below.
+- **I5: honest test counts.** See "Test counts" above. No more
+  unverified "X + Y = Z" claims.
+
+## Known Data Gaps
+
+| Platform | Field | Why | Fix path |
+|----------|-------|-----|----------|
+| qidian | `--top > 5` returns ≤5 per period | m.qidian.com rank page caps at 5 books per tab, no pagination visible in the server-rendered HTML | Use desktop site (blocked by probe.js) OR aggregate 9 tabs (45 books max, may duplicate across tabs) |
+| qimao | `word_count` always null | Upstream Nuxt SSR `number` field is reader_count, not word_count | v0.2: detail-page fetch or alternative API |
+| zongheng | `intro` always empty | Rank payload's `description` field is empty (site fills it on detail page) | v0.2: detail-page fetch for each book |
+| ciweimao | `status` often null | Table row doesn't include 完结/连载 label (only update date) | v0.2: detail-page fetch (after captcha bypass) |
+
+## v0.1.3 changelog (carried forward for reference)
+
+### Fix: qidian (起点) — mobile-subdomain bypass
 
 The runtime bypass that DOES work is using the **mobile subdomain**
-(`m.qidian.com`) with an iPhone Safari User-Agent. The mobile pages are
-server-rendered (the body contains the rank/category HTML directly, not
-just a Vue mount point) and don't trigger probe.js.
+(`m.qidian.com`) with an iPhone Safari User-Agent. Mobile pages are
+server-rendered (the body contains the rank/category HTML, not just a
+Vue mount point) and don't trigger probe.js.
 
-We still ported the vendored RC4 helper verbatim into
-`scripts/adapters/qidian_cookies.py` for traceability and future-proofing
-(in case qidian reopens the cookie-bypass path). Tests exercise the
-helper byte-deterministic-ally without network access.
+The vendored upstream `vendor/novel-downloader/qidian_subset/searcher.py`
+contains an RC4 cookie construction (`_calc_cookies`) attempt, but
+verified 2026-08-13 that it does NOT bypass modern probe.js. Runtime
+bypass is `m.qidian.com` (see `scripts/adapters/qidian.py`).
 
-- `scripts/adapters/qidian_cookies.py` (new) — pure-Python port of the
-  vendored RC4 + `_calc_cookies`. ~120 LOC.
-- `scripts/adapters/qidian.py` — full rewrite to WEBFETCH strategy
-  against `m.qidian.com`. Parses 9 rank tabs on `/rank` (period picks
-  tab) and 20 books per category on `/category/catid<id>`. ~180 LOC.
-- Status: BLOCKED_EXTERNAL → LIVE.
+v0.1.4 deleted the local `qidian_cookies.py` port as dead code. The
+vendored `vendor/novel-downloader/qidian_subset/searcher.py` is now the
+single source of truth for the RC4 helper if it is ever re-needed.
 
 ### Fix: zongheng (纵横) — Nuxt SSR scraping
 
-The previously assumed JSON API
-`https://www.zongheng.com/api/rank/details` returns HTTP 404. The site
-itself returns 200 with a Nuxt SSR payload embedded as
-`window.__NUXT__`, containing all rank lists (`monthTicketRankList`,
-`newBookRankList`, `popularRankList`, `clickRankList`,
-`recommendRankList`, `newOrderRankList`) under
+The previously assumed JSON API `https://www.zongheng.com/api/rank/details`
+returns HTTP 404. The site itself returns 200 with a Nuxt SSR payload
+embedded as `window.__NUXT__`, containing all rank lists
+(`monthTicketRankList`, `newBookRankList`, `popularRankList`,
+`clickRankList`, `recommendRankList`, `newOrderRankList`) under
 `state.rank.popularityRank`.
 
-We reuse the balanced-brace + identifier-substitution Nuxt parser
-originally written for the qimao adapter (copied verbatim into
-`scripts/adapters/zongheng.py` so the adapter is self-contained and
-doesn't break on qimao refactors) and pick the right list for the
-requested period.
+v0.1.4 extracts the shared balanced-brace + identifier-substitution
+Nuxt parser to `scripts/nuxt_parser.py` (was duplicated in
+`scripts/adapters/qimao.py` and `scripts/adapters/zongheng.py`).
 
-- `scripts/adapters/zongheng.py` — full rewrite to WEBFETCH strategy
-  against the public `/rank` page. ~200 LOC.
-- Status: BLOCKED_EXTERNAL → LIVE.
+### New tests (v0.1.3, since modified in v0.1.4)
 
-### New tests
-
-- `tests/test_qidian_cookies.py` (new) — 9 unit tests for the RC4
-  helper, no network. Pin byte-level behavior so future changes don't
-  silently drift the cookie shape.
-- `tests/test_qidian_adapter.py` (updated) — parser unit tests against
-  real captured HTML fixtures (`tests/fixtures/qidian_rank_all.html`,
-  `tests/fixtures/qidian_category_xuanhuan.html`). Captured 2026-08-13.
-- `tests/test_qidian_live.py` (new) — 3 `@pytest.mark.slow` HTTP smoke
-  tests against `m.qidian.com`.
-- `tests/test_zongheng_adapter.py` (updated) — parser unit tests
-  against the real captured HTML fixture
-  (`tests/fixtures/zongheng_rank_newbook.html`). The old synthesized
-  fixture `tests/fixtures/zongheng_rank_details.json` is no longer used
-  by tests but is kept for historical reference (git history).
-- `tests/test_zongheng_live.py` (new) — 3 `@pytest.mark.slow` HTTP smoke
-  tests against `zongheng.com/rank`.
-
-### Captcha regressions (separate from this fix)
-
-- **ciweimao**: The site's `/book_list/*` endpoints now redirect (HTTP
-  307) to a man-machine verification page (`/signup/man_machine_verify`)
-  for some requests. The current adapter raises `HTTPStatusError` when
-  this happens. The adapter status is still `LIVE` (it does work for
-  the in-fixture URLs), but the live smoke test fails on the
-  CAPTCHA-gated endpoints. Bypassing the captcha is a separate item —
-  likely needs Playwright + hCaptcha solver, similar to fanqie.
+- `tests/test_qidian_cookies.py` — DELETED in v0.1.4 (was dead code).
+- `tests/test_qidian_adapter.py` — parser unit tests against real
+  captured HTML fixtures. Still present.
+- `tests/test_qidian_live.py` — 3 `@pytest.mark.slow` HTTP smoke tests
+  against `m.qidian.com`. Still present.
+- `tests/test_zongheng_adapter.py` — parser unit tests against the real
+  captured HTML fixture. v0.1.4 trimmed to integration-only tests
+  (low-level parser tests moved to `tests/test_nuxt_parser.py`).
+- `tests/test_zongheng_live.py` — 3 `@pytest.mark.slow` HTTP smoke
+  tests against `zongheng.com/rank`. Still present.
+- `tests/test_nuxt_parser.py` (v0.1.4 NEW) — 15 unit tests for the
+  shared Nuxt SSR parser (`scan_balanced`, `split_top_level_csv`,
+  `parse_nuxt_payload`). Covers string-aware brace scanning, escape
+  sequences, bare-key quoting, identifier substitution boundaries.
+- `tests/test_ciweimao_live.py` (v0.1.4 MODIFIED) — 1 fast metadata
+  test + 2 slow HTTP smoke tests. The slow tests are marked
+  `@pytest.mark.skip` after the 2026-08-13 captcha 307 regression;
+  the metadata test asserts `status == BLOCKED_EXTERNAL` so a future
+  regression that flips the label back to LIVE would fail CI.
 
 ## What "BLOCKED_EXTERNAL" / "BLOCKED_IMPLEMENTATION" means
 
@@ -107,26 +136,12 @@ The orchestrator records an `AdapterError` with a human-readable
 explanation. User sees clear messages in `chart-scan/books.json`
 errors[] and `chart-scan/report.md` 失败记录 section.
 
-## What "LIVE_WITH_SETUP" means
+## After v0.1.4 (3/5 LIVE)
 
-These adapters have a working runtime code path, but require a
-one-time user setup step before they can fetch data. The orchestrator
-calls `fetch()` (no short-circuit) and any `RuntimeError` raised by
-the adapter (e.g. "Playwright not installed — run `pip install
-playwright`") surfaces as an `AdapterError` with actionable guidance.
-
-## After v0.1.3 (5/5 LIVE / LIVE_WITH_SETUP)
-
-All five platforms are now either LIVE or LIVE_WITH_SETUP. No further
-adapter-fix work is needed for this skill to return data on every
-platform (assuming the user runs `pip install playwright &&
-playwright install chromium` for fanqie).
-
-- Run `pytest -m slow` to verify all 5 against real endpoints (note:
-  ciweimao smoke tests currently fail due to the captcha regression
-  documented above)
-- The next time this doc is updated, consider converting it to a
-  "current capabilities" doc with a small "Open follow-ups" section
+Three platforms return real data today (qidian, qimao, zongheng).
+Two are blocked: ciweimao (external captcha, v0.2 needs Playwright +
+hCaptcha solver) and fanqie (implementation gap, v0.2 needs a thin
+adapter over the vendored site-wide crawl).
 
 ## How to add a new adapter
 
@@ -146,4 +161,4 @@ If you add a 6th platform:
    `platform` + `strategy` + `status`).
 6. If LIVE or LIVE_WITH_SETUP, add parser unit tests + an
    `@pytest.mark.slow` HTTP smoke test (modeled on
-   `tests/test_ciweimao_live.py` or `tests/test_qimao_live.py`).
+   `tests/test_qimao_live.py` or `tests/test_zongheng_live.py`).

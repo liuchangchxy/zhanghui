@@ -1,4 +1,4 @@
-"""Tests for the zongheng adapter metadata + parser unit tests.
+"""Tests for the zongheng adapter metadata + parser integration.
 
 Status: LIVE (verified 2026-08-13, after Nuxt SSR scraping rewrite).
 
@@ -10,6 +10,9 @@ Status: LIVE (verified 2026-08-13, after Nuxt SSR scraping rewrite).
     Tests use a real captured HTML fixture saved at
     tests/fixtures/zongheng_rank_newbook.html (captured 2026-08-13 from
     https://www.zongheng.com/rank?nav=new-book&rankType=4).
+
+    v0.1.4: parser low-level unit tests moved to ``test_nuxt_parser.py``;
+    this file exercises the integration of the parser with the adapter.
 """
 from __future__ import annotations
 
@@ -20,7 +23,6 @@ import pytest
 from scripts.adapters.zongheng import (
     ZonghengAdapter,
     parse_rank_payload,
-    _parse_nuxt_payload,
     _serial_status_to_literal,
     _extract_int,
     _normalize_rank_no,
@@ -64,22 +66,11 @@ def test_normalize_rank_no():
     assert _normalize_rank_no(None, 7) == 7
 
 
-# --- parser tests against real captured HTML --------------------------------
+# --- integration tests against real captured HTML ----------------------------
 
 @pytest.fixture
 def fixtures_dir() -> Path:
     return Path(__file__).parent / "fixtures"
-
-
-def test_parse_nuxt_payload_round_trip(fixtures_dir):
-    """The parser successfully extracts the Nuxt SSR state dictionary."""
-    html = (fixtures_dir / "zongheng_rank_newbook.html").read_text()
-    data = _parse_nuxt_payload(html)
-    assert "state" in data, "expected top-level 'state' key in Nuxt payload"
-    rank = data["state"].get("rank", {}).get("popularityRank", {})
-    assert "monthTicketRankList" in rank
-    assert "newBookRankList" in rank
-    assert "recommendRankList" in rank
 
 
 def test_parse_rank_payload_monthly_picks_month_ticket(fixtures_dir):
