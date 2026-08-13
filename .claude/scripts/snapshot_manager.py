@@ -87,17 +87,112 @@ def build_manifest(chapter: int, files: list[str], project_root: Path) -> Manife
     )
 
 
-# === CLI 占位（后续 task 填充） ===
+def discover_files(project_root: Path) -> list[Path]:
+    """递归扫描 SNAPSHOT_PATHS 下所有 .md 文件。
+
+    过滤规则：
+    - 只扫 SNAPSHOT_PATHS 列出的根（默认 设定集/ + 大纲/）
+    - 只收 .md
+    - 忽略隐藏文件（以 . 开头）
+    """
+    found: list[Path] = []
+    for sub in SNAPSHOT_PATHS:
+        root = project_root / sub
+        if not root.is_dir():
+            continue
+        for p in root.rglob("*.md"):
+            if any(part.startswith(".") for part in p.relative_to(root).parts):
+                continue
+            found.append(p)
+    return sorted(found)
+
+
+def _chapter_dir(project_root: Path, chapter: int) -> Path:
+    return project_root / ".webnovel" / "snapshots" / f"ch{chapter:04d}"
+
+
+def _copy_file(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(src.read_bytes())
+
+
+def cmd_freeze(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root).resolve()
+    files = discover_files(project_root)
+    if not files:
+        print(
+            f"[snapshot] 找不到任何 SNAPSHOT_PATHS 下的 .md 文件 "
+            f"(尝试过: {', '.join(SNAPSHOT_PATHS)})",
+            file=sys.stderr,
+        )
+        return EXIT_INFRA
+
+    chapter = args.chapter
+    snap_dir = _chapter_dir(project_root, chapter)
+    if snap_dir.exists():
+        print(
+            f"[snapshot] 警告: {snap_dir} 已存在，将被覆盖",
+            file=sys.stderr,
+        )
+
+    rels = [p.relative_to(project_root).as_posix() for p in files]
+    manifest = build_manifest(chapter, rels, project_root)
+
+    # 复制文件 + 写 manifest
+    for src in files:
+        dst = snap_dir / src.relative_to(project_root)
+        _copy_file(src, dst)
+    (snap_dir / "manifest.json").write_text(
+        json.dumps(manifest.to_dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "snapshot_dir": str(snap_dir),
+                "chapter": chapter,
+                "file_count": len(rels),
+            },
+            ensure_ascii=False,
+        )
+    )
+    return EXIT_OK
+
+
+def _not_implemented(name: str) -> int:
+    print(f"[snapshot] {name} 尚未实现", file=sys.stderr)
+    return EXIT_INFRA
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="workflow snapshot 管理器")
+    parser.add_argument(
+        "--project-root",
+        default=str(Path.cwd()),
+        help="项目根目录（默认 CWD）",
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("freeze")
-    sub.add_parser("verify")
-    sub.add_parser("list")
-    sub.add_parser("diff")
+
+    p_freeze = sub.add_parser("freeze", help="冻结 N 章的 设定集+大纲")
+    p_freeze.add_argument("chapter", type=int, help="章节号")
+    p_freeze.set_defaults(func=cmd_freeze)
+
+    # 其他子命令占位，后续 task 填充
+    p_verify = sub.add_parser("verify", help="校验 N 章快照是否漂移")
+    p_verify.add_argument("chapter", type=int)
+    p_verify.set_defaults(func=lambda a: _not_implemented("verify"))
+
+    p_list = sub.add_parser("list", help="列出所有快照")
+    p_list.set_defaults(func=lambda a: _not_implemented("list"))
+
+    p_diff = sub.add_parser("diff", help="显示当前 vs 快照的文件差异清单")
+    p_diff.add_argument("chapter", type=int)
+    p_diff.set_defaults(func=lambda a: _not_implemented("diff"))
+
     args = parser.parse_args(argv)
-    print(f"stub: {args.cmd}", file=sys.stderr)
-    return EXIT_INFRA
+    return args.func(args)
 
 
 if __name__ == "__main__":
