@@ -52,3 +52,63 @@ def init_story_craft(path: str | Path) -> dict:
     elif not isinstance(state["story_craft"], dict):
         raise StoryCraftFieldError("story_craft is not a dict")
     return state
+
+
+VALID_DEPTHS = {"表层", "中层", "深层"}
+VALID_TYPES = {"物谶", "诗谶", "戏谶", "灯谜", "环境", "习惯", "对话双关"}
+
+
+def _next_foreshadow_id(chain: list) -> str:
+    used = {item.get("id", "") for item in chain}
+    n = 1
+    while f"FS-{n:03d}" in used:
+        n += 1
+    return f"FS-{n:03d}"
+
+
+def add_foreshadow(state: dict, item: dict) -> dict:
+    """Add foreshadow item to chain. Validates required fields.
+
+    Required: type, depth
+    Optional: id (auto-assigned if missing), content, buried_chapter,
+              expected_payoff_chapter, payoff_method, linked_entities
+    """
+    if item.get("depth") not in VALID_DEPTHS:
+        raise ValueError(f"depth must be one of {VALID_DEPTHS}, got {item.get('depth')}")
+    if item.get("type") not in VALID_TYPES:
+        raise ValueError(f"type must be one of {VALID_TYPES}, got {item.get('type')}")
+
+    chain = state.setdefault("story_craft", {}).setdefault("foreshadow_chain", [])
+    new_item = {
+        "id": item.get("id") or _next_foreshadow_id(chain),
+        "type": item["type"],
+        "depth": item["depth"],
+        "content": item.get("content", ""),
+        "buried_chapter": item.get("buried_chapter"),
+        "expected_payoff_chapter": item.get("expected_payoff_chapter"),
+        "payoff_method": item.get("payoff_method", ""),
+        "linked_entities": item.get("linked_entities", []),
+        "status": "active",
+        "buried_quality": item.get("buried_quality"),
+        "payoff_chapter": None,
+        "payoff_quality": None,
+    }
+    chain.append(new_item)
+    return state
+
+
+def payoff_foreshadow(state: dict, foreshadow_id: str, chapter: int, quality: str) -> dict:
+    """Mark foreshadow as paid off at given chapter.
+
+    Raises ValueError if not found or already paid off.
+    """
+    chain = state["story_craft"]["foreshadow_chain"]
+    for item in chain:
+        if item["id"] == foreshadow_id:
+            if item["status"] == "paid_off":
+                raise ValueError(f"{foreshadow_id} already paid off")
+            item["status"] = "paid_off"
+            item["payoff_chapter"] = chapter
+            item["payoff_quality"] = quality
+            return state
+    raise ValueError(f"foreshadow {foreshadow_id} not found")

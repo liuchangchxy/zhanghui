@@ -11,7 +11,7 @@ _SCRIPTS = Path(__file__).resolve().parent.parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from story_craft import init_story_craft, StoryCraftFieldError  # noqa: E402
+from story_craft import init_story_craft, StoryCraftFieldError, add_foreshadow, payoff_foreshadow  # noqa: E402
 
 
 def test_init_story_craft_creates_empty_structure():
@@ -91,3 +91,51 @@ def test_init_story_craft_raises_field_error_when_not_dict():
             raise AssertionError("Expected StoryCraftFieldError but no exception was raised")
     finally:
         Path(path).unlink()
+
+
+def test_add_foreshadow_creates_item():
+    state = {"story_craft": {"foreshadow_chain": []}}
+    item = {
+        "id": "FS-001",
+        "type": "物谶",
+        "depth": "中层",
+        "content": "血玉蜘蛛蛛丝",
+        "buried_chapter": 5,
+        "expected_payoff_chapter": 25,
+        "payoff_method": "虚天鼎钥匙",
+        "linked_entities": ["韩立", "血玉蜘蛛"]
+    }
+    result = add_foreshadow(state, item)
+    assert len(result["story_craft"]["foreshadow_chain"]) == 1
+    assert result["story_craft"]["foreshadow_chain"][0]["id"] == "FS-001"
+    assert result["story_craft"]["foreshadow_chain"][0]["status"] == "active"
+
+
+def test_add_foreshadow_assigns_next_id():
+    state = {"story_craft": {"foreshadow_chain": [{"id": "FS-001"}]}}
+    result = add_foreshadow(state, {"type": "物谶", "depth": "表层"})
+    assert result["story_craft"]["foreshadow_chain"][1]["id"] == "FS-002"
+
+
+def test_add_foreshadow_validates_depth():
+    state = {"story_craft": {"foreshadow_chain": []}}
+    with __import__("pytest").raises(ValueError):
+        add_foreshadow(state, {"type": "物谶", "depth": "invalid"})
+
+
+def test_payoff_foreshadow_marks_paid_off():
+    state = {"story_craft": {"foreshadow_chain": [
+        {"id": "FS-001", "status": "active"}
+    ]}}
+    result = payoff_foreshadow(state, "FS-001", chapter=25, quality="强")
+    assert result["story_craft"]["foreshadow_chain"][0]["status"] == "paid_off"
+    assert result["story_craft"]["foreshadow_chain"][0]["payoff_chapter"] == 25
+    assert result["story_craft"]["foreshadow_chain"][0]["payoff_quality"] == "强"
+
+
+def test_payoff_foreshadow_raises_if_already_paid():
+    state = {"story_craft": {"foreshadow_chain": [
+        {"id": "FS-001", "status": "paid_off"}
+    ]}}
+    with __import__("pytest").raises(ValueError):
+        payoff_foreshadow(state, "FS-001", chapter=25, quality="强")
