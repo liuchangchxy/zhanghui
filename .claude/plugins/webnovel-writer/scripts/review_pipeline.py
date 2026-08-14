@@ -28,6 +28,12 @@ _ensure_scripts_path()
 from data_modules.review_author_view import render_review_author_view
 from data_modules.review_schema import append_ai_flavor_anti_patterns, parse_review_output
 from security_utils import atomic_write_json, atomic_write_text
+from story_craft import (
+    check_rhythm_status,
+    check_scene_sequel,
+    check_timed_lock_deadlines,
+    check_volume_beat,
+)
 
 
 def _resolve_report_path(project_root: Path, report_file: str) -> Path:
@@ -156,6 +162,7 @@ def build_review_artifacts(
 ) -> Dict[str, Any]:
     raw = json.loads(review_results_path.read_text(encoding="utf-8"))
     result = parse_review_output(chapter=chapter, raw=raw)
+    _inject_craft_issues(project_root, result, chapter)
     anti_patterns_added = append_ai_flavor_anti_patterns(project_root, result)
     metrics = result.to_metrics_dict(report_file=report_file)
     normalized_review = result.to_dict()
@@ -168,6 +175,122 @@ def build_review_artifacts(
         "metrics": metrics,
         "anti_patterns_added": anti_patterns_added,
     }
+
+
+def _craft_category_to_review_category(craft_category: str) -> str:
+    """Map story_craft issue category to ReviewIssue VALID_CATEGORIES."""
+    if craft_category == "foreshadow_compliance":
+        return "continuity"
+    if craft_category == "beat_compliance":
+        return "pacing"
+    return "other"
+
+
+def _craft_issue_to_review_issue(issue_str: str, chapter: int):
+    """Convert a run_craft_checks string into a ReviewIssue."""
+    from data_modules.review_schema import ReviewIssue
+
+    is_blocker = "BLOCKER" in issue_str or "BLOCK" in issue_str or "未声明" in issue_str or "逾期" in issue_str
+
+    # Split "category: description" prefix
+    if ":" in issue_str:
+        craft_category, _, description = issue_str.partition(":")
+        craft_category = craft_category.strip()
+        description = description.strip()
+    else:
+        craft_category = "other"
+        description = issue_str
+
+    return ReviewIssue(
+        severity="critical" if is_blocker else "medium",
+        category=_craft_category_to_review_category(craft_category),
+        location=f"chapter {chapter}",
+        description=description,
+        evidence="",
+        fix_hint="",
+        blocking=is_blocker,
+    )
+
+
+def _load_story_state(project_root: Path) -> dict:
+    """Best-effort load of state.json from project_root. Returns empty dict if missing."""
+    try:
+        state_path = project_root / ".webnovel" / "state.json"
+        if state_path.exists():
+            return json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {}
+
+
+def _inject_craft_issues(project_root: Path, result, chapter: int) -> None:
+    """Load state.json (best-effort) and merge story_craft issues into result.issues."""
+    state = _load_story_state(project_root)
+    if not state:
+        return
+    craft = run_craft_checks(state, chapter)
+    for blocker in craft.get("blockers", []):
+        result.issues.append(_craft_issue_to_review_issue(blocker, chapter))
+    for warning in craft.get("warnings", []):
+        result.issues.append(_craft_issue_to_review_issue(warning, chapter))
+
+
+def chapter_to_volume(state: dict, chapter: int) -> int:
+    """Best-effort: figure out which volume a chapter belongs to."""
+    return state.get("story_craft", {}).get("volume_beat", {}).get("volume", 1)
+
+
+def run_craft_checks(state: dict, chapter: int) -> dict:
+    """Run all story_craft checks for a given chapter. Return issues dict."""
+    issues: dict[str, list[str]] = {"blockers": [], "warnings": []}
+
+    # Volume beat (only if initialized)
+    if "volume_beat" in state.get("story_craft", {}):
+        vol = state["story_craft"]["volume_beat"]["volume"]
+        if vol == chapter_to_volume(state, chapter):
+            vol_issues = check_volume_beat(state, volume=vol)
+            for issue in vol_issues:
+                if "BLOCKER" in issue:
+                    issues["blockers"].append(f"beat_compliance: {issue}")
+                else:
+                    issues["warnings"].append(f"beat_compliance: {issue}")
+
+    # Rhythm
+    if "rhythm_curve" in state.get("story_craft", {}):
+        rhythm_status = check_rhythm_status(state)
+        if rhythm_status == "block":
+            n = state["story_craft"]["rhythm_curve"]["chapters_since_peak"]
+            issues["blockers"].append(
+                f"foreshadow_compliance: 节奏曲线 BLOCK：chapters_since_peak={n}"
+            )
+        elif rhythm_status == "warning":
+            issues["warnings"].append("foreshadow_compliance: 节奏曲线 WARNING")
+
+    # Timed locks
+    if "timed_locks" in state.get("story_craft", {}):
+        overdue = check_timed_lock_deadlines(state, current_chapter=chapter)
+        for lock in overdue:
+            issues["blockers"].append(
+                f"foreshadow_compliance: 定时锁逾期：{lock['id']} deadline={lock['deadline_chapter']}"
+            )
+
+    # Scene-Sequel
+    cm = state.get("chapter_meta", {}).get(str(chapter), {})
+    if cm:
+        ss_issues = check_scene_sequel(cm)
+        for issue in ss_issues:
+            if issue.startswith("BLOCKER"):
+                issues["blockers"].append(f"beat_compliance: Scene-Sequel: {issue}")
+            else:
+                issues["warnings"].append(f"beat_compliance: Scene-Sequel: {issue}")
+
+        # Hook type
+        if not cm.get("hook_type"):
+            issues["blockers"].append(
+                "foreshadow_compliance: 章末 hook_type 未声明"
+            )
+
+    return issues
 
 
 def main() -> None:
