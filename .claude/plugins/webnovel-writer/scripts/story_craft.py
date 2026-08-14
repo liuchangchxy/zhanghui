@@ -326,15 +326,21 @@ def fill_beat(state: dict, volume: int, beat_name: str, chapter: int, notes: str
     raise ValueError(f"beat {beat_name} not found")
 
 
-def check_volume_beat(state: dict, volume: int) -> list:
-    """Return issues. BLOCKER for Midpoint/All Is Lost missing.
+def check_volume_beat(state: dict, volume: int, current_chapter: int | None = None) -> list:
+    """Return issues. BLOCKER for Midpoint/All Is Lost when current chapter >= beat's chapter.
 
     Behavior:
     - If volume_beat is not initialized at all, return a friendly BLOCKER
       list (does not raise) so callers can display the issue.
     - If volume_beat is initialized for a different volume, raise
       ValueError (multi-volume not yet supported in this iteration).
+    - For Midpoint/All Is Lost, BLOCKER is only emitted when current_chapter
+      is provided AND current_chapter >= beat['chapter'] - tolerance (2).
+      If current_chapter is None, BLOCKER is always emitted (legacy behavior,
+      used by callers that have no chapter context).
+    - Non-critical beats always emit WARN when unfilled.
     """
+    tolerance = 2
     vb = state.get("story_craft", {}).get("volume_beat")
     if vb is None:
         return [f"BLOCKER: story_craft.volume_beat not initialized for volume {volume} — run init-volume-beat first"]
@@ -346,8 +352,15 @@ def check_volume_beat(state: dict, volume: int) -> list:
     issues = []
     beats = vb["beats"]
     for beat in beats:
-        if beat["name"] in ("Midpoint", "All Is Lost") and not beat["filled"]:
-            issues.append(f"BLOCKER: {beat['name']} must be filled")
-        elif not beat["filled"]:
-            issues.append(f"WARN: {beat['name']} not yet filled")
+        is_critical = beat["name"] in ("Midpoint", "All Is Lost")
+        if not beat["filled"]:
+            if is_critical:
+                if current_chapter is not None:
+                    if current_chapter >= beat["chapter"] - tolerance:
+                        issues.append(f"BLOCKER: {beat['name']} must be filled")
+                    # else: not yet due
+                else:
+                    issues.append(f"BLOCKER: {beat['name']} must be filled")
+            else:
+                issues.append(f"WARN: {beat['name']} not yet filled")
     return issues
