@@ -33,17 +33,8 @@ def _load_state(path: str | Path) -> dict:
     """Load state.json from path."""
     p = Path(path)
     if not p.exists():
-        raise StoryCraftFieldError(f"state.json not found: {path}")
+        raise FileNotFoundError(f"state.json not found: {path}")
     return json.loads(p.read_text(encoding="utf-8"))
-
-
-def _save_state(path: str | Path, state: dict) -> None:
-    """Save state.json atomically."""
-    p = Path(path)
-    p.write_text(
-        json.dumps(state, ensure_ascii=False, indent=2),
-        encoding="utf-8"
-    )
 
 
 def init_story_craft(path: str | Path) -> dict:
@@ -51,6 +42,9 @@ def init_story_craft(path: str | Path) -> dict:
 
     Idempotent: preserves existing story_craft content.
     Preserves all other state.json fields.
+
+    Note: This function loads and mutates in-memory only. Caller is responsible
+    for writing the result back to disk (use security_utils.atomic_write_json).
     """
     state = _load_state(path)
     if "story_craft" not in state:

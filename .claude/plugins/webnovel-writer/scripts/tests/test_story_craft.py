@@ -58,3 +58,36 @@ def test_init_story_craft_preserves_existing():
         assert result["story_craft"]["rhythm_curve"]["chapters_since_peak"] == 5
     finally:
         Path(path).unlink()
+
+
+def test_init_story_craft_raises_file_not_found_when_missing():
+    nonexistent = Path(tempfile.gettempdir()) / "definitely_not_a_real_state_file_xyz_12345.json"
+    if nonexistent.exists():
+        nonexistent.unlink()
+
+    try:
+        try:
+            init_story_craft(nonexistent)
+        except FileNotFoundError:
+            pass
+        else:
+            raise AssertionError("Expected FileNotFoundError but no exception was raised")
+    finally:
+        if nonexistent.exists():
+            nonexistent.unlink()
+
+
+def test_init_story_craft_raises_field_error_when_not_dict():
+    with tempfile.NamedTemporaryFile(suffix='.json', delete=False, mode='w') as f:
+        json.dump({"project_info": {}, "story_craft": "not a dict"}, f)
+        path = f.name
+
+    try:
+        try:
+            init_story_craft(path)
+        except StoryCraftFieldError:
+            pass
+        else:
+            raise AssertionError("Expected StoryCraftFieldError but no exception was raised")
+    finally:
+        Path(path).unlink()
