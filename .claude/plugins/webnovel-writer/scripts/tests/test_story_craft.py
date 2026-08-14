@@ -24,6 +24,8 @@ from story_craft import (
     increment_chapters_since_peak,
     set_character_arc,
     add_thematic_echo,
+    set_chapter_meta,
+    check_scene_sequel,
 )  # noqa: E402
 
 
@@ -277,3 +279,63 @@ def test_set_character_arc_raises_for_missing_required_field():
     state = {"story_craft": {"character_arc": None}}
     with __import__("pytest").raises(ValueError):
         set_character_arc(state, {"name": "X", "starting_state": "a", "ending_state": "b"})  # missing transformation
+
+
+def test_set_chapter_meta_validates_hook_type():
+    state = {"chapter_meta": {}}
+    with __import__("pytest").raises(ValueError):
+        set_chapter_meta(state, chapter=1, hook_type="unknown")
+
+
+def test_set_chapter_meta_writes_all_fields():
+    state = {"chapter_meta": {}}
+    result = set_chapter_meta(
+        state,
+        chapter=5,
+        beat_position="Midpoint",
+        hook_type="反转式",
+        scene_goal="获得神器",
+        scene_conflict="守护者阻挡",
+        sequel_decision="使用神器"
+    )
+    cm = result["chapter_meta"]["5"]
+    assert cm["beat_position"] == "Midpoint"
+    assert cm["hook_type"] == "反转式"
+    assert cm["scene_goal"] == "获得神器"
+    assert cm["hook_type"] in {"悬念式", "反转式", "情绪炸弹式", "信息投放式", "留白式", "反讽式"}
+
+
+def test_set_chapter_meta_foreshadow_buried_array():
+    state = {"chapter_meta": {}}
+    result = set_chapter_meta(
+        state,
+        chapter=5,
+        foreshadow_buried=["FS-001", "FS-003"]
+    )
+    assert result["chapter_meta"]["5"]["foreshadow_buried"] == ["FS-001", "FS-003"]
+
+
+def test_check_scene_sequel_blocks_when_goal_missing():
+    cm = {"scene_goal": None, "scene_conflict": "ok", "sequel_decision": "ok"}
+    issues = check_scene_sequel(cm)
+    assert any("scene_goal" in i for i in issues)
+
+
+def test_check_scene_sequel_warns_when_setback_missing():
+    cm = {
+        "scene_goal": "ok", "scene_conflict": "ok",
+        "scene_setback": None, "scene_resolution": "ok",
+        "sequel_reaction": "ok", "sequel_dilemma": "ok", "sequel_decision": "ok"
+    }
+    issues = check_scene_sequel(cm)
+    assert any(i.startswith("WARN") for i in issues)
+
+
+def test_check_scene_sequel_ok_when_all_filled():
+    cm = {
+        "scene_goal": "ok", "scene_conflict": "ok",
+        "scene_setback": "ok", "scene_resolution": "ok",
+        "sequel_reaction": "ok", "sequel_dilemma": "ok", "sequel_decision": "ok"
+    }
+    issues = check_scene_sequel(cm)
+    assert issues == []

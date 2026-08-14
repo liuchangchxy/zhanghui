@@ -232,3 +232,38 @@ def add_thematic_echo(state: dict, premise: str, chapter: int, manifestation: st
         "echoes": [{"chapter": chapter, "manifestation": manifestation}]
     })
     return state
+
+
+VALID_HOOK_TYPES = {"悬念式", "反转式", "情绪炸弹式", "信息投放式", "留白式", "反讽式"}
+
+
+def set_chapter_meta(state: dict, chapter: int, **fields) -> dict:
+    """Set chapter_meta fields. Validates hook_type if provided.
+
+    Allowed fields: beat_position, hook_type, scene_goal, scene_conflict,
+    scene_setback, scene_resolution, sequel_reaction, sequel_dilemma,
+    sequel_decision, foreshadow_buried, foreshadow_paid_off.
+    """
+    if "hook_type" in fields and fields["hook_type"] not in VALID_HOOK_TYPES:
+        raise ValueError(f"hook_type must be one of {VALID_HOOK_TYPES}")
+    meta = state.setdefault("chapter_meta", {})
+    key = str(chapter)
+    existing = meta.get(key, {})
+    existing.update({k: v for k, v in fields.items() if v is not None})
+    meta[key] = existing
+    return state
+
+
+def check_scene_sequel(chapter_meta: dict) -> list:
+    """Return list of issues. BLOCKER for goal/conflict/decision missing;
+    WARNING for other 4 steps missing."""
+    issues = []
+    blockers = ["scene_goal", "scene_conflict", "sequel_decision"]
+    warnings = ["scene_setback", "scene_resolution", "sequel_reaction", "sequel_dilemma"]
+    for field in blockers:
+        if not chapter_meta.get(field):
+            issues.append(f"BLOCKER: {field} required")
+    for field in warnings:
+        if not chapter_meta.get(field):
+            issues.append(f"WARN: {field} recommended")
+    return issues
