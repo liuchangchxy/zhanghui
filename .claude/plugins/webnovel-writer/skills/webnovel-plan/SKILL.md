@@ -222,6 +222,14 @@ BLOCKER 处理：
 
 每章必须包含：目标、阻力、代价、时间锚点、章内时间跨度、与上章时间差、倒计时状态、爽点、Strand、反派层级、视角/主角、关键实体、本章变化、章末未闭合问题、钩子，以及结构化节点 `CBN`、`CPNs`、`CEN`、`必须覆盖节点`、`本章禁区`。
 
+**新增 craft 必填字段**：
+- `beat_position`：本章在卷 15-beat 中的位置（如 Midpoint / Fun and Games）
+- `scene_goal` / `scene_conflict` / `scene_setback` / `scene_resolution`：Scene 4 步
+- `sequel_reaction` / `sequel_dilemma` / `sequel_decision`：Sequel 3 步
+- `hook_type`：6 种章末钩子之一
+- `foreshadow_buried`：本章埋设的伏笔 ID 列表
+- `foreshadow_paid_off`：本章回收的伏笔 ID 列表
+
 #### 结构化节点
 
 节点格式统一为 `主体 | 动作/变化 | 对象/结果`（写作执行骨架，不追求严格语法 SVO）。完整格式说明、字段细则与示例见 `${SKILL_ROOT}/references/outlining/chapter-planning.md` 的「结构化节点规范」，按需区段读，不在本文件内联。
