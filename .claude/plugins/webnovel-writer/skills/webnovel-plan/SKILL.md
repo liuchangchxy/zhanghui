@@ -252,6 +252,26 @@ BLOCKER 处理：
 
 硬规则：若发现与总纲或既有设定冲突，标记 `BLOCKER` 并停止后续更新。
 
+### Step 8.5（新增）：craft 一致性检查
+
+执行强制验证：
+
+```bash
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
+  story-craft check-volume --volume {volume_id}
+```
+
+检查项：
+- ✅ 15-beat 完整性（Midpoint + All Is Lost 必填）
+- ✅ 伏笔链数量（表层≥5/中层≥3/深层≥1）
+- ✅ 定时锁数量（卷级≥3）
+- ✅ thematic_echoes ≥1 且 echoes ≥3
+- ✅ character_arc 4 字段全填
+- ✅ 每章 Scene-Sequel 必填字段不缺失
+- ✅ 每章 hook_type 已声明
+
+输出 BLOCKER 列表 → 暂停 → 用户裁决 → 继续 Step 9。
+
 ### Step 9：验证、保存并更新状态
 
 必须通过：节拍表 / 时间线表 / 详细大纲均存在且非空；每章时间字段齐全；时间线单调递增；倒计时推进正确；新设定已回写；`BLOCKER=0`；有节点时相邻章节 `CEN -> CBN` 无明显逻辑冲突且每章`必须覆盖节点`不超过 4 个。
