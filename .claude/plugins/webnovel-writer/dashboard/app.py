@@ -27,6 +27,48 @@ from .watcher import FileWatcher
 _project_root: Path | None = None
 _watcher = FileWatcher()
 
+# ---------------------------------------------------------------------------
+# Story-Craft 面板模板（HTML 字符串，简单格式化）
+# ---------------------------------------------------------------------------
+_BEAT_HTML_TEMPLATE = """\
+<h1>卷 {volume} 15-Beat 节拍</h1>
+<table border="1" style="border-collapse: collapse;">
+<tr><th>#</th><th>Beat</th><th>章</th><th>filled</th><th>notes</th></tr>
+{rows}
+</table>
+<p><small>Midpoint + All Is Lost 是 BLOCKER。</small></p>
+"""
+
+_FORESHADOW_HTML_TEMPLATE = """\
+<h1>伏笔链 ({count} 项)</h1>
+<table border="1" style="border-collapse: collapse;">
+<tr><th>ID</th><th>Type</th><th>Depth</th><th>Buried</th><th>Payoff</th><th>Status</th></tr>
+{rows}
+</table>
+"""
+
+_TIMED_LOCK_HTML_TEMPLATE = """\
+<h1>定时锁 ({count} 项)</h1>
+<table border="1" style="border-collapse: collapse;">
+<tr><th>ID</th><th>描述</th><th>Deadline</th><th>Status</th></tr>
+{rows}
+</table>
+"""
+
+_RHYTHM_HTML_TEMPLATE = """\
+<h1>节奏曲线</h1>
+<p>距离上次情绪高峰: <strong>{chapters_since_peak}</strong> 章</p>
+<p>状态: <strong style="color: {status_color}">{status_upper}</strong></p>
+<p>Warning threshold: {warning_threshold} / Block threshold: {block_threshold}</p>
+<p>Last peak: chapter {last_peak_chapter}</p>
+{history_html}
+"""
+
+_PANEL_EMPTY_HTML_TEMPLATE = """\
+<h1>{panel}</h1>
+<p>{msg}</p>
+"""
+
 STATIC_DIR = Path(__file__).parent / "frontend" / "dist"
 LOCAL_CORS_ORIGINS = [
     "http://localhost",
@@ -78,6 +120,93 @@ def _load_state_payload(*, required: bool = False) -> dict:
         raise HTTPException(status_code=500, detail=f"state.json 读取失败: {exc}") from exc
 
     return payload if isinstance(payload, dict) else {}
+
+
+def _load_story_craft() -> dict:
+    """读取 state.json 中的 story_craft 子结构。"""
+    state = _load_state_payload()
+    craft = state.get("story_craft") if isinstance(state, dict) else None
+    return craft if isinstance(craft, dict) else {}
+
+
+def _render_beat_rows(beats: list[dict]) -> str:
+    parts: list[str] = []
+    for index, beat in enumerate(beats, start=1):
+        if not isinstance(beat, dict):
+            continue
+        name = str(beat.get("name") or "")
+        chapter = beat.get("chapter") or ""
+        filled = bool(beat.get("filled"))
+        notes = beat.get("notes") or ""
+        blocker = name in ("Midpoint", "All Is Lost") and not filled
+        if blocker:
+            bg = "#ffcccc"
+        elif filled:
+            bg = "#ccffcc"
+        else:
+            bg = ""
+        style = f' style="background: {bg}"' if bg else ""
+        mark = "✓" if filled else "✗"
+        parts.append(
+            f"<tr{style}><td>{index}</td><td>{name}</td><td>{chapter}</td>"
+            f"<td>{mark}</td><td>{notes}</td></tr>"
+        )
+    return "".join(parts) or "<tr><td colspan='5'>暂无节拍</td></tr>"
+
+
+def _render_foreshadow_rows(chain: list[dict]) -> str:
+    parts: list[str] = []
+    for item in chain:
+        if not isinstance(item, dict):
+            continue
+        parts.append(
+            "<tr><td>{id}</td><td>{type}</td><td>{depth}</td>"
+            "<td>{buried}</td><td>{payoff}</td><td>{status}</td></tr>".format(
+                id=item.get("id", ""),
+                type=item.get("type", ""),
+                depth=item.get("depth", ""),
+                buried=item.get("buried_chapter") or "",
+                payoff=item.get("expected_payoff_chapter") or "",
+                status=item.get("status", ""),
+            )
+        )
+    return "".join(parts) or "<tr><td colspan='6'>暂无伏笔</td></tr>"
+
+
+def _render_timed_lock_rows(locks: list[dict]) -> str:
+    parts: list[str] = []
+    for item in locks:
+        if not isinstance(item, dict):
+            continue
+        parts.append(
+            "<tr><td>{id}</td><td>{desc}</td><td>{deadline}</td><td>{status}</td></tr>".format(
+                id=item.get("id", ""),
+                desc=item.get("description", ""),
+                deadline=item.get("deadline_chapter", ""),
+                status=item.get("status", ""),
+            )
+        )
+    return "".join(parts) or "<tr><td colspan='4'>暂无定时锁</td></tr>"
+
+
+def _render_rhythm_history(history: list[dict]) -> str:
+    if not history:
+        return ""
+    items: list[str] = []
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        items.append(
+            "<li>第 {chapter} 章: {type} (intensity {intensity})</li>".format(
+                chapter=entry.get("chapter", ""),
+                type=entry.get("type", ""),
+                intensity=entry.get("intensity", ""),
+            )
+        )
+    return (
+        '<details><summary>历史 ({count})</summary><ul>{items}</ul></details>'
+        .format(count=len(history), items="".join(items))
+    )
 
 
 def _parse_json_value(raw: object, default):
@@ -818,6 +947,94 @@ def create_app(project_root: str | Path | None = None) -> FastAPI:
             "pending_amend_proposals": proposal_rows[0]["count"] if proposal_rows else 0,
             "event_files": file_count,
         }
+
+    # ===========================================================
+    # API：story_craft 面板（HTML 视图）
+    # ===========================================================
+
+    def _empty_panel(panel: str, msg: str) -> HTMLResponse:
+        return HTMLResponse(
+            _PANEL_EMPTY_HTML_TEMPLATE.format(panel=panel, msg=msg),
+            status_code=200,
+        )
+
+    @app.get("/craft/beat/{volume}")
+    def craft_beat_panel(volume: int):
+        """15-beat 卷节拍面板。"""
+        craft = _load_story_craft()
+        volume_beat = craft.get("volume_beat") if isinstance(craft.get("volume_beat"), dict) else {}
+        beats = volume_beat.get("beats") if isinstance(volume_beat.get("beats"), list) else []
+        if not beats:
+            return _empty_panel(
+                "节拍",
+                "尚未初始化。运行: webnovel.py story-craft init-volume-beat --volume "
+                + str(volume) + " --total-chapters 50",
+            )
+        html = _BEAT_HTML_TEMPLATE.format(
+            volume=volume,
+            rows=_render_beat_rows(beats),
+        )
+        return HTMLResponse(html, status_code=200)
+
+    @app.get("/craft/foreshadow")
+    def craft_foreshadow_panel():
+        """伏笔链面板。"""
+        craft = _load_story_craft()
+        chain = craft.get("foreshadow_chain") if isinstance(craft.get("foreshadow_chain"), list) else []
+        if not chain:
+            return _empty_panel("伏笔", "尚未初始化。运行: webnovel.py story-craft init-forechains --volume 1")
+        html = _FORESHADOW_HTML_TEMPLATE.format(
+            count=len(chain),
+            rows=_render_foreshadow_rows(chain),
+        )
+        return HTMLResponse(html, status_code=200)
+
+    @app.get("/craft/timed-locks")
+    def craft_timed_locks_panel():
+        """定时锁面板。"""
+        craft = _load_story_craft()
+        locks = craft.get("timed_locks") if isinstance(craft.get("timed_locks"), list) else []
+        if not locks:
+            return _empty_panel("定时锁", "尚未初始化。运行: webnovel.py story-craft init-locks --volume 1")
+        html = _TIMED_LOCK_HTML_TEMPLATE.format(
+            count=len(locks),
+            rows=_render_timed_lock_rows(locks),
+        )
+        return HTMLResponse(html, status_code=200)
+
+    @app.get("/craft/rhythm")
+    def craft_rhythm_panel():
+        """节奏曲线面板。"""
+        craft = _load_story_craft()
+        curve = craft.get("rhythm_curve") if isinstance(craft.get("rhythm_curve"), dict) else None
+        if not curve:
+            return _empty_panel("节奏", "尚未初始化")
+
+        chapters_since_peak = int(curve.get("chapters_since_peak") or 0)
+        warning_threshold = int(curve.get("warning_threshold") or 3)
+        block_threshold = int(curve.get("block_threshold") or 5)
+
+        if chapters_since_peak >= block_threshold:
+            status = "block"
+            status_color = "red"
+        elif chapters_since_peak >= warning_threshold:
+            status = "warning"
+            status_color = "orange"
+        else:
+            status = "ok"
+            status_color = "green"
+
+        history = curve.get("history") if isinstance(curve.get("history"), list) else []
+        html = _RHYTHM_HTML_TEMPLATE.format(
+            chapters_since_peak=chapters_since_peak,
+            status_color=status_color,
+            status_upper=status.upper(),
+            warning_threshold=warning_threshold,
+            block_threshold=block_threshold,
+            last_peak_chapter=curve.get("last_emotion_peak_chapter", ""),
+            history_html=_render_rhythm_history(history),
+        )
+        return HTMLResponse(html, status_code=200)
 
     # ===========================================================
     # API：文档浏览（正文/大纲/设定集 —— 只读）
