@@ -15,7 +15,7 @@
       "required": [
         "未过充分性闸门，不执行 `webnovel.py init`",
         "用户确认前不得写入",
-        "python -X utf8"
+        "python3 -X utf8"
       ]
     },
     {
