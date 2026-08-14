@@ -71,7 +71,7 @@ def test_plugin_version_is_6_3_0() -> None:
 def test_no_scripts_in_dev_dotclaude() -> None:
     """dev .claude/scripts/ 与 .claude/skills/ 在重构后应已清空。"""
     for path in [".claude/scripts", ".claude/skills"]:
-        full = PLUGIN_ROOT.parent.parent / path  # plugin/.. = .claude/, 再上 = dev root
+        full = PLUGIN_ROOT.parent.parent.parent / path  # plugin/.. = .claude/, 再上 = dev root
         if full.exists():
             contents = list(full.iterdir())
             assert not contents, f"{path} 应已清空但还有: {contents}"
