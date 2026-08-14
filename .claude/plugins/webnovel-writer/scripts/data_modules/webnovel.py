@@ -417,6 +417,70 @@ def cmd_use(args: argparse.Namespace) -> int:
     return 0
 
 
+def _save_state_via_atomic(project_root: Path, state: dict) -> None:
+    """Save state.json atomically using security_utils."""
+    from security_utils import atomic_write_json
+
+    state_path = project_root / ".webnovel" / "state.json"
+    atomic_write_json(
+        state_path,
+        state,
+        indent=2,
+        use_lock=True,
+        backup=False,
+    )
+
+
+def cmd_story_craft(args: argparse.Namespace) -> int:
+    """Dispatch story-craft subcommands."""
+    from security_utils import read_json_safe
+
+    root = _resolve_root(args.project_root)
+    state_path = root / ".webnovel" / "state.json"
+    state = read_json_safe(state_path, default={})
+
+    action = args.story_craft_action
+    if action == "init-volume-beat":
+        from story_craft import init_volume_beat
+
+        init_volume_beat(
+            state,
+            volume=args.volume,
+            total_chapters=args.total_chapters,
+        )
+        _save_state_via_atomic(root, state)
+        return 0
+    if action == "fill-beat":
+        from story_craft import fill_beat
+
+        fill_beat(
+            state,
+            volume=args.volume,
+            beat_name=args.beat_name,
+            chapter=args.chapter,
+            notes=args.notes or "",
+        )
+        _save_state_via_atomic(root, state)
+        return 0
+    if action == "check-volume":
+        from story_craft import check_volume_beat
+
+        issues = check_volume_beat(state, volume=args.volume)
+        for issue in issues:
+            print(issue)
+        return 1 if any("BLOCKER" in i for i in issues) else 0
+    if action == "init-forechains":
+        # Placeholder: real impl will load from chapter outline and generate foreshadows
+        print("init-forechains not yet fully implemented (placeholder)")
+        return 0
+    if action == "init-locks":
+        # Placeholder: real impl will load from chapter outline and generate locks
+        print("init-locks not yet fully implemented (placeholder)")
+        return 0
+    print(f"unknown story-craft action: {action}", file=sys.stderr)
+    return 2
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="webnovel unified CLI")
     parser.add_argument("--project-root", help="书项目根目录或工作区根目录（可选，默认自动检测）")
@@ -497,6 +561,18 @@ def main() -> None:
     p_use.add_argument("project_root", help="书项目根目录（必须包含 .webnovel/state.json）")
     p_use.add_argument("--workspace-root", help="工作区根目录（可选；默认由运行环境推断）")
     p_use.set_defaults(func=cmd_use)
+
+    craft_parser = sub.add_parser("story-craft", help="Story craft operations")
+    craft_parser.add_argument("story_craft_action", choices=[
+        "init-volume-beat", "fill-beat", "check-volume",
+        "init-forechains", "init-locks",
+    ])
+    craft_parser.add_argument("--volume", type=int)
+    craft_parser.add_argument("--total-chapters", type=int)
+    craft_parser.add_argument("--beat-name")
+    craft_parser.add_argument("--chapter", type=int)
+    craft_parser.add_argument("--notes")
+    craft_parser.set_defaults(func=cmd_story_craft)
 
     # Pass-through to data modules
     p_index = sub.add_parser("index", help="转发到 index_manager")
