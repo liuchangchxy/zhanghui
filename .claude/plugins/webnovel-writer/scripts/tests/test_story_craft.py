@@ -19,6 +19,9 @@ from story_craft import (
     add_timed_lock,
     fulfill_timed_lock,
     check_timed_lock_deadlines,
+    record_emotion_peak,
+    check_rhythm_status,
+    increment_chapters_since_peak,
 )  # noqa: E402
 
 
@@ -181,3 +184,53 @@ def test_check_timed_lock_deadlines_returns_overdue():
     assert "TL-001" in ids
     assert "TL-002" not in ids  # not yet overdue
     assert "TL-003" not in ids  # already fulfilled
+
+
+def test_record_emotion_peak_resets_counter():
+    state = {"story_craft": {"rhythm_curve": {
+        "last_emotion_peak_chapter": 5,
+        "chapters_since_peak": 3,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+    }}}
+    result = record_emotion_peak(state, chapter=8, intensity=7, type_="medium_cool_point")
+    assert result["story_craft"]["rhythm_curve"]["last_emotion_peak_chapter"] == 8
+    assert result["story_craft"]["rhythm_curve"]["chapters_since_peak"] == 0
+    assert len(result["story_craft"]["rhythm_curve"]["history"]) == 1
+
+
+def test_check_rhythm_returns_warning_when_over_threshold():
+    state = {"story_craft": {"rhythm_curve": {
+        "last_emotion_peak_chapter": 1,
+        "chapters_since_peak": 4,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+    }}}
+    status = check_rhythm_status(state)
+    assert status == "warning"
+
+
+def test_check_rhythm_returns_block_when_over_block_threshold():
+    state = {"story_craft": {"rhythm_curve": {
+        "last_emotion_peak_chapter": 1,
+        "chapters_since_peak": 6,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+    }}}
+    status = check_rhythm_status(state)
+    assert status == "block"
+
+
+def test_check_rhythm_returns_ok_when_within_threshold():
+    state = {"story_craft": {"rhythm_curve": {
+        "last_emotion_peak_chapter": 1,
+        "chapters_since_peak": 1,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+    }}}
+    status = check_rhythm_status(state)
+    assert status == "ok"

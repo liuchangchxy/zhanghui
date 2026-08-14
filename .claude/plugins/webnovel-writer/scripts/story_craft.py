@@ -158,3 +158,39 @@ def check_timed_lock_deadlines(state: dict, current_chapter: int) -> list:
         if item["status"] == "active"
         and item["deadline_chapter"] <= current_chapter
     ]
+
+
+def record_emotion_peak(state: dict, chapter: int, intensity: int, type_: str) -> dict:
+    """Record an emotion peak and reset chapters_since_peak counter."""
+    curve = state["story_craft"]["rhythm_curve"]
+    curve["last_emotion_peak_chapter"] = chapter
+    curve["chapters_since_peak"] = 0
+    curve["history"].append({
+        "chapter": chapter,
+        "intensity": intensity,
+        "type": type_
+    })
+    return state
+
+
+def check_rhythm_status(state: dict) -> str:
+    """Return rhythm status: 'ok' | 'warning' | 'block'.
+
+    Updates chapters_since_peak based on current chapter (if provided).
+    Caller is expected to pass state with up-to-date chapters_since_peak.
+    """
+    curve = state["story_craft"]["rhythm_curve"]
+    n = curve["chapters_since_peak"]
+    if n >= curve["block_threshold"]:
+        return "block"
+    if n >= curve["warning_threshold"]:
+        return "warning"
+    return "ok"
+
+
+def increment_chapters_since_peak(state: dict, chapter: int) -> dict:
+    """Increment chapters_since_peak if chapter > last_emotion_peak_chapter."""
+    curve = state["story_craft"]["rhythm_curve"]
+    if chapter > curve["last_emotion_peak_chapter"]:
+        curve["chapters_since_peak"] = chapter - curve["last_emotion_peak_chapter"]
+    return state
