@@ -275,7 +275,13 @@ def run_craft_checks(state: dict, chapter: int) -> dict:
             )
 
     # Scene-Sequel
-    cm = state.get("chapter_meta", {}).get(str(chapter), {})
+    cm_raw = state.get("chapter_meta")
+    if not isinstance(cm_raw, dict):
+        cm_raw = {}
+    cm_entry = cm_raw.get(str(chapter))
+    if not isinstance(cm_entry, dict):
+        cm_entry = {}
+    cm = cm_entry
     if cm:
         ss_issues = check_scene_sequel(cm)
         for issue in ss_issues:
