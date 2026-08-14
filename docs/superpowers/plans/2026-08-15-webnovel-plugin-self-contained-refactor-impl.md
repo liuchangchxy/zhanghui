@@ -35,7 +35,7 @@
 | `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/hooks/hooks.json` | SessionStart + PreToolUse guard |
 | `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/` | 核心脚本（webnovel.py + 内化脚本） |
 | `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/_shared/` | 跨 skill 共享脚本（text_humanizer.py） |
-| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/` | 10 个 SKILL.md |
+| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/` | 14 个 SKILL.md（9 个原有 + 5 个迁移：fast-write/revise/deslop-check/resume/chart-scan） |
 | `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/` | 4 个 agent md |
 | `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/templates/` | 个人语料默认内容（init 时 copy 出去） |
 | `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/` | 你的专属 marketplace |
@@ -123,20 +123,20 @@ git commit -m "refactor(plugin): rename webnovel-writer to webnovel-writer_chang
 
 ---
 
-## Task 3: 更新 plugin.json 的 name 字段
+## Task 3: 更新 plugin.json 的 name + version 字段
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/.claude-plugin/plugin.json:3`
+- Modify: `.claude/plugins/webnovel-writer_chang/.claude-plugin/plugin.json:3-4`
 
-- [ ] **Step 1: 读取当前 name 字段**
+- [ ] **Step 1: 读取当前 name + version 字段**
 
 ```bash
-cat .claude/plugins/webnovel-writer_chang/.claude-plugin/plugin.json | python3 -c "import json,sys; print(json.load(sys.stdin)['name'])"
+cat .claude/plugins/webnovel-writer_chang/.claude-plugin/plugin.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('name:', d['name']); print('version:', d['version'])"
 ```
 
-预期输出：`webnovel-writer`
+预期输出：`name: webnovel-writer` 与 `version: 6.2.1`
 
-- [ ] **Step 2: 用 Python 改写 name 字段**
+- [ ] **Step 2: 用 Python 同时改写 name 与 version 字段**
 
 ```bash
 python3 -c "
@@ -145,12 +145,14 @@ from pathlib import Path
 p = Path('.claude/plugins/webnovel-writer_chang/.claude-plugin/plugin.json')
 data = json.loads(p.read_text(encoding='utf-8'))
 data['name'] = 'webnovel-writer_chang'
+data['version'] = '6.3.0'
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-print('updated:', data['name'])
+print('updated name:', data['name'])
+print('updated version:', data['version'])
 "
 ```
 
-预期输出：`updated: webnovel-writer_chang`
+预期输出：`updated name: webnovel-writer_chang` 与 `updated version: 6.3.0`
 
 - [ ] **Step 3: 验证 JSON 仍合法**
 
@@ -164,15 +166,17 @@ python3 -c "import json; json.load(open('.claude/plugins/webnovel-writer_chang/.
 
 ```bash
 git add .claude/plugins/webnovel-writer_chang/.claude-plugin/plugin.json
-git commit -m "refactor(plugin): rename plugin.json name field to webnovel-writer_chang"
+git commit -m "refactor(plugin): rename plugin.json name to webnovel-writer_chang and bump version to 6.3.0"
 ```
 
 ---
 
-## Task 4: 创建独立 marketplace 目录与 marketplace.json
+## Task 4: 创建独立 marketplace + 首次 cp plugin + 建 cache symlink
 
 **Files:**
 - Create: `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/.claude-plugin/marketplace.json`
+- Create: `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/`（plugin 副本）
+- Symlink: `~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/` → dev workspace
 
 - [ ] **Step 1: 创建 marketplace 目录**
 
@@ -219,9 +223,95 @@ ls ~/.claude/plugins/marketplaces/webnovel-chang-marketplace/
 
 预期输出：看到 `webnovel-writer_chang/` 子目录和 `.claude-plugin/`
 
-- [ ] **Step 5: Commit（marketplace 仓库是独立的，不在 dev workspace 的 git 里；跳过 git step）**
+- [ ] **Step 5: 创建 cache 目录（先空目录，等 Claude Code 安装触发）**
 
-注：marketplace 不在 dev workspace 的 git 仓库内，是独立的 Claude Code 管理目录，无需 commit。
+```bash
+mkdir -p ~/.claude/plugins/cache/webnovel-chang-marketplace
+ls -la ~/.claude/plugins/cache/webnovel-chang-marketplace/
+```
+
+预期输出：cache 目录存在但 webnovel-writer_chang 子目录还未创建
+
+- [ ] **Step 6: 写 sync_dev_to_marketplace.sh 脚本**
+
+```bash
+mkdir -p .claude/plugins/webnovel-writer_chang/scripts/dev-only
+cat > .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_marketplace.sh <<'BASH_EOF'
+#!/usr/bin/env bash
+# 同步 dev workspace 的 plugin 源码到 marketplace 仓库。
+# cache 走 symlink（见 Task 4 Step 7）会自动跟上。
+set -euo pipefail
+
+DEV_PLUGIN="/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang"
+MKT_PLUGIN="$HOME/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang"
+
+if [[ ! -d "$DEV_PLUGIN" ]]; then
+    echo "ERROR: dev plugin 不存在: $DEV_PLUGIN" >&2
+    exit 1
+fi
+if [[ ! -d "$MKT_PLUGIN" ]]; then
+    echo "ERROR: marketplace plugin 不存在: $MKT_PLUGIN" >&2
+    exit 1
+fi
+
+# rsync 同步，--delete 保证 marketplace 不残留旧文件
+rsync -a --delete \
+    --exclude='.git/' \
+    --exclude='__pycache__/' \
+    --exclude='.pytest_cache/' \
+    --exclude='.in_use/' \
+    "$DEV_PLUGIN/" "$MKT_PLUGIN/"
+
+echo "synced: $DEV_PLUGIN -> $MKT_PLUGIN"
+BASH_EOF
+chmod +x .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_marketplace.sh
+ls -la .claude/plugins/webnovel-writer_chang/scripts/dev-only/
+```
+
+预期输出：脚本存在并可执行
+
+- [ ] **Step 7: Commit marketplace 与 sync 脚本**
+
+注：marketplace JSON 在 `~/.claude/plugins/marketplaces/` 下，不在 dev workspace 的 git 里。dev workspace 只 commit sync 脚本。
+
+```bash
+git add .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_marketplace.sh
+git commit -m "feat(plugin): add dev-only/sync_dev_to_marketplace.sh"
+```
+
+## Task 4b: 把 cache 建为指向 dev workspace 的 symlink
+
+**Files:**
+- Symlink: `~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/` → dev workspace
+
+- [ ] **Step 1: 关闭 Claude Code（手动操作）**
+
+注：cache 目录若已存在（之前 Claude Code 安装过），先确认是否空。
+
+- [ ] **Step 2: 创建 symlink**
+
+```bash
+ln -sfn /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang \
+    ~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang
+ls -la ~/.claude/plugins/cache/webnovel-chang-marketplace/
+```
+
+预期输出：看到 `webnovel-writer_chang -> /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang`
+
+- [ ] **Step 3: 验证 symlink 解析**
+
+```bash
+readlink ~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang
+ls ~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/.claude-plugin/plugin.json
+```
+
+预期输出：
+- `readlink` 输出 dev workspace 的绝对路径
+- `ls` 能解析到 plugin.json（symlink 工作）
+
+- [ ] **Step 4: 重启 Claude Code 让 cache symlink 生效**
+
+注：手动操作。重启后 Claude Code 从 symlink 解析 plugin，加载 dev workspace 的代码。
 
 ---
 
@@ -255,7 +345,7 @@ print('enabledPlugins:', data.get('enabledPlugins'))
 "
 ```
 
-预期输出：能看到当前结构（已知有 `enabledPlugins.webnovel-writer@webnovel-writer-marketplace: true`）
+预期输出：实际看到的当前结构（user settings.json 当前**没有** `enabledPlugins` 或 `marketplaces` 字段——这两个字段会被本次 task 新增；plugin 当前是 dev workspace scope 启用的，不是 user scope）
 
 - [ ] **Step 3: 加 marketplaces 字段**
 
@@ -321,7 +411,9 @@ python3 -c "import json; json.load(open('$HOME/.claude/settings.json'))" && echo
 
 - [ ] **Step 3: 重启 Claude Code 让新 plugin 生效**
 
-注：手动操作，关闭当前 claude 会话、重新启动 `claude` 命令
+注：手动操作，关闭当前 claude 会话、重新启动 `claude` 命令。第一次启动时 Claude Code 会从 marketplace 仓库安装 plugin 到 cache（cache 是 Task 4b Step 2 建好的 symlink → dev workspace），所以新装的就是 dev workspace 当前版本的 plugin。
+
+**注**：user-scope 启用 `webnovel-writer_chang@webnovel-chang-marketplace: true` 会与 dev-workspace 的 `enabledPlugins`（裸名 `webnovel-writer`，Task 24 会改成 `_chang` 后缀）共存——两者指向同一个 plugin 名，Claude Code 会去重为一份加载。预期。
 
 ---
 
@@ -383,7 +475,7 @@ git commit -m "fix(plugin/hooks): use python3 not python (macOS has no python al
 find .claude/plugins/webnovel-writer_chang/skills -name SKILL.md
 ```
 
-预期输出：10 个 SKILL.md
+预期输出：14 个 SKILL.md
 
 - [ ] **Step 2: 替换所有 SKILL.md 里的 python → python3**
 
@@ -391,11 +483,11 @@ find .claude/plugins/webnovel-writer_chang/skills -name SKILL.md
 find .claude/plugins/webnovel-writer_chang/skills -name SKILL.md -exec sed -i '' 's/python -X utf8/python3 -X utf8/g' {} +
 ```
 
-- [ ] **Step 3: 验证替换**
+- [ ] **Step 3: 验证替换（用宽松 grep 覆盖有引号/无引号两种写法）**
 
 ```bash
 echo "裸 python -X utf8 残留："
-grep -rn '"python -X utf8' .claude/plugins/webnovel-writer_chang/skills/ | wc -l
+grep -rEn '(?<![A-Za-z0-9_])python -X utf8' .claude/plugins/webnovel-writer_chang/skills/ | wc -l
 echo "python3 -X utf8 命中数："
 grep -rn 'python3 -X utf8' .claude/plugins/webnovel-writer_chang/skills/ | wc -l
 ```
@@ -411,52 +503,95 @@ git commit -m "fix(plugin/skills): use python3 not python in all SKILL.md"
 
 ---
 
-## Task 9: 修 plugin 自带 SKILL.md：反模式 fallback → 严格 CLAUDE_PLUGIN_ROOT:?
+## Task 9: 全局 sweep：所有 SKILL.md 与 agent md 的 CLAUDE_PROJECT_DIR 改为 CLAUDE_PLUGIN_ROOT
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md:136,149,330,352,355` 等
+- Modify: 8 个 SKILL.md（init/plan/write/dashboard/review/query/learn/doctor）的 `export WORKSPACE_ROOT=...` 行
+- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md:136`（SCRIPTS_DIR 反模式 fallback）
 
-- [ ] **Step 1: 找出所有反模式 fallback**
+**注意**：`scripts/project_locator.py`（6 处）与 `hooks/session_start.py:33` 的 `CLAUDE_PROJECT_DIR` 引用**有意保留**（spec §2.4）——本 Task 不动这些。TDD 测试 `test_no_claude_project_dir_in_skills` 范围**仅限** skills/agents md。
+
+- [ ] **Step 1: 列出所有需要修的 SKILL.md**
 
 ```bash
-grep -rn 'CLAUDE_PLUGIN_ROOT:-.*CLAUDE_PROJECT_DIR' .claude/plugins/webnovel-writer_chang/skills/
+grep -rln 'CLAUDE_PROJECT_DIR' .claude/plugins/webnovel-writer_chang/skills/ .claude/plugins/webnovel-writer_chang/agents/
 ```
 
-预期输出：列出所有 `${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PROJECT_DIR:-$PWD}/.claude/...}` 反模式
+预期输出：列出 8 个 SKILL.md（init/plan/write/dashboard/review/query/learn/doctor）+ 0 个 agent md（agent md 不引用 CLAUDE_PROJECT_DIR）。具体行号如：
+- `skills/webnovel-init/SKILL.md:141`
+- `skills/webnovel-doctor/SKILL.md:27`
+- `skills/webnovel-learn/SKILL.md:16`
+- `skills/webnovel-write/SKILL.md:135,136`
+- `skills/webnovel-plan/SKILL.md:31`
+- `skills/webnovel-dashboard/SKILL.md:20`
+- `skills/webnovel-review/SKILL.md:16`
+- `skills/webnovel-query/SKILL.md:17`
 
-- [ ] **Step 2: 修 webnovel-write SKILL.md 的 SCRIPTS_DIR fallback（line 136）**
+- [ ] **Step 2: 全局替换 WORKSPACE_ROOT 表达式**
 
-打开 `.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md`，找到：
+对每个 SKILL.md，把：
 ```bash
-export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PROJECT_DIR:-$PWD}}/.claude/plugins/webnovel-writer/scripts"
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
 ```
 替换为：
 ```bash
-export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
+export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT}/.."   # plugin/..  ≈ plugin 父目录（即包含 .claude/ 的 workspace 根）
 ```
 
-- [ ] **Step 3: 修 webnovel-write SKILL.md 里其它 `python3 ${CLAUDE_PROJECT_DIR:-$PWD}/.claude/scripts/...` 调用**
+或更准确：因 `CLAUDE_PROJECT_DIR` 在 marketplace 安装下未被注入，但 `CLAUDE_PLUGIN_ROOT` 一定存在；plugin 父目录就是 Claude Code 启动时的 PWD（即 dev workspace 或书项目根）。所以 `${CLAUDE_PLUGIN_ROOT}/..` 等价于 `${CLAUDE_PROJECT_DIR:-$PWD}`。
 
-对每一处 `python3 ${CLAUDE_PROJECT_DIR:-$PWD}/.claude/scripts/<name>.py ...` 改为：
+批量替换：
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py ...
-```
-（涉及 `tracking_query.py`、`changes_gate.py`、`text_humanizer.py`、`check-ai-patterns.js`）
-
-- [ ] **Step 4: 验证无残留**
-
-```bash
-grep -rn 'CLAUDE_PLUGIN_ROOT:-' .claude/plugins/webnovel-writer_chang/skills/
-grep -rn 'python3 \${CLAUDE_PROJECT_DIR' .claude/plugins/webnovel-writer_chang/skills/
+find .claude/plugins/webnovel-writer_chang/skills -name SKILL.md -exec sed -i '' 's|export WORKSPACE_ROOT="\${CLAUDE_PROJECT_DIR:-\$PWD}"|export WORKSPACE_ROOT="\${CLAUDE_PLUGIN_ROOT}/.."|g' {} +
 ```
 
-预期输出：两个命令都输出 0 行
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: 修 webnovel-write SKILL.md 的 SCRIPTS_DIR 反模式 fallback（line 136）**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
-git commit -m "fix(plugin/webnovel-write): remove CLAUDE_PROJECT_DIR fallback path hacks"
+sed -i '' 's|export SCRIPTS_DIR="\${CLAUDE_PLUGIN_ROOT:-\${CLAUDE_PROJECT_DIR:-\$PWD}}/.claude/plugins/webnovel-writer/scripts"|export SCRIPTS_DIR="\${CLAUDE_PLUGIN_ROOT}/scripts"|g' \
+    .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+grep -n 'SCRIPTS_DIR' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+```
+
+预期输出：SCRIPTS_DIR 行已无 CLAUDE_PROJECT_DIR
+
+- [ ] **Step 4: 修 webnovel-write SKILL.md 里 `python3 ${CLAUDE_PROJECT_DIR:-...}/.claude/scripts/...` 调用**
+
+```bash
+grep -n 'CLAUDE_PROJECT_DIR' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+```
+
+预期输出：列出 line 149/330/352/355 等。对每一处 `python3 ${CLAUDE_PROJECT_DIR:-${PWD}}/.claude/scripts/<name>.py` 或 `python3 ${CLAUDE_PROJECT_DIR:-$(pwd)}/.claude/scripts/<name>.py` 改为 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`。
+
+```bash
+sed -i '' 's|python3 \${CLAUDE_PROJECT_DIR:-\${PWD}}/.claude/scripts/|python3 ${CLAUDE_PLUGIN_ROOT}/scripts/|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+sed -i '' 's|python3 \${CLAUDE_PROJECT_DIR:-\$(pwd)}/.claude/scripts/|python3 ${CLAUDE_PLUGIN_ROOT}/scripts/|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+sed -i '' 's|node \${CLAUDE_PROJECT_DIR:-\${PWD}}/.claude/scripts/|node ${CLAUDE_PLUGIN_ROOT}/scripts/|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+sed -i '' 's|node \${CLAUDE_PROJECT_DIR:-\$(pwd)}/.claude/scripts/|node ${CLAUDE_PLUGIN_ROOT}/scripts/|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+```
+
+- [ ] **Step 5: 验证 SKILL.md / agent md 内无 CLAUDE_PROJECT_DIR**
+
+```bash
+grep -rn 'CLAUDE_PROJECT_DIR' .claude/plugins/webnovel-writer_chang/skills/ .claude/plugins/webnovel-writer_chang/agents/
+```
+
+预期输出：0 行（scripts/project_locator.py 与 hooks/session_start.py 不在 grep 范围内，保留 CLAUDE_PROJECT_DIR 引用是允许的）
+
+- [ ] **Step 6: 验证 hooks.json / agent md 内也无反模式**
+
+```bash
+grep -rn 'python -X utf8' .claude/plugins/webnovel-writer_chang/skills/ .claude/plugins/webnovel-writer_chang/agents/ .claude/plugins/webnovel-writer_chang/hooks/
+grep -rn 'CLAUDE_PLUGIN_ROOT:-' .claude/plugins/webnovel-writer_chang/skills/ .claude/plugins/webnovel-writer_chang/agents/
+```
+
+预期输出：两个 grep 都输出 0 行
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add .claude/plugins/webnovel-writer_chang/skills/ .claude/plugins/webnovel-writer_chang/agents/
+git commit -m "fix(plugin): replace CLAUDE_PROJECT_DIR with CLAUDE_PLUGIN_ROOT across all SKILL.md and agent md"
 ```
 
 ---
@@ -580,11 +715,13 @@ git mv .claude/scripts/snapshot_manager.py .claude/plugins/webnovel-writer_chang
 
 - [ ] **Step 4: 跑 tests 验证未破坏**
 
+注：`changes_gate.py` 当前在 dev `tests/` 里**没有对应 pytest 文件**——dev 测试目录只有 `test_context_slice.py` / `test_snapshot_manager.py` / `test_rejection_contract.py` 等少数脚本级测试，changes_gate 是 CLI 工具，行为靠手动跑测。Task 13/14 阶段只验证存在的脚本级测试：
+
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_changes_gate.py tests/test_context_slice.py tests/test_snapshot_manager.py -v 2>&1 | tail -20
+cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_context_slice.py tests/test_snapshot_manager.py -v 2>&1 | tail -20
 ```
 
-预期输出：现有测试全绿
+预期输出：现有测试全绿（仅这两个文件）
 
 - [ ] **Step 5: Commit**
 
@@ -725,13 +862,53 @@ git mv .claude/skills/webnovel-chart-scan .claude/plugins/webnovel-writer_chang/
 grep -rn 'CLAUDE_PROJECT_DIR' .claude/plugins/webnovel-writer_chang/skills/webnovel-resume/ .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/ 2>/dev/null
 ```
 
-预期输出：可能 0 行（这两个 skill 没引用脚本），如有就替换为 CLAUDE_PLUGIN_ROOT
+预期输出：可能 0 行（这两个 skill 没引用 CLAUDE_PROJECT_DIR 变量），如有就替换为 CLAUDE_PLUGIN_ROOT
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: 修 webnovel-chart-scan SKILL.md 的硬编码绝对路径**
+
+`webnovel-chart-scan/SKILL.md` 当前用 dev workspace 绝对路径（line 28、line 87）：
+
+```bash
+grep -n '/Users/chang/Desktop' .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
+```
+
+预期输出：列出含 `/Users/chang/Desktop/...webnovel-chart-scan/...` 的行
+
+把硬编码绝对路径改为 `${CLAUDE_PLUGIN_ROOT}` 引用：
+
+```bash
+sed -i '' 's|python /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/scripts/scan.py|python3 ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-chart-scan/scripts/scan.py|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
+sed -i '' 's|cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan|cd ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-chart-scan|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
+grep -n '/Users/chang/Desktop' .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
+```
+
+预期输出：第二次 grep 输出 0 行
+
+- [ ] **Step 5: 改 webnovel-deslop-check SKILL.md 的裸相对路径**
+
+`webnovel-deslop-check/SKILL.md` 用了 `python3 .claude/scripts/text_humanizer.py` 和 `node .claude/scripts/check-ai-patterns.js` 这种**无变量前缀**的裸相对路径（line 65、81、95）。这些路径在 book 项目下找不到 `.claude/scripts/`，必坏。
+
+```bash
+grep -n '\.claude/scripts/' .claude/plugins/webnovel-writer_chang/skills/webnovel-deslop-check/SKILL.md
+```
+
+预期输出：列出 line 65/81/95 的 `python3 .claude/scripts/` 与 `node .claude/scripts/`
+
+把裸路径改为 `${CLAUDE_PLUGIN_ROOT}`（text_humanizer.py 走 `_shared/`）：
+
+```bash
+sed -i '' 's|python3 \.claude/scripts/text_humanizer\.py|python3 ${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-deslop-check/SKILL.md
+sed -i '' 's|node \.claude/scripts/check-ai-patterns\.js|node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-deslop-check/SKILL.md
+grep -n '\.claude/scripts/' .claude/plugins/webnovel-writer_chang/skills/webnovel-deslop-check/SKILL.md
+```
+
+预期输出：第二次 grep 输出 0 行
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A
-git commit -m "feat(plugin/skills): migrate webnovel-resume + webnovel-chart-scan"
+git commit -m "feat(plugin/skills): migrate webnovel-resume + webnovel-chart-scan + fix chart-scan absolute path + fix deslop-check bare relative paths"
 ```
 
 ---
@@ -764,11 +941,51 @@ grep -n 'style_fingerprint\|tracking_query' .claude/plugins/webnovel-writer_chan
 
 预期输出：可能 0 行（webnovel-write 通过 SCRIPTS_DIR 变量间接引用），如有就替换为 `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.py`
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: 清理 test_style_fingerprint.py 的双副本断言**
+
+`test_style_fingerprint.py:18` 定义 `STANDALONE_COPY = PLUGIN_COPY.parents[3] / "scripts" / "style_fingerprint.py"`，line 94-99 用 `test_two_copies_stay_identical` 校验 plugin 副本与 dev `.claude/scripts/` 副本的 SHA-256 一致。重构后 dev `.claude/scripts/` 不存在，测试会 `pytest.skip`——silently pass 的双副本守门失去意义。
+
+```bash
+grep -n 'STANDALONE_COPY\|two_copies' .claude/plugins/webnovel-writer_chang/scripts/tests/test_style_fingerprint.py | head -10
+```
+
+预期输出：列出 line 18 与 line 94-99 的相关代码
+
+打开文件做以下修改：
+1. 删除 `STANDALONE_COPY = ...` 常量定义（line 18）
+2. 删除 `test_two_copies_stay_identical` 整个测试函数（line 92-100 附近）
+3. 在文件顶部加注释：
+```python
+# Note: 双副本 SHA 校验已删除——重构后 style_fingerprint.py 只在 plugin/scripts/ 一份，
+# dev workspace 不再保留独立副本。如未来需要副本一致性校验，参考 git history 中此测试的旧实现。
+```
+
+```bash
+python3 -c "
+from pathlib import Path
+p = Path('.claude/plugins/webnovel-writer_chang/scripts/tests/test_style_fingerprint.py')
+text = p.read_text(encoding='utf-8')
+# 删除 STANDALONE_COPY 定义
+import re
+text = re.sub(r'^STANDALONE_COPY = .*?\$', '', text, count=1, flags=re.MULTILINE)
+# 删除整个 test_two_copies_stay_identical 函数（粗略匹配：函数 def 到下一个 def 或 class 开头）
+text = re.sub(r'@pytest\.mark\.\w+\n\s*\n\s*def test_two_copies_stay_identical.*?(?=\n\s*(?:@|def |class ))', '', text, flags=re.DOTALL)
+# 加注释
+if '双副本 SHA 校验已删除' not in text:
+    text = '# Note: 双副本 SHA 校验已删除——重构后 style_fingerprint.py 只在 plugin/scripts/ 一份，\n# dev workspace 不再保留独立副本。\n' + text
+p.write_text(text, encoding='utf-8')
+print('cleaned')
+"
+grep -c 'STANDALONE_COPY\|test_two_copies' .claude/plugins/webnovel-writer_chang/scripts/tests/test_style_fingerprint.py
+```
+
+预期输出：`0`（双副本相关代码已清理）
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add -A
-git commit -m "feat(plugin/scripts): migrate style_fingerprint.py + tracking_query.py"
+git commit -m "feat(plugin/scripts): migrate style_fingerprint.py + tracking_query.py + clean up test_style_fingerprint.py two-copy assertion"
 ```
 
 ---
@@ -795,16 +1012,90 @@ ls .claude/scripts/
 
 预期输出：应只剩 `tests/`（如果 tests 还在）或完全空；如果还有遗漏的脚本文件，重复 Phase D 迁移它们
 
-- [ ] **Step 3: 删除空目录（保留 tests/ 如果在）**
+- [ ] **Step 3: 把 dev `.claude/scripts/tests/` 内文件逐个 git mv 到 plugin tests/（注意 conftest.py 合并）**
 
-如果 `.claude/scripts/` 完全是空目录：
+dev `tests/` 有 17 个文件，plugin `tests/` 已有 16 个文件。**两个目录都有 `conftest.py`**——直接 `git mv` 会冲突。先合并 conftest.py，再逐个移文件。
+
 ```bash
-rmdir .claude/scripts/
+# 1. 看两边 conftest.py 大小
+echo "dev conftest.py 行数："
+wc -l .claude/scripts/tests/conftest.py
+echo "plugin conftest.py 行数："
+wc -l .claude/plugins/webnovel-writer_chang/scripts/tests/conftest.py
+
+# 2. 把 plugin 的 conftest.py 备份（保留 plugin 版本作为基础）
+cp .claude/plugins/webnovel-writer_chang/scripts/tests/conftest.py /tmp/plugin-conftest.bak.py
+
+# 3. 移动 dev tests 到 plugin tests/，但先跳过 conftest.py
+mkdir -p /tmp/dev-tests
+cp -R .claude/scripts/tests/. /tmp/dev-tests/
+rm -f /tmp/dev-tests/conftest.py  # 不动 plugin 的 conftest.py
+ls /tmp/dev-tests/
+
+# 4. 手动对比 conftest.py：取 plugin 为主，dev 的辅助 fixture（如有）合并进去
+diff .claude/scripts/tests/conftest.py .claude/plugins/webnovel-writer_chang/scripts/tests/conftest.py
 ```
-如果只剩 `tests/` 子目录：
+
+预期输出：diff 会显示两边差异（可能 dev 有 plugin 没有的 fixture，或反之）。合并策略：以 plugin 版本为基础，把 dev 的独有 fixture 加进去。
+
 ```bash
-# 把 tests/ 也搬进 plugin
-git mv .claude/scripts/tests .claude/plugins/webnovel-writer_chang/scripts/tests
+# 5. 把 dev 独有 test 文件逐个 git mv（先确认无重名）
+for f in /tmp/dev-tests/*.py; do
+    name=$(basename "$f")
+    if [[ -f ".claude/plugins/webnovel-writer_chang/scripts/tests/$name" ]]; then
+        echo "COLLISION: $name exists in both, manual merge needed"
+    else
+        git mv ".claude/scripts/tests/$name" ".claude/plugins/webnovel-writer_chang/scripts/tests/$name"
+    fi
+done
+```
+
+预期输出：除非有重名，否则所有 dev test_*.py 文件都被 git mv
+
+```bash
+# 6. 处理 conftest.py：合并后写回 plugin tests/conftest.py
+python3 <<'PYEOF'
+from pathlib import Path
+
+plugin_cf = Path('.claude/plugins/webnovel-writer_chang/scripts/tests/conftest.py')
+dev_cf = Path('.claude/scripts/tests/conftest.py')
+
+plugin_text = plugin_cf.read_text(encoding='utf-8')
+dev_text = dev_cf.read_text(encoding='utf-8')
+
+# 简单合并策略：plugin 为主，把 dev 的独有 fixture 函数 append 进去
+import re
+def extract_fixtures(text):
+    return set(re.findall(r'^def\s+(\w+)\s*\(', text, re.MULTILINE))
+
+plugin_fixtures = extract_fixtures(plugin_text)
+dev_fixtures = extract_fixtures(dev_text)
+
+unique_to_dev = dev_fixtures - plugin_fixtures
+if unique_to_dev:
+    print(f"dev 独有 fixture: {unique_to_dev}")
+    # 提取 dev 独有函数体
+    extras = []
+    for fname in unique_to_dev:
+        m = re.search(rf'(^def\s+{re.escape(fname)}\s*\([^)]*\)[^\n]*\n(?:.+\n)*?)(?=^def\s+|^class\s+|^@|\Z)',
+                      dev_text, re.MULTILINE)
+        if m:
+            extras.append(m.group(1))
+    if extras:
+        plugin_text = plugin_text.rstrip() + '\n\n# === merged from dev/.claude/scripts/tests/conftest.py ===\n\n' + '\n'.join(extras)
+        plugin_cf.write_text(plugin_text, encoding='utf-8')
+        print(f"merged {len(extras)} fixtures into plugin conftest.py")
+else:
+    print("no unique dev fixtures to merge")
+PYEOF
+```
+
+预期输出：要么 `no unique dev fixtures to merge`，要么 `merged N fixtures`
+
+```bash
+# 7. 删除 dev tests/ 和 scripts/
+rm .claude/scripts/tests/conftest.py
+rmdir .claude/scripts/tests/
 rmdir .claude/scripts/
 ```
 
@@ -825,99 +1116,246 @@ ls .claude/plugins/webnovel-writer_chang/skills/
 echo
 echo "plugin 全部 script："
 ls .claude/plugins/webnovel-writer_chang/scripts/
+echo
+echo "plugin tests/ 文件数："
+ls .claude/plugins/webnovel-writer_chang/scripts/tests/ | wc -l
 ```
 
 预期输出：
 - dev `.claude/` 剩：`plugins/` `references/` `sources/` `worktrees/` `settings.json` `.webnovel-current-project`
-- plugin skills 含 10 个目录（init/plan/write/fast-write/revise/deslop-check/resume/chart-scan/doctor/learn/review/query/dashboard/style-profile = 13 个含 dashboard/style-profile 共 15 个，看实际）
+- plugin skills 含 14 个目录（init/plan/write/fast-write/revise/deslop-check/resume/chart-scan/doctor/learn/review/query/dashboard/style-profile）
 - plugin scripts 含 webnovel.py + 迁移的脚本 + _shared/
+- plugin tests/ 应为合并后的 ~30 个文件（plugin 16 + dev 17 - 3 个 conftest 重叠 = ~30）
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: 跑 plugin tests 验证合并后未破坏**
 
 ```bash
+cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v 2>&1 | tail -30
+```
+
+预期输出：全绿，或有少量失败可逐个修复（合并 conftest 不应破坏）
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/chang/Desktop/ai写小说工具开发/.claude/worktrees/refactor-self-contained
 git add -A
-git commit -m "chore(dev): remove empty .claude/skills/ and .claude/scripts/ after migration"
+git commit -m "chore(dev): remove empty .claude/skills/ and .claude/scripts/ after migration + merge tests/conftest.py"
 ```
 
 ---
 
-# Phase E: webnovel-init 个人语料改路径
+# Phase E: webnovel-init 个人语料改路径（顺手实现新功能）
 
-## Task 20: 改 webnovel-init SKILL.md：个人语料写到书项目
+## Task 20: 创建默认模板文件 + 改 webnovel-init SKILL.md
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md:200-203`
+- Create: `.claude/plugins/webnovel-writer_chang/templates/个人语料.md`（默认模板）
+- Create: `.claude/plugins/webnovel-writer_chang/templates/写作宪法.md`（默认模板）
+- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md`
 
-- [ ] **Step 1: 找出 SKILL.md 里提到个人语料/写作宪法的段落**
+- [ ] **Step 1: 创建 templates/个人语料.md 默认模板**
 
 ```bash
-grep -n '个人语料\|写作宪法\|templates' .claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md | head -20
+cat > .claude/plugins/webnovel-writer_chang/templates/个人语料.md <<'MD_EOF'
+# 个人语料（写给 AI 的写作风格指南）
+
+> 本文件由 `webnovel-init` 自动从 plugin templates/ copy 到书项目的 `.webnovel/writer-profile/`。
+> 用户应直接编辑书项目里的副本，**不要**改 plugin 内的源模板（升级会被覆盖）。
+
+## 1. 主角定位
+
+- 性格：{{待填}}
+- 说话方式：{{待填}}
+- 内心独白风格：{{待填}}
+
+## 2. 写作偏好
+
+- 句长偏好：{{短句/中句/长句}}
+- 对话比例：{{待填}}
+- 内心戏比例：{{待填}}
+- 视角：{{第一人称/第三人称/全知}}
+- 时态：{{过去/现在}}
+
+## 3. 禁忌
+
+- 不要写：{{待填}}
+- 不要出现：{{敏感词列表}}
+
+## 4. 标点与格式
+
+- 引号风格：{{直引号"" / 弯引号""}}
+- 段落长度：{{最长多少字}}
+- 章节切分偏好：{{按场景/按时间/按 POV}}
+
+---
+
+填好后保存，后续 `/webnovel-write` 会自动加载本文件作为上下文。
+MD_EOF
+ls .claude/plugins/webnovel-writer_chang/templates/个人语料.md
 ```
 
-预期输出：列出相关行
+预期输出：文件存在
 
-- [ ] **Step 2: 改写路径**
+- [ ] **Step 2: 创建 templates/写作宪法.md 默认模板**
 
-打开 SKILL.md，把所有 `${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/<file>` 替换为 `${PROJECT_ROOT}/.webnovel/writer-profile/<file>`，并加一行说明：
+```bash
+cat > .claude/plugins/webnovel-writer_chang/templates/写作宪法.md <<'MD_EOF'
+# 写作宪法（贯穿全书的不变规则）
+
+> 与 个人语料.md 不同，本文件是**硬约束**，写章节时 AI 必须遵守。
+> 同样由 webnovel-init 自动 copy，用户直接编辑书项目里的副本。
+
+## 1. 设定硬约束
+
+- 力量体系上限：{{待填}}
+- 主角不可逾越的红线：{{待填}}
+
+## 2. 叙事硬约束
+
+- 不允许穿越/重生类金手指（除非作品本身设定如此）
+- 不允许时间倒流（除非作品本身设定如此）
+- 不允许 NPC 凭空知道主角秘密（除非已合理解释）
+
+## 3. 风格硬约束
+
+- 章节末不写"欲知后事如何"式钩子（除非作品本身风格如此）
+- 不出现现代网络用语（除非作品本身风格如此）
+- 不出现"叮，系统提示"等系统文标志（除非作品本身是系统流）
+
+## 4. 自定义硬约束
+
+- {{待填}}
+
+---
+
+填好后保存。`/webnovel-review` 会把本文件作为合规性检查的硬基线。
+MD_EOF
+ls .claude/plugins/webnovel-writer_chang/templates/写作宪法.md
+```
+
+预期输出：文件存在
+
+- [ ] **Step 3: 改 webnovel-init SKILL.md 文档**
+
+打开 `.claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md`，在合适位置加一段（搜索 "Step 3.5" 之类 init 流程描述附近）：
+
 ```markdown
-# 个人语料默认内容来源：${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/
-# 实际写入位置：${PROJECT_ROOT}/.webnovel/writer-profile/
-# （init 时 templates/ 内容会被 copy 到 writer-profile/，用户编辑后者）
+# Step 3.6 - 复制个人语料默认模板到书项目
+mkdir -p "${PROJECT_ROOT}/.webnovel/writer-profile"
+cp "${CLAUDE_PLUGIN_ROOT}/templates/个人语料.md" "${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md"
+cp "${CLAUDE_PLUGIN_ROOT}/templates/写作宪法.md" "${PROJECT_ROOT}/.webnovel/writer-profile/写作宪法.md"
+echo "✅ 个人语料模板已写入 ${PROJECT_ROOT}/.webnovel/writer-profile/，请编辑后保存。"
 ```
 
-- [ ] **Step 3: 跑 init_project.py 的 dry-run 看新逻辑**
-
-```bash
-python3 .claude/plugins/webnovel-writer_chang/scripts/webnovel.py init --help
-```
-
-预期输出：能看到 init 命令的帮助（具体参数按实际）
+如 SKILL.md 里有 Step 3.6 实际编号则保留编号；如无则作为新段落加入。
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md
-git commit -m "feat(plugin/webnovel-init): write personal profile to book project's .webnovel/writer-profile/"
+git add .claude/plugins/webnovel-writer_chang/templates/ .claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md
+git commit -m "feat(plugin/webnovel-init): add 个人语料 + 写作宪法 default templates + copy-to-book-project step in SKILL.md"
 ```
 
 ---
 
-## Task 21: 改 init_project.py 实际实现：copy templates 到 writer-profile/
+## Task 21: 让 init_project.py 真正执行 copy
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/init_project.py`（如存在该模块）
+- Modify: `.claude/plugins/webnovel-writer_chang/scripts/init_project.py`（或 `data_modules/init_logic.py` 等，按实际位置）
 
-- [ ] **Step 1: 找出 init 写文件的位置**
-
-```bash
-grep -rn '个人语料\|writer-profile\|templates' .claude/plugins/webnovel-writer_chang/scripts/init_project.py 2>/dev/null
-grep -rn '个人语料\|writer-profile\|templates' .claude/plugins/webnovel-writer_chang/scripts/data_modules/ 2>/dev/null | head -10
-```
-
-- [ ] **Step 2: 按实际位置改路径**
-
-注：实际改哪里取决于 init_project.py 的实现细节——把"写到 plugin templates 目录"改为"copy 到 `<PROJECT_ROOT>/.webnovel/writer-profile/`"。
-
-- [ ] **Step 3: 写小测试验证 init 落点**
+- [ ] **Step 1: 定位 init 写文件的函数**
 
 ```bash
-python3 -c "
-import os, tempfile, shutil
-# 临时建一个 book 项目，跑 init，看 writer-profile/ 是否被创建
-tmp = tempfile.mkdtemp()
-print('book:', tmp)
-# 跑 webnovel.py init --project-root $tmp --dry-run (或真实 run)
-# shutil.rmtree(tmp)
-"
+grep -rn 'def.*init\|设定集/世界观\|设定集/主角' .claude/plugins/webnovel-writer_chang/scripts/init_project.py .claude/plugins/webnovel-writer_chang/scripts/data_modules/ 2>/dev/null | grep -i 'write\|create\|setup' | head -10
 ```
 
-预期输出：init 完后 `tmp/.webnovel/writer-profile/` 目录存在并含默认文件
+预期输出：列出 init 写文件的函数位置（通常在 init_project.py 后半段）
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 2: 在 init 流程末尾加 writer-profile 块**
+
+找到 init 流程最后写入 state.json 之前的代码块，在其后插入：
+
+```python
+# === 个人语料 + 写作宪法模板写入（Task 21）===
+import shutil
+from pathlib import Path as _Path
+
+_template_dir = _Path(__file__).resolve().parent.parent / "templates"
+_writer_profile = project_root / ".webnovel" / "writer-profile"
+_writer_profile.mkdir(parents=True, exist_ok=True)
+for template_name in ("个人语料.md", "写作宪法.md"):
+    src = _template_dir / template_name
+    dst = _writer_profile / template_name
+    if not dst.exists() and src.exists():
+        shutil.copy(src, dst)
+        print(f"✅ 已写入 {dst}")
+```
+
+（如 init_project.py 实际不在 scripts/ 而在 scripts/data_modules/，路径相应调整）
+
+- [ ] **Step 3: 写 pytest 验证 init 落点**
+
+```bash
+cat > .claude/plugins/webnovel-writer_chang/scripts/tests/test_writer_profile_init.py <<'PY_EOF'
+"""测试 init 把 templates/个人语料.md 与 写作宪法.md copy 到 <book>/.webnovel/writer-profile/。"""
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+import pytest
+
+
+def test_init_creates_writer_profile(tmp_path: Path) -> None:
+    """在临时书项目目录跑 init，验证 .webnovel/writer-profile/{个人语料,写作宪法}.md 被创建。"""
+    repo_root = Path(__file__).resolve().parents[2]  # scripts/tests/ → scripts/ → plugin/
+    webnovel_py = repo_root / "scripts" / "webnovel.py"
+    if not webnovel_py.exists():
+        pytest.skip(f"webnovel.py 不存在: {webnovel_py}")
+
+    book = tmp_path / "book"
+    book.mkdir()
+    # 用最少的命令行参数跑 init（按实际参数调整）
+    result = subprocess.run(
+        ["python3", str(webnovel_py), "--project-root", str(book), "init", "--minimal"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    writer_profile = book / ".webnovel" / "writer-profile"
+    assert writer_profile.exists(), f"writer-profile 未创建: {writer_profile}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    assert (writer_profile / "个人语料.md").exists(), "个人语料.md 未 copy"
+    assert (writer_profile / "写作宪法.md").exists(), "写作宪法.md 未 copy"
+PY_EOF
+cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_writer_profile_init.py -v 2>&1 | tail -20
+```
+
+预期输出：测试通过（或根据实际 init 参数调整后通过）
+
+- [ ] **Step 4: 改 webnovel-write SKILL.md:158 读路径**
+
+打开 `.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md`，找到含 `个人语料.md` 的 line（约 158）：
+
+```bash
+grep -n '个人语料' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+```
+
+把 `设定集/个人语料.md` 之类路径改为 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md`。
+
+```bash
+sed -i '' 's|${PROJECT_ROOT}/设定集/个人语料\.md|${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+sed -i '' 's|${PROJECT_ROOT}/.*个人语料\.md|${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+grep -n '个人语料' .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+```
+
+预期输出：grep 仅显示新路径
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add -A
-git commit -m "feat(init): write personal profile files to .webnovel/writer-profile/ instead of plugin templates"
+git commit -m "feat(init): copy 个人语料 + 写作宪法 templates to .webnovel/writer-profile/ + update webnovel-write read path"
 ```
 
 ---
@@ -928,6 +1366,8 @@ git commit -m "feat(init): write personal profile files to .webnovel/writer-prof
 
 **Files:**
 - Modify: `ai写小说工具开发/.claude/worktrees/refactor-self-contained/.claude/settings.json`
+
+**为什么**：dev settings.json 的 hooks 块是用 `${CLAUDE_PROJECT_DIR}/.claude/plugins/webnovel-writer/hooks/...` 拼出来的——这是 dev 调试遗留（plugin 路径已重命名为 `_chang`，marketplace 自带 hooks.json 用 `${CLAUDE_PLUGIN_ROOT}` 是正确的）。dev hooks 本身已经用 `python3`（不像 plugin 的 hooks.json 用 `python`），删掉是对的。
 
 - [ ] **Step 1: 读当前 settings.json**
 
@@ -968,41 +1408,62 @@ git commit -m "refactor(dev/settings): remove hooks override (marketplace provid
 
 ---
 
-## Task 23: 删 dev settings.json 的过宽 permissions
+## Task 23: 重写 dev settings.json 的 permissions.allow
 
 **Files:**
 - Modify: `.claude/settings.json`（permissions.allow）
 
-- [ ] **Step 1: 用 Python 清理过宽 permissions**
+**为什么不是只删**：Phase A 把 plugin 目录重命名为 `_chang`，Phase D 把所有 `.claude/scripts/` 与 `.claude/plugins/webnovel-writer/` 下的脚本迁到 plugin。旧 permissions 里 9 条规则指向这些**已不存在的路径**，留着只会造成 noise + 真用 plugin 脚本时无 allow 命中弹提示窗。所以要**整段重写**。
+
+- [ ] **Step 1: 用 Python 完全重写 permissions.allow**
 
 ```bash
 python3 <<'PYEOF'
 import json
 from pathlib import Path
+
 p = Path('.claude/settings.json')
 data = json.loads(p.read_text(encoding='utf-8'))
-allow = data.get('permissions', {}).get('allow', [])
-REMOVE_PATTERNS = [
-    'Bash(ls -la*)',
-    'Bash(cat *)',
-    'Bash(find *)',
-    'Bash(grep *)',
-    'Bash(mkdir *)',
-    'Bash(git status*)',
+
+NEW_ALLOW = [
+    # plugin 主脚本
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py*)',
+    # 迁移到 plugin scripts/ 的脚本
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py*)',
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/context_slice.py*)',
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/snapshot_manager.py*)',
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py*)',
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/rejection_contract.py*)',
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/style_fingerprint.py*)',
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/tracking_query.py*)',
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/extract_chapter_context.py*)',
+    'Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py*)',
+    # node 脚本
+    'Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js*)',
+    'Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/normalize-punctuation.js*)',
+    # plugin style-profile skill node 调用
+    'Bash(node ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-style-profile/*)',
+    # dev workspace 工作流（git 提交、读 settings 等）
+    'Bash(git status)',
     'Bash(git diff*)',
     'Bash(git log*)',
-    'Bash(pytest*)',
-    'Bash(pip install*)',
+    'Bash(git add*)',
+    'Bash(git commit*)',
+    # dev 调试：跑 plugin 测试
+    'Bash(python3 -m pytest*)',
+    # dev 调试：rsync 同步 dev → marketplace
+    'Bash(rsync*)',
+    'Bash(mkdir*)',
+    'Bash(ln -sfn*)',
 ]
-new_allow = [a for a in allow if a not in REMOVE_PATTERNS]
-data['permissions']['allow'] = new_allow
+
+data['permissions']['allow'] = NEW_ALLOW
 p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-print('removed', len(allow) - len(new_allow), 'patterns')
-print('remaining', len(new_allow), 'allow rules')
+print(f'wrote {len(NEW_ALLOW)} allow rules')
 PYEOF
 ```
 
-预期输出：移除了 N 条过宽规则（具体看实际数量），剩余规则数 = 原数 - 移除数
+预期输出：`wrote 22 allow rules`
 
 - [ ] **Step 2: 验证 JSON**
 
@@ -1012,11 +1473,19 @@ python3 -c "import json; json.load(open('.claude/settings.json'))" && echo "JSON
 
 预期输出：`JSON OK`
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: 验证无残留过期路径**
+
+```bash
+grep -E '\.claude/scripts/|\.claude/plugins/webnovel-writer[^_]' .claude/settings.json
+```
+
+预期输出：0 行（不再含指向 `.claude/scripts/` 或旧名 plugin 的 allow 规则）
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add .claude/settings.json
-git commit -m "refactor(dev/settings): remove overly broad bash permission globs"
+git commit -m "refactor(dev/settings): rewrite permissions.allow for new plugin path layout"
 ```
 
 ---
@@ -1136,11 +1605,29 @@ def test_hooks_use_python3(json_file: Path) -> None:
     assert not bad, f"{json_file.relative_to(PLUGIN_ROOT)} 仍用 `python -X utf8`: {bad}"
 
 
-def test_plugin_name_is_chang_suffix() -> None:
-    """plugin.json 的 name 必须以 _chang 结尾。"""
+def test_plugin_name_is_exact() -> None:
+    """plugin.json 的 name 必须**精确等于** 'webnovel-writer_chang'——endswith 太宽松（'x_chang_y' 也通过）。"""
     import json
     data = json.loads((PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-    assert data["name"].endswith("_chang"), f"plugin name {data['name']!r} 不以 _chang 结尾"
+    assert data["name"] == "webnovel-writer_chang", (
+        f"plugin name 必须是 'webnovel-writer_chang'，实际是 {data['name']!r}"
+    )
+
+
+def test_plugin_version_is_6_3_0() -> None:
+    """plugin.json version 必须是 6.3.0——避免 marketplace.json 6.3.0 与 plugin.json 6.2.1 drift。"""
+    import json
+    data = json.loads((PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert data["version"] == "6.3.0", f"plugin version 必须是 6.3.0，实际是 {data['version']!r}"
+
+
+def test_no_scripts_in_dev_dotclaude() -> None:
+    """dev .claude/scripts/ 与 .claude/skills/ 在重构后应已清空。"""
+    for path in [".claude/scripts", ".claude/skills"]:
+        full = PLUGIN_ROOT.parent.parent / path  # plugin/.. = .claude/, 再上 = dev root
+        if full.exists():
+            contents = list(full.iterdir())
+            assert not contents, f"{path} 应已清空但还有: {contents}"
 ```
 
 - [ ] **Step 3: 跑测试（应大部分失败，因为 Phase C/D/F 还没全做完；这是预期的 TDD 失败）**
@@ -1149,7 +1636,12 @@ def test_plugin_name_is_chang_suffix() -> None:
 cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_self_contained.py -v 2>&1 | tail -40
 ```
 
-预期输出：很多 `FAIL`，但至少 `test_plugin_name_is_chang_suffix` 应通过（Task 3 已改 name）
+预期输出：很多 `FAIL`（python/CLAUDE_PROJECT_DIR/skill path 三类都会报）；但以下三项**应已通过**（Task 3 已改）：
+- `test_plugin_name_is_exact` ✓
+- `test_plugin_version_is_6_3_0` ✓
+- `test_hooks_use_python3` ✓（Task 7 已修）
+
+如有任何一项红，回溯 Task 3 看是否漏了字段。
 
 - [ ] **Step 4: Commit 测试本身**
 
@@ -1501,6 +1993,8 @@ ls 正文/第0001章*/ 2>/dev/null
 
 **Files:** (无文件改动，仅 git 操作)
 
+**Merge 策略：推荐 squash**。理由：30+ 个原子 commit 跨 10 个 Phase，单 PR/单 commit 对回溯更友好；squash 后 commit message 引用 spec doc，未来 cherry-pick / revert 都清楚。如偏好保留每个原子 commit 的历史，把 `git merge --squash` 换成 `git merge --no-ff` 即可。
+
 - [ ] **Step 1: 切回 main**
 
 ```bash
@@ -1514,13 +2008,30 @@ git checkout main
 git log --oneline refactor/self-contained ^main | head -40
 ```
 
-预期输出：列出 refactor 分支独有的 commits（约 20-30 个）
+预期输出：列出 refactor 分支独有的 commits（约 30-35 个）
 
-- [ ] **Step 3: 选 merge 策略**
+- [ ] **Step 3: Squash merge**
 
-二选一：
-- **merge commit**（保留所有原子 commit）：`git merge --no-ff refactor/self-contained`
-- **squash**（合成 1 个 commit）：`git merge --squash refactor/self-contained && git commit -m "refactor: webnovel-writer plugin self-contained (spec 2026-08-15)"`
+```bash
+cd /Users/chang/Desktop/ai写小说工具开发
+git merge --squash refactor/self-contained
+git status
+```
+
+预期输出：`git status` 显示 staged 但未 committed 的所有 refactor 改动
+
+```bash
+git commit -m "refactor: webnovel-writer plugin self-contained (spec 2026-08-15)
+
+把 webnovel-writer fork 重构为 self-contained：plugin 重命名为 _chang 后缀，
+建立独立 marketplace，所有 SKILL.md/agent md 路径变量统一到 CLAUDE_PLUGIN_ROOT，
+5 个项目级 skill + 10 个脚本迁入 plugin，dev workspace 零 .claude/scripts 依赖。
+书项目（根源牌序 等）无需任何 .claude/ 配置即可加载。
+
+详见：
+- docs/superpowers/specs/2026-08-15-webnovel-plugin-self-contained-refactor-design.md
+- docs/superpowers/plans/2026-08-15-webnovel-plugin-self-contained-refactor-impl.md"
+```
 
 - [ ] **Step 4: 跑最终全测试**
 
@@ -1538,13 +2049,12 @@ git worktree remove .claude/worktrees/refactor-self-contained
 git branch -d refactor/self-contained
 ```
 
-- [ ] **Step 6: 推 / 通知**
+- [ ] **Step 6: 同步 marketplace（cache symlink 自动跟上）**
 
-注：dev workspace 无 remote，无需 push。把重构结果同步到 marketplace 仓库：
+注：dev workspace 无 remote，无需 push。cache 是 symlink（Task 4b）→ dev workspace，无需同步。但 marketplace 仓库是独立目录，需要 cp：
 
 ```bash
-rsync -a --delete .claude/plugins/webnovel-writer_chang/ \
-    ~/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/
+bash .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_marketplace.sh
 ```
 
 ---
