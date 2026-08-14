@@ -441,6 +441,8 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
 
     action = args.story_craft_action
     if action == "init-volume-beat":
+        if not args.total_chapters or args.total_chapters <= 0:
+            raise ValueError(f"total-chapters must be positive, got {args.total_chapters}")
         from story_craft import init_volume_beat
 
         init_volume_beat(
@@ -463,12 +465,59 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
         _save_state_via_atomic(root, state)
         return 0
     if action == "check-volume":
-        from story_craft import check_volume_beat
+        from story_craft import (
+            check_volume_beat, check_rhythm_status,
+            check_timed_lock_deadlines, check_scene_sequel,
+        )
 
+        issues: list[str] = []
+        # 1. Volume beat (chapter-aware for accurate BLOCKER timing)
         try:
-            issues = check_volume_beat(state, volume=args.volume)
+            vol_issues = check_volume_beat(state, volume=args.volume, current_chapter=args.chapter)
         except ValueError as exc:
-            issues = [f"BLOCKER: {exc}"]
+            vol_issues = [f"BLOCKER: {exc}"]
+        issues.extend(vol_issues)
+        # 2. Rhythm curve status
+        if state.get("story_craft", {}).get("rhythm_curve"):
+            rhythm_status = check_rhythm_status(state)
+            if rhythm_status == "block":
+                n = state["story_craft"]["rhythm_curve"].get("chapters_since_peak", "?")
+                issues.append(f"BLOCKER: 节奏曲线 BLOCK：chapters_since_peak={n}")
+            elif rhythm_status == "warning":
+                issues.append("WARN: 节奏曲线 WARNING")
+        # 3. Timed locks + 4. Scene-Sequel (chapter-aware)
+        if args.chapter is not None:
+            overdue = check_timed_lock_deadlines(state, current_chapter=args.chapter)
+            for lock in overdue:
+                issues.append(f"BLOCKER: 定时锁逾期：{lock['id']} deadline={lock['deadline_chapter']}")
+            cm = state.get("chapter_meta", {})
+            if isinstance(cm, dict):
+                cm_entry = cm.get(str(args.chapter), {})
+                if isinstance(cm_entry, dict):
+                    for issue in check_scene_sequel(cm_entry):
+                        issues.append(issue)
+                    if not cm_entry.get("hook_type"):
+                        issues.append("BLOCKER: 章末 hook_type 未声明")
+        # 5. Foreshadow chain per-depth count
+        foreshadow_chain = state.get("story_craft", {}).get("foreshadow_chain", [])
+        if isinstance(foreshadow_chain, list):
+            depth_counts = {"表层": 0, "中层": 0, "深层": 0}
+            for f in foreshadow_chain:
+                if isinstance(f, dict) and f.get("depth") in depth_counts:
+                    depth_counts[f["depth"]] += 1
+            if depth_counts["表层"] < 5:
+                issues.append(f"WARN: 表层伏笔 < 5 (当前 {depth_counts['表层']})")
+            if depth_counts["中层"] < 3:
+                issues.append(f"WARN: 中层伏笔 < 3 (当前 {depth_counts['中层']})")
+            if depth_counts["深层"] < 1:
+                issues.append("BLOCKER: 深层伏笔 = 0")
+        # 6. Thematic echoes + 7. Character arc presence
+        thematic = state.get("story_craft", {}).get("thematic_echoes", [])
+        if not thematic:
+            issues.append("WARN: thematic_echoes 为空")
+        if not state.get("story_craft", {}).get("character_arc"):
+            issues.append("WARN: character_arc 未设置")
+
         for issue in issues:
             print(issue)
         return 1 if any("BLOCKER" in i for i in issues) else 0
@@ -478,14 +527,21 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
         # Ensure story_craft substructure exists.
         state.setdefault("story_craft", {}).setdefault("foreshadow_chain", [])
         chain = state["story_craft"]["foreshadow_chain"]
+
+        # Volume context (defaults to 1 when --volume omitted).
+        volume = getattr(args, "volume", None) or 1
+
+        # Per-volume depth counts (foreshadows now carry a `volume` field).
         existing_by_depth = {"表层": 0, "中层": 0, "深层": 0}
         for item in chain:
+            if not isinstance(item, dict):
+                continue
+            if item.get("volume") != volume:
+                continue
             d = item.get("depth")
             if d in existing_by_depth:
                 existing_by_depth[d] += 1
 
-        # Volume context (defaults to 1 when --volume omitted).
-        volume = getattr(args, "volume", None) or 1
         total_chapters = (
             state.get("story_craft", {}).get("volume_beat", {}).get("total_chapters")
             or 50
@@ -502,6 +558,7 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
             add_foreshadow(state, {
                 "type": "环境",
                 "depth": "表层",
+                "volume": volume,
                 "content": f"[auto] 表层伏笔 #{i + 1}（卷{volume} 待补具体内容）",
                 "buried_chapter": ch,
                 "expected_payoff_chapter": min(vol_end, ch + max(5, total_chapters // 5)),
@@ -516,6 +573,7 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
             add_foreshadow(state, {
                 "type": "物谶",
                 "depth": "中层",
+                "volume": volume,
                 "content": f"[auto] 中层伏笔 #{i + 1}（卷{volume} 待补具体内容）",
                 "buried_chapter": ch,
                 "expected_payoff_chapter": min(vol_end, ch + max(10, total_chapters // 3)),
@@ -529,6 +587,7 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
             add_foreshadow(state, {
                 "type": "诗谶",
                 "depth": "深层",
+                "volume": volume,
                 "content": f"[auto] 深层伏笔 #{i + 1}（全书级主题伏笔，待补具体内容）",
                 "buried_chapter": vol_start,
                 "expected_payoff_chapter": vol_end,
@@ -558,6 +617,20 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
         vol_start = max(1, (volume - 1) * total_chapters + 1)
         vol_end = volume * total_chapters
 
+        # Genre-aware chapter-level placeholder lock.
+        # Reads genre from project_info; falls back to 玄幻.
+        genre = (
+            state.get("project_info", {}).get("genre", "玄幻")
+            if isinstance(state.get("project_info"), dict)
+            else "玄幻"
+        )
+        chapter_level_lock_desc = {
+            "玄幻": "主角 3 章内出村",
+            "修仙": "主角 3 章内踏入修仙门派",
+            "都市": "金手指第 1 章出现，第 2 章起作用",
+            "system_flow": "系统第 1 章出现，第 2 章起作用",
+        }.get(genre, "主角 3 章内出村")  # fallback to 玄幻
+
         # Target volume-level locks: Midpoint / All Is Lost / 卷末新钩子。
         targets = [
             ("Midpoint 必须发生", int(vol_start + (vol_end - vol_start) * 0.5)),
@@ -578,18 +651,40 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
             })
             added += 1
 
-        # Genre chapter-level placeholder: 玄幻 default → 主角3章内出村.
-        # (Other genres will be added when genre profile is wired in.)
-        genre_chapter_level = "主角3章内出村"
-        if not _has(genre_chapter_level):
+        if not _has(chapter_level_lock_desc):
             add_timed_lock(state, {
-                "description": genre_chapter_level,
+                "description": chapter_level_lock_desc,
                 "deadline_chapter": vol_start + 2,
             })
             added += 1
 
         _save_state_via_atomic(root, state)
         print(f"init-locks: added {added} timed_lock(s) for volume {volume} (total now {len(state['story_craft']['timed_locks'])})")
+        return 0
+    if action == "set-chapter-meta":
+        from story_craft import set_chapter_meta
+
+        fields: dict[str, object] = {}
+        if args.beat_position:
+            fields["beat_position"] = args.beat_position
+        if args.hook_type:
+            fields["hook_type"] = args.hook_type
+        if args.scene_goal:
+            fields["scene_goal"] = args.scene_goal
+        if args.scene_conflict:
+            fields["scene_conflict"] = args.scene_conflict
+        if args.scene_setback:
+            fields["scene_setback"] = args.scene_setback
+        if args.scene_resolution:
+            fields["scene_resolution"] = args.scene_resolution
+        if args.sequel_reaction:
+            fields["sequel_reaction"] = args.sequel_reaction
+        if args.sequel_dilemma:
+            fields["sequel_dilemma"] = args.sequel_dilemma
+        if args.sequel_decision:
+            fields["sequel_decision"] = args.sequel_decision
+        set_chapter_meta(state, chapter=args.chapter, **fields)
+        _save_state_via_atomic(root, state)
         return 0
     print(f"unknown story-craft action: {action}", file=sys.stderr)
     return 2
@@ -679,13 +774,23 @@ def main() -> None:
     craft_parser = sub.add_parser("story-craft", help="Story craft operations")
     craft_parser.add_argument("story_craft_action", choices=[
         "init-volume-beat", "fill-beat", "check-volume",
-        "init-forechains", "init-locks",
+        "init-forechains", "init-locks", "set-chapter-meta",
     ])
     craft_parser.add_argument("--volume", type=int)
     craft_parser.add_argument("--total-chapters", type=int)
     craft_parser.add_argument("--beat-name")
     craft_parser.add_argument("--chapter", type=int)
     craft_parser.add_argument("--notes")
+    # set-chapter-meta per-field arguments
+    craft_parser.add_argument("--beat-position")
+    craft_parser.add_argument("--hook-type")
+    craft_parser.add_argument("--scene-goal")
+    craft_parser.add_argument("--scene-conflict")
+    craft_parser.add_argument("--scene-setback")
+    craft_parser.add_argument("--scene-resolution")
+    craft_parser.add_argument("--sequel-reaction")
+    craft_parser.add_argument("--sequel-dilemma")
+    craft_parser.add_argument("--sequel-decision")
     craft_parser.set_defaults(func=cmd_story_craft)
 
     # Pass-through to data modules
