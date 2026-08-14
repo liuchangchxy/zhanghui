@@ -281,15 +281,31 @@ def init_volume_beat(state: dict, volume: int, total_chapters: int) -> dict:
     """Initialize volume_beat with empty 15-beat skeleton.
 
     Beat chapters are auto-distributed by percentage.
+
+    Behavior:
+    - If a volume_beat for the same volume already exists, return state
+      unchanged (idempotent for same volume).
+    - If a volume_beat exists for a different volume, raise ValueError
+      (multi-volume not yet supported in this iteration).
     """
     percentages = [0.01, 0.05, 0.10, 0.10, 0.20, 0.20, 0.22, 0.50, 0.50, 0.75, 0.75, 0.80, 0.80, 0.99, 1.00]
     if len(percentages) != 15:
         raise ValueError("internal: percentages must match 15 beats")
+    sc = state.setdefault("story_craft", {})
+    existing = sc.get("volume_beat")
+    if existing is not None:
+        if existing.get("volume") == volume:
+            # Same volume already initialized — no-op.
+            return state
+        raise ValueError(
+            f"volume_beat already initialized for volume {existing.get('volume')}; "
+            f"multi-volume not yet supported (requested volume {volume})"
+        )
     beats = []
     for name, pct in zip(VALID_BEATS, percentages):
         ch = max(1, round(pct * total_chapters))
         beats.append({"name": name, "chapter": ch, "filled": False, "notes": None})
-    state.setdefault("story_craft", {})["volume_beat"] = {
+    sc["volume_beat"] = {
         "volume": volume,
         "total_chapters": total_chapters,
         "beats": beats
@@ -298,6 +314,8 @@ def init_volume_beat(state: dict, volume: int, total_chapters: int) -> dict:
 
 
 def fill_beat(state: dict, volume: int, beat_name: str, chapter: int, notes: str) -> dict:
+    if state.get("story_craft", {}).get("volume_beat", {}).get("volume") != volume:
+        raise ValueError(f"volume {volume} not initialized; run init-volume-beat first")
     beats = state["story_craft"]["volume_beat"]["beats"]
     for beat in beats:
         if beat["name"] == beat_name:
@@ -309,9 +327,24 @@ def fill_beat(state: dict, volume: int, beat_name: str, chapter: int, notes: str
 
 
 def check_volume_beat(state: dict, volume: int) -> list:
-    """Return issues. BLOCKER for Midpoint/All Is Lost missing."""
+    """Return issues. BLOCKER for Midpoint/All Is Lost missing.
+
+    Behavior:
+    - If volume_beat is not initialized at all, return a friendly BLOCKER
+      list (does not raise) so callers can display the issue.
+    - If volume_beat is initialized for a different volume, raise
+      ValueError (multi-volume not yet supported in this iteration).
+    """
+    vb = state.get("story_craft", {}).get("volume_beat")
+    if vb is None:
+        return [f"BLOCKER: story_craft.volume_beat not initialized for volume {volume} — run init-volume-beat first"]
+    if vb.get("volume") != volume:
+        raise ValueError(
+            f"volume_beat initialized for volume {vb.get('volume')}; "
+            f"multi-volume not yet supported (requested volume {volume})"
+        )
     issues = []
-    beats = state["story_craft"]["volume_beat"]["beats"]
+    beats = vb["beats"]
     for beat in beats:
         if beat["name"] in ("Midpoint", "All Is Lost") and not beat["filled"]:
             issues.append(f"BLOCKER: {beat['name']} must be filled")

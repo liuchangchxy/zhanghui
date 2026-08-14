@@ -388,3 +388,22 @@ def test_check_volume_beat_ok_when_midpoint_and_all_is_lost_filled():
     issues = check_volume_beat(state, volume=1)
     blockers = [i for i in issues if "BLOCKER" in i]
     assert blockers == []
+
+
+def test_check_volume_beat_returns_friendly_when_not_initialized():
+    state = {"story_craft": {}}
+    issues = check_volume_beat(state, volume=1)
+    assert any("not initialized" in i for i in issues)
+    assert any("BLOCKER" in i for i in issues)
+
+
+def test_fill_beat_raises_when_volume_mismatch():
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    with __import__("pytest").raises(ValueError):
+        fill_beat(state, volume=2, beat_name="Midpoint", chapter=25, notes="")
+
+
+def test_check_volume_beat_raises_when_volume_mismatch():
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    with __import__("pytest").raises(ValueError):
+        check_volume_beat(state, volume=2)
