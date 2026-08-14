@@ -36,9 +36,9 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
 
 默认加载清单：
 - L1（启动前）：`references/genre-tropes.md`
-- L1（按需）：`templates/写作宪法.md` —— 仅当用户尚未提供时加载，作为风格底线占位
+- L1（按需）：`${CLAUDE_PLUGIN_ROOT}/templates/写作宪法.md` —— 仅当用户尚未提供时加载，作为风格底线占位
 - L2（按需）：
-  - 题材模板：`templates/genres/{genre}.md`
+  - 题材模板：`${CLAUDE_PLUGIN_ROOT}/templates/genres/{genre}.md`
   - 金手指：`templates/golden-finger-templates.md`
   - 世界观：`references/worldbuilding/faction-systems.md`
   - 创意约束：按下方"逐文件引用清单"触发加载
@@ -122,7 +122,7 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
 
 ## 工具策略（按需）
 
-- `Read/Grep`：读取项目上下文与参考文件（`README.md`、`CLAUDE.md`、`templates/genres/*`、`references/*`）。
+- `Read/Grep`：读取项目上下文与参考文件（`README.md`、`CLAUDE.md`、`${CLAUDE_PLUGIN_ROOT}/templates/genres/*`、`references/*`）。
 - `Bash`：执行 `init_project.py`、文件存在性检查、最小验证命令。
 - `Task`：拆分并行子任务（如题材映射、约束包候选生成、文件验证）。
 - `AskUserQuestion`：用于关键分歧裁决、候选方案选择、最终确认。
@@ -159,8 +159,8 @@ export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 - 加载最小参考：
   - `references/system-data-flow.md`（用于校对 init 产物与 plan/write 输入链路）
   - `references/genre-tropes.md`
-  - `templates/genres/`（仅在用户选定题材后按需读取）
-- **创作宪法加载**：`templates/写作宪法.md`（仅检测存在性，不强制内容）
+  - `${CLAUDE_PLUGIN_ROOT}/templates/genres/`（仅在用户选定题材后按需读取）
+- **创作宪法加载**：`${CLAUDE_PLUGIN_ROOT}/templates/写作宪法.md`（仅检测存在性，不强制内容）
   - 存在 → 作为风格底线参考，L1 常驻
   - 不存在 → 不阻断，但在 Step 6 提示用户可填写以固化风格底线
 - **创作宪法加载**：`${CLAUDE_PLUGIN_ROOT}/templates/写作宪法.md`（Phase E 起基线目录迁到 plugin 级），仅检测存在性，不强制内容。
