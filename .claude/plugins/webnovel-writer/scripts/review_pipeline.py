@@ -236,7 +236,15 @@ def _inject_craft_issues(project_root: Path, result, chapter: int) -> None:
 
 
 def chapter_to_volume(state: dict, chapter: int) -> int:
-    """Best-effort: figure out which volume a chapter belongs to."""
+    """Return current volume. Single-volume assumption: returns volume_beat.volume.
+
+    Note: this function does NOT actually use the `chapter` argument — the current
+    state model only tracks one volume_beat (the active volume). Multi-volume
+    support would require volumes_planned lookup; falls back to 1 when
+    volume_beat is missing. Future maintainers: do NOT expect this function to
+    compute volume from chapter boundaries — see _resolve_volume_for_chapter in
+    dashboard/app.py for the multi-volume-aware variant.
+    """
     return state.get("story_craft", {}).get("volume_beat", {}).get("volume", 1)
 
 
