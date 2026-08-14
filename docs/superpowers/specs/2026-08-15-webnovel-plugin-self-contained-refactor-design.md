@@ -1,29 +1,35 @@
-# webnovel-writer plugin 自包含化重构设计
+# webnovel-writer plugin 自包含化与跨平台分发设计
 
-**日期**：2026-08-15
+**日期**：2026-08-15（修订：原 spec 只覆盖自包含化；本修订加入跨平台分发 + Python 依赖自动安装）
 **作者**：与 Claude Code 协作（superpowers:brainstorming）
-**状态**：待用户审阅
+**状态**：待用户审阅（修订中）
 
 ---
 
 ## 0. 目标与边界
 
 ### 0.1 一句话目标
-把 fork 出来的 webnovel-writer plugin 重构为**自包含、可在任何书项目目录直接加载**，不再要求每个书项目手动配置 `.claude/`、不再依赖 dev workspace 的项目级 skill/scripts。
+把 fork 出来的 webnovel-writer plugin 重构为**自包含、可在任何书项目目录直接加载**，且具备**跨平台（macOS + Linux + Windows）自动安装 Python 依赖**的能力，通过 `webnovel-chang-marketplace` **公开分发**——用户装 marketplace 后零手动步骤可用；不再要求每个书项目手动配置 `.claude/`、不再依赖 dev workspace 的项目级 skill/scripts。
 
 ### 0.2 触发问题
 用户报告：cd 到 `/Users/chang/Desktop/根源牌序/` 后 `/webnovel-init`、`/webnovel-doctor`、`/webnovel-write` 等 skill 无法正常使用，SessionStart hook 也跑不出正确输出。同一时刻在 dev workspace `ai写小说工具开发/` 下却能跑——说明 plugin 跟 dev workspace 耦合过紧。
 
 ### 0.3 明确不做的
 - 不重新发明 webnovel-writer（保留 plugin 主体，只重构路径与目录布局）
-- 不发布到公共 marketplace（仅自用，fork 重命名为 `_chang` 后缀做身份区分）
-- 不引入新功能（不解决"如何写好小说"，只解决"Claude Code 加载不动"）
+- 不重写 Python 业务代码（chart-scan / dashboard / 根 scripts/ 保持当前实现，仅补依赖管理）
+- 不砍任何 skill 功能（**含 fanqie**，虽然它是 BLOCKED_IMPLEMENTATION；用户明确"不能以牺牲功能为代价"）
+- 不引入新功能（不解决"如何写好小说"，只解决"Claude Code 加载不动"和"依赖自动装"）
 - 不改写 plugin 业务逻辑（review pipeline、story craft、init 流程的语义保持不变）
+- 不做 GUI 弹窗（用 Claude Code 自身的 prompt 机制，跨平台一致）
+- 不在 SessionStart 阻塞等装完（用户体验优先；后台并行安装）
 
 ### 0.4 约束
-- 纯自用，许可证兼容不是问题
+- **公开分发**：plugin 经 `webnovel-chang-marketplace` 公开，许可证 GPL-3.0（与上游一致）
+- **跨平台**：macOS + Linux + Windows（不含 Windows ARM / Linux ARM；如未来需要再补）
+- 平台差异：`macOS` 自带 python3（但版本不一） / `Linux` 通常有 python3 但版本可能 <3.11 / `Windows` 通常没有 python3；缺失时由 uv 自动下载
+- Python 版本需求：>=3.11；缺失时由 uv 静默下载（用户无感）
+- `_chang` 后缀保持（fork 身份区分，与上游 `webnovel-writer` 隔离）
 - dev workspace 是纯本地、无 remote 的 git 仓库
-- macOS Darwin 25.5.0，`python3` 可用、`python` 别名不可用
 - 现有 4e403ee 等 git 历史保留，重构是新 commit
 
 ---
@@ -148,7 +154,7 @@ dev 模式下 plugin 三跳链路：
 
 **关键**：cache 必须建为 `ln -sfn` 指向 dev workspace 的 plugin/，而不是把 marketplace 拷贝过来。任何对 dev workspace 的修改都立即被 Claude Code 感知（无需 rehash）。如果 cache 是普通目录而非 symlink，dev 修改不会生效，会出现「测试通过但实际加载的仍是旧版」的诡异问题。
 
-**发布流程**（当前仅自用，未来如要发版）：改完 dev workspace 代码后，跑 `scripts/sync_dev_to_marketplace.sh` 把代码同步到 marketplace 仓库（cache 通过 symlink 自动跟上），再 `sync_plugin_version.py --version X.Y.Z` 同步 version 字段。
+**发布流程**：改完 dev workspace 代码后，跑 `scripts/sync_dev_to_marketplace.sh` 把代码同步到 marketplace 仓库（cache 通过 symlink 自动跟上），再 `sync_plugin_version.py --version X.Y.Z` 同步 version 字段。marketplace.json 字段按 https://docs.claude.com/en/docs/claude-code/marketplace 规范填写完整（`name` / `owner` / `plugins[].source` / `plugins[].description`），让 Claude Code 的 marketplace browser 能发现此 marketplace。
 
 ### 2.4 CLAUDE_PROJECT_DIR 的合法保留（不属反模式）
 
@@ -253,6 +259,130 @@ dev 模式下 plugin 三跳链路：
   - 断言所有 `${CLAUDE_PLUGIN_ROOT}` 引用都解析到真实存在的路径
   - 断言 plugin 自带全部被引用脚本（无外部依赖）
 
+### 4.6 跨平台 Python 依赖自动安装
+
+**为什么需要**：plugin 内有 Python 依赖：
+
+| 子模块 | 依赖（pyproject / requirements） |
+|---|---|
+| `webnovel-chart-scan` skill | `httpx + bs4 + pydantic + lxml` core + `playwright + chromium` 可选（150-300MB） |
+| `dashboard/` web server | `fastapi + uvicorn + httpx + watchdog`（独立 `requirements.txt`，跟 chart-scan 完全分家） |
+| 根 `scripts/*.py` | `pydantic`（**隐式依赖**，未在 pyproject/requirements 声明，需顺手修） |
+| `hooks/*.py` | stdlib only ✅ |
+
+公开 marketplace 分发要求用户**不感知**任何装依赖的动作。
+
+#### 4.6.1 实现方案：uv bootstrapper + SessionStart 后台安装
+
+**核心思想**：bundled `uv` 单文件二进制（~15MB，跨平台）作为 Python bootstrapper。SessionStart hook 检测每个 Python skill 的 venv 状态，后台 fork 子进程跑 `uv venv` + `uv pip install`，**不阻塞当前会话**。
+
+**为什么选 uv**：
+- 静态二进制单文件，bundled 进 plugin 简单
+- 自带 Python 下载（缺 Python 的机器也能跑）
+- 用 Rust 写的，比 pip 快 10-100×
+- 跨平台行为一致（mac/linux/win 都是同一套 API）
+
+#### 4.6.2 vendor/uv/ 布局
+
+```
+plugins/webnovel-writer_chang/vendor/uv/
+├── uv-darwin-arm64           ← macOS Apple Silicon
+├── uv-darwin-x86_64          ← macOS Intel
+├── uv-linux-x86_64           ← Linux x86_64
+└── uv-windows-x86_64.exe     ← Windows x86_64
+```
+
+由 `scripts/sync_dev_to_marketplace.sh` 在 release 时从 https://github.com/astral-sh/uv/releases 下载 + sha256 校验，commit 进 git（不用 git LFS，每个 ~15MB 可接受）。
+
+#### 4.6.3 用户态缓存布局
+
+```
+~/.cache/webnovel-writer-chang/        ← 主路径（mac/linux/win 都解析到这）
+├── venvs/
+│   ├── webnovel-chart-scan/
+│   │   ├── .install-stamp              ← 内容 = pyproject.toml sha256（去重核心）
+│   │   └── .chromium-prompted          ← "yes" / "no" / 不存在（用户是否接受过 chromium 弹窗）
+│   └── dashboard/
+└── logs/
+    ├── install-<skill>-<ts>.log
+    └── session-start-<ts>.log
+```
+
+Windows 上 `%LOCALAPPDATA%` 解析为同一个 `~/.cache/` 路径（`os.path.expanduser` 在 Windows 也用 `%USERPROFILE%`）。
+
+**.install-stamp 是核心去重机制**：每次 SessionStart hook 比对当前 pyproject.toml 的 sha256 与 stamp 内容，不匹配就重建 venv。plugin 升级时 pyproject 内容变了 → 自动重装依赖，无需手动 bump 版本号。
+
+#### 4.6.4 SessionStart 触发流（不阻塞会话）
+
+```
+SessionStart (session_start.py 扩展)
+    │
+    ├─ 扫描 ${CLAUDE_PLUGIN_ROOT}/skills/*/pyproject.toml
+    │     + dashboard/ 目录
+    │     → 枚举 Python 子模块列表 [webnovel-chart-scan, dashboard, ...]
+    │
+    ├─ 对每个 Python 子模块：
+    │     ├─ venv 不存在 ────────────────→ 加入 install_queue（小依赖）
+    │     ├─ .install-stamp 不匹配 ─────→ 加入 install_queue
+    │     └─ venv 完好 + stamp 匹配 ───→ 跳过
+    │
+    ├─ 后台 fork 子进程跑 install_python_deps.py
+    │     （**不阻塞当前会话**，用户在 hook 跑完后立刻能继续写代码）
+    │
+    └─ install_python_deps.py：
+          1. 按当前平台选 vendor/uv/* 二进制
+          2. uv venv ~/.cache/.../venvs/<module>
+          3. uv pip install -e <module_dir>[本 module 的 extras]
+          4. 写 .install-stamp = sha256(pyproject.toml + requirements.txt)
+          5. 写 logs/install-<module>-<ts>.log
+          6. 后台进程退出，下次 SessionStart 已就绪
+```
+
+**chromium 弹窗单独处理**（仅 webnovel-chart-scan）：
+- 检测 `.chromium-prompted` 是否存在
+- 不存在 → 通过 Claude prompt 问 "fanqie 需要 150MB chromium，装吗？(y/N)"
+  - y → 写 `.chromium-prompted=yes` + 后台 `uv run playwright install chromium`
+  - N → 写 `.chromium-prompted=no` + chart-scan 把 fanqie 永久 skip
+- 存在 → 跳过弹窗，不再打扰
+
+#### 4.6.5 错误处理
+
+| 失败场景 | 行为 |
+|---|---|
+| 网络断 / PyPI 不可达 | 自动 fallback 到 PyPI 国内镜像（清华/阿里/中科大，CN IP 检测）；失败 3 次后写 log + 下次 SessionStart 重试 |
+| `~/.cache/` 写不了（权限） | fallback 链：`~/Library/Caches/` (mac) → `%LOCALAPPDATA%` (win) → `$XDG_CACHE_HOME` (linux) → 项目根 `.webnovel/venv/` → 最后兜底报错让用户 export `WEBNOVEL_CACHE_DIR` |
+| uv 二进制跟平台不匹配 | 报错 "找不到匹配的 uv，请检查 vendor/uv/"，不静默 |
+| chromium 下载被中断 | 不影响 chart-scan 主流程；fanqie 走现有 BLOCKED_IMPLEMENTATION 报错路径（KNOWN_LIMITATIONS.md:14-16） |
+| 后台 install 进程被杀 | 下次 SessionStart 重新检测 + 重试（stamp 不会写除非装成功） |
+| 已有 venv 损坏 | 检测 `venv/bin/python --version`；失败则删了重建 |
+| dashboard port 被占 | dashboard 启动前探测 8000 端口；被占则给清晰错误 + 提示改 `WEBVIEW_PORT` |
+
+#### 4.6.6 测试策略
+
+| 层 | 内容 |
+|---|---|
+| 单元 | `install_python_deps.py` 纯函数：stamp 计算、平台二进制选择、venv 路径解析、pyproject 解析（mock 实际 uv 调用） |
+| 集成 | 干净 Docker 镜像（`python:3.11-slim` + 无 Python 的 `ubuntu:latest`）跑 SessionStart hook，断言 venv 创建 + stamp 正确 + 不阻塞 |
+| 跨平台 CI | GitHub Actions matrix：macos-14 (arm64) / ubuntu-22.04 / windows-2022，每个跑 `pytest tests/install/ -v` |
+| 冒烟 | 装好后真跑 `chart-scan --platform=qidian --top=3`，断言 `chart-scan/books.json` 至少含 3 个 BookItem |
+| 升级触发重装 | 手动改 pyproject.toml bump lxml 版本 + 重启 SessionStart → venv 被重建 + stamp 更新 |
+| **不测** | chromium 下载（CI 太大 + 慢 + 国内网络不稳） |
+
+#### 4.6.7 新增/修改的文件
+
+| 文件 | 操作 |
+|---|---|
+| `plugins/webnovel-writer_chang/vendor/uv/*` | 新增（裸二进制 commit，不用 LFS） |
+| `plugins/webnovel-writer_chang/hooks/session_start.py` | 改：扩展检测 Python skill 依赖 + fork 后台进程 |
+| `plugins/webnovel-writer_chang/hooks/install_python_deps.py` | 新增：实际跑 uv 的脚本（纯函数 + 子进程封装） |
+| `plugins/webnovel-writer_chang/hooks/hooks.json` | 改：SessionStart timeout **默认** 30s（覆盖原 5s）；实现里保证「检测 + fork」步骤 < 2s 完成，超时只是兜底，**不会真用到** |
+| `plugins/webnovel-writer_chang/skills/webnovel-chart-scan/pyproject.toml` | 已有，确保 extras 标注清晰（fanqie / dev） |
+| `plugins/webnovel-writer_chang/dashboard/pyproject.toml` | **新增**（替代裸 `requirements.txt`，让 install 流程统一） |
+| `plugins/webnovel-writer_chang/scripts/` 隐式 `pydantic` 依赖 | 顺手补：加 `pyproject.toml` 或 `requirements.txt` 显式声明 |
+| `plugins/webnovel-writer_chang/scripts/tests/test_install_*.py` | 新增：install 流程的单元 + 集成测试 |
+| `plugins/webnovel-writer_chang/scripts/sync_dev_to_marketplace.sh` | 改：release 时同步 uv 二进制 |
+| `README.md` | 改：加"首次使用会后台装依赖"说明 + 离线场景说明 + 镜像配置说明 |
+
 ---
 
 ## 5. 不动的东西
@@ -275,6 +405,10 @@ dev 模式下 plugin 三跳链路：
 | dev 加载测试 | `cd dev && claude → /webnovel-doctor` | 报 OK，hook 输出完整 |
 | **根治测试** | `cd /Users/chang/Desktop/根源牌序 && claude → SessionStart 输出完整 → /webnovel-doctor` | 报 OK，**book 项目下零 `.claude/` 配置** |
 | 写章节测试 | 在根源牌序 下跑 `/webnovel-init` 重做 → `/webnovel-write` 写一章 | 个人语料落在 `<book>/.webnovel/writer-profile/`；数据链完整 |
+| **跨平台 install (CI)** | GitHub Actions matrix 跑 clean container（`ubuntu:22.04` 无 python3 / `python:3.11-slim` / `windows:2022`） | 三平台 venv 都建好 + stamp 正确 + SessionStart 不阻塞 |
+| **升级触发重装** | 手动改 `pyproject.toml` bump lxml 版本 → 重启 SessionStart | venv 被重建 + stamp 更新（断言 `mtime` 与 `install-stamp` 内容都更新） |
+| **chromium 弹窗** | 干净 venv + 跑 chart-scan | 弹窗出现一次 + y 后 chromium 安装 + `.chromium-prompted=yes` 写入 |
+| **离线降级** | `pip` 指向不存在的镜像 + SessionStart | 失败 3 次后写 log，chart-scan 仍可跑（--platform=qidian 跳过 fanqie） |
 
 ---
 
@@ -288,17 +422,25 @@ dev 模式下 plugin 三跳链路：
 | `python3` 在某些 Linux 发行版指向 Python 2 | hooks 用 `python3 -X utf8` 字面量，依赖显式 python3；如未来要兼容 Linux，加一个 venv 探测脚本 |
 | marketplace cache 与 marketplace repo 的 plugin version 不一致 | `sync_plugin_version.py --check` 在 CI 跑；marketplace.json 的 version 字段与 plugin.json 同步 |
 | user-level settings.json 切换 enabledPlugins 后旧 plugin 残留 | 旧 `webnovel-writer@webnovel-writer-marketplace` 改为 `false` 而非删除，保留回滚路径 |
+| **uv 二进制过时 / 有 CVE** | release 流程固定每月一次 bump uv；CVE 出现时 hotfix release；commit message 必须包含 uv 版本号 |
+| **首次 SessionStart 后台 install 失败但用户没注意** | install 失败时 stderr 写到 `~/.cache/.../logs/`，下次 SessionStart 顶部 hook 输出明确说"上次的依赖安装失败，详见 logs/" |
+| **PyPI 国内镜像同步滞后**（某新版本 lxml 已发布但清华镜像没跟上） | install_python_deps.py 同时尝试 PyPI 官方源 + 国内镜像，取先成功的；不强制走镜像 |
+| **Windows 长路径问题**（`~/.cache/webnovel-writer-chang/...` 路径 > 260 字符） | Python 3.11+ 默认启用长路径支持；hooks 启动时检测 `sys.getwindowsversion()` 并显式 `import` 触发 enable_long_paths |
+| **dashboard 跟 chart-scan 各自 venv 隔离**（避免依赖冲突） | 设计上两个独立 venv，不共享 site-packages；这意味着 dashboard 重装不影响 chart-scan，反之亦然 |
+| **playwright 装 chromium 后磁盘占用 ~500MB** | README 写明磁盘预算；给 `WEBNOVEL_SKIP_CHROMIUM=1` env var 让 CI / 不想装的用户跳过 |
 
 ---
 
 ## 8. 不在范围（明确推迟）
 
 - 把 upstream 同步策略自动化（merge upstream → fork 的流程留给后续 PR）
-- 把 marketplace 发布到 GitHub releases（仅自用，不发布）
+- ~~把 marketplace 发布到 GitHub releases~~ → **修订为 IN SCOPE**：本 spec 修订后将 marketplace 公开分发；具体的 GitHub release 流程（如打 tag、release notes 模板）放到第一个 release 时再做，本 spec 只要求 `marketplace.json` 字段填写完整
 - webnovel-style-profile skill 的跨章漂移检测算法优化
 - dashboard 前端的视觉重构
 - agent 调度策略优化
 - 引入新能力（如多书并行写、跨书知识图谱）
+- Windows ARM / Linux ARM 平台（仅覆盖 mac+linux x86_64 + win x86_64；未来按需扩展）
+- 跨平台 wheel 构建（依赖 uv 自动管；如 uv 出现兼容问题再单独处理）
 
 ---
 
@@ -308,10 +450,17 @@ dev 模式下 plugin 三跳链路：
 |---|---|---|---|
 | 重构范围 | 彻底重做 / 最小修 / 只修 init | **彻底重做** | 用户选择 |
 | 代码事实源 | marketplace repo / dev workspace / monorepo | **dev workspace** | 用户明确「就这一个项目」 |
-| 开箱即用对象 | 自用 / 发布 / 都做 | **只为自己用** | 用户选择 |
+| ~~开箱即用对象~~ → **分发受众（修订）** | 自用 / 公开 marketplace | **公开 marketplace（webnovel-chang-marketplace）** | 2026-08-15 修订：用户要求"换台电脑装也能用"，升级为公开分发 |
 | 个人语料位置 | 书项目 / 用户 home / 保留 | **书项目 `.webnovel/writer-profile/`** | 用户选择 |
 | dev skill 去留 | 全迁 plugin / 保留 dev / 部分迁 | **全部迁入 plugin** | 用户选择 |
 | plugin 后缀 | 不改 / 加 `_chang` / 加 `_fork` | **`_chang`** | 用户选择 |
 | 架构变体 | 复用上游 marketplace / 独立 marketplace / file:// 直装 | **独立 marketplace** | 用户选择 |
 | 个人语料功能 | 顺手实现 / 删除 / 延后 | **顺手实现** | 用户选择；审查员发现代码里未实现，顺手补 |
 | cache 同步策略 | symlink / cp / 双向 rsync | **symlink（强制）+ 同步脚本（可选）** | 审查员指出 cp 模式会导致 dev 修改不生效 |
+| **平台覆盖（新增）** | 仅 macOS / mac+Linux / mac+Linux+Windows | **mac+Linux+Windows** | 用户 2026-08-15 选定 |
+| **Python 依赖管理方案（新增）** | 手动装 / 全 vendor / SessionStart hook 自动装 / bundle Python | **uv bootstrapper + SessionStart 后台装** | 用户要求"用户体感无感"；uv 是当前最简方案 |
+| **fanqie 命运（新增）** | 删 / 保留+默认 skip / 保留+显式弹窗 | **保留 + 显式弹窗** | 用户明确"不能以牺牲功能为代价" |
+| **install 阻塞策略（新增）** | 阻塞会话 / 后台并行 / 进度条 | **后台并行** | 用户 2026-08-15 选定 |
+| **venv 落点 fallback（新增）** | 仅 `~/.cache` / 多级 fallback | **多级 fallback（~/.cache → OS 标准 → 项目根 .webnovel/venv/）** | 实现细节；多级保安全 |
+| **CI 测 chromium（新增）** | 测 / 不测 | **不测** | 实现细节（CI 太大 + 国内网络不稳） |
+| **chromium 弹窗机制（新增）** | CLI 直接 y/N / Claude prompt | **Claude prompt** | 跨平台一致 + 复用了 Claude Code 自身 prompt 机制 |
