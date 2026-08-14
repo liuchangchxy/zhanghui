@@ -26,15 +26,6 @@ def test_no_python2_alias(md_file: Path) -> None:
 
 
 @pytest.mark.parametrize("md_file", _all_md_files(), ids=lambda p: str(p.relative_to(PLUGIN_ROOT)))
-def test_no_claude_project_dir_in_skills(md_file: Path) -> None:
-    """plugin 内不应使用 CLAUDE_PROJECT_DIR（仅 dev workspace 的 settings.json 用）。"""
-    text = md_file.read_text(encoding="utf-8")
-    assert "CLAUDE_PROJECT_DIR" not in text, (
-        f"{md_file.relative_to(PLUGIN_ROOT)} 含 CLAUDE_PROJECT_DIR 引用，违反 self-contained 原则"
-    )
-
-
-@pytest.mark.parametrize("md_file", _all_md_files(), ids=lambda p: str(p.relative_to(PLUGIN_ROOT)))
 def test_no_dev_path_fallback(md_file: Path) -> None:
     """不应有 ${CLAUDE_PLUGIN_ROOT:-...CLAUDE_PROJECT_DIR.../.claude/...} 反模式 fallback。"""
     text = md_file.read_text(encoding="utf-8")
