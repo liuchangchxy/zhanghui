@@ -85,3 +85,61 @@ ls .webnovel/observability/ 2>/dev/null
 ## CHANGES 协议
 
 每章末尾追加 `<chapter_changes>...</chapter_changes>` 块，8 个顶级字段声明本章对设定集/人物/物品/伏笔的所有变更。详见 `changes-protocol.md`。
+
+## v2.0 — Story Craft Engine (2026-08-14)
+
+Added 4 core narrative mechanisms to upgrade plan from form-level to craft-level:
+
+- **15-Beat Save the Cat** (volume level) — forces Midpoint + All Is Lost (BLOCKER)
+- **Scene-Sequel** (chapter level) — Goal/Conflict/Setback/Resolution/Reaction/Dilemma/Decision
+- **草蛇灰线 5-field tracking** — foreshadow state machine with BLOCKER on overdue
+- **Timed Lock + Rhythm Curve + Hook Type** — chapter-level discipline
+
+### State.json Schema
+New `story_craft` top-level field (optional, backward-compatible). Contains:
+- `rhythm_curve` — chapter-level emotion peak tracking with warning/block thresholds
+- `foreshadow_chain` — 5-field tracking (id/type/depth/buried_chapter/expected_payoff_chapter)
+- `timed_locks` — chapter-level deadlines (e.g., "主角 3 章内出村")
+- `thematic_echoes` — premise + per-chapter echo list
+- `character_arc` — protagonist name + starting_state + ending_state + transformation
+- `volume_beat` — 15-beat sheet with filled status per beat
+
+### New CLI Commands
+```
+webnovel.py story-craft init-volume-beat --volume N --total-chapters M
+webnovel.py story-craft fill-beat --volume N --beat-name "Midpoint" --chapter 25 --notes "..."
+webnovel.py story-craft check-volume --volume N
+webnovel.py story-craft init-forechains --volume N
+webnovel.py story-craft init-locks --volume N
+```
+
+### webnovel-plan Changes
+- New Step 4.5 (15-beat volume sheet)
+- New Step 6.5 (foreshadow chain + timed locks)
+- Step 7 extended with Scene-Sequel + beat fields
+- New Step 8.5 (craft consistency check)
+
+### Reviewer Extension
+5 → 7 dimensions. Added: 节拍合规性 / 草蛇灰线合规性.
+
+### Dashboard
+4 new panels: `/craft/beat/{vol}` / `/craft/foreshadow` / `/craft/timed-locks` / `/craft/rhythm`
+
+### Migration
+Run `python3 scripts/migrate_story_craft.py <path/to/state.json>` to add the field to existing projects. Idempotent. Creates `.bak` before modifying.
+
+### Tests
+- 141+ tests passing
+- TDD coverage for all 17 public functions in story_craft.py
+- Integration tests for review_pipeline + plan flow
+
+### New References
+8 markdown files under `references/shared/`:
+- 15-beat-save-the-cat.md
+- scene-sequel.md
+- foreshadow-chain.md
+- timed-lock.md
+- rhythm-curve.md
+- chapter-hook-types.md
+- character-arc.md
+- thematic-echo.md
