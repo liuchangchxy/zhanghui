@@ -4,8 +4,8 @@ webnovel-writer scripts package
 This package contains all Python scripts for the webnovel-writer plugin.
 """
 
-__version__ = "5.5.5"
-__author__ = "lcy"
+__version__ = "6.3.0"
+__author__ = "chang"
 
 __all__ = [
     "security_utils",
