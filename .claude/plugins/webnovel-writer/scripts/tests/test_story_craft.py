@@ -22,6 +22,8 @@ from story_craft import (
     record_emotion_peak,
     check_rhythm_status,
     increment_chapters_since_peak,
+    set_character_arc,
+    add_thematic_echo,
 )  # noqa: E402
 
 
@@ -234,3 +236,38 @@ def test_check_rhythm_returns_ok_when_within_threshold():
     }}}
     status = check_rhythm_status(state)
     assert status == "ok"
+
+
+def test_set_character_arc_replaces_existing():
+    state = {"story_craft": {"character_arc": None}}
+    arc = {
+        "name": "林川",
+        "starting_state": "归乡迷茫",
+        "ending_state": "接受本源",
+        "transformation": "通过卡池觉醒"
+    }
+    result = set_character_arc(state, arc)
+    assert result["story_craft"]["character_arc"]["name"] == "林川"
+    assert result["story_craft"]["character_arc"]["key_moments"] == []
+
+
+def test_add_thematic_echo():
+    state = {"story_craft": {"thematic_echoes": []}}
+    result = add_thematic_echo(
+        state,
+        premise="真正的强大是记忆而非力量",
+        chapter=5,
+        manifestation="主角回忆根源时力量觉醒"
+    )
+    assert len(result["story_craft"]["thematic_echoes"]) == 1
+    assert result["story_craft"]["thematic_echoes"][0]["premise"] == "真正的强大是记忆而非力量"
+    assert len(result["story_craft"]["thematic_echoes"][0]["echoes"]) == 1
+
+
+def test_add_thematic_echo_appends_to_existing_premise():
+    state = {"story_craft": {"thematic_echoes": [
+        {"id": "TE-001", "premise": "记忆与力量", "echoes": [{"chapter": 3}]}
+    ]}}
+    result = add_thematic_echo(state, premise="记忆与力量", chapter=10, manifestation="第二次觉醒")
+    assert len(result["story_craft"]["thematic_echoes"]) == 1  # same premise, not duplicated
+    assert len(result["story_craft"]["thematic_echoes"][0]["echoes"]) == 2

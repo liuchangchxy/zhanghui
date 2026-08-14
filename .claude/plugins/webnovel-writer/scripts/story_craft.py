@@ -194,3 +194,41 @@ def increment_chapters_since_peak(state: dict, chapter: int) -> dict:
     if chapter > curve["last_emotion_peak_chapter"]:
         curve["chapters_since_peak"] = chapter - curve["last_emotion_peak_chapter"]
     return state
+
+
+def set_character_arc(state: dict, arc: dict) -> dict:
+    """Set/replace character_arc. Required: name, starting_state, ending_state, transformation."""
+    for field in ("name", "starting_state", "ending_state", "transformation"):
+        if field not in arc:
+            raise ValueError(f"{field} required for character_arc")
+    state["story_craft"]["character_arc"] = {
+        **arc,
+        "key_moments": arc.get("key_moments", [])
+    }
+    return state
+
+
+def _next_thematic_echo_id(echoes: list) -> str:
+    used = {item.get("id", "") for item in echoes}
+    n = 1
+    while f"TE-{n:03d}" in used:
+        n += 1
+    return f"TE-{n:03d}"
+
+
+def add_thematic_echo(state: dict, premise: str, chapter: int, manifestation: str) -> dict:
+    """Add thematic echo. If premise already exists, append to its echoes list."""
+    echoes = state["story_craft"]["thematic_echoes"]
+    for item in echoes:
+        if item["premise"] == premise:
+            item["echoes"].append({
+                "chapter": chapter,
+                "manifestation": manifestation
+            })
+            return state
+    echoes.append({
+        "id": _next_thematic_echo_id(echoes),
+        "premise": premise,
+        "echoes": [{"chapter": chapter, "manifestation": manifestation}]
+    })
+    return state
