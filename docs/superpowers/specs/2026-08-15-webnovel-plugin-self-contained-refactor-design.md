@@ -40,7 +40,7 @@
 │   │
 │   ├── plugins/webnovel-writer/     [开发] ★ plugin 主体（跟 marketplace cache 软链耦合）
 │   ├── skills/                      [开发] 5 个项目级 skill（fast-write/revise/deslop/resume/chart-scan）
-│   ├── scripts/                     [开发] 9 个项目级脚本（changes_gate.py/check-ai-patterns.js/...）
+│   ├── scripts/                     [开发] 10 个项目级脚本（changes_gate.py/check-ai-patterns.js/context_slice.py/normalize-punctuation.js/rejection_contract.py/revise_chapter.py/snapshot_manager.py/style_fingerprint.py/text_humanizer.py/tracking_query.py）
 │   │
 │   ├── references/                  [参考]
 │   ├── sources/webnovel-writer-upstream/ [参考] fork 源快照
@@ -130,7 +130,7 @@ Claude Code 启动
 
 - **所有路径都从 `${CLAUDE_PLUGIN_ROOT}` 出发**，不再出现 `${CLAUDE_PROJECT_DIR}/.claude/...`
 - **所有 python 调用都用 `python3 -X utf8`**，不再依赖 `python` 别名
-- **plugin 自带全部运行时依赖**（webnovel.py、changes_gate.py、check-ai-patterns.js 等），不依赖书项目或 dev workspace 里有 `.claude/scripts/`
+- **plugin 自带全部运行时依赖**（webnovel.py、changes_gate.py、check-ai-patterns.js、text_humanizer.py 等），不依赖书项目或 dev workspace 里有 `.claude/scripts/`
 - **个人用户数据落在书项目里**（`<book>/.webnovel/writer-profile/`），不落在 plugin 安装目录里（升级不丢）
 - **书项目零 `.claude/` 配置**——所有 plugin 配置走 user 级 marketplace
 
@@ -138,9 +138,15 @@ Claude Code 启动
 
 dev 模式下 plugin 路径：
 ```
-marketplace 声明 → cache 实际加载 → symlink 到 dev workspace 的 plugins/webnovel-writer_chang/
+~/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/
+    ↓ 首次安装时 cp 同步
+~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/
+    ↓ dev 加速：symlink 到
+/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/
 ```
-任何对 `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/` 的修改立即被 Claude Code 感知（无需 rehash）。`sync_plugin_version.py` 仍可用于发布前的版本同步。
+任何对 `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/` 的修改立即被 Claude Code 感知（无需 rehash）。`sync_plugin_version.py` 仍可用于发布前的版本号同步。
+
+**发布流程**（如果未来要发版；当前仅自用）：改完 dev workspace 的代码后，跑 `scripts/sync_dev_to_marketplace.sh` 把代码 cp 到 marketplace 仓库，再 `sync_plugin_version.py --version X.Y.Z` 同步 version 字段。
 
 ---
 
@@ -164,14 +170,18 @@ marketplace 声明 → cache 实际加载 → symlink 到 dev workspace 的 plug
 
 ### 4.1 plugin 内部自包含化（最核心）
 
-- **5 个项目级 skill 搬入 plugin**（每个 skill 自带 scripts 子目录）：
-  - `webnovel-fast-write` ← `.claude/skills/webnovel-fast-write/` + `.claude/scripts/{changes_gate,context_slice,snapshot_manager}.py` + `.claude/scripts/text_humanizer.py`
-  - `webnovel-revise` ← `.claude/skills/webnovel-revise/` + `.claude/scripts/{revise_chapter,rejection_contract}.py` + `.claude/scripts/normalize-punctuation.js`
-  - `webnovel-deslop-check` ← `.claude/skills/webnovel-deslop-check/` + `.claude/scripts/{text_humanizer,check-ai-patterns}.{py,js}`
+- **5 个项目级 skill 搬入 plugin**（每个 skill 自带 scripts 子目录；跨 skill 共享的脚本放 `plugins/webnovel-writer_chang/scripts/_shared/`，避免重复）：
+  - `webnovel-fast-write` ← `.claude/skills/webnovel-fast-write/` + 依赖 `changes_gate.py` / `context_slice.py` / `snapshot_manager.py` / `text_humanizer.py`
+  - `webnovel-revise` ← `.claude/skills/webnovel-revise/` + 依赖 `revise_chapter.py` / `rejection_contract.py` / `normalize-punctuation.js`
+  - `webnovel-deslop-check` ← `.claude/skills/webnovel-deslop-check/` + 依赖 `check-ai-patterns.js` / `text_humanizer.py`（共享）
   - `webnovel-resume` ← `.claude/skills/webnovel-resume/`
   - `webnovel-chart-scan` ← `.claude/skills/webnovel-chart-scan/`
 
-- **`style_fingerprint.py` 搬入 plugin**（被 webnovel-write skill 用到）
+- **被 plugin 自带 skill（webnovel-write / webnovel-style-profile）调用的脚本直接搬入 plugin 主 scripts/ 目录**：
+  - `style_fingerprint.py` → `plugins/webnovel-writer_chang/scripts/style_fingerprint.py`（被 webnovel-write 调）
+  - `tracking_query.py` → `plugins/webnovel-writer_chang/scripts/tracking_query.py`（被 webnovel-write 调）
+
+- **共享脚本归位**：`text_humanizer.py` 同时被 fast-write 和 deslop-check 调用，统一放 `plugins/webnovel-writer_chang/scripts/_shared/text_humanizer.py`，两个 skill 的 SKILL.md 用 `${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py` 引用
 
 - **路径变量统一**：
   - `python` → `python3`（hooks.json + 所有 SKILL.md + 所有 agent md）
@@ -261,7 +271,7 @@ marketplace 声明 → cache 实际加载 → symlink 到 dev workspace 的 plug
 |---|---|
 | cache symlink 失效（cache 6.2.1 → dev 副本的 hack） | 拆掉 symlink，重跑 `claude plugin install webnovel-writer_chang@webnovel-chang-marketplace` |
 | 现有 根源牌序 项目半初始化 state.json 残留（`project_info` 填了但 `init_completed` 缺失） | init skill 启动时检测 `progress.init_completed` 缺失则警告 + 给出 `--force` 选项 |
-| dev 副本与 marketplace 副本 drift | README 写明「dev 时改 cache，发布时改 marketplace」双源约定；提供 `scripts/sync_dev_to_marketplace.sh` |
+| dev 副本与 marketplace 副本 drift | README 写明「dev 时改 dev workspace 的 plugin/，发布时改 marketplace 仓库的 plugin/」双源约定；提供 `scripts/sync_dev_to_marketplace.sh` 一键 cp 同步 |
 | `python3` 在某些 Linux 发行版指向 Python 2 | hooks 用 `python3 -X utf8` 字面量，依赖显式 python3；如未来要兼容 Linux，加一个 venv 探测脚本 |
 | marketplace cache 与 marketplace repo 的 plugin version 不一致 | `sync_plugin_version.py --check` 在 CI 跑；marketplace.json 的 version 字段与 plugin.json 同步 |
 | user-level settings.json 切换 enabledPlugins 后旧 plugin 残留 | 旧 `webnovel-writer@webnovel-writer-marketplace` 改为 `false` 而非删除，保留回滚路径 |
