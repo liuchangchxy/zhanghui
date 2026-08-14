@@ -11,7 +11,15 @@ _SCRIPTS = Path(__file__).resolve().parent.parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from story_craft import init_story_craft, StoryCraftFieldError, add_foreshadow, payoff_foreshadow  # noqa: E402
+from story_craft import (
+    init_story_craft,
+    StoryCraftFieldError,
+    add_foreshadow,
+    payoff_foreshadow,
+    add_timed_lock,
+    fulfill_timed_lock,
+    check_timed_lock_deadlines,
+)  # noqa: E402
 
 
 def test_init_story_craft_creates_empty_structure():
@@ -139,3 +147,37 @@ def test_payoff_foreshadow_raises_if_already_paid():
     ]}}
     with __import__("pytest").raises(ValueError):
         payoff_foreshadow(state, "FS-001", chapter=25, quality="强")
+
+
+def test_add_timed_lock_creates_item():
+    state = {"story_craft": {"timed_locks": []}}
+    item = {
+        "id": "TL-001",
+        "description": "玄幻主角 3 章内出村",
+        "deadline_chapter": 3
+    }
+    result = add_timed_lock(state, item)
+    assert len(result["story_craft"]["timed_locks"]) == 1
+    assert result["story_craft"]["timed_locks"][0]["status"] == "active"
+
+
+def test_fulfill_timed_lock_marks_done():
+    state = {"story_craft": {"timed_locks": [
+        {"id": "TL-001", "status": "active"}
+    ]}}
+    result = fulfill_timed_lock(state, "TL-001", chapter=2)
+    assert result["story_craft"]["timed_locks"][0]["status"] == "fulfilled"
+    assert result["story_craft"]["timed_locks"][0]["fulfilled_chapter"] == 2
+
+
+def test_check_timed_lock_deadlines_returns_overdue():
+    state = {"story_craft": {"timed_locks": [
+        {"id": "TL-001", "deadline_chapter": 3, "status": "active"},
+        {"id": "TL-002", "deadline_chapter": 10, "status": "active"},
+        {"id": "TL-003", "deadline_chapter": 5, "status": "fulfilled"}
+    ]}}
+    overdue = check_timed_lock_deadlines(state, current_chapter=7)
+    ids = [t["id"] for t in overdue]
+    assert "TL-001" in ids
+    assert "TL-002" not in ids  # not yet overdue
+    assert "TL-003" not in ids  # already fulfilled

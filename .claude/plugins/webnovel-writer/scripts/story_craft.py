@@ -112,3 +112,49 @@ def payoff_foreshadow(state: dict, foreshadow_id: str, chapter: int, quality: st
             item["payoff_quality"] = quality
             return state
     raise ValueError(f"foreshadow {foreshadow_id} not found")
+
+
+def _next_timed_lock_id(locks: list) -> str:
+    used = {item.get("id", "") for item in locks}
+    n = 1
+    while f"TL-{n:03d}" in used:
+        n += 1
+    return f"TL-{n:03d}"
+
+
+def add_timed_lock(state: dict, item: dict) -> dict:
+    """Add timed lock to state. Required: description, deadline_chapter."""
+    if "deadline_chapter" not in item:
+        raise ValueError("deadline_chapter required")
+    locks = state.setdefault("story_craft", {}).setdefault("timed_locks", [])
+    new_item = {
+        "id": item.get("id") or _next_timed_lock_id(locks),
+        "description": item.get("description", ""),
+        "trigger_chapter": item.get("trigger_chapter"),
+        "deadline_chapter": item["deadline_chapter"],
+        "status": "active",
+        "fulfilled_chapter": None,
+    }
+    locks.append(new_item)
+    return state
+
+
+def fulfill_timed_lock(state: dict, lock_id: str, chapter: int) -> dict:
+    locks = state["story_craft"]["timed_locks"]
+    for item in locks:
+        if item["id"] == lock_id:
+            if item["status"] == "fulfilled":
+                raise ValueError(f"{lock_id} already fulfilled")
+            item["status"] = "fulfilled"
+            item["fulfilled_chapter"] = chapter
+            return state
+    raise ValueError(f"timed_lock {lock_id} not found")
+
+
+def check_timed_lock_deadlines(state: dict, current_chapter: int) -> list:
+    """Return list of overdue timed locks (deadline passed, not fulfilled)."""
+    return [
+        item for item in state["story_craft"]["timed_locks"]
+        if item["status"] == "active"
+        and item["deadline_chapter"] <= current_chapter
+    ]
