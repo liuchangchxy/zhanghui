@@ -67,16 +67,18 @@
 
 ### 3.1 Tier 1 — 必吸收（核心机制级，8 项）
 
-| 来源 | 理论 | 网文/卷级映射 |
-|---|---|---|
-| **Dan Harmon Story Circle** | 8 阶段圆 | 卷级 Story Circle（v1 先不实现，留 v2） |
-| **Save the Cat Writes a Novel**（Jessica Brody 2018） | 15-beat 应用小说 | 卷级 15-beat 节拍表 |
-| **TV Writer's Room 流水线** | Pitch → Outline → Beat Sheet → Script | webnovel-plan Step 3-7 流程对应 |
-| **Scene-Sequel**（Dwight Swain） | Scene 4 步 + Sequel 3 步 | 每章 Scene-Sequel 节拍 |
-| **起点编辑流水《爽文的节奏》** | "定时锁" | 章节级 + 卷级定时锁 |
-| **草蛇灰线伏脉千里** | 三层伏笔 + 5 字段追踪 | state.json foreshadow_chain |
-| **马良写作节奏曲线** | 1.8 章/情绪高峰，平路 ≤3 | state.json rhythm_curve |
-| **红楼梦 5 谶语载体** | 物/诗/戏/灯谜/环境 | foreshadow_chain.type 枚举 |
+v1 实现 7 项直接机制 + 1 项过程映射；Dan Harmon Story Circle 入档但 v1 不实现（v2 增强）。
+
+| 来源 | 理论 | 网文/卷级映射 | v1 状态 |
+|---|---|---|---|
+| **Dan Harmon Story Circle** | 8 阶段圆 | 卷级 Story Circle | **v2 增强**（v1 只在 reference 留文档） |
+| **Save the Cat Writes a Novel**（Jessica Brody 2018） | 15-beat 应用小说 | 卷级 15-beat 节拍表 | v1 实现 |
+| **TV Writer's Room 流水线** | Pitch → Outline → Beat Sheet → Script | webnovel-plan Step 3-7 流程对应 | v1 实现（过程映射，不新增机制） |
+| **Scene-Sequel**（Dwight Swain） | Scene 4 步 + Sequel 3 步 | 每章 Scene-Sequel 节拍 | v1 实现 |
+| **起点编辑流水《爽文的节奏》** | "定时锁" | 章节级 + 卷级定时锁 | v1 实现 |
+| **草蛇灰线伏脉千里** | 三层伏笔 + 5 字段追踪 | state.json foreshadow_chain | v1 实现 |
+| **马良写作节奏曲线** | 1.8 章/情绪高峰，平路 ≤3 | state.json rhythm_curve | v1 实现 |
+| **红楼梦 5 谶语载体** | 物/诗/戏/灯谜/环境 | foreshadow_chain.type 枚举 | v1 实现 |
 
 ### 3.2 Tier 2 — 强烈建议（结构补充，6 项）
 
@@ -215,7 +217,7 @@ Sequel: Reaction → Dilemma → Decision
 **自动检查**（reviewer Step 3）：
 - ✅ 每章 ≥1 表层伏笔埋/收（WARNING 阈值）
 - ✅ 中层伏笔 ≥3 个/卷（HARD）
-- ✅ 深层伏笔 1-2 个/全书（HARD）
+- ✅ 深层伏笔 1-2 个/全书（min=1, max=2；HARD）
 - ⚠️ 任何 active 的伏笔 ≥10 章未推进 → WARNING
 - 🚫 任何 expected_payoff_chapter 已过 + 未 paid_off → BLOCKER
 - 🚫 任何 missed 的伏笔 → 标记 + 人 review
