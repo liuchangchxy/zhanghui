@@ -69,9 +69,14 @@ def test_plugin_version_is_6_3_0() -> None:
 
 
 def test_no_scripts_in_dev_dotclaude() -> None:
-    """dev .claude/scripts/ 与 .claude/skills/ 在重构后应已清空。"""
-    for path in [".claude/scripts", ".claude/skills"]:
-        full = PLUGIN_ROOT.parent.parent.parent / path  # plugin/.. = .claude/, 再上 = dev root
-        if full.exists():
-            contents = list(full.iterdir())
-            assert not contents, f"{path} 应已清空但还有: {contents}"
+    """dev .claude/scripts/ 应已清空；.claude/skills/ 不应残留 webnovel-* 重复副本（系统级 skill 如 writing-layered-plans 是合法 dev 工作流）。"""
+    # scripts/ 必须为空
+    scripts_full = PLUGIN_ROOT.parent.parent.parent / ".claude/scripts"
+    if scripts_full.exists():
+        contents = list(scripts_full.iterdir())
+        assert not contents, f".claude/scripts 应已清空但还有: {contents}"
+    # skills/ 只能不含 webnovel-* 重复（系统级 skill 合法）
+    skills_full = PLUGIN_ROOT.parent.parent.parent / ".claude/skills"
+    if skills_full.exists():
+        leftover = [p for p in skills_full.iterdir() if p.name.startswith("webnovel-")]
+        assert not leftover, f".claude/skills/ 不应残留 webnovel-* 重复: {leftover}"
