@@ -236,15 +236,32 @@ def add_thematic_echo(state: dict, premise: str, chapter: int, manifestation: st
 
 VALID_HOOK_TYPES = {"悬念式", "反转式", "情绪炸弹式", "信息投放式", "留白式", "反讽式"}
 
+ALLOWED_CHAPTER_META_FIELDS = {
+    "beat_position", "hook_type",
+    "scene_goal", "scene_conflict", "scene_setback", "scene_resolution",
+    "sequel_reaction", "sequel_dilemma", "sequel_decision",
+    "foreshadow_buried", "foreshadow_paid_off",
+}
+
 
 def set_chapter_meta(state: dict, chapter: int, **fields) -> dict:
-    """Set chapter_meta fields. Validates hook_type if provided.
+    """Set chapter_meta fields. Validates hook_type if non-None. Enforces field allowlist.
 
     Allowed fields: beat_position, hook_type, scene_goal, scene_conflict,
     scene_setback, scene_resolution, sequel_reaction, sequel_dilemma,
     sequel_decision, foreshadow_buried, foreshadow_paid_off.
+
+    Any field whose value is None is ignored (no-op) — caller can safely
+    pass None for fields they don't want to update.
     """
-    if "hook_type" in fields and fields["hook_type"] not in VALID_HOOK_TYPES:
+    if not isinstance(chapter, int) or chapter < 1:
+        raise ValueError(f"chapter must be a positive integer, got {chapter}")
+    unknown = set(fields.keys()) - ALLOWED_CHAPTER_META_FIELDS
+    if unknown:
+        raise ValueError(
+            f"unknown fields: {unknown}. Allowed: {sorted(ALLOWED_CHAPTER_META_FIELDS)}"
+        )
+    if fields.get("hook_type") is not None and fields["hook_type"] not in VALID_HOOK_TYPES:
         raise ValueError(f"hook_type must be one of {VALID_HOOK_TYPES}")
     meta = state.setdefault("chapter_meta", {})
     key = str(chapter)
