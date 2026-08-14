@@ -22,6 +22,7 @@ VALID_SEVERITIES = {"critical", "high", "medium", "low"}
 VALID_CATEGORIES = {
     "continuity", "setting", "character", "timeline",
     "ai_flavor", "logic", "pacing", "other",
+    "beat_compliance", "foreshadow_compliance",
 }
 SCORE_CATEGORIES = (
     "continuity",
@@ -32,6 +33,8 @@ SCORE_CATEGORIES = (
     "logic",
     "pacing",
     "other",
+    "beat_compliance",
+    "foreshadow_compliance",
 )
 SEVERITY_PENALTIES = {
     "critical": 35.0,
