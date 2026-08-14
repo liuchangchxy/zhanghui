@@ -132,7 +132,7 @@ allowed-tools: Read Write Edit Grep Bash Task
 
 环境设置（bash 命令执行前）：
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT}/.."
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 export SKILL_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is required}/skills/webnovel-write"
 

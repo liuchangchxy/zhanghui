@@ -24,7 +24,7 @@ argument-hint: "[--chapter N] [--deep]"
 准备路径：
 
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT}/.."
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT:?}/scripts"
 
 ```

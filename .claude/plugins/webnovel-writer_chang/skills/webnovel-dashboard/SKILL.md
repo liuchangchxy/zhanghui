@@ -17,7 +17,7 @@ allowed-tools: Bash Read
 ### Step 1：确认环境与模块目录
 
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT}/.."
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
 
 if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/dashboard" ]; then
   echo "ERROR: 未找到 dashboard 模块: ${CLAUDE_PLUGIN_ROOT}/dashboard" >&2

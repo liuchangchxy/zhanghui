@@ -13,7 +13,7 @@ argument-hint: "[要记住的写作经验]"
 - 用统一入口解析项目根，避免写错目录：
 
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT}/.."
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT:?}/scripts"
 export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
 

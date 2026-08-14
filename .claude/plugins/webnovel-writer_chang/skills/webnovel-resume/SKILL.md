@@ -13,7 +13,7 @@ allowed-tools: Read Bash AskUserQuestion
 
 环境设置（bash 命令执行前）：
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT}/.."
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
 
 if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/skills/webnovel-resume" ]; then
   echo "ERROR: 未设置 CLAUDE_PLUGIN_ROOT 或缺少目录: ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-resume" >&2
