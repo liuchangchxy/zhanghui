@@ -81,6 +81,20 @@ GENRE="$(python -X utf8 -c "import json; s=json.load(open('${PROJECT_ROOT}/.webn
 
 ```
 
+按 genre 加载 craft references：
+
+| Genre | 必读 reference |
+|---|---|
+| 玄幻/修仙/系统流 | 15-beat-save-the-cat.md + timed-lock.md + foreshadow-chain.md |
+| 都市/言情/历史 | rhythm-curve.md + foreshadow-chain.md + character-arc.md |
+| 悬疑/解谜 | foreshadow-chain.md + thematic-echo.md + 15-beat-save-the-cat.md |
+
+初始化 story_craft 字段（若缺失）：
+
+```bash
+python "${SCRIPTS_DIR}/migrate_story_craft.py" "${PROJECT_ROOT}/.webnovel/state.json"
+```
+
 按需读取设定集：`设定集/世界观.md`、`设定集/力量体系.md`、`设定集/主角卡.md`、`设定集/反派设计.md`、`.webnovel/idea_bank.json`。
 
 **跨卷状态读取**（已有已完成卷，即 `.webnovel/summaries/` 下有文件时必须执行）：
@@ -106,6 +120,13 @@ python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" mem
 - `设定集/力量体系.md`：境界链、限制、代价与冷却。
 - `设定集/主角卡.md`：欲望、缺陷、初始资源与限制。
 - `设定集/反派设计.md`：小/中/大反派层级与镜像关系。
+
+### Step 2.5（新增）：主题与主角弧初始化
+
+- 读 `references/shared/thematic-echo.md` + `references/shared/character-arc.md`
+- 让用户确认本卷的 thematic_premise（一句话主题）
+- 让用户确认主角的 starting_state / ending_state（卷首/卷末内在状态）
+- 写入 `story_craft.character_arc` 和 `story_craft.thematic_echoes`
 
 ### Step 3：选择目标卷并确认范围
 
