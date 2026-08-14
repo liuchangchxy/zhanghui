@@ -48,12 +48,6 @@
 - **M-H21**：`atomic_write_json` 默认 backup 用时间戳而非 `.bak` 覆盖
 - **M-H26**：`filelock` fallback 到 SQLite 锁
 
-### 配置 / 架构类
-
-- **M-H8**：CLAUDE_PLUGIN_ROOT 在项目级 symlink 安装时未设 → Step 0 直接 abort
-  - 状态：webnovel-write/skill.md 已部分加 fallback（CLAUDE_PROJECT_DIR）但需要重新跑端到端验证
-  - 影响：新 clone 项目跑 webnovel-init 时若 CLAUDE_PROJECT_DIR 未 set 仍会 abort
-
 ### 第三轮残留 HIGH（H1-H11 中未修）
 
 - **H2**：`changes_gate.py:474` R3 对 `from_holder`/`to_holder` 误报
@@ -63,7 +57,6 @@
 - **H8**：`test_cli_edge_cases.py:185` 假绿 → 同 H7（一起处理）
 - **H9**：`test_cli_edge_cases.py:61` 断言被 `if stdout.strip()` 守卫
 - **H10**：README:35 软链安装有 5 个未提的暗坑 → M-H6 已部分修
-- **H11**：CLAUDE_PLUGIN_ROOT 在项目级 symlink 安装时未设 → M-H8
 
 ---
 
@@ -78,7 +71,6 @@
 ### UX/工作流类
 
 - **MED-4**：Step 3 review_metrics 落库 vs Step 4 polish 输出无关联
-- **MED-5**：Step 4.5/4.6 用 CLAUDE_PROJECT_DIR 拼接，但 PROJECT_ROOT 在嵌套项目下不同
 - **MED-6**：Step 5 data-agent 与 chapter-commit 职责未互锁
 - **MED-7**：fast-write 跳 Step 1 cat protocol，易漏 CHANGES 块
 - **MED-8**：`repair_changes_json` 静默吞字符串值内逗号（line 107）

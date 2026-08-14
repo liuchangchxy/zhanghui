@@ -1,55 +1,32 @@
 {
   "enabledPlugins": {
-    "webnovel-writer": true
+    "webnovel-writer_chang@webnovel-chang-marketplace": true
   },
   "permissions": {
     "allow": [
-      "Bash(python3 .claude/scripts/changes_gate.py*)",
-      "Bash(python3 .claude/scripts/tracking_query.py*)",
-      "Bash(python3 .claude/scripts/style_fingerprint.py*)",
-      "Bash(node .claude/scripts/check-ai-patterns.js*)",
-      "Bash(node .claude/scripts/normalize-punctuation.js*)",
-      "Bash(python3 .claude/plugins/webnovel-writer/scripts/webnovel.py*)",
-      "Bash(python3 .claude/plugins/webnovel-writer/scripts/data_modules/*)",
-      "Bash(node .claude/plugins/webnovel-writer/skills/webnovel-style-profile/*)",
-      "Bash(python -X utf8 .claude/plugins/webnovel-writer/scripts/webnovel.py*)",
-      "Bash(ls -la*)",
-      "Bash(cat *)",
-      "Bash(find *)",
-      "Bash(grep *)",
-      "Bash(mkdir *)",
-      "Bash(git status*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/context_slice.py*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/snapshot_manager.py*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/rejection_contract.py*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/style_fingerprint.py*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/tracking_query.py*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/extract_chapter_context.py*)",
+      "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py*)",
+      "Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js*)",
+      "Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/normalize-punctuation.js*)",
+      "Bash(node ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-style-profile/*)",
+      "Bash(git status)",
       "Bash(git diff*)",
       "Bash(git log*)",
-      "Bash(pytest*)",
-      "Bash(pip install*)"
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(python3 -m pytest*)",
+      "Bash(rsync*)",
+      "Bash(mkdir*)",
+      "Bash(ln -sfn*)"
     ]
   },
-  "model": "sonnet",
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PROJECT_DIR:-${PWD}}/.claude/plugins/webnovel-writer/hooks/session_start.py",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PROJECT_DIR:-${PWD}}/.claude/plugins/webnovel-writer/hooks/guard_runtime_write.py",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  }
+  "model": "sonnet"
 }

@@ -1,81 +1,61 @@
-# ai 写小说工具开发
+# ai写小说工具开发
 
-为 webnovel-writer Claude Code 插件做的个人 skill 叠加层。解决三个具体痛点：
-1. 长篇一致性崩坏
-2. AI 味重
-3. 流程繁琐
+> 个人 fork 的 webnovel-writer 工具开发 workspace
 
-## 项目结构
+## 这是什么
 
+基于 [webnovel-writer](https://github.com/lingfengQAQ/webnovel-writer) 的个人 fork，加上 `_chang` 后缀做身份区分。**整个 fork 的目标：让 Claude Code 在任何书项目目录下直接加载这个 plugin，不要求书项目有 `.claude/` 配置。**
+
+## 目录地图
+
+详见 [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md)。
+
+简版：
+- `.claude/plugins/webnovel-writer_chang/` — 你开发的 plugin（self-contained）
+- `docs/PROJECT_MAP.md` — 参考 vs 开发分层
+- `docs/superpowers/specs/` — 设计文档
+- `docs/superpowers/plans/` — 实施计划
+
+## 加载机制
+
+1. Claude Code 启动时读 `~/.claude/settings.json` 的 `enabledPlugins`
+2. 找到 `webnovel-writer_chang@webnovel-chang-marketplace: true`
+3. 加载 `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/` 里的 marketplace.json
+4. 安装 plugin 到 `~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/`
+5. 注入 `CLAUDE_PLUGIN_ROOT` 环境变量
+6. plugin 自带的 hooks / skills / agents 全部可用
+
+dev 模式下 cache 是 dev workspace 的 symlink，**修改立即生效**无需重启（但 hooks.json / plugin.json 改动建议重启一次）。
+
+## 修改 plugin 代码
+
+直接在 `.claude/plugins/webnovel-writer_chang/` 里改。完成后跑：
+```bash
+cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v
 ```
-~/Desktop/ai写小说工具开发/                ← 工具本体（git root）
-├── .claude/
-│   ├── plugins/
-│   │   └── webnovel-writer/  ← vendored v6.2.1 upstream（git tracked）
-│   ├── skills/               ← 本地独有 4 个（plugin 没有的）
-│   ├── scripts/              ← CLI 工具
-│   ├── references/           ← 协议/规则文档
-│   ├── settings.json
-│   └── hooks/                ← 由 plugin 提供
-├── docs/                     ← 审查记录 + KNOWN_ISSUES + 历史快照
-├── README.md
-└── .git/
 
-~/Desktop/根源牌序/                      ← 小说项目（独立 git root）
-├── 大纲 设定集 正文 审查报告
-├── .webnovel/
-└── .claude → ~/Desktop/ai写小说工具开发/.claude  (软链)
-
-~/References/ai-webnovel-repos/          ← 参考仓库（物理隔离，只读）
-```
-
-## 边界规则
-
-1. **工具运行时只读** `.claude/`（本体）和**显式传入的 cwd**（项目）
-2. **不读** `~/References/` 任何东西
-3. **不递归扫描** `~/Desktop/` 找小说项目——必须靠 `cwd` 或 `.webnovel-current-project` 指针
-4. **`webnovel-writer` plugin 已在 git 里**——`.gitignore` 不再排除；`git clone` 直接可用
-
-## 安装
-
-工具仓默认 `git clone` 即用。在另一个小说项目里复用：
+## 同步到 marketplace（dev → marketplace）
 
 ```bash
-cd /path/to/your-novel-project
-ln -sfn ~/Desktop/ai写小说工具开发/.claude ./.claude
-claude    # 启动后 plugin + 本地独有 skill 自动加载
+bash .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_marketplace.sh
 ```
 
-或者从 `~/Desktop/根源牌序/` 直接启动（已配软链）。
+（首次手动 cp 即可；后续可写 `scripts/sync_dev_to_marketplace.sh`）
 
-## 三个本地 skill 的功能
+## 写新章节
 
-| Skill | 跳过什么 | 保留什么 |
-|---|---|---|
-| `/webnovel-fast-write` | Step 2B 风格转译 + Step 3 reviewer + Step 4 polish | Step 4.5 CHANGES + 4.6 anti-slop |
-| `/webnovel-deslop-check` | 写流程 | 仅扫描任意已有章节 |
-| `/webnovel-resume` | 无 | workflow 断点恢复（用 `run-ledger` 子命令）|
-
-## CHANGES 协议
-
-每章末尾追加 `<chapter_changes>...</chapter_changes>` 块，8 个顶级字段声明本章对设定集/人物/物品/伏笔的所有变更。详见 `changes-protocol.md`。
-
-## 测试
-
+在任何书项目目录下：
 ```bash
-cd .claude/scripts && python3 -m pytest tests/ -q
-cd .claude/plugins/webnovel-writer/scripts && python3 -m pytest tests/ -q
+cd /path/to/your-novel
+claude
+# 在 claude 里：
+# /webnovel-init   # 首次初始化
+# /webnovel-write  # 写章节
+# /webnovel-doctor # 诊断
 ```
 
-## 排错流程
+**书项目侧不需要任何 `.claude/` 配置。**
 
-```bash
-# 1. 先跑 doctor 做项目体检
-/webnovel-doctor --deep
+## 版本
 
-# 2. hook 误伤合法操作时的逃生口
-WEBNOVEL_DISABLE_RUNTIME_GUARD_HOOK=1 /webnovel-write
-
-# 3. 查看 token 用量
-ls .webnovel/observability/ 2>/dev/null
-```
+当前 plugin version: 6.3.0（自我包含重构首发版）
