@@ -51,11 +51,12 @@
 ```
 
 **问题**：
-- 5 个项目级 skill + 9 个项目级脚本**只在 dev workspace 下能用**——任何书项目 cd 进去调不到
-- plugin SKILL.md 内部多处 `${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PROJECT_DIR:-$PWD}/.claude/...}` 反模式 fallback，marketplace 装到非 dev workspace 时必然失败
-- `webnovel-init` 要求用户**直接编辑 plugin 安装目录**下的 `templates/个人语料.md`——marketplace 安装后升级会被覆盖
-- dev `settings.json` 用 `${CLAUDE_PROJECT_DIR}` 拼出 plugin 路径的 hooks，跟 marketplace 自带的 `${CLAUDE_PLUGIN_ROOT}` hooks 双跑双失败
-- `python` 在 macOS 上不存在别名，hooks.json 全用 `python -X utf8` 实际跑不起来
+- 5 个项目级 skill + 10 个项目级脚本**只在 dev workspace 下能用**——任何书项目 cd 进去调不到
+- plugin SKILL.md 内部多处 `${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PROJECT_DIR:-$PWD}/.claude/...}` 反模式 fallback（仅 webnovel-write/SKILL.md 命中），marketplace 装到非 dev workspace 时必然失败
+- 8 个 plugin 自带 SKILL.md（init/plan/write/dashboard/review/query/learn/doctor）用 `${CLAUDE_PROJECT_DIR:-$PWD}` 设 WORKSPACE_ROOT——marketplace 安装下 CLAUDE_PROJECT_DIR 不会被注入，fallback 到 PWD 在大多数场景凑巧能跑但不正确
+- `个人语料.md` / `写作宪法.md` 当前在代码里**未实现**（templates/ 没这俩文件，init_project.py 也没对应代码路径）——重构顺手实现
+- dev `settings.json` 用 `${CLAUDE_PROJECT_DIR}` 拼出 plugin 路径的 hooks 跟 marketplace 自带的 `${CLAUDE_PLUGIN_ROOT}` hooks 双跑双失败（dev settings.json 本身用 python3，但 hooks 引用了 dev 本地 plugin 路径）
+- plugin `hooks/hooks.json` 全用 `python -X utf8`——macOS 上没 `python` 别名，hooks 实际跑不起来
 
 ### 1.2 重构后：参考、dev 配置、plugin 三层清晰
 
@@ -134,19 +135,26 @@ Claude Code 启动
 - **个人用户数据落在书项目里**（`<book>/.webnovel/writer-profile/`），不落在 plugin 安装目录里（升级不丢）
 - **书项目零 `.claude/` 配置**——所有 plugin 配置走 user 级 marketplace
 
-### 2.3 dev workflow 与用户 workflow 合一
+### 2.3 dev workflow 与用户 workflow 合一（cache 走 symlink 是**强制**的，不是可选）
 
-dev 模式下 plugin 路径：
+dev 模式下 plugin 三跳链路：
 ```
-~/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/
+~/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/   ← marketplace repo
     ↓ 首次安装时 cp 同步
-~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/
-    ↓ dev 加速：symlink 到
-/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/
+~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/         ← cache（Claude Code 实际加载）
+    ↓ **必须建为 symlink** 指向
+/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/      ← dev 源码
 ```
-任何对 `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/` 的修改立即被 Claude Code 感知（无需 rehash）。`sync_plugin_version.py` 仍可用于发布前的版本号同步。
 
-**发布流程**（如果未来要发版；当前仅自用）：改完 dev workspace 的代码后，跑 `scripts/sync_dev_to_marketplace.sh` 把代码 cp 到 marketplace 仓库，再 `sync_plugin_version.py --version X.Y.Z` 同步 version 字段。
+**关键**：cache 必须建为 `ln -sfn` 指向 dev workspace 的 plugin/，而不是把 marketplace 拷贝过来。任何对 dev workspace 的修改都立即被 Claude Code 感知（无需 rehash）。如果 cache 是普通目录而非 symlink，dev 修改不会生效，会出现「测试通过但实际加载的仍是旧版」的诡异问题。
+
+**发布流程**（当前仅自用，未来如要发版）：改完 dev workspace 代码后，跑 `scripts/sync_dev_to_marketplace.sh` 把代码同步到 marketplace 仓库（cache 通过 symlink 自动跟上），再 `sync_plugin_version.py --version X.Y.Z` 同步 version 字段。
+
+### 2.4 CLAUDE_PROJECT_DIR 的合法保留（不属反模式）
+
+`scripts/project_locator.py`（约 6 处）与 `hooks/session_start.py:33` 仍读 `CLAUDE_PROJECT_DIR`——**这是有意保留**，因为 Claude Code 注入 CLAUDE_PROJECT_DIR 作为 workspace 提示，plugin 用它来 hint 项目根解析。
+
+**禁止清理这两处**。`test_no_claude_project_dir_in_skills` 测试断言范围**仅限** `skills/**/*.md` 与 `agents/**/*.md`，不覆盖 scripts/ 与 hooks/。
 
 ---
 
@@ -156,9 +164,11 @@ dev 模式下 plugin 路径：
 |---|---|---|
 | plugin 目录 | `plugins/webnovel-writer/` | `plugins/webnovel-writer_chang/` |
 | `plugin.json` 的 `name` | `"webnovel-writer"` | `"webnovel-writer_chang"` |
+| `plugin.json` 的 `version` | `"6.2.1"` | `"6.3.0"` |
 | `enabledPlugins` key | `webnovel-writer@webnovel-writer-marketplace` | `webnovel-writer_chang@webnovel-chang-marketplace` |
 | marketplace 仓库 | `webnovel-writer-marketplace/` | `webnovel-chang-marketplace/` |
 | `marketplace.json` `plugins[0].name` | `webnovel-writer` | `webnovel-writer_chang` |
+| `marketplace.json` `plugins[0].version` | 跟随 upstream | `6.3.0` |
 | `sync_plugin_version.py` 检查路径 | 旧名 | 新名 |
 | README / docs 字样 | 混用 | 统一为 `_chang` 后缀 |
 
@@ -188,17 +198,20 @@ dev 模式下 plugin 路径：
   - `${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PROJECT_DIR:-$PWD}/.claude/...}` → 严格 `${CLAUDE_PLUGIN_ROOT:?}`
   - `${CLAUDE_PLUGIN_ROOT:-${CLAUDE_PROJECT_DIR:-$PWD}}/.claude/plugins/webnovel-writer/scripts` → `${CLAUDE_PLUGIN_ROOT}/scripts`（webnovel-write SKILL.md line 136 反模式）
 
-- **`webnovel-init` 个人语料改路径**：
-  - 原：用户编辑 `${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/个人语料.md`
-  - 现：init 流程把 templates/ 内容 copy 到 `<book>/.webnovel/writer-profile/`，用户编辑这里
-  - templates/ 目录保留只作**默认内容来源**（含示例与必填项 schema）
+- **`webnovel-init` 个人语料改路径**（顺手实现）：
+  - **新功能**：`templates/个人语料.md` 与 `templates/写作宪法.md` 默认模板（首次创建），含空 schema + 示例
+  - init 流程：把 templates/ 两份 copy 到 `<book>/.webnovel/writer-profile/`，用户编辑这里
+  - `webnovel-write/SKILL.md:158` 等读取路径同步改为 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md`
+  - 模板放 `plugins/webnovel-writer_chang/templates/`（plugin root，非 skills/webnovel-init/）
 
 ### 4.2 dev workspace 瘦身
 
 - `.claude/settings.json`：
   - 删除整个 `hooks` 块（marketplace 自带 hooks.json）
-  - 删除过宽 permissions：`ls -la*` / `cat *` / `find *` / `grep *` / `mkdir *` / `git status*` / `git diff*` / `git log*` / `pytest*` / `pip install*`
-  - 保留 plugin 相关的 Bash allow（`python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py*` 等）
+  - **重写** `permissions.allow`（不是只删过宽项，因为 Phase D 后 `.claude/scripts/` 与 `.claude/plugins/webnovel-writer/` 都不存在了）：
+    - 删：`.claude/scripts/{changes_gate,tracking_query,style_fingerprint}.py` / `.claude/scripts/{check-ai-patterns,normalize-punctuation}.js` / `.claude/plugins/webnovel-writer/scripts/webnovel.py` / `.claude/plugins/webnovel-writer/scripts/data_modules/*` / `.claude/plugins/webnovel-writer/skills/webnovel-style-profile/*`
+    - 加：`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py*)`、`Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js*)`、`Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/normalize-punctuation.js*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/style_fingerprint.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/tracking_query.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/context_slice.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/snapshot_manager.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/rejection_contract.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/extract_chapter_context.py*)`
+    - 注：`${CLAUDE_PLUGIN_ROOT}` 在 settings.json 的 Bash allow 里被原样作为 glob 字符串处理（不展开），所以允许规则能匹配到任何 cache 路径下的对应脚本
   - `enabledPlugins.webnovel-writer` 裸名 → `webnovel-writer_chang@webnovel-chang-marketplace`
 
 - `.claude/skills/` → 删空（已搬入 plugin）
@@ -226,10 +239,10 @@ dev 模式下 plugin 路径：
   - 删除软链安装教程
   - 增加：marketplace 安装、切换到 fork、dev 加速（symlink）说明
   - 增加：版本同步流程（dev → marketplace → cache）
-- `docs/KNOWN_ISSUES.md`：删除以下条目（已根治）
-  - M-H8：CLAUDE_PLUGIN_ROOT 在项目级 symlink 安装时未设
-  - MED-5：Step 4.5/4.6 用 CLAUDE_PROJECT_DIR 拼接
-  - MED-52：相关 PATH 反模式
+- `docs/KNOWN_ISSUES.md`：
+  - 删除 M-H8（CLAUDE_PLUGIN_ROOT 在项目级 symlink 安装时未设）——已根治
+  - 删除 MED-5（Step 4.5/4.6 用 CLAUDE_PROJECT_DIR 拼接）——已根治
+  - **保留 MED-52**：原意是 `.webnovel-current-project` 是项目级状态泄漏，与本次重构的路径问题无关，重构后保留此文件并标注「仅 dev workspace 内部用」
 
 ### 4.5 测试与验证脚本
 
@@ -300,3 +313,5 @@ dev 模式下 plugin 路径：
 | dev skill 去留 | 全迁 plugin / 保留 dev / 部分迁 | **全部迁入 plugin** | 用户选择 |
 | plugin 后缀 | 不改 / 加 `_chang` / 加 `_fork` | **`_chang`** | 用户选择 |
 | 架构变体 | 复用上游 marketplace / 独立 marketplace / file:// 直装 | **独立 marketplace** | 用户选择 |
+| 个人语料功能 | 顺手实现 / 删除 / 延后 | **顺手实现** | 用户选择；审查员发现代码里未实现，顺手补 |
+| cache 同步策略 | symlink / cp / 双向 rsync | **symlink（强制）+ 同步脚本（可选）** | 审查员指出 cp 模式会导致 dev 修改不生效 |
