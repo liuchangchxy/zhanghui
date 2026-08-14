@@ -182,6 +182,38 @@ BLOCKER 处理：
 - 角色关系变化必须延续，不能当上一卷没发生过。
 - 主角能力 / 境界必须承接，不回退也不跳级（除非有剧情解释）。
 
+### Step 6.5（新增）：生成伏笔链 + 定时锁
+
+加载 `${SKILL_ROOT}/../../references/shared/foreshadow-chain.md` 和 `${SKILL_ROOT}/../../references/shared/timed-lock.md`。
+
+AI 自动生成：
+
+**A. 伏笔链初始化**：
+- 表层 ≥5 个（每章分配）
+- 中层 ≥3 个（分布到卷内）
+- 深层 ≥1 个（全书）
+- 每个伏笔：5 字段全填
+
+**B. 定时锁初始化**：
+- 卷级 ≥3 个（如 "Midpoint 必须发生" / "All Is Lost 必须到达" / "卷末新钩子必须留"）
+- 章节级按 genre 模板（玄幻 3 章出村 / 系统文 1 章出系统）
+
+输出文件：`大纲/第{volume_id}卷-伏笔表.md`
+
+执行：
+```bash
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
+  story-craft init-forechains --volume {volume_id}
+
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
+  story-craft init-locks --volume {volume_id}
+```
+
+BLOCKER 处理：
+- 深层伏笔 < 1 → BLOCKER
+- 中层伏笔 < 3 → BLOCKER
+- 卷级定时锁 < 3 → BLOCKER
+
 ### Step 7：批量生成章纲
 
 批次规则：默认 `10章/批`；复杂题材或多线并进降到 `8章/批`；简单升级流放宽到 `12章/批`；不建议单批超过 `12章`。
