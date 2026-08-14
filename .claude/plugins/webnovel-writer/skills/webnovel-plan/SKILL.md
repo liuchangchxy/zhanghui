@@ -140,6 +140,28 @@ python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" mem
 
 输出文件：`大纲/第{volume_id}卷-节拍表.md`
 
+### Step 4.5（新增）：生成 15-Beat 卷节拍表
+
+加载 `${SKILL_ROOT}/../../references/shared/15-beat-save-the-cat.md` 和模板 `${SKILL_ROOT}/references/outlining/volume-beat-sheet.md`。
+
+AI 自动生成：
+- 15 个 beat 在卷内的章节位置
+- Midpoint（必填 BLOCKER）：卷中反转/假胜利/假失败
+- All Is Lost（必填 BLOCKER）：卷末最低点
+- Final Image（必填）：与下卷 Opening Image 形成呼应
+
+输出文件：`大纲/第{volume_id}卷-节拍表.md`
+
+执行：
+```bash
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
+  story-craft init-volume-beat \
+  --volume {volume_id} --total-chapters {total_chapters}
+```
+
+BLOCKER 处理：
+- Midpoint/All Is Lost 缺失 → BLOCKER，暂停并询问用户
+
 ### Step 5：生成卷时间线表
 
 加载模板 `${SKILL_ROOT}/../../templates/output/大纲-卷时间线.md`。
