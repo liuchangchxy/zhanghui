@@ -3,7 +3,7 @@ import json
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 from story_craft import (
     init_story_craft, init_volume_beat, fill_beat,
