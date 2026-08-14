@@ -465,17 +465,131 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
     if action == "check-volume":
         from story_craft import check_volume_beat
 
-        issues = check_volume_beat(state, volume=args.volume)
+        try:
+            issues = check_volume_beat(state, volume=args.volume)
+        except ValueError as exc:
+            issues = [f"BLOCKER: {exc}"]
         for issue in issues:
             print(issue)
         return 1 if any("BLOCKER" in i for i in issues) else 0
     if action == "init-forechains":
-        # Placeholder: real impl will load from chapter outline and generate foreshadows
-        print("init-forechains not yet fully implemented (placeholder)")
+        from story_craft import add_foreshadow
+
+        # Ensure story_craft substructure exists.
+        state.setdefault("story_craft", {}).setdefault("foreshadow_chain", [])
+        chain = state["story_craft"]["foreshadow_chain"]
+        existing_by_depth = {"表层": 0, "中层": 0, "深层": 0}
+        for item in chain:
+            d = item.get("depth")
+            if d in existing_by_depth:
+                existing_by_depth[d] += 1
+
+        # Volume context (defaults to 1 when --volume omitted).
+        volume = getattr(args, "volume", None) or 1
+        total_chapters = (
+            state.get("story_craft", {}).get("volume_beat", {}).get("total_chapters")
+            or 50
+        )
+        # Approximate per-volume chapter span (best-effort placeholder).
+        vol_start = max(1, (volume - 1) * total_chapters + 1)
+        vol_end = volume * total_chapters
+
+        added = 0
+        # Surface (表层) ≥5 — one per chapter-ish across the volume.
+        surface_needed = max(0, 5 - existing_by_depth["表层"])
+        for i in range(surface_needed):
+            ch = vol_start + i * max(1, (vol_end - vol_start) // max(surface_needed, 1))
+            add_foreshadow(state, {
+                "type": "环境",
+                "depth": "表层",
+                "content": f"[auto] 表层伏笔 #{i + 1}（卷{volume} 待补具体内容）",
+                "buried_chapter": ch,
+                "expected_payoff_chapter": min(vol_end, ch + max(5, total_chapters // 5)),
+                "payoff_method": "[auto] 章末揭晓或对白回收（待细化）",
+                "linked_entities": [],
+            })
+            added += 1
+        # Mid (中层) ≥3.
+        mid_needed = max(0, 3 - existing_by_depth["中层"])
+        for i in range(mid_needed):
+            ch = vol_start + (vol_end - vol_start) * (i + 1) // (mid_needed + 1)
+            add_foreshadow(state, {
+                "type": "物谶",
+                "depth": "中层",
+                "content": f"[auto] 中层伏笔 #{i + 1}（卷{volume} 待补具体内容）",
+                "buried_chapter": ch,
+                "expected_payoff_chapter": min(vol_end, ch + max(10, total_chapters // 3)),
+                "payoff_method": "[auto] 卷中/卷末重大事件回收（待细化）",
+                "linked_entities": [],
+            })
+            added += 1
+        # Deep (深层) ≥1.
+        deep_needed = max(0, 1 - existing_by_depth["深层"])
+        for i in range(deep_needed):
+            add_foreshadow(state, {
+                "type": "诗谶",
+                "depth": "深层",
+                "content": f"[auto] 深层伏笔 #{i + 1}（全书级主题伏笔，待补具体内容）",
+                "buried_chapter": vol_start,
+                "expected_payoff_chapter": vol_end,
+                "payoff_method": "[auto] 全书主线回收（待细化）",
+                "linked_entities": [],
+            })
+            added += 1
+
+        _save_state_via_atomic(root, state)
+        print(
+            f"init-forechains: added {added} foreshadow(s) for volume {volume} "
+            f"(表层={existing_by_depth['表层'] + sum(1 for x in range(surface_needed))}, "
+            f"中层={existing_by_depth['中层'] + mid_needed}, "
+            f"深层={existing_by_depth['深层'] + deep_needed})"
+        )
         return 0
     if action == "init-locks":
-        # Placeholder: real impl will load from chapter outline and generate locks
-        print("init-locks not yet fully implemented (placeholder)")
+        from story_craft import add_timed_lock
+
+        state.setdefault("story_craft", {}).setdefault("timed_locks", [])
+        locks = state["story_craft"]["timed_locks"]
+        volume = getattr(args, "volume", None) or 1
+        total_chapters = (
+            state.get("story_craft", {}).get("volume_beat", {}).get("total_chapters")
+            or 50
+        )
+        vol_start = max(1, (volume - 1) * total_chapters + 1)
+        vol_end = volume * total_chapters
+
+        # Target volume-level locks: Midpoint / All Is Lost / 卷末新钩子。
+        targets = [
+            ("Midpoint 必须发生", int(vol_start + (vol_end - vol_start) * 0.5)),
+            ("All Is Lost 必须到达", int(vol_start + (vol_end - vol_start) * 0.75)),
+            ("卷末新钩子必须留", vol_end),
+        ]
+
+        def _has(needle: str) -> bool:
+            return any(needle in (l.get("description") or "") for l in locks)
+
+        added = 0
+        for desc, deadline in targets:
+            if _has(desc):
+                continue
+            add_timed_lock(state, {
+                "description": desc,
+                "deadline_chapter": deadline,
+            })
+            added += 1
+
+        # Genre chapter-level placeholder: 玄幻 default → 主角3章内出村.
+        # (Other genres will be added when genre profile is wired in.)
+        genre_chapter_level = "主角3章内出村"
+        if not _has(genre_chapter_level):
+            add_timed_lock(state, {
+                "description": genre_chapter_level,
+                "deadline_chapter": vol_start + 2,
+            })
+            added += 1
+
+        _save_state_via_atomic(root, state)
+        print(f"init-locks: added {added} timed_lock(s) for volume {volume} (total now {len(state['story_craft']['timed_locks'])})")
         return 0
     print(f"unknown story-craft action: {action}", file=sys.stderr)
     return 2
