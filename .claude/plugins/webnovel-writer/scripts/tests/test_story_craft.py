@@ -271,3 +271,9 @@ def test_add_thematic_echo_appends_to_existing_premise():
     result = add_thematic_echo(state, premise="记忆与力量", chapter=10, manifestation="第二次觉醒")
     assert len(result["story_craft"]["thematic_echoes"]) == 1  # same premise, not duplicated
     assert len(result["story_craft"]["thematic_echoes"][0]["echoes"]) == 2
+
+
+def test_set_character_arc_raises_for_missing_required_field():
+    state = {"story_craft": {"character_arc": None}}
+    with __import__("pytest").raises(ValueError):
+        set_character_arc(state, {"name": "X", "starting_state": "a", "ending_state": "b"})  # missing transformation
