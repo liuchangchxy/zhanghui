@@ -267,3 +267,54 @@ def check_scene_sequel(chapter_meta: dict) -> list:
         if not chapter_meta.get(field):
             issues.append(f"WARN: {field} recommended")
     return issues
+
+
+VALID_BEATS = [
+    "Opening Image", "Theme Stated", "Setup", "Catalyst", "Debate",
+    "Break Into Two", "B Story", "Fun and Games", "Midpoint",
+    "Bad Guys Close In", "All Is Lost", "Dark Night of the Soul",
+    "Break Into Three", "Finale", "Final Image"
+]
+
+
+def init_volume_beat(state: dict, volume: int, total_chapters: int) -> dict:
+    """Initialize volume_beat with empty 15-beat skeleton.
+
+    Beat chapters are auto-distributed by percentage.
+    """
+    percentages = [0.01, 0.05, 0.10, 0.10, 0.20, 0.20, 0.22, 0.50, 0.50, 0.75, 0.75, 0.80, 0.80, 0.99, 1.00]
+    if len(percentages) != 15:
+        raise ValueError("internal: percentages must match 15 beats")
+    beats = []
+    for name, pct in zip(VALID_BEATS, percentages):
+        ch = max(1, round(pct * total_chapters))
+        beats.append({"name": name, "chapter": ch, "filled": False, "notes": None})
+    state.setdefault("story_craft", {})["volume_beat"] = {
+        "volume": volume,
+        "total_chapters": total_chapters,
+        "beats": beats
+    }
+    return state
+
+
+def fill_beat(state: dict, volume: int, beat_name: str, chapter: int, notes: str) -> dict:
+    beats = state["story_craft"]["volume_beat"]["beats"]
+    for beat in beats:
+        if beat["name"] == beat_name:
+            beat["filled"] = True
+            beat["chapter"] = chapter
+            beat["notes"] = notes
+            return state
+    raise ValueError(f"beat {beat_name} not found")
+
+
+def check_volume_beat(state: dict, volume: int) -> list:
+    """Return issues. BLOCKER for Midpoint/All Is Lost missing."""
+    issues = []
+    beats = state["story_craft"]["volume_beat"]["beats"]
+    for beat in beats:
+        if beat["name"] in ("Midpoint", "All Is Lost") and not beat["filled"]:
+            issues.append(f"BLOCKER: {beat['name']} must be filled")
+        elif not beat["filled"]:
+            issues.append(f"WARN: {beat['name']} not yet filled")
+    return issues

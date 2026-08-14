@@ -26,6 +26,10 @@ from story_craft import (
     add_thematic_echo,
     set_chapter_meta,
     check_scene_sequel,
+    init_volume_beat,
+    fill_beat,
+    check_volume_beat,
+    VALID_BEATS,
 )  # noqa: E402
 
 
@@ -339,3 +343,48 @@ def test_check_scene_sequel_ok_when_all_filled():
     }
     issues = check_scene_sequel(cm)
     assert issues == []
+
+
+VALID_BEATS = [
+    "Opening Image", "Theme Stated", "Setup", "Catalyst", "Debate",
+    "Break Into Two", "B Story", "Fun and Games", "Midpoint",
+    "Bad Guys Close In", "All Is Lost", "Dark Night of the Soul",
+    "Break Into Three", "Finale", "Final Image"
+]
+
+
+def test_init_volume_beat_creates_empty_skeleton():
+    state = {"story_craft": {}}
+    result = init_volume_beat(state, volume=1, total_chapters=50)
+    beats = result["story_craft"]["volume_beat"]["beats"]
+    assert len(beats) == 15
+    assert beats[0]["name"] == "Opening Image"
+    assert beats[0]["chapter"] == 1
+    assert beats[8]["name"] == "Midpoint"
+    assert beats[8]["chapter"] == 25  # 50% of 50
+
+
+def test_fill_beat_updates_status():
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    result = fill_beat(state, volume=1, beat_name="Midpoint", chapter=25, notes="假胜利")
+    beats = result["story_craft"]["volume_beat"]["beats"]
+    midpoint = next(b for b in beats if b["name"] == "Midpoint")
+    assert midpoint["filled"] is True
+    assert midpoint["chapter"] == 25
+    assert midpoint["notes"] == "假胜利"
+
+
+def test_check_volume_beat_returns_blocker_for_missing_midpoint():
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    issues = check_volume_beat(state, volume=1)
+    assert any("Midpoint" in i for i in issues)
+    assert any("BLOCKER" in i for i in issues)
+
+
+def test_check_volume_beat_ok_when_midpoint_and_all_is_lost_filled():
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    fill_beat(state, volume=1, beat_name="Midpoint", chapter=25, notes="")
+    fill_beat(state, volume=1, beat_name="All Is Lost", chapter=37, notes="")
+    issues = check_volume_beat(state, volume=1)
+    blockers = [i for i in issues if "BLOCKER" in i]
+    assert blockers == []
