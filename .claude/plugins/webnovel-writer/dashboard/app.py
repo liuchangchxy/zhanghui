@@ -5,6 +5,7 @@ Webnovel Dashboard - FastAPI 主应用
 """
 
 import asyncio
+import html
 import json
 import sqlite3
 import sys
@@ -148,8 +149,9 @@ def _render_beat_rows(beats: list[dict]) -> str:
         style = f' style="background: {bg}"' if bg else ""
         mark = "✓" if filled else "✗"
         parts.append(
-            f"<tr{style}><td>{index}</td><td>{name}</td><td>{chapter}</td>"
-            f"<td>{mark}</td><td>{notes}</td></tr>"
+            f"<tr{style}><td>{index}</td><td>{html.escape(name)}</td>"
+            f"<td>{html.escape(str(chapter))}</td>"
+            f"<td>{mark}</td><td>{html.escape(str(notes))}</td></tr>"
         )
     return "".join(parts) or "<tr><td colspan='5'>暂无节拍</td></tr>"
 
@@ -162,12 +164,12 @@ def _render_foreshadow_rows(chain: list[dict]) -> str:
         parts.append(
             "<tr><td>{id}</td><td>{type}</td><td>{depth}</td>"
             "<td>{buried}</td><td>{payoff}</td><td>{status}</td></tr>".format(
-                id=item.get("id", ""),
-                type=item.get("type", ""),
-                depth=item.get("depth", ""),
-                buried=item.get("buried_chapter") or "",
-                payoff=item.get("expected_payoff_chapter") or "",
-                status=item.get("status", ""),
+                id=html.escape(str(item.get("id", ""))),
+                type=html.escape(str(item.get("type", ""))),
+                depth=html.escape(str(item.get("depth", ""))),
+                buried=html.escape(str(item.get("buried_chapter") or "")),
+                payoff=html.escape(str(item.get("expected_payoff_chapter") or "")),
+                status=html.escape(str(item.get("status", ""))),
             )
         )
     return "".join(parts) or "<tr><td colspan='6'>暂无伏笔</td></tr>"
@@ -180,10 +182,10 @@ def _render_timed_lock_rows(locks: list[dict]) -> str:
             continue
         parts.append(
             "<tr><td>{id}</td><td>{desc}</td><td>{deadline}</td><td>{status}</td></tr>".format(
-                id=item.get("id", ""),
-                desc=item.get("description", ""),
-                deadline=item.get("deadline_chapter", ""),
-                status=item.get("status", ""),
+                id=html.escape(str(item.get("id", ""))),
+                desc=html.escape(str(item.get("description", ""))),
+                deadline=html.escape(str(item.get("deadline_chapter", ""))),
+                status=html.escape(str(item.get("status", ""))),
             )
         )
     return "".join(parts) or "<tr><td colspan='4'>暂无定时锁</td></tr>"
@@ -198,9 +200,9 @@ def _render_rhythm_history(history: list[dict]) -> str:
             continue
         items.append(
             "<li>第 {chapter} 章: {type} (intensity {intensity})</li>".format(
-                chapter=entry.get("chapter", ""),
-                type=entry.get("type", ""),
-                intensity=entry.get("intensity", ""),
+                chapter=html.escape(str(entry.get("chapter", ""))),
+                type=html.escape(str(entry.get("type", ""))),
+                intensity=html.escape(str(entry.get("intensity", ""))),
             )
         )
     return (
