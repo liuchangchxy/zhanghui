@@ -496,7 +496,7 @@ def test_cli_rejects_zero_or_negative_chapter(tmp_path, capsys):
         '{"plot_threads":{"foreshadowing":[]}}',
         encoding="utf-8",
     )
-    script = "/Users/chang/Desktop/ai写小说工具开发/.claude/scripts/tracking_query.py"
+    script = str(Path(__file__).resolve().parents[1] / "tracking_query.py")
     for bad in ("0", "-1", "-100", "1000001"):
         result = subprocess.run(
             [sys.executable, script, "--project", str(tmp_path), "--chapter", bad],
