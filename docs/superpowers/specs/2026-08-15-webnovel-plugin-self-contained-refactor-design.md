@@ -292,7 +292,7 @@ plugins/webnovel-writer_chang/vendor/uv/
 └── uv-windows-x86_64.exe     ← Windows x86_64
 ```
 
-由 `scripts/sync_dev_to_marketplace.sh` 在 release 时从 https://github.com/astral-sh/uv/releases 下载 + sha256 校验，commit 进 git（不用 git LFS，每个 ~15MB 可接受）。
+由 `scripts/sync_dev_to_marketplace.sh` 在 release 时从 https://github.com/astral-sh/uv/releases 下载 + sha256 校验，commit 进 git（不用 git LFS；uv 0.4.18 每个 binary 25-40MB，4 个合计 ~120MB；后续版本如变重再评估 LFS）。
 
 #### 4.6.3 用户态缓存布局
 
