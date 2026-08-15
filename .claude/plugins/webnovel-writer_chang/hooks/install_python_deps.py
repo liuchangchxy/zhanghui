@@ -199,14 +199,20 @@ def install_module(module_dir: Path) -> None:
     Args:
         module_dir: 含 pyproject.toml 的目录。
 
+    环境变量:
+        WEBNOVEL_INSTALL_TIMEOUT: subprocess 单次调用超时（秒，默认 300）
+
     Raises:
         RuntimeError: uv venv 或 uv pip install 返回非 0；log 写到 logs/。
+        FileNotFoundError => RuntimeError: uv 二进制不存在（spec §4.6.5）。
     """
+    install_timeout = int(os.environ.get("WEBNOVEL_INSTALL_TIMEOUT", str(DEFAULT_INSTALL_TIMEOUT)))
+
     cache = resolve_cache_dir()
     venv = cache / "venvs" / module_dir.name
     logs = cache / "logs"
     logs.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     log_path = logs / f"install-{module_dir.name}-{timestamp}.log"
 
     # Locate uv via $CLAUDE_PLUGIN_ROOT/vendor/uv (set by Claude Code).
@@ -218,20 +224,28 @@ def install_module(module_dir: Path) -> None:
     venv.parent.mkdir(parents=True, exist_ok=True)
 
     # Step 1: uv venv
-    r = subprocess.run(
-        [str(uv), "venv", str(venv), "--python", "3.11"],
-        capture_output=True, text=True, timeout=DEFAULT_INSTALL_TIMEOUT,
-    )
+    try:
+        r = subprocess.run(
+            [str(uv), "venv", str(venv), "--python", "3.11"],
+            capture_output=True, text=True, timeout=install_timeout,
+        )
+    except FileNotFoundError as e:
+        log_path.write_text(f"uv binary not found: {uv}\n{e}\n")
+        raise RuntimeError(f"uv 二进制不存在：{uv}（请重新安装 plugin 或 vendor uv）") from e
     if r.returncode != 0:
         log_path.write_text(f"uv venv failed:\n{r.stderr}\n")
         raise RuntimeError(f"uv venv 失败：{r.stderr[:200]}")
 
     # Step 2: uv pip install
-    r = subprocess.run(
-        [str(uv), "pip", "install", "-e", str(module_dir)],
-        capture_output=True, text=True, timeout=DEFAULT_INSTALL_TIMEOUT,
-        env={**os.environ, "VIRTUAL_ENV": str(venv)},
-    )
+    try:
+        r = subprocess.run(
+            [str(uv), "pip", "install", "-e", str(module_dir)],
+            capture_output=True, text=True, timeout=install_timeout,
+            env={**os.environ, "VIRTUAL_ENV": str(venv)},
+        )
+    except FileNotFoundError as e:
+        log_path.write_text(f"uv binary not found mid-install: {uv}\n{e}\n")
+        raise RuntimeError(f"uv 二进制在 install 过程中消失：{uv}") from e
     if r.returncode != 0:
         log_path.write_text(f"uv pip install failed:\n{r.stderr}\n")
         raise RuntimeError(f"uv pip install 失败：{r.stderr[:200]}")

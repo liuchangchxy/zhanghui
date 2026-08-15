@@ -371,3 +371,35 @@ def test_install_module_failure_writes_log(tmp_path, monkeypatch):
     venv = tmp_path / "cache" / "venvs" / "m"
     assert not (venv / ".install-stamp").exists()
 
+    # NEW: Assert log file was written
+    logs = tmp_path / "cache" / "logs"
+    log_files = list(logs.glob("install-m-*.log"))
+    assert len(log_files) == 1, f"expected 1 log file, got {log_files}"
+    log_content = log_files[0].read_text()
+    assert "uv pip install failed" in log_content
+    assert "ERROR: package 'foo' not found" in log_content
+
+
+def test_install_module_missing_uv_raises_runtime_error(tmp_path, monkeypatch):
+    """uv 二进制不存在 → RuntimeError (不是 FileNotFoundError)。"""
+    from hooks import install_python_deps as ipd
+    # Point CLAUDE_PLUGIN_ROOT at a path with NO vendor/uv/ to force missing-binary
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "no-such-plugin"))
+    monkeypatch.setattr(ipd, "resolve_cache_dir", lambda: tmp_path / "cache")
+
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='m'\n")
+
+    with pytest.raises(RuntimeError, match="uv 二进制不存在"):
+        ipd.install_module(module)
+
+    # No stamp should be written
+    venv = tmp_path / "cache" / "venvs" / "m"
+    assert not (venv / ".install-stamp").exists()
+
+    # Log file should be written
+    logs = tmp_path / "cache" / "logs"
+    log_files = list(logs.glob("install-m-*.log"))
+    assert len(log_files) == 1
+
