@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import platform as _platform
 import sys
 from pathlib import Path
@@ -58,3 +59,22 @@ def select_uv_binary(vendor_uv_dir: Path) -> Path:
             f"请检查 vendor/uv/ 目录；支持：{sorted(UV_BINARY_MAP.keys())}"
         )
     return vendor_uv_dir / name
+
+
+def resolve_cache_dir() -> Path:
+    """解析 plugin 跨平台缓存根目录。
+
+    优先级：
+    1. $WEBNOVEL_CACHE_DIR（用户显式指定）
+    2. ~/.cache/webnovel-writer-chang/（跨平台统一路径；Windows 上 ~ 解析为 %USERPROFILE%）
+
+    Returns:
+        已创建的缓存根目录 Path。
+    """
+    custom = os.environ.get("WEBNOVEL_CACHE_DIR")
+    if custom:
+        cache = Path(custom)
+    else:
+        cache = Path.home() / ".cache" / "webnovel-writer-chang"
+    cache.mkdir(parents=True, exist_ok=True)
+    return cache

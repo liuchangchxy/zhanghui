@@ -70,3 +70,30 @@ def test_select_uv_binary_unsupported_raises(monkeypatch, tmp_path):
     from hooks.install_python_deps import select_uv_binary
     with pytest.raises(RuntimeError, match="找不到匹配的 uv"):
         select_uv_binary(tmp_path)
+
+
+# --- resolve_cache_dir ---
+
+def test_resolve_cache_dir_uses_expanduser(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv("WEBNOVEL_CACHE_DIR", raising=False)
+    from hooks.install_python_deps import resolve_cache_dir
+    cache = resolve_cache_dir()
+    assert cache == tmp_path / ".cache" / "webnovel-writer-chang"
+
+
+def test_resolve_cache_dir_env_override(monkeypatch, tmp_path):
+    custom = tmp_path / "custom"
+    monkeypatch.setenv("WEBNOVEL_CACHE_DIR", str(custom))
+    from hooks.install_python_deps import resolve_cache_dir
+    assert resolve_cache_dir() == custom
+
+
+def test_resolve_cache_dir_creates_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("WEBNOVEL_CACHE_DIR", raising=False)
+    from hooks.install_python_deps import resolve_cache_dir
+    cache = resolve_cache_dir()
+    assert cache.exists()
+    assert cache.is_dir()
