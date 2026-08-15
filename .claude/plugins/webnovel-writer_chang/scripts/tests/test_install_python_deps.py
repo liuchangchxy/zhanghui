@@ -1,5 +1,6 @@
 """install_python_deps.py 的单元测试。"""
 import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -74,6 +75,13 @@ def test_select_uv_binary_unsupported_raises(monkeypatch, tmp_path):
 
 # --- resolve_cache_dir ---
 
+# Skip chmod-based tests on Windows (chmod semantics differ)
+_skip_unix_only = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="chmod-based unwritable tests are Unix-only",
+)
+
+
 def test_resolve_cache_dir_uses_expanduser(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
@@ -97,3 +105,103 @@ def test_resolve_cache_dir_creates_dir(monkeypatch, tmp_path):
     cache = resolve_cache_dir()
     assert cache.exists()
     assert cache.is_dir()
+
+
+@_skip_unix_only
+def test_resolve_cache_dir_fallback_when_default_unwritable(monkeypatch, tmp_path):
+    """如果 ~/.cache 不可写，应该 fallback 到下一个候选。
+
+    注意：chmod 555 在 leaf 已存在时，mkdir(exist_ok=True) 不会失败；
+    所以必须 chmod 在 PARENT (.cache/) 上，这样 mkdir 想创建
+    webnovel-writer-chang/ 时会因为父目录不可写而 PermissionError。
+    """
+    unwritable_home = tmp_path / "home"
+    unwritable_home.mkdir()
+    # Pre-create the parent .cache/ and lock it
+    cache_parent = unwritable_home / ".cache"
+    cache_parent.mkdir()
+    # Do NOT pre-create the leaf — we want mkdir to fail trying to create it
+    os.chmod(cache_parent, 0o555)
+
+    monkeypatch.setenv("HOME", str(unwritable_home))
+    monkeypatch.setenv("USERPROFILE", str(unwritable_home))
+    monkeypatch.delenv("WEBNOVEL_CACHE_DIR", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")  # skip mac fallback; use linux xdg path
+    # Point cwd somewhere safe + writable so .webnovel/venv fallback can succeed
+    safe_cwd = tmp_path / "safe_cwd"
+    safe_cwd.mkdir()
+    monkeypatch.setattr("hooks.install_python_deps.Path.cwd", lambda: safe_cwd)
+
+    try:
+        from hooks.install_python_deps import resolve_cache_dir
+        result = resolve_cache_dir()
+        # Should NOT be the locked-down default — must fall through
+        assert result != cache_parent / "webnovel-writer-chang", \
+            f"expected fallback, but got {result}"
+    finally:
+        os.chmod(cache_parent, 0o755)  # restore for cleanup
+
+
+@_skip_unix_only
+def test_resolve_cache_dir_env_override_unwritable_raises(monkeypatch, tmp_path):
+    """用户显式 WEBNOVEL_CACHE_DIR 但不可写 → 直接报错（不 fallback）。
+
+    chmod 555 必须放在 parent 上而不是 leaf——leaf 已存在时 mkdir(exist_ok=True)
+    不会失败。
+    """
+    parent = tmp_path / "readonly_parent"
+    parent.mkdir()
+    inner = parent / "cache"  # doesn't exist
+    os.chmod(parent, 0o555)
+
+    monkeypatch.setenv("WEBNOVEL_CACHE_DIR", str(inner))
+
+    try:
+        from hooks.install_python_deps import resolve_cache_dir
+        with pytest.raises(PermissionError, match="WEBNOVEL_CACHE_DIR"):
+            resolve_cache_dir()
+    finally:
+        os.chmod(parent, 0o755)
+
+
+@_skip_unix_only
+def test_resolve_cache_dir_all_unwritable_raises(monkeypatch, tmp_path):
+    """全部 fallback 都失败 → raise PermissionError 提示 export WEBNOVEL_CACHE_DIR。
+
+    每个候选的 *parent* 都要锁住，mkdir(exist_ok=True) 才能真的 PermissionError。
+    """
+    unwritable_home = tmp_path / "home"
+    unwritable_home.mkdir()
+
+    # Lock ~/.cache/ — leaf won't be created, so we lock the parent
+    cache_parent = unwritable_home / ".cache"
+    cache_parent.mkdir()
+    os.chmod(cache_parent, 0o555)
+
+    # Lock $XDG_CACHE_HOME/ — same trick
+    xdg_parent = unwritable_home / "xdg"
+    xdg_parent.mkdir()
+    os.chmod(xdg_parent, 0o555)
+
+    # Lock cwd so .webnovel/ can't be created
+    locked_cwd = tmp_path / "locked_cwd"
+    locked_cwd.mkdir()
+    os.chmod(locked_cwd, 0o555)
+
+    monkeypatch.setenv("HOME", str(unwritable_home))
+    monkeypatch.setenv("USERPROFILE", str(unwritable_home))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(xdg_parent))
+    monkeypatch.delenv("WEBNOVEL_CACHE_DIR", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr("hooks.install_python_deps.Path.cwd", lambda: locked_cwd)
+
+    try:
+        from hooks.install_python_deps import resolve_cache_dir
+        with pytest.raises(PermissionError, match="WEBNOVEL_CACHE_DIR"):
+            resolve_cache_dir()
+    finally:
+        os.chmod(cache_parent, 0o755)
+        os.chmod(xdg_parent, 0o755)
+        os.chmod(locked_cwd, 0o755)
+
