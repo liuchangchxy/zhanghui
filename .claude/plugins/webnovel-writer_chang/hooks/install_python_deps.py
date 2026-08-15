@@ -135,3 +135,26 @@ def resolve_cache_dir() -> Path:
         f"全部 cache 候选路径都不可写：{[str(c) for c in candidates]}。"
         f"请设置 WEBNOVEL_CACHE_DIR 指向可写目录后重试"
     )
+
+
+def should_install_module(module_dir: Path) -> str:
+    """判断某 module 是否需要重新安装。
+
+    Args:
+        module_dir: 含 pyproject.toml 的目录。
+
+    Returns:
+        "ok" 如果 venv 存在且 stamp 匹配；否则返回原因字符串（"missing venv" / "stale stamp"）。
+    """
+    cache = resolve_cache_dir()
+    venv = cache / "venvs" / module_dir.name
+    if not venv.exists():
+        return "missing venv"
+    stamp_path = venv / ".install-stamp"
+    if not stamp_path.exists():
+        return "missing stamp"
+    on_disk = stamp_path.read_text().strip()
+    expected = compute_install_stamp(module_dir)
+    if on_disk != expected:
+        return f"stale stamp (disk={on_disk[:8]} expected={expected[:8]})"
+    return "ok"

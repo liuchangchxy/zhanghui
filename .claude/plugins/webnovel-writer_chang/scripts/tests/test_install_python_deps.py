@@ -205,3 +205,39 @@ def test_resolve_cache_dir_all_unwritable_raises(monkeypatch, tmp_path):
         os.chmod(xdg_parent, 0o755)
         os.chmod(locked_cwd, 0o755)
 
+
+# --- should_install_module ---
+
+def test_should_install_module_no_venv(tmp_path, monkeypatch):
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    from hooks.install_python_deps import should_install_module
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\n")
+    assert should_install_module(module) == "missing venv"
+
+
+def test_should_install_module_stale_stamp(tmp_path, monkeypatch):
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    from hooks.install_python_deps import should_install_module, compute_install_stamp
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='x'\n")
+    venv = tmp_path / "cache" / "venvs" / "m"
+    venv.mkdir(parents=True)
+    (venv / ".install-stamp").write_text("stale-stamp-not-matching\n")
+    assert should_install_module(module) != "ok"
+
+
+def test_should_install_module_up_to_date(tmp_path, monkeypatch):
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    from hooks.install_python_deps import should_install_module, compute_install_stamp
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='x'\n")
+    venv = tmp_path / "cache" / "venvs" / "m"
+    venv.mkdir(parents=True)
+    stamp = compute_install_stamp(module)
+    (venv / ".install-stamp").write_text(stamp + "\n")
+    assert should_install_module(module) == "ok"
+
