@@ -58,7 +58,7 @@ fi
 不默认安装依赖。仅当 Step 4 因缺依赖启动失败时，提示用户手动执行：
 
 ```bash
-python -m pip install -r "${DASHBOARD_DIR}/requirements.txt"
+python -m pip install -e "${DASHBOARD_DIR}"
 
 ```
 
@@ -81,7 +81,7 @@ python -m dashboard.server --project-root "${PROJECT_ROOT}"
 
 | 故障 | 恢复方式 |
 |------|---------|
-| 启动报缺依赖 | 手动 `pip install -r "${DASHBOARD_DIR}/requirements.txt"`，检查 Python 版本与网络 |
+| 启动报缺依赖 | 手动 `pip install -e "${DASHBOARD_DIR}"`，检查 Python 版本与网络 |
 | 前端 `dist/` 缺失 | 确认插件完整安装，dist 应随插件打包 |
 | 项目根解析失败 | 检查 `.webnovel/state.json` 是否存在，确认 `WORKSPACE_ROOT` 正确 |
 | 端口占用 | 用 `--port <其他端口>` 或关闭占用进程 |

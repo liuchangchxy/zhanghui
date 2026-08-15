@@ -411,7 +411,7 @@ def _python_checks() -> list[dict[str, Any]]:
                 expected="module importable for dashboard",
                 actual="present" if found else "missing",
                 impact="" if found else "Dashboard 服务端可能无法启动。",
-                repair="" if found else "运行 python -m pip install -r dashboard/requirements.txt。",
+                repair="" if found else "运行 python -m pip install -e dashboard/。",
             )
         )
     return checks
@@ -423,13 +423,13 @@ def _dashboard_checks(plugin_root: Path | None = None) -> list[dict[str, Any]]:
     dashboard_root = plugin_root / "dashboard"
     dist = dashboard_root / "frontend" / "dist"
     package_json = dashboard_root / "frontend" / "package.json"
-    requirements = dashboard_root / "requirements.txt"
+    pyproject = dashboard_root / "pyproject.toml"
     checks: list[dict[str, Any]] = []
     for check_id, path, expected in (
         ("dashboard.root", dashboard_root, "directory exists"),
         ("dashboard.frontend.dist", dist, "built frontend dist exists"),
         ("dashboard.frontend.package_json", package_json, "package.json exists"),
-        ("dashboard.requirements", requirements, "requirements.txt exists"),
+        ("dashboard.pyproject", pyproject, "pyproject.toml exists (replaces requirements.txt)"),
     ):
         exists = path.is_dir() if expected.startswith("directory") or path == dist else path.is_file()
         checks.append(
