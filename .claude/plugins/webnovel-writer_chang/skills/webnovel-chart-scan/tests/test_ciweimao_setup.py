@@ -157,3 +157,37 @@ def test_install_agent_browser_raises_on_timeout(monkeypatch):
     monkeypatch.setattr("subprocess.run", fake_run)
     with pytest.raises(RuntimeError, match="超时"):
         install_agent_browser()
+
+
+def test_launch_chrome_passes_remote_debugging_port_and_user_data_dir(monkeypatch, tmp_path):
+    """launch_chrome returns Popen with --remote-debugging-port=PORT and --user-data-dir=DIR."""
+    from scripts.ciweimao_setup.setup_ciweimao import launch_chrome
+
+    captured = {}
+    class FakePopen:
+        def __init__(self, cmd, **kwargs):
+            captured["cmd"] = cmd
+            captured["kwargs"] = kwargs
+            self.pid = 12345
+    monkeypatch.setattr("subprocess.Popen", FakePopen)
+
+    user_data_dir = tmp_path / "chrome-profile"
+    result = launch_chrome(9222, user_data_dir)
+
+    assert "--remote-debugging-port=9222" in captured["cmd"]
+    assert f"--user-data-dir={user_data_dir}" in captured["cmd"]
+    assert "--no-first-run" in captured["cmd"]
+    assert captured["kwargs"].get("start_new_session") is True
+    assert result.pid == 12345
+
+
+def test_launch_chrome_includes_headless_flag(monkeypatch, tmp_path):
+    """Headless mode is enabled (matches the spec — server/CI friendly)."""
+    from scripts.ciweimao_setup.setup_ciweimao import launch_chrome
+    captured = {}
+    class FakePopen:
+        def __init__(self, cmd, **kwargs):
+            captured["cmd"] = cmd
+    monkeypatch.setattr("subprocess.Popen", FakePopen)
+    launch_chrome(9222, tmp_path / "chrome-profile")
+    assert "--headless=new" in captured["cmd"]

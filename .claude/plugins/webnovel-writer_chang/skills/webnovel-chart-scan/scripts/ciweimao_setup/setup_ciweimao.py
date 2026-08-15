@@ -119,3 +119,32 @@ def install_agent_browser() -> None:
             f"stderr: {result.stderr[:300]}\n"
             "请手动运行 `sudo npm install -g agent-browser` 并重试。"
         )
+
+
+def launch_chrome(port: int, user_data_dir: Path) -> subprocess.Popen:
+    """Start Chrome in the background with CDP enabled.
+
+    Returns the Popen handle. The process is detached via start_new_session
+    so it survives the setup script's exit. Caller is responsible for
+    eventual cleanup (the user can `pkill -f "remote-debugging-port=9222"`).
+
+    The Chrome binary is resolved via find_chrome_binary() — caller should
+    have already checked the binary exists.
+    """
+    binary = find_chrome_binary()
+    cmd = [
+        str(binary),
+        f"--remote-debugging-port={port}",
+        f"--user-data-dir={user_data_dir}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--headless=new",
+        "about:blank",  # opens a tab so CDP /json/version responds immediately
+    ]
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    return subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
