@@ -6,7 +6,10 @@ Provides:
 - find_chrome_binary
 - setup_ciweimao (orchestrator)
 
-Can be invoked as a CLI: ``python -m webnovel_chart_scan.ciweimao_setup.setup_ciweimao [--port 9222]``
+Can be invoked as a CLI:
+    python -m scripts.ciweimao_setup.setup_ciweimao [--port 9222]
+or (if installed via `pip install -e .`):
+    webnovel-chart-scan-setup-ciweimao [--port 9222]
 or programmatically via setup_ciweimao.setup_ciweimao(port).
 """
 from __future__ import annotations
