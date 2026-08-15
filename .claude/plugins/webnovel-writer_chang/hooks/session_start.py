@@ -12,6 +12,43 @@ MAX_LINES = 8
 MAX_CHARS = 1000
 DISABLE_ENV = "WEBNOVEL_DISABLE_SESSION_STATUS_HOOK"
 
+# Cache symlink path (per spec §2.3 — cache must be ln -sfn to dev workspace)
+# When not a symlink, dev code changes won't be picked up by Claude Code.
+CACHE_SYMLINK_PATH = (
+    Path.home() / ".claude" / "plugins" / "cache"
+    / "webnovel-chang-marketplace" / "webnovel-writer_chang"
+)
+
+
+def verify_cache_symlink(plugin_root: Path) -> None:
+    """Check that the plugin cache is a symlink to dev workspace (per spec §2.3).
+
+    If cache is a regular directory or missing, dev modifications won't be picked
+    up by Claude Code. Print warning to stderr (not stdout) so it doesn't pollute
+    Claude's hook output. Silent on cache symlink (correct state) or fresh install.
+
+    Without this guard, the same "edit code → plugin breaks silently" failure mode
+    has bitten us repeatedly. The warning fires on every SessionStart until fixed.
+    """
+    try:
+        if not CACHE_SYMLINK_PATH.exists():
+            return  # Fresh install; cache symlink not set up yet; silent
+        if CACHE_SYMLINK_PATH.is_symlink():
+            return  # Correct state; silent
+    except OSError:
+        return  # Path resolution failed; don't crash hook
+
+    # Cache exists but is NOT a symlink — broken state
+    target = CACHE_SYMLINK_PATH
+    print(
+        f"WARNING: plugin cache is not a symlink: {target}\n"
+        f"  Dev code changes will NOT be picked up by Claude Code.\n"
+        f"  Fix: rm -rf {target} && ln -sfn {plugin_root} {target}\n"
+        f"  Or run scripts/dev-only/setup_dev_env.sh",
+        file=sys.stderr,
+        flush=True,
+    )
+
 
 def _truthy(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
@@ -30,6 +67,10 @@ def main() -> int:
         return 0
 
     plugin_root = Path(os.environ.get("CLAUDE_PLUGIN_ROOT") or Path(__file__).resolve().parents[1])
+
+    # Check cache symlink FIRST (before any other work) so the user sees the warning
+    # even if the rest of the hook fails. Per spec §2.3: cache must be symlink.
+    verify_cache_symlink(plugin_root)
     workspace_root = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
     webnovel = plugin_root / "scripts" / "webnovel.py"
     if not webnovel.is_file():

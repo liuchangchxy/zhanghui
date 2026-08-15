@@ -25,7 +25,42 @@
 5. 注入 `CLAUDE_PLUGIN_ROOT` 环境变量
 6. plugin 自带的 hooks / skills / agents 全部可用
 
-dev 模式下 cache 是 dev workspace 的 symlink，**修改立即生效**无需重启（但 hooks.json / plugin.json 改动建议重启一次）。
+dev 模式下 cache 是 dev workspace 的 **symlink**，**修改立即生效**无需重启（但 hooks.json / plugin.json 改动建议重启一次）。
+
+## ⚠️ 第一次开发：跑 setup_dev_env.sh
+
+**这步不能跳过，跳过的话改了代码 Claude Code 看不到，plugin 直接挂。**
+
+```bash
+bash .claude/plugins/webnovel-writer_chang/scripts/dev-only/setup_dev_env.sh
+```
+
+这个脚本会：
+1. 验证 plugin source 完整
+2. 把 dev workspace 同步到 marketplace
+3. **把 cache 建为指向 dev workspace 的 symlink**（spec §2.3 强制）
+4. 验证 symlink 工作
+5. 跑 smoke test
+
+**幂等**：可重复跑。如果 cache 已经是 symlink 不会有任何改动。
+
+SessionStart 已经加了自检——如果你忘了建 symlink 跑 setup_dev_env.sh，session_start 会在 stderr 警告你。
+
+## 日常开发流程
+
+```
+1. 在 .claude/plugins/webnovel-writer_chang/ 里改代码
+2. 保存
+3. 重启 Claude Code（如果只改了 hooks.json / plugin.json，普通 .py 改动有时免重启）
+4. 验证
+```
+
+**不要做**：
+- ❌ 手动 cp / 复制文件到 cache
+- ❌ 手动 cd 到 cache 改东西
+- ❌ 跳过 setup_dev_env.sh
+
+**如果 cache 变回普通目录**（比如手动 sync 出错）：再跑一次 setup_dev_env.sh 它会修正。
 
 ## 首次安装依赖
 
@@ -40,9 +75,8 @@ dev 模式下 cache 是 dev workspace 的 symlink，**修改立即生效**无需
 
 **清理**：`rm -rf ~/.cache/webnovel-writer-chang/` 即可重装。
 
-## 修改 plugin 代码
+## 测试
 
-直接在 `.claude/plugins/webnovel-writer_chang/` 里改。完成后跑：
 ```bash
 cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v
 ```
@@ -53,7 +87,7 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v
 bash .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_marketplace.sh
 ```
 
-（首次手动 cp 即可；后续可写 `scripts/sync_dev_to_marketplace.sh`）
+跑这个脚本：rsync plugin + 验证 uv 4 个平台二进制 sha256。
 
 ## 写新章节
 
@@ -68,6 +102,25 @@ claude
 ```
 
 **书项目侧不需要任何 `.claude/` 配置。**
+
+## 常见问题
+
+### SessionStart 警告 "plugin cache is not a symlink"
+
+session_start.py 在 cache 不是 symlink 时会警告到 stderr。**修复**：跑 setup_dev_env.sh。
+
+### 改了代码但 Claude Code 看不到
+
+1. 确认 cache 是 symlink：`ls -la ~/.claude/plugins/cache/webnovel-chang-marketplace/`
+2. 如果不是 symlink：跑 setup_dev_env.sh
+3. 如果是 symlink 但内容不对：检查 `readlink` 指向的路径
+
+### Python 依赖没装 / 装错了
+
+```bash
+rm -rf ~/.cache/webnovel-writer-chang/
+# 下次 SessionStart 会自动重装
+```
 
 ## 版本
 
