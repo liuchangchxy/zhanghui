@@ -382,6 +382,40 @@ def nuke_venv(module_name: str) -> None:
         shutil.rmtree(venv)
 
 
+CHROMIUM_PROMPT_FILENAME = ".chromium-prompted"
+
+
+def _chromium_marker(module_name: str) -> Path:
+    return resolve_cache_dir() / "venvs" / module_name / CHROMIUM_PROMPT_FILENAME
+
+
+def should_prompt_chromium(module_name: str) -> bool:
+    """判断是否需要弹 chromium 安装提示。
+
+    仅 webnovel-chart-scan（fanqie adapter）会触发。
+    """
+    return not _chromium_marker(module_name).exists()
+
+
+def write_chromium_decision(module_name: str, decision: str) -> None:
+    """记录用户对 chromium 弹窗的选择：'yes' 或 'no'。
+
+    'no' 意味着 chart-scan 永久 skip fanqie。
+    """
+    marker = _chromium_marker(module_name)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(decision.strip().lower() + "\n")
+
+
+def format_chromium_prompt() -> str:
+    """生成发给 Claude prompt 的消息文本。"""
+    return (
+        "fanqie adapter 需要下载 chromium 浏览器（~150MB）。\n"
+        "装好后可用 fanqie 平台榜单扫描；不装也能用其它 4 个平台。\n"
+        "是否安装？(y/N)"
+    )
+
+
 def main() -> int:
     """CLI 入口：python3 install_python_deps.py [--module NAME]。
 

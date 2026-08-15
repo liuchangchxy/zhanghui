@@ -666,3 +666,39 @@ def test_main_propagates_plugin_root_to_install_module(monkeypatch, tmp_path):
     assert captured_plugin_root == [str(plugin_root)]
 
 
+# --- chromium prompt ---
+
+def test_should_prompt_chromium_first_time(tmp_path, monkeypatch):
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    venv = tmp_path / "cache" / "venvs" / "webnovel-chart-scan"
+    venv.mkdir(parents=True)
+    from hooks.install_python_deps import should_prompt_chromium
+    assert should_prompt_chromium("webnovel-chart-scan") is True
+
+
+def test_should_prompt_chromium_already_yes(tmp_path, monkeypatch):
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    venv = tmp_path / "cache" / "venvs" / "webnovel-chart-scan"
+    venv.mkdir(parents=True)
+    (venv / ".chromium-prompted").write_text("yes\n")
+    from hooks.install_python_deps import should_prompt_chromium
+    assert should_prompt_chromium("webnovel-chart-scan") is False
+
+
+def test_should_prompt_chromium_already_no(tmp_path, monkeypatch):
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    venv = tmp_path / "cache" / "venvs" / "webnovel-chart-scan"
+    venv.mkdir(parents=True)
+    (venv / ".chromium-prompted").write_text("no\n")
+    from hooks.install_python_deps import should_prompt_chromium
+    assert should_prompt_chromium("webnovel-chart-scan") is False
+
+
+def test_write_chromium_decision(tmp_path, monkeypatch):
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    from hooks.install_python_deps import write_chromium_decision
+    write_chromium_decision("webnovel-chart-scan", "yes")
+    f = tmp_path / "cache" / "venvs" / "webnovel-chart-scan" / ".chromium-prompted"
+    assert f.read_text().strip() == "yes"
+
+
