@@ -17,9 +17,9 @@ Why shell-out instead of porting the JS to Python:
 - The JS file is 9KB and updated frequently upstream — vendor-pinning
   + shelling out is the lower-maintenance path
 
-Word-count parsing: the JS output uses Chinese 万/亿 suffixes
-("234万" → 2,340,000; "1.2亿" → 120,000,000). Native English digit
-strings are passed through unchanged.
+Word-count parsing: the JS output uses Chinese 万/亿/千 suffixes
+("234万" → 2,340,000; "1.2亿" → 120,000,000; "5.6千" → 5,600).
+Native English digit strings are passed through unchanged.
 
 Markdown format (verified against vendored ciweimao-rank-scraper.js,
 commit 6af052974fd86fbdbbafce3e363d643221c6ce27):
@@ -49,16 +49,30 @@ The two distinct meta-line shapes (NO.1 vs #2-10) exist because the
 upstream parser extracts NO.1 from a 3-line block (title/author/metric)
 where genre is empty, while #2-10 entries come from a single
 "N[genre]title" line with author empty.
+
+Rank-1 author-availability caveat (C4): the upstream JS does NOT emit
+the author for rank-1 (it parses a 3-line block where the genre slot
+is empty by upstream convention). If upstream ever changes and starts
+putting a genre label in rank-1's first slot, we treat it as a genre
+(mis-classification bug otherwise) and flag ``raw_payload["author_missing"]
+= True`` so downstream consumers know the author is unknown.
+
+For rank-1, when upstream doesn't provide a genre either, we apply a
+loose title-based heuristic (see ``_TITLE_GENRE_KEYWORDS``). If that
+also fails to match, we leave ``category=""`` and set the flag.
 """
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 from pathlib import Path
 from typing import Optional
 
-from scripts.adapters.ciweimao_cat_map import map_native_category
+from scripts.adapters.ciweimao_cat_map import NATIVE_TO_NORMALIZED, map_native_category
 from scripts.schema import RawBook
+
+logger = logging.getLogger(__name__)
 
 
 # Path to the vendored JS scraper. Set in Task 8 (vendor step).
@@ -82,8 +96,33 @@ PERIOD_TO_RANK_TYPE = {
 }
 
 
+# Loose title-based genre heuristic for rank-1 (when upstream emits no
+# genre and no author — see C4/I6). Order matters: longer keywords
+# come first so 仙侠 doesn't accidentally match before 修仙小说.
+_TITLE_GENRE_KEYWORDS = (
+    "修仙", "玄幻", "奇幻", "都市", "仙侠", "武侠", "科幻",
+    "游戏", "竞技", "悬疑", "灵异", "同人", "历史", "军事",
+    "二次元", "轻小说",
+)
+
+
+def _title_genre_guess(title: str) -> str:
+    """Loose genre guess based on keywords in the book title.
+
+    Used for rank-1 entries only (upstream doesn't emit a genre for the
+    top slot). Returns empty string if no keyword matches — caller must
+    then flag ``author_missing=True``.
+    """
+    if not title:
+        return ""
+    for kw in _TITLE_GENRE_KEYWORDS:
+        if kw in title:
+            return map_native_category(kw)
+    return ""
+
+
 def parse_word_count(text: str) -> Optional[int]:
-    """Convert "234万" / "1.2亿" / "15000" → int. Return None on parse fail."""
+    """Convert "234万" / "1.2亿" / "5.6千" / "15000" → int. Return None on parse fail."""
     if not text:
         return None
     text = text.strip()
@@ -93,6 +132,9 @@ def parse_word_count(text: str) -> Optional[int]:
     m = re.match(r"^([\d.]+)\s*亿$", text)
     if m:
         return int(float(m.group(1)) * 100_000_000)
+    m = re.match(r"^([\d.]+)\s*千$", text)
+    if m:
+        return int(float(m.group(1)) * 1_000)
     if text.isdigit():
         return int(text)
     return None
@@ -114,10 +156,10 @@ _LINK_LINE_RE = re.compile(r"^\[作品页\]\(([^)]+)\)\s*$")
 
 # Meta values use " · " (middle dot, U+00B7) as the field separator.
 # The metric field (always last when present) matches a number with optional
-# 万/亿 suffix. Anything else is either an author name (rank 1) or a genre
+# 万/亿/千 suffix. Anything else is either an author name (rank 1) or a genre
 # label (rank 2-10).
 _META_SEPARATOR = " · "
-_METRIC_RE = re.compile(r"^[\d.]+\s*(?:万|亿)?$")
+_METRIC_RE = re.compile(r"^[\d.]+\s*(?:万|亿|千)?$")
 
 
 def _split_meta_line(meta_content: str, rank_num: int) -> tuple[str, str, str]:
@@ -129,6 +171,14 @@ def _split_meta_line(meta_content: str, rank_num: int) -> tuple[str, str, str]:
     A meta line is "*X · Y*" (2 parts, one of which is metric) or
     "*X*" (1 part — could be just metric or just author/genre). Unknown
     ordering is disambiguated by rank.
+
+    C4 hardening: if rank=1 and the only label is actually a known
+    category name (which would happen if upstream changed its format
+    and started emitting a genre in the rank-1 slot), we treat it as
+    a category instead of an author — and flag ``author_missing``
+    via ``raw_payload["author_missing"] = True`` in the caller.
+    The ``author=""`` return + ``category=<mapped>`` return signals the
+    caller to set the flag.
     """
     parts = [p.strip() for p in meta_content.split(_META_SEPARATOR)]
     author = ""
@@ -153,7 +203,14 @@ def _split_meta_line(meta_content: str, rank_num: int) -> tuple[str, str, str]:
     # The single remaining label is author (rank 1) or category (rank >= 2).
     label = label_parts[0]
     if rank_num == 1:
-        author = label
+        # C4: if this "label" is actually a known genre name, upstream
+        # probably changed format. Treat it as a category (NOT author)
+        # and signal the caller via empty author.
+        if label in NATIVE_TO_NORMALIZED:
+            author = ""
+            category = label
+        else:
+            author = label
     else:
         category = label
 
@@ -166,7 +223,10 @@ def parse_rank_markdown(md_text: str, top: int = 50) -> list[RawBook]:
     See module docstring for the exact Markdown shape produced by the
     vendored JS (verified against upstream commit 6af05297).
     """
-    if not md_text.strip():
+    if not md_text or not md_text.strip():
+        logger.warning(
+            "parse_rank_markdown: empty markdown received — returning []"
+        )
         return []
 
     books: list[RawBook] = []
@@ -184,6 +244,10 @@ def parse_rank_markdown(md_text: str, top: int = 50) -> list[RawBook]:
         native_category = ""
         metric = ""
         detail_url = ""
+        # C4: flag we set if the author is genuinely unknown upstream
+        # (rank-1 with no upstream author, or upstream format change
+        # caused mis-classification).
+        author_missing = False
 
         for line in block.splitlines():
             line = line.strip()
@@ -195,12 +259,32 @@ def parse_rank_markdown(md_text: str, top: int = 50) -> list[RawBook]:
                 author, native_category, metric = _split_meta_line(
                     meta_match.group(1), rank_num
                 )
+                # C4: rank-1 with empty author means upstream didn't
+                # emit an author. Flag it so downstream consumers know.
+                if rank_num == 1 and not author and not native_category:
+                    author_missing = True
+                # C4: rank-1 where _split_meta_line re-routed the label
+                # to category (because it matched a known genre name)
+                # also means the real author is unknown.
+                if rank_num == 1 and not author and native_category:
+                    author_missing = True
                 continue
 
             link_match = _LINK_LINE_RE.match(line)
             if link_match:
                 detail_url = link_match.group(1).strip()
                 continue
+
+        # I6: rank-1 fallback — if we still don't have a category
+        # (upstream changed format AND no keyword matched), try a
+        # loose title-keyword heuristic.
+        if rank_num == 1 and not native_category:
+            guess = _title_genre_guess(title)
+            if guess:
+                native_category = guess
+                # We used a heuristic, so the upstream genre is also
+                # effectively unknown (we guessed). Flag it.
+                author_missing = True
 
         # Map ciweimao native category → our normalized category
         normalized_category = map_native_category(native_category)
@@ -223,6 +307,7 @@ def parse_rank_markdown(md_text: str, top: int = 50) -> list[RawBook]:
             raw_payload={
                 "metric": metric,
                 "native_category": native_category,
+                **({"author_missing": True} if author_missing else {}),
             },
         ))
 
@@ -285,13 +370,28 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
             f"stderr={result.stderr[:500]}"
         )
 
-    # The scraper writes a file named 刺猬猫{rank_type}_{YYYYMMDD}.md
+    # I3: pick the most-recently-modified matching file. Lexical sort
+    # (sorted(...)[-1]) is fragile to upstream filename variations like
+    # 刺猬猫点击榜_20260815.md.bak or 刺猬猫点击榜_20260815.md.OLD.
     expected_pattern = f"刺猬猫{rank_type}_"
-    matching = sorted(output_dir.glob(f"{expected_pattern}*.md"))
+    matching = list(output_dir.glob(f"{expected_pattern}*.md"))
     if not matching:
-        raise RuntimeError(
-            f"ciweimao scraper succeeded but no output file matching "
-            f"{expected_pattern}*.md found in {output_dir}. "
-            f"stdout={result.stdout[:500]}"
-        )
-    return matching[-1]  # most recent if multiple
+        # Fallback glob: allow .bak / .OLD / etc. — anything starting
+        # with the prefix. This handles legacy rotation patterns
+        # without falsely accepting unrelated files.
+        fallback = [
+            p for p in output_dir.glob(f"{expected_pattern}*")
+            if p.is_file()
+        ]
+        if not fallback:
+            raise RuntimeError(
+                f"ciweimao scraper succeeded but no output file matching "
+                f"{expected_pattern}* found in {output_dir}. "
+                f"stdout={result.stdout[:500]}"
+            )
+        # Among fallback files, pick most-recently-modified too.
+        return max(fallback, key=lambda p: p.stat().st_mtime)
+
+    # I3: most-recently-modified wins (handles re-scrape overwrites
+    # where filename is the same but mtime differs).
+    return max(matching, key=lambda p: p.stat().st_mtime)

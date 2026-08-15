@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+/* NOTE: This file requires ./cdp-utils.js — do NOT re-vendor without it.
+ * Vendored together as a unit on 2026-08-16 from upstream commit 6af05297.
+ */
 /**
  * 刺猬猫阅读排行榜采集脚本
  *
