@@ -292,7 +292,7 @@ plugins/webnovel-writer_chang/vendor/uv/
 └── uv-windows-x86_64.exe     ← Windows x86_64
 ```
 
-由 `scripts/sync_dev_to_marketplace.sh` 在 release 时从 https://github.com/astral-sh/uv/releases 下载 + sha256 校验，commit 进 git（不用 git LFS，每个 ~15MB 可接受）。
+由 `scripts/sync_dev_to_marketplace.sh` 在 release 时从 https://github.com/astral-sh/uv/releases 下载 + sha256 校验，commit 进 git（不用 git LFS；uv 0.4.18 每个 binary 25-40MB，4 个合计 ~120MB；后续版本如变重再评估 LFS）。
 
 #### 4.6.3 用户态缓存布局
 
@@ -300,7 +300,7 @@ plugins/webnovel-writer_chang/vendor/uv/
 ~/.cache/webnovel-writer-chang/        ← 主路径（mac/linux/win 都解析到这）
 ├── venvs/
 │   ├── webnovel-chart-scan/
-│   │   ├── .install-stamp              ← 内容 = pyproject.toml sha256（去重核心）
+│   │   ├── .install-stamp              ← 内容 = sha256(pyproject.toml + 任何 requirements.txt)（去重核心；任一文件可选）
 │   │   └── .chromium-prompted          ← "yes" / "no" / 不存在（用户是否接受过 chromium 弹窗）
 │   └── dashboard/
 └── logs/
@@ -310,7 +310,7 @@ plugins/webnovel-writer_chang/vendor/uv/
 
 Windows 上 `%LOCALAPPDATA%` 解析为同一个 `~/.cache/` 路径（`os.path.expanduser` 在 Windows 也用 `%USERPROFILE%`）。
 
-**.install-stamp 是核心去重机制**：每次 SessionStart hook 比对当前 pyproject.toml 的 sha256 与 stamp 内容，不匹配就重建 venv。plugin 升级时 pyproject 内容变了 → 自动重装依赖，无需手动 bump 版本号。
+**.install-stamp 是核心去重机制**：每次 SessionStart hook 比对当前 `pyproject.toml` 和 `requirements.txt`（任一可选）的合并 sha256 与 stamp 内容，不匹配就重建 venv。plugin 升级时依赖清单内容变了 → 自动重装依赖，无需手动 bump 版本号。
 
 #### 4.6.4 SessionStart 触发流（不阻塞会话）
 

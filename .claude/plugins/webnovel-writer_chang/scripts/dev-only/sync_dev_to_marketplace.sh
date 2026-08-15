@@ -22,3 +22,18 @@ rsync -a --delete \
     "$DEV_PLUGIN/" "$MKT_PLUGIN/"
 
 echo "synced: $DEV_PLUGIN -> $MKT_PLUGIN"
+
+# 校验 vendor/uv/ 二进制完整性（rsync 后确认没损坏）
+if [[ -f "$MKT_PLUGIN/vendor/uv/SHA256SUMS" ]]; then
+    echo "Verifying uv binary sha256..."
+    # 仅校验当前平台对应条目；SHA256SUMS 文本里有所有平台 hash
+    # shasum -a 256 -c 会处理
+    (
+        cd "$MKT_PLUGIN/vendor/uv" && shasum -a 256 -c SHA256SUMS
+    ) || {
+        echo "ERROR: uv binary sha256 校验失败（marketplace 上的 vendor/uv/ 已损坏）" >&2
+        exit 1
+    }
+else
+    echo "WARN: vendor/uv/SHA256SUMS 不存在，跳过 sha256 校验" >&2
+fi

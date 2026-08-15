@@ -59,7 +59,92 @@ def main() -> int:
     output = _clip(proc.stdout or proc.stderr or "")
     if output:
         print(output)
+
+    trigger_background_python_install(plugin_root)
+
+    prompt = check_chromium_prompt(plugin_root)
+    if prompt:
+        print(prompt)
     return 0
+
+
+def check_chromium_prompt(plugin_root: Path) -> str | None:
+    """检查 webnovel-chart-scan 是否需要 chromium 弹窗。
+
+    Returns:
+        需要弹窗时返回 prompt 文本（给 Claude）；否则 None。
+
+    整个函数体都被 try/except 包住：chromium nag 永远不应该 crash SessionStart hook。
+    缓存路径通过 install_python_deps.resolve_cache_dir()（spec §4.6.5 fallback chain）
+    解析，**不要**硬编码 ~/.cache/webnovel-writer-chang。
+    """
+    try:
+        sys.path.insert(0, str(plugin_root / "hooks"))
+        try:
+            from install_python_deps import (
+                should_prompt_chromium,
+                format_chromium_prompt,
+                should_install_module,
+            )
+        except (ImportError, OSError, PermissionError):
+            return None  # install_python_deps.py 还没部署或导入失败；静默 skip
+
+        # Suppress unless install_python_deps.py has marked chart-scan as fully installed.
+        # Use should_install_module()'s "ok" check (not raw stamp existence, which can be stale).
+        chart_scan = plugin_root / "skills" / "webnovel-chart-scan"
+        if not chart_scan.exists():
+            return None
+        if should_install_module(chart_scan) != "ok":
+            return None
+
+        # Now check if user has already been prompted
+        if not should_prompt_chromium("webnovel-chart-scan"):
+            return None
+
+        return format_chromium_prompt()
+    except (ImportError, OSError, PermissionError):
+        # chromium nag must never crash a session hook — 包括 should_install_module
+        # 内部调用 resolve_cache_dir() 抛 PermissionError 的情况。
+        return None
+
+
+def trigger_background_python_install(plugin_root) -> None:
+    """扫描 plugin_root 下属的 Python module，对需要重装的 fork 后台进程跑 install_python_deps.py。
+
+    主 hook 不等子进程完成；子进程日志写到 ~/.cache/.../logs/。
+
+    Args:
+        plugin_root: plugin 根目录 Path；如果为 None 则跳过。
+    """
+    if plugin_root is None:
+        return
+    sys.path.insert(0, str(plugin_root / "hooks"))
+    try:
+        from install_python_deps import find_python_modules, should_install_module
+    except ImportError:
+        return  # install_python_deps.py 还没部署；静默 skip
+
+    pending = [m for m in find_python_modules(plugin_root)
+               if should_install_module(m) != "ok"]
+    if not pending:
+        return
+
+    install_script = plugin_root / "hooks" / "install_python_deps.py"
+    if not install_script.exists():
+        return
+
+    # Detach：用 subprocess.Popen + start_new_session=True 让子进程脱离父 hook 的生命周期
+    try:
+        subprocess.Popen(
+            [sys.executable, str(install_script), "--plugin-root", str(plugin_root)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True, close_fds=True,
+        )
+    except (OSError, FileNotFoundError, PermissionError) as e:
+        # 资源耗尽 / 可执行文件丢失 / 权限拒绝 — 静默失败
+        # 下次 SessionStart 会重新检测；spec §4.6.5 允许
+        print(f"trigger_background_python_install: Popen failed: {e}", file=sys.stderr, flush=True)
+        return
 
 
 if __name__ == "__main__":

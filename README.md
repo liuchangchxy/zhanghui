@@ -27,6 +27,19 @@
 
 dev 模式下 cache 是 dev workspace 的 symlink，**修改立即生效**无需重启（但 hooks.json / plugin.json 改动建议重启一次）。
 
+## 首次安装依赖
+
+第一次跑 `claude` 时，plugin 会自动在后台装 Python 依赖（不需要你手动操作）：
+- 装在 `~/.cache/webnovel-writer-chang/venvs/<module>/`
+- SessionStart 后台 fork 子进程，不阻塞你的会话
+- 装好后会写 `.install-stamp`，下次不再装
+
+`webnovel-chart-scan` 的 fanqie adapter 需要 chromium（~150MB），会弹一次 y/N 让你选。
+
+**离线场景**：默认从 PyPI 装；如果 PyPI 不可达会自动切国内镜像（清华/阿里）。要彻底离线请用 `WEBNOVEL_CACHE_DIR` 指向预装好的 venv。
+
+**清理**：`rm -rf ~/.cache/webnovel-writer-chang/` 即可重装。
+
 ## 修改 plugin 代码
 
 直接在 `.claude/plugins/webnovel-writer_chang/` 里改。完成后跑：
