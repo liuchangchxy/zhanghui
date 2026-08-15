@@ -6,17 +6,26 @@
 - File: `skills/story-long-scan/scripts/ciweimao-rank-scraper.js`
 - License: MIT (see upstream LICENSE)
 - Vendored: 2026-08-16
-- Upstream SHA: `6af052974fd86fbdbbafce3e363d643221c6ce27`
+- Upstream SHAs:
+  - `ciweimao-rank-scraper.js`: `6af052974fd86fbdbbafce3e363d643221c6ce27`
+  - `cdp-utils.js`: same commit (`6af052974fd86fbdbbafce3e363d643221c6ce27`)
 
 ## What we vendor
 
-Just `ciweimao-rank-scraper.js` — the Node.js scraper that uses Chrome DevTools
-Protocol to bypass ciweimao.com's man-machine verify captcha and scrape rank
-pages into Markdown files.
+Two files (both from `skills/story-long-scan/scripts/`):
+
+- `ciweimao-rank-scraper.js` — the Node.js scraper that uses Chrome DevTools
+  Protocol to bypass ciweimao.com's man-machine verify captcha and scrape
+  rank pages into Markdown files.
+- `cdp-utils.js` — the scraper's only Node dependency. Provides `ab()`,
+  `sleep()`, `evalJSONBase64()`, `scrollLoad()`, `getArg()`, `localDateStamp()`,
+  `runCli()` and the Windows `agent-browser` shim resolution. Required
+  because `require("./cdp-utils")` on line 20 of the scraper otherwise fails
+  with `MODULE_NOT_FOUND` at the very first `node` invocation, masking any
+  real Chrome/CDP error. cdp-utils.js itself only requires Node built-ins
+  (`child_process`, `fs`, `path`) — no further chained dependencies.
 
 We do NOT vendor:
-- The `cdp-utils.js` dependency — caller's responsibility (project ships its own
-  CDP infrastructure via agent-browser)
 - Other scrapers in the upstream repo (qidian/fanqie/qimao/jjwxc) — we have
   our own implementations for those
 
