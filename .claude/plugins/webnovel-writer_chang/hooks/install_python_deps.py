@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import os
 import platform as _platform
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -146,9 +147,11 @@ def should_install_module(module_dir: Path) -> str:
         module_dir: 含 pyproject.toml 的目录。
 
     Returns:
-        以下 4 个字符串之一:
+        以下 5 个字符串之一:
             - "ok"                       venv 存在且 stamp 匹配
             - "missing venv"             venv 目录不存在
+            - "corrupted venv"           venv 存在但 python 二进制缺失或 --version 失败
+                                         (已 nuke，下次 install_module 会重建)
             - "missing stamp"            venv 目录存在但 .install-stamp 文件不存在
             - "stale stamp (disk=X expected=Y)"  venv+stamp 都存在但内容不匹配
                                          (X, Y 是 sha256 前 8 字符用于调试)
@@ -157,6 +160,9 @@ def should_install_module(module_dir: Path) -> str:
     venv = cache / "venvs" / module_dir.name
     if not venv.exists():
         return "missing venv"
+    if is_venv_corrupted(module_dir.name):
+        nuke_venv(module_dir.name)
+        return "corrupted venv"
     stamp_path = venv / ".install-stamp"
     if not stamp_path.exists():
         return "missing stamp"
@@ -254,4 +260,45 @@ def install_module(module_dir: Path) -> None:
     stamp = compute_install_stamp(module_dir)
     (venv / ".install-stamp").write_text(stamp + "\n")
     log_path.write_text(f"OK: installed {module_dir.name}, stamp={stamp[:8]}\n")
+
+
+def is_venv_corrupted(module_name: str) -> bool:
+    """检测 venv 是否损坏（python 二进制不存在或 --version 失败）。
+
+    检测两类损坏：
+    1. bin/python 完全不存在（venv 目录被外部删空、或 uv 创建到一半失败）
+    2. bin/python 存在但 --version 退出非 0（可执行文件被覆盖、权限丢失、动态库丢失）
+
+    Args:
+        module_name: venv 名（对应 modules/<name> 目录）。
+
+    Returns:
+        True = 损坏（需要重建）；False = 健康。
+    """
+    venv = resolve_cache_dir() / "venvs" / module_name
+    py = venv / "bin" / "python"
+    if not py.exists():
+        return True
+    try:
+        r = subprocess.run(
+            [str(py), "--version"],
+            capture_output=True, timeout=5,
+        )
+        return r.returncode != 0
+    except (subprocess.TimeoutExpired, OSError):
+        return True
+
+
+def nuke_venv(module_name: str) -> None:
+    """删掉损坏的 venv（让 install_module 重建）。
+
+    Args:
+        module_name: venv 名（对应 modules/<name> 目录）。
+
+    Side Effects:
+        删除 <cache>/venvs/<module_name> 整个目录树。如果目录不存在则 no-op。
+    """
+    venv = resolve_cache_dir() / "venvs" / module_name
+    if venv.exists():
+        shutil.rmtree(venv)
 

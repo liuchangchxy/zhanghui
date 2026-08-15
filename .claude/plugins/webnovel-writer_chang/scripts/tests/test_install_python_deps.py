@@ -7,6 +7,20 @@ from pathlib import Path
 import pytest
 
 
+def _make_healthy_venv(venv: Path) -> None:
+    """Create a fake bin/python so ``is_venv_corrupted`` returns False.
+
+    Tests that exercise stamp logic (missing/stale/ok/corrupt-stamp) want a
+    structurally valid venv — only the .install-stamp varies. A real venv
+    always has bin/python; absence is the corrupted-venv case (tested by the
+    is_venv_corrupted_* tests below).
+    """
+    fake_py = venv / "bin" / "python"
+    fake_py.parent.mkdir(parents=True, exist_ok=True)
+    fake_py.write_text("#!/bin/sh\nexit 0\n")
+    fake_py.chmod(0o755)
+
+
 # 让 hooks/ 包能从 tests 目录被发现：hooks/ 在 webnovel-writer_chang/hooks/，
 # 需要把 webnovel-writer_chang/ 加进 sys.path。
 _PLUGIN_ROOT = Path(__file__).resolve().parents[2]
@@ -225,6 +239,7 @@ def test_should_install_module_stale_stamp(tmp_path, monkeypatch):
     (module / "pyproject.toml").write_text("[project]\nname='x'\n")
     venv = tmp_path / "cache" / "venvs" / "m"
     venv.mkdir(parents=True)
+    _make_healthy_venv(venv)
     (venv / ".install-stamp").write_text("stale-stamp-not-matching\n")
     assert should_install_module(module).startswith("stale stamp")
 
@@ -237,6 +252,7 @@ def test_should_install_module_up_to_date(tmp_path, monkeypatch):
     (module / "pyproject.toml").write_text("[project]\nname='x'\n")
     venv = tmp_path / "cache" / "venvs" / "m"
     venv.mkdir(parents=True)
+    _make_healthy_venv(venv)
     stamp = compute_install_stamp(module)
     (venv / ".install-stamp").write_text(stamp + "\n")
     assert should_install_module(module) == "ok"
@@ -250,6 +266,7 @@ def test_should_install_module_missing_stamp(tmp_path, monkeypatch):
     (module / "pyproject.toml").write_text("[project]\nname='x'\n")
     venv = tmp_path / "cache" / "venvs" / "m"
     venv.mkdir(parents=True)
+    _make_healthy_venv(venv)
     # Deliberately do NOT create .install-stamp
     assert should_install_module(module) == "missing stamp"
 
@@ -269,6 +286,7 @@ def test_should_install_module_stamp_content_variants(tmp_path, monkeypatch, sta
     (module / "pyproject.toml").write_text("[project]\nname='x'\n")
     venv = tmp_path / "cache" / "venvs" / "m"
     venv.mkdir(parents=True)
+    _make_healthy_venv(venv)
     (venv / ".install-stamp").write_text(stamp_content)
     result = should_install_module(module)
     # Either matches (ok) or is stale stamp — never missing stamp (file exists)
@@ -291,6 +309,7 @@ def test_should_install_module_corrupt_stamp_does_not_crash(tmp_path, monkeypatc
     (module / "pyproject.toml").write_text("[project]\nname='x'\n")
     venv = tmp_path / "cache" / "venvs" / "m"
     venv.mkdir(parents=True)
+    _make_healthy_venv(venv)
     # Write non-UTF-8 bytes directly
     (venv / ".install-stamp").write_bytes(b"\xff\xfe\xfd")
     # Should NOT raise UnicodeDecodeError after the fix
@@ -402,4 +421,47 @@ def test_install_module_missing_uv_raises_runtime_error(tmp_path, monkeypatch):
     logs = tmp_path / "cache" / "logs"
     log_files = list(logs.glob("install-m-*.log"))
     assert len(log_files) == 1
+
+
+# --- is_venv_corrupted ---
+#
+# Skip on Windows: venv path uses Unix /bin/python; tests below use chmod 0o755
+# (Unix permission semantics) and a shell script binary. Both are Unix-only.
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix-only path/chmod/binary")
+def test_is_venv_corrupted_missing_python_bin(tmp_path, monkeypatch):
+    """venv 目录存在但 bin/python 不存在 → corrupted。"""
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    venv = tmp_path / "cache" / "venvs" / "x"
+    venv.mkdir(parents=True)
+    from hooks.install_python_deps import is_venv_corrupted
+    assert is_venv_corrupted("x") is True
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix-only path/chmod/binary")
+def test_is_venv_corrupted_python_version_fails(tmp_path, monkeypatch):
+    """bin/python 存在但 --version 失败 → corrupted。"""
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    venv = tmp_path / "cache" / "venvs" / "x"
+    bin_dir = venv / "bin"
+    bin_dir.mkdir(parents=True)
+    fake_py = bin_dir / "python"
+    fake_py.write_text("#!/bin/sh\nexit 1\n")
+    fake_py.chmod(0o755)
+    from hooks.install_python_deps import is_venv_corrupted
+    assert is_venv_corrupted("x") is True
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix-only path/chmod/binary")
+def test_is_venv_corrupted_healthy(tmp_path, monkeypatch):
+    """bin/python 健康 (--version 退出 0) → not corrupted。"""
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    venv = tmp_path / "cache" / "venvs" / "x"
+    bin_dir = venv / "bin"
+    bin_dir.mkdir(parents=True)
+    fake_py = bin_dir / "python"
+    fake_py.write_text("#!/bin/sh\necho Python 3.11.0\nexit 0\n")
+    fake_py.chmod(0o755)
+    from hooks.install_python_deps import is_venv_corrupted
+    assert is_venv_corrupted("x") is False
 
