@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 # plugin.json manifest validator — 防止无效字段导致 plugin "failed to load"。
 #
-# 用法：./validate_plugin_manifest.sh [plugin_root]
-# 默认 plugin_root = 当前 dev workspace 的 plugin/
+# 用法：./validate_plugin_manifest.sh [plugin_root] [manifest_path]
+#   plugin_root   默认 = 本脚本所在的那个 plugin（scripts/dev-only/../..）。
+#                 必须靠脚本位置推导，不能硬编码绝对路径：否则在 git worktree
+#                 里调用时会去校验主工作区的文件——该拦的不拦，不该拦的乱拦。
+#   manifest_path 默认 = plugin_root/.claude-plugin/plugin.json。
+#                 pre-commit 会传入从 index 抽出的那份，因为进入历史的是 index
+#                 的内容，不是磁盘工作区的内容。
 #
 # 跑在 setup_dev_env.sh / sync_dev_to_marketplace.sh 之后能挡住所有已知错误。
-# 也建议加到 git pre-commit hook。
 
 set -euo pipefail
 
-PLUGIN_ROOT="${1:-/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang}"
-MANIFEST="$PLUGIN_ROOT/.claude-plugin/plugin.json"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+PLUGIN_ROOT="${1:-$DEFAULT_PLUGIN_ROOT}"
+MANIFEST="${2:-$PLUGIN_ROOT/.claude-plugin/plugin.json}"
 
 echo "=== validating plugin manifest ==="
 echo "plugin root: $PLUGIN_ROOT"
@@ -24,14 +31,15 @@ fi
 
 ERRORS=0
 
-# 用 python 解析 + 校验
-python3 <<PYEOF
+# 用 python 解析 + 校验（路径走环境变量，避免路径里的引号/空格破坏 heredoc）
+WN_MANIFEST="$MANIFEST" WN_PLUGIN_ROOT="$PLUGIN_ROOT" python3 <<'PYEOF'
 import json
+import os
 import sys
 from pathlib import Path
 
-manifest_path = Path("$MANIFEST")
-plugin_root = Path("$PLUGIN_ROOT")
+manifest_path = Path(os.environ["WN_MANIFEST"])
+plugin_root = Path(os.environ["WN_PLUGIN_ROOT"])
 data = json.loads(manifest_path.read_text(encoding="utf-8"))
 
 errors = []
