@@ -28,3 +28,6 @@ node_modules/
 
 # Snapshot 目录：每个章节一份完整副本，会膨胀仓库且与项目本身重复
 .webnovel/snapshots/
+
+# Git worktrees (per using-git-worktrees skill)
+.worktrees/
