@@ -61,7 +61,31 @@ def main() -> int:
         print(output)
 
     trigger_background_python_install(plugin_root)
+
+    prompt = check_chromium_prompt(plugin_root)
+    if prompt:
+        print(prompt)
     return 0
+
+
+def check_chromium_prompt(plugin_root: Path) -> str | None:
+    """检查 webnovel-chart-scan 是否需要 chromium 弹窗。
+
+    Returns:
+        需要弹窗时返回 prompt 文本（给 Claude）；否则 None。
+    """
+    sys.path.insert(0, str(plugin_root / "hooks"))
+    try:
+        from install_python_deps import should_prompt_chromium, format_chromium_prompt
+    except ImportError:
+        return None
+    if not should_prompt_chromium("webnovel-chart-scan"):
+        return None
+    # 只在 chart-scan venv 已就绪时弹（否则用户连装 deps 都还没确认）
+    cache_root = Path.home() / ".cache" / "webnovel-writer-chang"
+    if not (cache_root / "venvs" / "webnovel-chart-scan" / ".install-stamp").exists():
+        return None
+    return format_chromium_prompt()
 
 
 def trigger_background_python_install(plugin_root) -> None:
