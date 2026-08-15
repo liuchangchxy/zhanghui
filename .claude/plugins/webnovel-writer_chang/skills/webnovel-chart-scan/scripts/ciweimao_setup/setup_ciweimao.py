@@ -63,3 +63,24 @@ def find_chrome_binary() -> Path:
         "找不到 Chrome 二进制。请安装 Google Chrome（macOS：brew install --cask google-chrome；"
         "Linux：apt install google-chrome-stable）或运行 `playwright install chromium` 后重试。"
     )
+
+
+def check_chrome_running(port: int) -> bool:
+    """Probe whether Chrome is listening on the CDP port.
+
+    Returns True if the CDP /json/version endpoint responds 2xx AND its body
+    contains a "Browser" field (verifies it's actually Chrome, not e.g.
+    another HTTP server that happened to bind to that port).
+
+    Returns False on connection refused, timeout, non-2xx, or missing
+    Browser field. Never raises.
+    """
+    url = f"http://127.0.0.1:{port}/json/version"
+    try:
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            if resp.status != 200:
+                return False
+            body = resp.read().decode("utf-8", errors="replace")
+            return '"Browser"' in body
+    except Exception:
+        return False

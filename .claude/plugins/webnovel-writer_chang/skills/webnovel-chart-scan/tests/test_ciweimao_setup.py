@@ -52,3 +52,43 @@ def test_find_chrome_binary_raises_when_not_found(monkeypatch):
     monkeypatch.setattr("os.path.exists", lambda p: False)
     with pytest.raises(RuntimeError, match="找不到 Chrome"):
         find_chrome_binary()
+
+
+def test_check_chrome_running_returns_true_when_browser_field_present(monkeypatch):
+    """CDP /json/version returning 'Browser' in body → Chrome is running."""
+    from scripts.ciweimao_setup.setup_ciweimao import check_chrome_running
+
+    class FakeResp:
+        status = 200
+        def read(self):
+            return b'{"Browser":"Chrome/120.0.6099.71","Protocol-Version":"1.3"}'
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=2: FakeResp())
+    assert check_chrome_running(9222) is True
+
+
+def test_check_chrome_running_returns_false_on_connection_refused(monkeypatch):
+    """CDP unreachable → False (do NOT raise — caller decides)."""
+    from scripts.ciweimao_setup.setup_ciweimao import check_chrome_running
+
+    def fake_urlopen(url, timeout=2):
+        raise OSError("Connection refused")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    assert check_chrome_running(9222) is False
+
+
+def test_check_chrome_running_returns_false_on_non_2xx(monkeypatch):
+    """CDP returns 404 or other non-2xx → False."""
+    from scripts.ciweimao_setup.setup_ciweimao import check_chrome_running
+
+    class FakeResp:
+        status = 503
+        def read(self): return b""
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=2: FakeResp())
+    assert check_chrome_running(9222) is False
