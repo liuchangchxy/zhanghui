@@ -6,15 +6,16 @@ Status: SKIPPED (verified 2026-08-13 — captcha 307 regression).
     showed ciweimao.com now gates ``/book_list/*`` with a 307 redirect to
     ``/signup/man_machine_verify`` (a man-machine CAPTCHA page). The
     adapter status was relabeled ``BLOCKED_EXTERNAL`` in v0.1.4 to reflect
-    this. The tests below would fail against current upstream; the skip
-    marker records why, and the orchestrator short-circuits the adapter.
-
-    Bypassing the captcha is the v0.2 work item — likely needs
-    Playwright + hCaptcha solver, similar to fanqie.
+    this. In v0.2, the captcha is bypassed by vendoring worldwonderer/
+    oh-story-claudecode (MIT, CDP-based), so the status was relabeled
+    ``LIVE_WITH_SETUP``. The skip markers below remain because they hit
+    the live site, which still fails without CDP; they will be revisited
+    when the v0.2 live path is exercised end-to-end.
 
     The non-network metadata test is left live (it asserts
-    ``status == BLOCKED_EXTERNAL``), so a future regression that
-    silently flips the label back to ``LIVE`` would fail CI.
+    ``status == LIVE_WITH_SETUP``), so a future regression that
+    silently flips the label back to ``LIVE`` or
+    ``BLOCKED_EXTERNAL`` would fail CI.
 """
 from __future__ import annotations
 
@@ -24,12 +25,13 @@ from scripts.adapters.ciweimao import CiweimaoAdapter
 from scripts.adapters.base import AdapterStatus
 
 
-def test_ciweimao_adapter_is_blocked_external():
-    """Sanity check: ciweimao must be labeled BLOCKED_EXTERNAL after the
-    2026-08-13 captcha regression. If this test fails, someone flipped
-    the label back to LIVE without re-verifying against upstream."""
+def test_ciweimao_adapter_is_live_with_setup():
+    """Sanity check: ciweimao must be labeled LIVE_WITH_SETUP after the
+    v0.2 vendoring of the worldwonderer CDP scraper. If this test fails,
+    someone flipped the label back to LIVE or BLOCKED_EXTERNAL without
+    re-verifying against upstream."""
     a = CiweimaoAdapter()
-    assert a.status == AdapterStatus.BLOCKED_EXTERNAL
+    assert a.status == AdapterStatus.LIVE_WITH_SETUP
     assert a.platform == "ciweimao"
     assert a.strategy.value == "webfetch"
 
