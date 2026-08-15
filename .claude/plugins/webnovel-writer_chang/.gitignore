@@ -40,3 +40,4 @@ scripts/zzz_test.db*
 # Frontend build artifacts (Vite/React dashboard)
 dashboard/frontend/dist/
 dashboard/frontend/node_modules/
+# test edit
