@@ -21,5 +21,8 @@
     "agents/reviewer.md",
     "agents/data-agent.md",
     "agents/deconstruction-agent.md"
-  ]
+  ],
+  "skills": "./skills/",
+  "commands": "./commands/",
+  "hooks": "./hooks/hooks.json"
 }
