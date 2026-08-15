@@ -18,6 +18,44 @@ echo "marketplace: $MARKETPLACE"
 echo "cache:       $CACHE"
 echo ""
 
+# === 工具函数：race-safe 安装 cache symlink ===
+# 旧实现是 `rm -rf $CACHE && ln -sfn ...`，中间被打断会丢 cache。
+# 新实现：先 ln -sfn 到 .new 临时名，验证 symlink 能解析到有效 plugin，
+# 然后 atomic mv 替换。任何一步失败 .new 自动清理，cache 永远不会是空。
+install_cache_symlink() {
+    local target="$1"      # plugin root 路径
+    local link_path="$2"   # cache 路径
+
+    local tmp_link="${link_path}.new.$$"
+
+    # 1. 先建临时 symlink（如果 .new 残留先清）
+    rm -f "$tmp_link"
+    if ! ln -sfn "$target" "$tmp_link"; then
+        echo "  ERROR: ln -sfn 失败（权限？路径错误？）"
+        rm -f "$tmp_link"
+        return 1
+    fi
+
+    # 2. 验证临时 symlink 能解析到有效 plugin
+    if [ ! -f "$tmp_link/.claude-plugin/plugin.json" ]; then
+        echo "  ERROR: 临时 symlink 无法解析到 plugin（plugin.json 不存在）"
+        echo "    symlink → $target"
+        echo "    但 $target/.claude-plugin/plugin.json 不存在"
+        rm -f "$tmp_link"
+        return 1
+    fi
+
+    # 3. 删旧 cache + atomic 替换（mv 是 atomic，不会半截状态）
+    rm -rf "$link_path" 2>/dev/null || true
+    if ! mv "$tmp_link" "$link_path"; then
+        echo "  ERROR: mv 失败（权限？冲突？）"
+        rm -f "$tmp_link"
+        return 1
+    fi
+
+    echo "  ✓ cache symlink installed (race-safe): $link_path → $target"
+}
+
 # === 1. 验证 plugin source 存在 ===
 echo "[1/5] Checking plugin source..."
 if [ ! -d "$PLUGIN_ROOT" ]; then
@@ -56,26 +94,21 @@ if [ -L "$CACHE" ]; then
         read -p "  Fix to point to plugin root? (y/n) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            rm -rf "$CACHE"
-            ln -sfn "$PLUGIN_ROOT" "$CACHE"
-            echo "  ✓ cache symlink corrected"
+            install_cache_symlink "$PLUGIN_ROOT" "$CACHE"
         else
             echo "  skipped (you'll need to fix manually)"
         fi
     fi
 elif [ -d "$CACHE" ]; then
-    echo "  cache is a regular directory (not symlink). Removing and creating symlink..."
-    rm -rf "$CACHE"
-    ln -sfn "$PLUGIN_ROOT" "$CACHE"
-    echo "  ✓ cache symlink created (was regular dir)"
+    echo "  cache is a regular directory (not symlink). Replacing with symlink (race-safe)..."
+    install_cache_symlink "$PLUGIN_ROOT" "$CACHE"
 elif [ -e "$CACHE" ]; then
     echo "  cache exists but is neither symlink nor directory: $CACHE"
     exit 1
 else
     echo "  cache does not exist. Creating symlink..."
     mkdir -p "$(dirname "$CACHE")"
-    ln -sfn "$PLUGIN_ROOT" "$CACHE"
-    echo "  ✓ cache symlink created"
+    install_cache_symlink "$PLUGIN_ROOT" "$CACHE"
 fi
 
 # === 4. 验证 symlink 真的指向 plugin source ===
