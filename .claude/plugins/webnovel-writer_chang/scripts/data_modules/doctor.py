@@ -397,7 +397,7 @@ def _python_checks() -> list[dict[str, Any]]:
                 expected="module importable",
                 actual="present" if found else "missing",
                 impact="" if found else "核心数据模块可能无法运行。",
-                repair="" if found else "运行 python -m pip install -r scripts/requirements.txt。",
+                repair="" if found else "运行 python -m pip install -e scripts/。",
             )
         )
     for module_name in ("fastapi", "uvicorn", "watchdog"):
