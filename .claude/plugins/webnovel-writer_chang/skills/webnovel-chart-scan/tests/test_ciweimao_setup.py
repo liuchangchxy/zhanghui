@@ -131,7 +131,7 @@ def test_install_agent_browser_raises_runtime_error_on_failure(monkeypatch):
 
     def fake_run(cmd, *args, **kwargs):
         class R: returncode = 1; stderr = "EACCES permission denied"
-        raise subprocess.CalledProcessError(1, cmd, stderr=b"EACCES permission denied")
+        return R()
 
     monkeypatch.setattr("subprocess.run", fake_run)
     with pytest.raises(RuntimeError, match="npm install -g agent-browser 失败"):

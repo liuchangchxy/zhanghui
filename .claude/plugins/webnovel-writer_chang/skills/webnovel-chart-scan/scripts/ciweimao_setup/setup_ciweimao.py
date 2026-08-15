@@ -112,13 +112,6 @@ def install_agent_browser() -> None:
             "npm install -g agent-browser 超时（120s）。请检查网络或手动运行："
             "sudo npm install -g agent-browser"
         ) from e
-    except subprocess.CalledProcessError as e:
-        stderr = (e.stderr or b"").decode("utf-8", errors="replace") if isinstance(e.stderr, (bytes, bytearray)) else (e.stderr or "")
-        raise RuntimeError(
-            f"npm install -g agent-browser 失败（exit {e.returncode}）。\n"
-            f"stderr: {stderr[:300]}\n"
-            "请手动运行 `sudo npm install -g agent-browser` 并重试。"
-        ) from e
 
     if result.returncode != 0:
         raise RuntimeError(
