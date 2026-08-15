@@ -112,7 +112,7 @@ else
 fi
 
 # === 4. 验证 symlink 真的指向 plugin source ===
-echo "[4/5] Verifying cache symlink works..."
+echo "[4/6] Verifying cache symlink works..."
 if [ ! -L "$CACHE" ]; then
     echo "ERROR: cache is not a symlink (setup failed)"
     exit 1
@@ -129,8 +129,30 @@ if [ ! -f "$CACHE/.claude-plugin/plugin.json" ]; then
 fi
 echo "  ✓ cache symlink → $TARGET (resolves to valid plugin)"
 
-# === 5. Smoke test ===
-echo "[5/5] Running smoke test..."
+# === 5. 安装 git hooks ===
+# pre-commit 源文件在 repo 里（scripts/dev-only/pre-commit）。.git/hooks/ 不进
+# 版本控制；这一步把源复制到 git 实际执行的位置。已存在的旧版本会被覆盖，
+# 让"改 source 后跑一次 setup"成为同步契约。
+# cd 进 plugin root，因为 install 时 bash 的 CWD 不一定是它。
+echo "[5/6] Installing git hooks from scripts/dev-only/..."
+cd "$PLUGIN_ROOT"
+HOOKS_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/hooks"
+install_git_hook() {
+    local src="$1" name="$2"
+    local dst="$HOOKS_DIR/$name"
+    if [ ! -f "$src" ]; then
+        echo "  ⚠ hook source missing, skipped: $src"
+        return 0
+    fi
+    mkdir -p "$HOOKS_DIR"
+    cp "$src" "$dst"
+    chmod +x "$dst"
+    echo "  ✓ installed $name → $dst"
+}
+install_git_hook "$PLUGIN_ROOT/scripts/dev-only/pre-commit" "pre-commit"
+
+# === 6. Smoke test ===
+echo "[6/6] Running smoke test..."
 if PYTHONPATH="$PLUGIN_ROOT/hooks" python3 -c "
 from pathlib import Path
 from install_python_deps import compute_install_stamp, select_uv_binary, resolve_cache_dir
