@@ -170,3 +170,59 @@ def verify_cdp_ready(port: int, retries: int = 10, delay: float = 0.5) -> None:
         f"  - 防火墙拦截 127.0.0.1:{port}\n"
         f"手动检查：curl http://127.0.0.1:{port}/json/version"
     )
+
+
+def setup_ciweimao(port: int = DEFAULT_CDP_PORT) -> None:
+    """Idempotent setup: ensure agent-browser is on PATH and Chrome @ port is up.
+
+    Order of operations:
+    1. Install agent-browser if missing.
+    2. Probe Chrome on the CDP port.
+    3. If Chrome is not running, find binary, launch it, verify CDP ready.
+    4. If Chrome IS already running, do nothing.
+
+    Raises RuntimeError on any unrecoverable failure with an actionable
+    message pointing the user to the next step.
+    """
+    # Step 1: agent-browser
+    if not check_agent_browser():
+        install_agent_browser()
+    if not check_agent_browser():
+        # Install claimed success but binary still missing — very weird
+        raise RuntimeError(
+            "npm install -g agent-browser 报告成功，但 PATH 中仍找不到 agent-browser。"
+            "请手动运行 `which agent-browser` 和 `npm list -g agent-browser` 排查。"
+        )
+
+    # Step 2-4: Chrome
+    if check_chrome_running(port):
+        return  # already ready
+
+    user_data_dir = _chrome_user_data_dir()
+    launch_chrome(port, user_data_dir)
+    verify_cdp_ready(port)
+
+
+def main() -> int:
+    """CLI entry: ``python -m webnovel_chart_scan.ciweimao_setup.setup_ciweimao [--port PORT]``."""
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Set up Chrome @ CDP port + agent-browser for ciweimao adapter.",
+    )
+    parser.add_argument(
+        "--port", type=int, default=DEFAULT_CDP_PORT,
+        help=f"CDP port (default {DEFAULT_CDP_PORT}; honors $WEBNOVEL_CIWEIMAO_CDP_PORT)",
+    )
+    args = parser.parse_args()
+    port = int(os.environ.get("WEBNOVEL_CIWEIMAO_CDP_PORT", args.port))
+    try:
+        setup_ciweimao(port=port)
+    except RuntimeError as e:
+        print(f"FAIL: {e}", file=sys.stderr, flush=True)
+        return 1
+    print(f"OK: ciweimao CDP ready on port {port}", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

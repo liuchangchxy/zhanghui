@@ -234,3 +234,66 @@ def test_verify_cdp_ready_succeeds_after_some_retries(monkeypatch):
     monkeypatch.setattr("scripts.ciweimao_setup.setup_ciweimao.time.sleep", lambda *_: None)
     verify_cdp_ready(9222, retries=5, delay=0.01)  # should not raise
     assert state["n"] == 2
+
+
+def test_setup_ciweimao_idempotent_when_already_ready(monkeypatch):
+    """When agent-browser is on PATH and Chrome is running, do nothing."""
+    from scripts.ciweimao_setup.setup_ciweimao import setup_ciweimao
+
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.check_agent_browser", lambda: True,
+    )
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.check_chrome_running", lambda port: True,
+    )
+    install_called = []
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.install_agent_browser",
+        lambda: install_called.append(True),
+    )
+    launch_called = []
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.launch_chrome",
+        lambda port, user_data_dir: launch_called.append((port, user_data_dir)) or object(),
+    )
+
+    setup_ciweimao(port=9222)
+
+    assert install_called == [], "should not reinstall when on PATH"
+    assert launch_called == [], "should not launch when already running"
+
+
+def test_setup_ciweimao_installs_then_launches(monkeypatch, tmp_path):
+    """When agent-browser missing + Chrome not running, install then launch."""
+    from scripts.ciweimao_setup.setup_ciweimao import setup_ciweimao
+
+    state = {"agent": False, "chrome": False}
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.check_agent_browser", lambda: state["agent"],
+    )
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.check_chrome_running", lambda port: state["chrome"],
+    )
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.install_agent_browser",
+        lambda: state.__setitem__("agent", True),
+    )
+    def fake_launch(port, user_data_dir):
+        state["chrome"] = True
+        return object()
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.launch_chrome", fake_launch,
+    )
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.verify_cdp_ready", lambda *a, **k: None,
+    )
+    # Override cache dir to use tmp_path
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao._chrome_user_data_dir",
+        lambda: tmp_path / "chrome",
+    )
+
+    setup_ciweimao(port=9333)
+
+    assert state["agent"] is True
+    assert state["chrome"] is True
