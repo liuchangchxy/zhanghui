@@ -10,8 +10,45 @@ import platform as _platform
 import shutil
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+PIP_MIRRORS_CN = [
+    "https://pypi.tuna.tsinghua.edu.cn/simple",
+    "https://mirrors.aliyun.com/pypi/simple/",
+    "https://pypi.mirrors.ustc.edu.cn/simple/",
+]
+
+
+def _is_china_ip() -> bool:
+    """简单启发式：通过访问 ip.cn 看返回是否包含 '中国' / 'China'。
+
+    返回 True 视为 CN 网络。失败兜底 False。
+    """
+    try:
+        with urllib.request.urlopen("https://ip.cn", timeout=2) as r:
+            body = r.read().decode("utf-8", errors="ignore")
+        return "中国" in body or "China" in body
+    except Exception:
+        return False
+
+
+def pick_pip_index_url() -> str:
+    """决定 uv pip install 使用的 index URL。
+
+    优先级：
+    1. $WEBNOVEL_PIP_INDEX（用户显式指定）
+    2. CN IP 检测为 True → 清华镜像
+    3. 默认 PyPI 官方
+    """
+    custom = os.environ.get("WEBNOVEL_PIP_INDEX")
+    if custom:
+        return custom
+    if _is_china_ip():
+        return PIP_MIRRORS_CN[0]
+    return "https://pypi.org/simple"
 
 
 def compute_install_stamp(module_dir: Path) -> str:
@@ -243,9 +280,11 @@ def install_module(module_dir: Path) -> None:
         raise RuntimeError(f"uv venv 失败：{r.stderr[:200]}")
 
     # Step 2: uv pip install
+    index_url = pick_pip_index_url()
     try:
         r = subprocess.run(
-            [str(uv), "pip", "install", "-e", str(module_dir)],
+            [str(uv), "pip", "install", "-e", str(module_dir),
+             "--index-url", index_url],
             capture_output=True, text=True, timeout=install_timeout,
             env={**os.environ, "VIRTUAL_ENV": str(venv)},
         )

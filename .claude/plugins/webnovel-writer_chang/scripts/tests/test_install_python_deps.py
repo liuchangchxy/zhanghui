@@ -512,3 +512,27 @@ def test_nuke_venv_noop_on_missing(tmp_path, monkeypatch):
     # Don't create venv at all
     nuke_venv("x")  # should not raise
 
+
+# --- pick_pip_index_url ---
+
+def test_pick_pip_index_url_default_no_env(monkeypatch):
+    monkeypatch.delenv("WEBNOVEL_PIP_INDEX", raising=False)
+    monkeypatch.setattr("hooks.install_python_deps._is_china_ip", lambda: False)
+    from hooks.install_python_deps import pick_pip_index_url
+    assert pick_pip_index_url() == "https://pypi.org/simple"
+
+
+def test_pick_pip_index_url_env_override(monkeypatch):
+    monkeypatch.setenv("WEBNOVEL_PIP_INDEX", "https://mirrors.aliyun.com/pypi/simple/")
+    from hooks.install_python_deps import pick_pip_index_url
+    assert pick_pip_index_url() == "https://mirrors.aliyun.com/pypi/simple/"
+
+
+def test_pick_pip_index_url_china_detected(monkeypatch):
+    """模拟 CN 检测（IP 库查 cn → 返回清华镜像）。"""
+    monkeypatch.delenv("WEBNOVEL_PIP_INDEX", raising=False)
+    monkeypatch.setattr("hooks.install_python_deps._is_china_ip", lambda: True)
+    from hooks.install_python_deps import pick_pip_index_url
+    url = pick_pip_index_url()
+    assert "tsinghua" in url or "aliyun" in url or "ustc" in url
+
