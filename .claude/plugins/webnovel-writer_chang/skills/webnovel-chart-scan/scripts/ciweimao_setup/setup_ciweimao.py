@@ -21,7 +21,6 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
 
 # Default CDP port. Can be overridden via WEBNOVEL_CIWEIMAO_CDP_PORT env var.
@@ -207,7 +206,8 @@ def setup_ciweimao(port: int = DEFAULT_CDP_PORT) -> None:
 
 
 def main() -> int:
-    """CLI entry: ``python -m webnovel_chart_scan.ciweimao_setup.setup_ciweimao [--port PORT]``."""
+    """CLI entry: ``webnovel-chart-scan-setup-ciweimao [--port PORT]``
+    （等价于: ``python -m scripts.ciweimao_setup.setup_ciweimao [--port PORT]``）."""
     import argparse
     parser = argparse.ArgumentParser(
         description="Set up Chrome @ CDP port + agent-browser for ciweimao adapter.",

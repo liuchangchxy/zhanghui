@@ -371,7 +371,8 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
         raise RuntimeError(
             f"ciweimao scraper 超时（180s）。可能原因：\n"
             f"  - 站点慢或网络问题\n"
-            f"  - CDP 连接失败（运行 python -m webnovel_chart_scan.ciweimao_setup.setup_ciweimao 排查）"
+            f"  - CDP 连接失败（运行 webnovel-chart-scan-setup-ciweimao\n"
+            f"    （等价于: python -m scripts.ciweimao_setup.setup_ciweimao）排查）"
         ) from e
 
     if result.returncode != 0:
@@ -382,7 +383,8 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
             cdp_hint = (
                 f"\n\n排查步骤：\n"
                 f"  1. Chrome @ 9222 没起来？运行：\n"
-                f"     python -m webnovel_chart_scan.ciweimao_setup.setup_ciweimao\n"
+                f"     webnovel-chart-scan-setup-ciweimao\n"
+                f"     （等价于: python -m scripts.ciweimao_setup.setup_ciweimao）\n"
                 f"  2. agent-browser 不在 PATH？运行：\n"
                 f"     npm install -g agent-browser\n"
                 f"  3. 端口冲突？设置 WEBNOVEL_CIWEIMAO_CDP_PORT=9333 重试"

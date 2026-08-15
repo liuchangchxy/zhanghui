@@ -85,6 +85,7 @@ def test_run_scraper_humanizes_chrome_not_running_error(monkeypatch, tmp_path):
         run_scraper("点击榜", tmp_path)
 
     msg = str(exc_info.value)
+    assert "webnovel_chart_scan" not in msg
     assert "setup_ciweimao" in msg or "webnovel_chart_scan" in msg
     assert "Chrome" in msg or "9222" in msg
     assert "agent-browser" in msg

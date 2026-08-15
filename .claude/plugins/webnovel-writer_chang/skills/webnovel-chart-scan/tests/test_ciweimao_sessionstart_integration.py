@@ -71,5 +71,6 @@ def test_format_ciweimao_prompt_mentions_setup_script():
     assert "ciweimao" in text
     assert "agent-browser" in text
     assert "9222" in text
-    assert "setup_ciweimao" in text or "webnovel_chart_scan" in text
+    assert "webnovel_chart_scan" not in text
+    assert "webnovel-chart-scan-setup-ciweimao" in text or "python -m scripts.ciweimao_setup.setup_ciweimao" in text
     assert "y/N" in text

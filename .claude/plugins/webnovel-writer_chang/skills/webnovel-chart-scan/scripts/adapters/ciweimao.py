@@ -7,7 +7,8 @@ Required setup:
 - ``agent-browser`` on $PATH
 
 To set up automatically:
-    python -m webnovel_chart_scan.ciweimao_setup.setup_ciweimao
+    webnovel-chart-scan-setup-ciweimao
+    （等价于: python -m scripts.ciweimao_setup.setup_ciweimao）
 
 The setup script is idempotent and safe to re-run. If Chrome was killed,
 the next scan will surface a humanized error message referencing the setup
