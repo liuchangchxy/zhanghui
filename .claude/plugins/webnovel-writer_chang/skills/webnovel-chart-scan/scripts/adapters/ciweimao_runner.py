@@ -92,6 +92,7 @@ JS_SCRAPER_PATH = (
 #   --type all    → all ranks (heavier; not used by us)
 PERIOD_TO_RANK_TYPE = {
     "daily": "click",
+    # 注意：ciweimao 没有原生 weekly 榜；weekly 复用 click 榜（最近 24h 数据）。
     "weekly": "click",
     "monthly": "monthly",
 }
