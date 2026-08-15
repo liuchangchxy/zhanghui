@@ -30,3 +30,7 @@ def test_compute_install_stamp_includes_requirements_txt(tmp_path):
     with_reqs = compute_install_stamp(tmp_path)
     assert with_reqs != base
     assert len(with_reqs) == 64  # sha256 hex
+    # Exact value pins the iteration order — if implementation reorders (pyproject, requirements) vs (requirements, pyproject),
+    # stamp value changes and existing venvs get re-installed. Catch this contract.
+    expected = hashlib.sha256(b"[project]\n" + b"foo>=1.0\n").hexdigest()
+    assert with_reqs == expected

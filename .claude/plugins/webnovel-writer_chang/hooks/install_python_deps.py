@@ -12,10 +12,11 @@ def compute_install_stamp(module_dir: Path) -> str:
     """计算 <module_dir>/{pyproject.toml,requirements.txt} 的 sha256 stamp。
 
     Args:
-        module_dir: 包含 pyproject.toml 的目录。
+        module_dir: 含 pyproject.toml 或 requirements.txt（或两者）的目录；
+                    不存在的文件被跳过。
 
     Returns:
-        64-char hex sha256。
+        64-char hex sha256。如果两个文件都不存在，返回 sha256(b"")。
     """
     h = hashlib.sha256()
     for fname in ("pyproject.toml", "requirements.txt"):
