@@ -68,7 +68,7 @@ chart-scan/
 | 平台 | Strategy | 说明 |
 |------|----------|------|
 | 起点 | HYBRID | parser + URL 模板 + 分类 ID（reference-only vendor） |
-| 番茄 | DIRECT_DUMP | fetch GitHub raw daily dump（无需 chromium，T-1 天延迟） |
+| 番茄 | DIRECT_DUMP | fetch GitHub raw daily dump（无需 chromium，最多 24h 数据延迟，取决于用户时区） |
 | 纵横 | DIRECT_API | 自写 httpx 调公开 API |
 | 七猫 | VENDOR | clone WebCrawler（个人自用） |
 | 刺猬猫 | WEBFETCH (vendored CDP) | shell-out to vendored Node scraper（需 Node.js + Chrome） |

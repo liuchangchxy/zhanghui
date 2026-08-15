@@ -1,6 +1,6 @@
 # Known Limitations (v0.2.1)
 
-Last updated: 2026-08-16
+Last updated: 2026-08-16 (post-adversarial-review)
 
 Each platform adapter is explicitly marked with `status`:
 - **LIVE**: works against real upstream today
@@ -13,22 +13,105 @@ Each platform adapter is explicitly marked with `status`:
 | Platform | Status | Why | Enable path |
 |----------|--------|-----|-------------|
 | **ciweimao** (刺猬猫) | 🟡 LIVE_WITH_SETUP | Vendored worldwonderer/oh-story-claudecode (MIT) Node scraper uses CDP to bypass captcha. Needs Node.js ≥18 + Chrome accessible via agent-browser | Setup: `brew install node` + install agent-browser. See `vendor/worldwonderer_subset/README.md` |
-| **fanqie** (番茄) | 🟡 LIVE_WITH_SETUP | Fetches pre-built daily dump from FanqieRankTracker's GitHub raw (74 categories × 20 books, ~2MB). No Playwright needed. 1-day data lag. | Setup: ensure outbound HTTPS to raw.githubusercontent.com works. Cache at `~/.cache/webnovel-chart-scan/` |
+| **fanqie** (番茄) | 🟡 LIVE_WITH_SETUP | Fetches pre-built daily dump from FanqieRankTracker's GitHub raw (74 categories × 20 books, ~2MB). No Playwright needed. Up to ~24h data lag depending on user timezone vs Beijing publish time (08:00 Beijing = 00:00 UTC). | Setup: ensure outbound HTTPS to raw.githubusercontent.com works. Cache at `~/.cache/webnovel-chart-scan/` |
 | **qimao** (七猫) | LIVE | Vendored regex rewrite fixed (v0.1.2); shared Nuxt SSR parser in `scripts/nuxt_parser.py` | n/a |
 | **qidian** (起点) | LIVE | Mobile-subdomain bypass — `https://m.qidian.com/rank` and `/category/catid<id>` return server-rendered HTML with the iPhone Safari User-Agent (no probe.js) | n/a |
 | **zongheng** (纵横) | LIVE | Nuxt SSR scraping — `/rank?nav=new-book&rankType=4` returns 200 with `window.__NUXT__` payload containing all 6 rank lists; uses shared parser | n/a |
 
 3/5 platforms are LIVE. 2/5 are LIVE_WITH_SETUP.
 
-## Test counts (verified 2026-08-16)
+## Test counts (verified 2026-08-16, post-adversarial-review)
 
-- Fast tests (default, `pytest tests/`): 108 — all pass; no skips
-- Slow tests (`pytest -m slow`): 13 — 11 pass (qidian ×3, qimao ×2, zongheng ×3, ciweimao_runner_integration ×3), 2 skipped (ciweimao captcha-regression HTTP smoke tests; @pytest.mark.skip)
-- Total: 121
+- Fast tests (default, `pytest tests/`): 124 — all pass; no skips
+- Slow tests (`pytest -m slow`): 13 — 11 pass (qidian ×4, qimao ×3, zongheng ×4 — minus 2 ciweimao captcha-regression @pytest.mark.skip — plus ciweimao_runner_integration ×3 — minus 1 of those depends on Node), 2 skipped (ciweimao captcha-regression HTTP smoke tests; @pytest.mark.skip)
+- Total: 137
 
 Skipped at runtime by `addopts = "-m 'not slow'"` in `pyproject.toml`. Run
 slow tests explicitly with `pytest -m slow` once you have network access
 and want to verify the LIVE adapters.
+
+## v0.2.1 adversarial-review patch (2026-08-16)
+
+Second-pass fixes from an adversarial code review of v0.2.1 (which
+itself was a v0.2.0 review patch). 17 issues total — 4 critical,
+6 important, 7 minor. All addressed; all tests pass; see test-count
+table below.
+
+### Critical fixes (C1–C4)
+
+- **C1: fanqie corrupted-cache crash with no recovery.** `_download_dump`
+  now wraps the cache read in `try/except json.JSONDecodeError`; on parse
+  failure it logs a warning, deletes the corrupted file, and falls
+  through to the HTTP download.
+- **C2: fanqie cryptic JSON error on non-JSON 200 OK.** Before parsing,
+  the adapter now checks that `resp.text` starts with `{` or `[`. If
+  not, it raises a clear `RuntimeError` naming the `Content-Type` and
+  the first 200 chars of the body (so e.g. a Cloudflare challenge page
+  is recognized immediately).
+- **C3: fanqie caches bad response before parsing.** Reordered:
+  `data = json.loads(resp.text)` then `cache_file.write_text(...)`. If
+  parsing fails, no cache file is written and the next call retries
+  from upstream.
+- **C4: ciweimao parser silent mis-classification on upstream format
+  change.** When `rank_num == 1` and the meta-line label is in
+  `NATIVE_TO_NORMALIZED` (meaning upstream started putting a genre in
+  rank-1's slot), the parser now treats the label as a `category` (not
+  an `author`) and sets `raw_payload["author_missing"] = True` so
+  downstream consumers know the author is genuinely unknown upstream.
+
+### Important fixes (I1–I6)
+
+- **I1: fanqie silent failure on empty `categories[]`.** After
+  `_download_dump`, the adapter now checks `if not dump.get("categories")`
+  and treats it as a 404-equivalent so the "step back 3 days" loop kicks
+  in.
+- **I2: fanqie no retry on transient network errors.** The fallback loop
+  now catches `(httpx.HTTPError, httpx.RequestError)` and steps back a
+  day, identical to the `FileNotFoundError` path.
+- **I3: ciweimao glob picks lexically-latest (fragile to filename
+  variations).** `run_scraper` now picks the most-recently-modified
+  file (`max(..., key=lambda p: p.stat().st_mtime)`). If the canonical
+  `*.md` glob finds nothing, a fallback glob `*` is tried (handles
+  `.bak` / `.OLD` rotation patterns).
+- **I4: docstring "1-day data lag" misleading (timezone variable).**
+  Module docstring + KNOWN_LIMITATIONS now describe the lag as "up to
+  ~24h, depending on user timezone vs Beijing publish time (08:00
+  Beijing = 00:00 UTC)".
+- **I5: ciweimao test hardcoded `/tmp` path (pytest-xdist flake).**
+  Both tests in `tests/test_ciweimao_adapter.py` now use the `tmp_path`
+  pytest builtin (per-test isolated tempdir).
+- **I6: ciweimao rank-1 dropped by category filter.** When rank==1 has
+  no upstream genre, the parser applies a loose title-keyword heuristic
+  (matching 修仙/玄幻/都市/仙侠/...). If no keyword matches, it leaves
+  `category=""` AND sets `raw_payload["author_missing"] = True`. See
+  "Known Data Gaps" below for the new ciweimao rank-1 row.
+
+### Minor fixes (M1–M7)
+
+- **M1: `parse_word_count` no `千` support.** Added regex case for
+  `千` (thousand-suffix): `5.6千 → 5_600`.
+- **M2: empty markdown silent return.** `parse_rank_markdown("", ...)`
+  now logs a warning ("empty markdown received") before returning `[]`.
+- **M3: vendor dir no LICENSE file.** Fetched the upstream MIT LICENSE
+  text from `https://raw.githubusercontent.com/worldwonderer/oh-story-claudecode/main/LICENSE`
+  and saved it as `vendor/worldwonderer_subset/LICENSE`. Updated
+  `vendor/worldwonderer_subset/README.md` to reference it.
+- **M4: magic number 3 should be a constant.** Added
+  `MAX_FALLBACK_DAYS = 3` as a module-level constant in `fanqie.py`;
+  `range(3)` replaced with `range(MAX_FALLBACK_DAYS)`.
+- **M5: integration test over-broad regression check.** The
+  "Cannot find module" `not in combined` check in
+  `tests/test_ciweimao_runner_integration.py` is now scoped to
+  per-line checking of CDP/agent-browser presence, so incidental noise
+  in stderr doesn't mask the regression.
+- **M6: KNOWN_LIMITATIONS.md test count off-by-one.** Re-counted actual
+  test functions in every `tests/test_*.py` and updated the totals.
+  See "Test counts" above.
+- **M7: `raw_payload["period"]` misleading + vendored JS usage comment.**
+  Renamed `raw_payload["period"]` → `raw_payload["period_arg"]` in
+  `fanqie.py` (clearer that it's the echoed user arg, not upstream
+  data), and prepended a `// NOTE: This file requires ./cdp-utils.js —`
+  comment block to the vendored `ciweimao-rank-scraper.js`.
 
 ## v0.2.1 patch (2026-08-16)
 
@@ -86,10 +169,20 @@ extracts books from the JS output.
 
 ### Test count change
 - v0.2.0: 104 fast + 10 slow = 114 total
-- v0.2.1: 108 fast + 13 slow = 121 total
-- +4 fast tests (split NO.1 vs rank-2 fixtures, native category
-  normalization, missing metric, missing link line)
-- +3 slow tests (integration test for vendored JS invocation)
+- v0.2.1 (parser fix): 108 fast + 13 slow = 121 total
+- v0.2.1 (adversarial-review): 124 fast + 13 slow = 137 total
+- +4 fast tests in first v0.2.1 pass (split NO.1 vs rank-2 fixtures, native
+  category normalization, missing metric, missing link line)
+- +3 slow tests in first v0.2.1 pass (integration test for vendored JS invocation)
+- +16 fast tests in second v0.2.1 pass (adversarial review fixes):
+  - 7 fanqie cache/parse/retry hardening tests
+    (corrupted-cache recovery, non-JSON 200 OK, no-cache-on-parse-fail,
+    empty-categories fallback, transient-HTTP-error retry,
+    MAX_FALLBACK_DAYS constant, period_arg key rename)
+  - 9 ciweimao parser hardening tests (千 word-count, empty-markdown
+    warning, C4 author_missing flag, C4 genre-routing, I6 title heuristic,
+    rank≥2 not flagged, mtime-not-lexical file pick, fallback glob for
+    .bak files)
 
 ## v0.2.0 changelog (2026-08-16)
 
@@ -162,6 +255,7 @@ extracts books from the JS output.
 | qimao | `word_count` always null | Upstream Nuxt SSR `number` field is reader_count, not word_count | v0.2: detail-page fetch or alternative API |
 | zongheng | `intro` always empty | Rank payload's `description` field is empty (site fills it on detail page) | v0.2: detail-page fetch for each book |
 | ciweimao | `status` often null | Table row doesn't include 完结/连载 label (only update date) | v0.2: detail-page fetch (after captcha bypass) |
+| ciweimao | rank-1 `author` may be missing + `category` may be heuristic | Upstream JS parses rank-1 from a 3-line block (title/author/metric) with no genre; if upstream changes format the label could be a genre (parser routes it to `category` + flags `raw_payload.author_missing=True`). Title-keyword heuristic fills category when both are missing. | v0.3: detail-page fetch for rank-1 to recover author + authoritative category |
 
 ## v0.1.3 changelog (carried forward for reference)
 
