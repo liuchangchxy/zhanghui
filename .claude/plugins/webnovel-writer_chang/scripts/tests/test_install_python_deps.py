@@ -38,9 +38,6 @@ def test_compute_install_stamp_includes_requirements_txt(tmp_path):
 
 # --- select_uv_binary ---
 
-import sys
-
-
 def test_select_uv_binary_darwin_arm64(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr("platform.machine", lambda: "arm64")

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import hashlib
+import platform as _platform
 import sys
 from pathlib import Path
 
@@ -27,17 +28,12 @@ def compute_install_stamp(module_dir: Path) -> str:
     return h.hexdigest()
 
 
-import platform as _platform
-
-
 # (system, machine) -> filename
 UV_BINARY_MAP: dict[tuple[str, str], str] = {
     ("darwin", "arm64"): "uv-darwin-arm64",
     ("darwin", "x86_64"): "uv-darwin-x86_64",
     ("linux", "x86_64"): "uv-linux-x86_64",
-    ("linux", "aarch64"): "uv-linux-x86_64",  # 后续 Phase 再补 linux-arm64 二进制
     ("win32", "AMD64"): "uv-windows-x86_64.exe",
-    ("win32", "x86"): "uv-windows-x86_64.exe",
 }
 
 
@@ -51,7 +47,8 @@ def select_uv_binary(vendor_uv_dir: Path) -> Path:
         uv 二进制的完整 Path。
 
     Raises:
-        RuntimeError: 当前平台不在 4 个支持范围内。
+        RuntimeError: 当前平台不在 vendored 二进制对应的 4 个平台组合内。
+                    ARM Linux / 32 位 Windows 等未覆盖平台会清晰报错而不是静默跑错架构二进制。
     """
     key = (sys.platform, _platform.machine())
     name = UV_BINARY_MAP.get(key)
