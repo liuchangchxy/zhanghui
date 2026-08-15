@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import os
 import platform as _platform
@@ -379,4 +380,56 @@ def nuke_venv(module_name: str) -> None:
     venv = resolve_cache_dir() / "venvs" / module_name
     if venv.exists():
         shutil.rmtree(venv)
+
+
+def main() -> int:
+    """CLI 入口：python3 install_python_deps.py [--module NAME]。
+
+    无参数：扫描 CLAUDE_PLUGIN_ROOT 下所有 Python module 并 install。
+    有参数：只装指定 module。
+
+    Returns:
+        0 全部成功 / 1 至少一个失败 / 2 调用错误。
+    """
+    parser = argparse.ArgumentParser(description="Install Python deps for plugin modules.")
+    parser.add_argument("--module", help="只装指定 module 名（skills/<name> 或 dashboard）")
+    parser.add_argument("--plugin-root", default=os.environ.get("CLAUDE_PLUGIN_ROOT"),
+                        help="plugin 根目录（默认从 CLAUDE_PLUGIN_ROOT 环境变量读）")
+    args = parser.parse_args()
+
+    if not args.plugin_root:
+        print("ERROR: --plugin-root 未指定且 CLAUDE_PLUGIN_ROOT 未设置", file=sys.stderr)
+        return 2
+
+    plugin_root = Path(args.plugin_root)
+    if args.module:
+        target = plugin_root / "skills" / args.module
+        if not target.exists():
+            target = plugin_root / args.module
+        if not (target / "pyproject.toml").exists():
+            print(f"ERROR: {target} 没有 pyproject.toml", file=sys.stderr)
+            return 2
+        modules = [target]
+    else:
+        modules = find_python_modules(plugin_root)
+
+    failures = 0
+    for module in modules:
+        reason = should_install_module(module)
+        if reason == "ok":
+            print(f"SKIP: {module.name} ({reason})")
+            continue
+        print(f"INSTALL: {module.name} ({reason})")
+        try:
+            install_module(module)
+            print(f"OK: {module.name}")
+        except Exception as e:
+            print(f"FAIL: {module.name}: {e}", file=sys.stderr)
+            failures += 1
+
+    return 0 if failures == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 
