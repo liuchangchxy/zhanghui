@@ -165,3 +165,24 @@ def should_install_module(module_dir: Path) -> str:
     if on_disk != expected:
         return f"stale stamp (disk={on_disk[:8]} expected={expected[:8]})"
     return "ok"
+
+
+def find_python_modules(plugin_root: Path) -> list[Path]:
+    """扫描 plugin root 下所有 Python 模块（skills/<name>/pyproject.toml + dashboard/pyproject.toml）。
+
+    Args:
+        plugin_root: plugin 根目录（含 skills/ 与 dashboard/）。
+
+    Returns:
+        含 pyproject.toml 的目录 Path 列表。
+    """
+    modules: list[Path] = []
+    skills = plugin_root / "skills"
+    if skills.exists():
+        for skill in sorted(skills.iterdir()):
+            if (skill / "pyproject.toml").exists():
+                modules.append(skill)
+    dashboard = plugin_root / "dashboard"
+    if (dashboard / "pyproject.toml").exists():
+        modules.append(dashboard)
+    return modules

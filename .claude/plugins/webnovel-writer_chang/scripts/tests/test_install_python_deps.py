@@ -298,3 +298,18 @@ def test_should_install_module_corrupt_stamp_does_not_crash(tmp_path, monkeypatc
     # Should be classified as stale stamp (content doesn't match expected)
     assert result.startswith("stale stamp")
 
+
+# --- find_python_modules ---
+
+def test_find_python_modules_finds_pyproject_toml(tmp_path):
+    from hooks.install_python_deps import find_python_modules
+    (tmp_path / "skills").mkdir()
+    (tmp_path / "skills" / "chart-scan").mkdir()
+    (tmp_path / "skills" / "chart-scan" / "pyproject.toml").write_text("[project]\n")
+    (tmp_path / "skills" / "write").mkdir()  # no pyproject → ignore
+    (tmp_path / "dashboard").mkdir()
+    (tmp_path / "dashboard" / "pyproject.toml").write_text("[project]\n")
+    modules = find_python_modules(tmp_path)
+    names = sorted(m.name for m in modules)
+    assert names == ["chart-scan", "dashboard"]
+
