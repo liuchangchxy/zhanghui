@@ -19,7 +19,8 @@ def _repo_root() -> Path:
 
 
 def _tmp_root() -> Path:
-    root = _repo_root() / ".tmp" / "pytest"
+    """Use system tempdir, not plugin scan root. Prevents Claude Code slash command breakage."""
+    root = Path(tempfile.gettempdir()) / "webnovel-writer-chang-pytest"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
