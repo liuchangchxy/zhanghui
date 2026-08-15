@@ -59,7 +59,37 @@ def main() -> int:
     output = _clip(proc.stdout or proc.stderr or "")
     if output:
         print(output)
+
+    trigger_background_python_install(plugin_root)
     return 0
+
+
+def trigger_background_python_install(plugin_root: Path) -> None:
+    """扫描 plugin 的 Python module，对需要重装的 fork 后台进程跑 install_python_deps.py。
+
+    主 hook 不等子进程完成；子进程日志写到 ~/.cache/.../logs/。
+    """
+    sys.path.insert(0, str(plugin_root / "hooks"))
+    try:
+        from install_python_deps import find_python_modules, should_install_module
+    except ImportError:
+        return  # install_python_deps.py 还没部署；静默 skip
+
+    pending = [m for m in find_python_modules(plugin_root)
+               if should_install_module(m) != "ok"]
+    if not pending:
+        return
+
+    install_script = plugin_root / "hooks" / "install_python_deps.py"
+    if not install_script.exists():
+        return
+
+    # Detach：用 subprocess.Popen + start_new_session=True 让子进程脱离父 hook 的生命周期
+    subprocess.Popen(
+        [sys.executable, str(install_script), "--plugin-root", str(plugin_root)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True, close_fds=True,
+    )
 
 
 if __name__ == "__main__":
