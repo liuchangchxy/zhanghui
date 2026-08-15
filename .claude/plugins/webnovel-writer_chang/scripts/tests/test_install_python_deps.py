@@ -537,3 +537,132 @@ def test_pick_pip_index_url_china_detected(monkeypatch):
     url = pick_pip_index_url()
     assert "tsinghua" in url or "aliyun" in url or "ustc" in url
 
+
+# --- main ---
+
+
+def test_main_returns_2_when_no_plugin_root(monkeypatch, tmp_path):
+    """main() returns 2 when --plugin-root and CLAUDE_PLUGIN_ROOT are both unset."""
+    from hooks.install_python_deps import main
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    monkeypatch.setattr(sys, "argv", ["install_python_deps.py"])
+    assert main() == 2
+
+
+def test_main_returns_2_for_nonexistent_module(monkeypatch, tmp_path):
+    """main() returns 2 when --module target has no pyproject.toml."""
+    from hooks.install_python_deps import main
+    plugin_root = tmp_path / "plugin"
+    plugin_root.mkdir()
+    # Create skills/ dir but no skill with that name
+    (plugin_root / "skills").mkdir()
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(plugin_root))
+    monkeypatch.setattr(sys, "argv", [
+        "install_python_deps.py",
+        "--plugin-root", str(plugin_root),
+        "--module", "nonexistent",
+    ])
+    assert main() == 2
+
+
+def test_main_returns_0_when_all_up_to_date(monkeypatch, tmp_path):
+    """If should_install_module returns 'ok' for all modules, main returns 0."""
+    from hooks.install_python_deps import main
+    plugin_root = tmp_path / "plugin"
+    (plugin_root / "skills" / "fake-skill").mkdir(parents=True)
+    (plugin_root / "skills" / "fake-skill" / "pyproject.toml").write_text("[project]\n")
+
+    # Mock should_install_module to always return 'ok'
+    monkeypatch.setattr("hooks.install_python_deps.should_install_module", lambda m: "ok")
+    # Mock find_python_modules to return our fake module
+    fake_module = plugin_root / "skills" / "fake-skill"
+    monkeypatch.setattr(
+        "hooks.install_python_deps.find_python_modules",
+        lambda r: [fake_module],
+    )
+    # Mock install_module so it isn't called (we said 'ok' for all)
+    monkeypatch.setattr(
+        "hooks.install_python_deps.install_module",
+        lambda m: (_ for _ in ()).throw(AssertionError("should not be called")),
+    )
+
+    monkeypatch.setattr(sys, "argv", [
+        "install_python_deps.py",
+        "--plugin-root", str(plugin_root),
+    ])
+    assert main() == 0
+
+
+def test_main_returns_1_when_install_fails(monkeypatch, tmp_path):
+    """If install_module raises, main returns 1."""
+    from hooks.install_python_deps import main
+    plugin_root = tmp_path / "plugin"
+    (plugin_root / "skills" / "fake-skill").mkdir(parents=True)
+    (plugin_root / "skills" / "fake-skill" / "pyproject.toml").write_text("[project]\n")
+
+    # Mock should_install_module to require install
+    monkeypatch.setattr(
+        "hooks.install_python_deps.should_install_module",
+        lambda m: "missing venv",
+    )
+    fake_module = plugin_root / "skills" / "fake-skill"
+    monkeypatch.setattr(
+        "hooks.install_python_deps.find_python_modules",
+        lambda r: [fake_module],
+    )
+
+    # Mock install_module to raise
+    def fake_install(module):
+        raise RuntimeError("install failed")
+    monkeypatch.setattr("hooks.install_python_deps.install_module", fake_install)
+
+    monkeypatch.setattr(sys, "argv", [
+        "install_python_deps.py",
+        "--plugin-root", str(plugin_root),
+    ])
+    assert main() == 1
+
+
+def test_main_propagates_plugin_root_to_install_module(monkeypatch, tmp_path):
+    """If --plugin-root is passed without env var, install_module can still find vendor/uv.
+
+    Without the fix that sets CLAUDE_PLUGIN_ROOT from --plugin-root, this test would
+    raise 'CLAUDE_PLUGIN_ROOT 未设置' instead of 'uv 二进制不存在'.
+    """
+    from hooks.install_python_deps import main
+    plugin_root = tmp_path / "plugin"
+    (plugin_root / "skills" / "fake-skill").mkdir(parents=True)
+    (plugin_root / "skills" / "fake-skill" / "pyproject.toml").write_text("[project]\n")
+
+    # CRITICAL: ensure env var is unset
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    monkeypatch.setattr(
+        "hooks.install_python_deps.should_install_module",
+        lambda m: "missing venv",
+    )
+    fake_module = plugin_root / "skills" / "fake-skill"
+    monkeypatch.setattr(
+        "hooks.install_python_deps.find_python_modules",
+        lambda r: [fake_module],
+    )
+
+    captured_plugin_root = []
+
+    def fake_install(module):
+        # Read env var AFTER main() ran — verify it's set
+        captured_plugin_root.append(os.environ.get("CLAUDE_PLUGIN_ROOT"))
+        # Simulate missing uv binary so install_module raises immediately
+        raise RuntimeError("uv 二进制不存在")
+
+    monkeypatch.setattr("hooks.install_python_deps.install_module", fake_install)
+
+    monkeypatch.setattr(sys, "argv", [
+        "install_python_deps.py",
+        "--plugin-root", str(plugin_root),
+    ])
+    exit_code = main()
+    assert exit_code == 1
+    # The env var should have been set from --plugin-root
+    assert captured_plugin_root == [str(plugin_root)]
+
+

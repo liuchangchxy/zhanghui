@@ -398,16 +398,23 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.plugin_root:
-        print("ERROR: --plugin-root 未指定且 CLAUDE_PLUGIN_ROOT 未设置", file=sys.stderr)
+        print("ERROR: --plugin-root 未指定且 CLAUDE_PLUGIN_ROOT 未设置", file=sys.stderr, flush=True)
         return 2
 
+    # Ensure CLAUDE_PLUGIN_ROOT is set so install_module can find vendor/uv
+    os.environ["CLAUDE_PLUGIN_ROOT"] = args.plugin_root
     plugin_root = Path(args.plugin_root)
     if args.module:
         target = plugin_root / "skills" / args.module
         if not target.exists():
             target = plugin_root / args.module
+        # Validate target is under plugin_root (prevent path traversal/escape)
+        target = target.resolve()
+        if not target.is_relative_to(plugin_root.resolve()):
+            print(f"ERROR: --module {args.module} escaped plugin root", file=sys.stderr, flush=True)
+            return 2
         if not (target / "pyproject.toml").exists():
-            print(f"ERROR: {target} 没有 pyproject.toml", file=sys.stderr)
+            print(f"ERROR: {target} 没有 pyproject.toml", file=sys.stderr, flush=True)
             return 2
         modules = [target]
     else:
@@ -417,14 +424,14 @@ def main() -> int:
     for module in modules:
         reason = should_install_module(module)
         if reason == "ok":
-            print(f"SKIP: {module.name} ({reason})")
+            print(f"SKIP: {module.name} (venv up to date)", flush=True)
             continue
-        print(f"INSTALL: {module.name} ({reason})")
+        print(f"INSTALL: {module.name} ({reason})", flush=True)
         try:
             install_module(module)
-            print(f"OK: {module.name}")
+            print(f"OK: {module.name}", flush=True)
         except Exception as e:
-            print(f"FAIL: {module.name}: {e}", file=sys.stderr)
+            print(f"FAIL: {module.name}: {e}", file=sys.stderr, flush=True)
             failures += 1
 
     return 0 if failures == 0 else 1
