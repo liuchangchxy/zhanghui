@@ -184,6 +184,41 @@ extracts books from the JS output.
     rank≥2 not flagged, mtime-not-lexical file pick, fallback glob for
     .bak files)
 
+## v0.2.2 (2026-08-16)
+
+ciweimao setup automation: made LIVE_WITH_SETUP honest.
+
+**What changed:**
+- Added `scripts/ciweimao_setup/setup_ciweimao.py` — idempotent setup script
+  (find_chrome_binary + check/install agent-browser + launch Chrome @ 9222).
+- Added `scripts/ciweimao_setup/sessionstart_integration.py` — `.ciweimao-prompted`
+  decision marker mirror (independent from `.chromium-prompted`).
+- Extended `hooks/session_start.py` with `check_ciweimao_prompt()` so
+  users get a y/N prompt at SessionStart when ciweimao setup is missing.
+- `ciweimao_runner.py` now reads `WEBNOVEL_CIWEIMAO_CDP_PORT` env var
+  (default 9222) so multiple worktrees don't fight over the port.
+- All ciweimao errors now point to `webnovel-chart-scan-setup-ciweimao`
+  console script for self-service fix.
+- Deleted `parse_category_html` + related dead code (BeautifulSoup path
+  replaced by vendored CDP scraper in v0.2).
+- Added `tests/test_ciweimao_e2e.py` — end-to-end test, auto-skips when
+  Chrome/agent-browser missing.
+
+**Setup flow:**
+1. User starts Claude Code → SessionStart hook detects missing ciweimao setup.
+2. Hook prompts y/N to user.
+3. On y: Claude runs `webnovel-chart-scan-setup-ciweimao` (or the user runs
+   it manually), which auto-installs agent-browser (npm) and launches
+   Chrome @ 9222.
+4. On N: decision persisted, no future prompts.
+5. Next scan just works.
+
+**Out of scope (future work):**
+- Replace vendored CDP scraper with playwright-based scraper (drop
+  agent-browser dependency entirely). See spec §10.
+- Windows Chrome binary path detection in `find_chrome_binary()`.
+- GitHub Actions nightly job for `pytest -m slow`.
+
 ## v0.2.0 changelog (2026-08-16)
 
 ### Platform upgrades

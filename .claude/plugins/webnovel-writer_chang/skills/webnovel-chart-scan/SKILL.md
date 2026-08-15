@@ -71,7 +71,7 @@ chart-scan/
 | 番茄 | DIRECT_DUMP | fetch GitHub raw daily dump（无需 chromium，最多 24h 数据延迟，取决于用户时区） |
 | 纵横 | DIRECT_API | 自写 httpx 调公开 API |
 | 七猫 | VENDOR | clone WebCrawler（个人自用） |
-| 刺猬猫 | WEBFETCH (vendored CDP) | shell-out to vendored Node scraper（需 Node.js + Chrome） |
+| 刺猬猫 | WEBFETCH (vendored CDP) | shell-out to vendored Node scraper（SessionStart 钩子引导装 agent-browser + Chrome @ 9222） |
 
 详见 `references/upstream-survey.md`。
 
@@ -87,4 +87,19 @@ chart-scan/
 cd ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-chart-scan
 pip install -e ".[fanqie,dev]"
 playwright install chromium  # 番茄需要
+```
+
+### 刺猬猫额外设置
+
+ciweimao adapter 需要 Chrome @ 9222 + `agent-browser`。SessionStart 钩子会
+在你第一次进入项目时弹 y/N 提示；接受即可一键装好。
+
+手动运行：
+```bash
+webnovel-chart-scan-setup-ciweimao
+```
+
+或自定义端口：
+```bash
+WEBNOVEL_CIWEIMAO_CDP_PORT=9333 webnovel-chart-scan-setup-ciweimao --port 9333
 ```
