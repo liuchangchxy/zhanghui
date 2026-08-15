@@ -392,7 +392,7 @@ def test_install_module_creates_venv_and_stamp(tmp_path, monkeypatch):
 
 
 def test_install_module_failure_writes_log(tmp_path, monkeypatch):
-    """uv 失败的场景：写 log，不写 stamp。"""
+    """uv 失败的场景：写 log + 尝试多 URL。"""
     from hooks import install_python_deps as ipd
     monkeypatch.setattr(ipd, "resolve_cache_dir", lambda: tmp_path / "cache")
     monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
@@ -408,18 +408,19 @@ def test_install_module_failure_writes_log(tmp_path, monkeypatch):
     module.mkdir()
     (module / "pyproject.toml").write_text("[project]\nname='m'\n")
 
-    with pytest.raises(RuntimeError, match="uv pip install 失败"):
+    with pytest.raises(RuntimeError, match="uv pip install"):
         ipd.install_module(module)
 
     venv = tmp_path / "cache" / "venvs" / "m"
     assert not (venv / ".install-stamp").exists()
 
-    # NEW: Assert log file was written
+    # Log file present with attempt history
     logs = tmp_path / "cache" / "logs"
     log_files = list(logs.glob("install-m-*.log"))
-    assert len(log_files) == 1, f"expected 1 log file, got {log_files}"
+    assert len(log_files) == 1
     log_content = log_files[0].read_text()
-    assert "uv pip install failed" in log_content
+    # Should have attempted multiple URLs (PyPI + TUNA + aliyun at minimum)
+    assert "attempt" in log_content
     assert "ERROR: package 'foo' not found" in log_content
 
 

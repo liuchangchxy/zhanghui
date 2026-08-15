@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 PIP_MIRRORS_CN = [
-    "https://pypi.tuna.tsinghua.edu.cn/simple",
+    "https://pypi.tuna.tsinghua.edu.cn/simple/",
     "https://mirrors.aliyun.com/pypi/simple/",
     "https://pypi.mirrors.ustc.edu.cn/simple/",
 ]
@@ -279,21 +279,60 @@ def install_module(module_dir: Path) -> None:
         log_path.write_text(f"uv venv failed:\n{r.stderr}\n")
         raise RuntimeError(f"uv venv 失败：{r.stderr[:200]}")
 
-    # Step 2: uv pip install
-    index_url = pick_pip_index_url()
-    try:
-        r = subprocess.run(
-            [str(uv), "pip", "install", "-e", str(module_dir),
-             "--index-url", index_url],
-            capture_output=True, text=True, timeout=install_timeout,
-            env={**os.environ, "VIRTUAL_ENV": str(venv)},
+    # Step 2: uv pip install with URL fallback chain (spec §4.6.5)
+    # Build URL chain: primary + fallback mirrors depending on what primary is.
+    primary = pick_pip_index_url()
+    url_chain = [primary]
+    if "pypi.org" in primary:
+        # Primary is PyPI official; fall back to CN mirrors (TUNA, aliyun, USTC)
+        url_chain.extend(PIP_MIRRORS_CN)
+    elif primary == PIP_MIRRORS_CN[0]:
+        # Primary is TUNA; fall back to aliyun, then USTC
+        url_chain.extend(PIP_MIRRORS_CN[1:])
+
+    MAX_RETRIES_PER_URL = 3
+    last_error: str | None = None
+    attempt_log: list[str] = []
+
+    for url in url_chain:
+        for attempt in range(1, MAX_RETRIES_PER_URL + 1):
+            try:
+                r = subprocess.run(
+                    [str(uv), "pip", "install", "-e", str(module_dir),
+                     "--index-url", url],
+                    capture_output=True, text=True, timeout=install_timeout,
+                    env={**os.environ, "VIRTUAL_ENV": str(venv)},
+                )
+            except FileNotFoundError as e:
+                attempt_log.append(f"attempt {attempt} on {url}: FileNotFoundError: {e}")
+                last_error = "uv 二进制不存在"
+                break  # Don't retry on FileNotFoundError — binary is missing
+            if r.returncode == 0:
+                # Success
+                attempt_log.append(f"OK on {url} (attempt {attempt})")
+                break  # exit inner loop
+            attempt_log.append(
+                f"attempt {attempt} on {url}: returncode={r.returncode}, "
+                f"stderr={r.stderr[:100]}"
+            )
+            last_error = f"uv pip install 失败：{r.stderr[:200]}"
+        else:
+            # Inner loop completed without break (all 3 attempts failed for this URL)
+            continue  # try next URL
+        # If we got here via break from inner loop, determine why
+        if last_error == "uv 二进制不存在":
+            break  # Cannot recover; exit outer loop
+        # Otherwise: success — exit outer loop
+        break
+
+    # Write log with attempt history (spec §4.6.5: failed attempts logged for retry)
+    log_path.write_text("\n".join(attempt_log) + "\n")
+
+    if not attempt_log or not attempt_log[-1].startswith("OK"):
+        raise RuntimeError(
+            f"uv pip install 在 {sum(1 for l in attempt_log if 'attempt' in l)} "
+            f"次尝试后失败。Last error: {last_error}"
         )
-    except FileNotFoundError as e:
-        log_path.write_text(f"uv binary not found mid-install: {uv}\n{e}\n")
-        raise RuntimeError(f"uv 二进制在 install 过程中消失：{uv}") from e
-    if r.returncode != 0:
-        log_path.write_text(f"uv pip install failed:\n{r.stderr}\n")
-        raise RuntimeError(f"uv pip install 失败：{r.stderr[:200]}")
 
     # Step 3: write stamp
     stamp = compute_install_stamp(module_dir)
