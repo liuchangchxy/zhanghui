@@ -412,7 +412,15 @@ def format_chromium_prompt() -> str:
     return (
         "fanqie adapter 需要下载 chromium 浏览器（~150MB）。\n"
         "装好后可用 fanqie 平台榜单扫描；不装也能用其它 4 个平台。\n"
-        "是否安装？(y/N)"
+        "是否安装？(y/N)\n"
+        "\n"
+        "【Claude 指引】用户回答后请执行以下操作之一完成决策持久化，避免下次 SessionStart 再问：\n"
+        "  - 用户接受 y: cd $CLAUDE_PLUGIN_ROOT/skills/webnovel-chart-scan && "
+        "$VENV_BIN/playwright install chromium"
+        "（VENV_BIN 路径：$WEBNOVEL_CACHE_DIR/venvs/webnovel-chart-scan/bin/，"
+        "resolve_cache_dir() 解析）\n"
+        "  - 用户拒绝 N: write_chromium_decision('webnovel-chart-scan', 'no') "
+        "（写在 venv 旁的 .chromium-prompted 标记，永久 skip fanqie）"
     )
 
 

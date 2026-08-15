@@ -73,19 +73,39 @@ def check_chromium_prompt(plugin_root: Path) -> str | None:
 
     Returns:
         需要弹窗时返回 prompt 文本（给 Claude）；否则 None。
+
+    整个函数体都被 try/except 包住：chromium nag 永远不应该 crash SessionStart hook。
+    缓存路径通过 install_python_deps.resolve_cache_dir()（spec §4.6.5 fallback chain）
+    解析，**不要**硬编码 ~/.cache/webnovel-writer-chang。
     """
-    sys.path.insert(0, str(plugin_root / "hooks"))
     try:
-        from install_python_deps import should_prompt_chromium, format_chromium_prompt
-    except ImportError:
+        sys.path.insert(0, str(plugin_root / "hooks"))
+        try:
+            from install_python_deps import (
+                should_prompt_chromium,
+                format_chromium_prompt,
+                should_install_module,
+            )
+        except (ImportError, OSError, PermissionError):
+            return None  # install_python_deps.py 还没部署或导入失败；静默 skip
+
+        # Suppress unless install_python_deps.py has marked chart-scan as fully installed.
+        # Use should_install_module()'s "ok" check (not raw stamp existence, which can be stale).
+        chart_scan = plugin_root / "skills" / "webnovel-chart-scan"
+        if not chart_scan.exists():
+            return None
+        if should_install_module(chart_scan) != "ok":
+            return None
+
+        # Now check if user has already been prompted
+        if not should_prompt_chromium("webnovel-chart-scan"):
+            return None
+
+        return format_chromium_prompt()
+    except (ImportError, OSError, PermissionError):
+        # chromium nag must never crash a session hook — 包括 should_install_module
+        # 内部调用 resolve_cache_dir() 抛 PermissionError 的情况。
         return None
-    if not should_prompt_chromium("webnovel-chart-scan"):
-        return None
-    # 只在 chart-scan venv 已就绪时弹（否则用户连装 deps 都还没确认）
-    cache_root = Path.home() / ".cache" / "webnovel-writer-chang"
-    if not (cache_root / "venvs" / "webnovel-chart-scan" / ".install-stamp").exists():
-        return None
-    return format_chromium_prompt()
 
 
 def trigger_background_python_install(plugin_root) -> None:
