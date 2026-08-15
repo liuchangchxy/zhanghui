@@ -358,20 +358,37 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
             check=False,
         )
     except FileNotFoundError as e:
+        # `node` not on PATH
         raise RuntimeError(
-            "node executable not found on PATH. Install Node.js ≥18 to "
-            "enable ciweimao adapter."
+            "找不到 node 可执行文件。请安装 Node.js ≥18：\n"
+            "  - macOS: brew install node\n"
+            "  - Linux: 见 https://nodejs.org/en/download/package-manager\n"
+            "  - 或访问 https://nodejs.org 下载安装包\n"
+            "装好后 ciweimao adapter 才能用。"
         ) from e
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(
-            f"ciweimao scraper timed out after 180s. Site may be slow "
-            "or the CDP connection failed."
+            f"ciweimao scraper 超时（180s）。可能原因：\n"
+            f"  - 站点慢或网络问题\n"
+            f"  - CDP 连接失败（运行 python -m webnovel_chart_scan.ciweimao_setup.setup_ciweimao 排查）"
         ) from e
 
     if result.returncode != 0:
+        stderr = result.stderr[:500] if result.stderr else "(no stderr)"
+        # Detect "CDP discovery failed" / "agent-browser" → Chrome not running
+        cdp_hint = ""
+        if "CDP" in stderr or "agent-browser" in stderr or "9222" in stderr:
+            cdp_hint = (
+                f"\n\n排查步骤：\n"
+                f"  1. Chrome @ 9222 没起来？运行：\n"
+                f"     python -m webnovel_chart_scan.ciweimao_setup.setup_ciweimao\n"
+                f"  2. agent-browser 不在 PATH？运行：\n"
+                f"     npm install -g agent-browser\n"
+                f"  3. 端口冲突？设置 WEBNOVEL_CIWEIMAO_CDP_PORT=9333 重试"
+            )
         raise RuntimeError(
-            f"ciweimao scraper failed (exit {result.returncode}): "
-            f"stderr={result.stderr[:500]}"
+            f"ciweimao scraper 失败（exit {result.returncode}）。\n"
+            f"stderr: {stderr}{cdp_hint}"
         )
 
     # I3: pick the most-recently-modified matching file. Lexical sort

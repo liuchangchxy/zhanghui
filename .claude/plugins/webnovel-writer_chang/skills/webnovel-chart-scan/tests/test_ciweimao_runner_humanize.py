@@ -56,3 +56,35 @@ def test_run_scraper_defaults_to_9222_when_env_unset(monkeypatch, tmp_path):
     assert "--port" in captured["cmd"]
     port_idx = captured["cmd"].index("--port")
     assert captured["cmd"][port_idx + 1] == "9222"
+
+
+def test_run_scraper_humanizes_file_not_found_node(monkeypatch, tmp_path):
+    """FileNotFoundError on `node` → friendly RuntimeError pointing to install."""
+    def fake_run(cmd, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", "node")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError, match="brew install node"):
+        run_scraper("点击榜", tmp_path)
+
+
+def test_run_scraper_humanizes_chrome_not_running_error(monkeypatch, tmp_path):
+    """subprocess exit non-zero with CDP error → humanized message with setup command."""
+    class FakeResult:
+        returncode = 1
+        stdout = ""
+        stderr = "agent-browser failed: CDP discovery failed for 127.0.0.1:9222"
+
+    def fake_run(cmd, **kwargs):
+        return FakeResult()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        run_scraper("点击榜", tmp_path)
+
+    msg = str(exc_info.value)
+    assert "setup_ciweimao" in msg or "webnovel_chart_scan" in msg
+    assert "Chrome" in msg or "9222" in msg
+    assert "agent-browser" in msg
