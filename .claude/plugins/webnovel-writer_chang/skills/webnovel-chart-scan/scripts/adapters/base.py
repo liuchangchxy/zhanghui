@@ -10,6 +10,7 @@ class Strategy(str, Enum):
     HYBRID = "hybrid"           # uses httpx + reference to vendored code
     DIRECT_API = "direct_api"
     WEBFETCH = "webfetch"
+    DIRECT_DUMP = "direct_dump"  # fetches pre-built upstream JSON dump (e.g. fanqie daily)
 
 
 class AdapterStatus(str, Enum):
