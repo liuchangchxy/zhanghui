@@ -84,3 +84,8 @@ def check_chrome_running(port: int) -> bool:
             return '"Browser"' in body
     except Exception:
         return False
+
+
+def check_agent_browser() -> bool:
+    """Return True if `agent-browser` is on PATH."""
+    return shutil.which("agent-browser") is not None

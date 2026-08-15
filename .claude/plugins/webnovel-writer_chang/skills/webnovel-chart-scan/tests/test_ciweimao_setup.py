@@ -92,3 +92,15 @@ def test_check_chrome_running_returns_false_on_non_2xx(monkeypatch):
 
     monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=2: FakeResp())
     assert check_chrome_running(9222) is False
+
+
+def test_check_agent_browser_returns_true_when_on_path(monkeypatch):
+    from scripts.ciweimao_setup.setup_ciweimao import check_agent_browser
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/local/bin/agent-browser" if cmd == "agent-browser" else None)
+    assert check_agent_browser() is True
+
+
+def test_check_agent_browser_returns_false_when_missing(monkeypatch):
+    from scripts.ciweimao_setup.setup_ciweimao import check_agent_browser
+    monkeypatch.setattr("shutil.which", lambda cmd: None)
+    assert check_agent_browser() is False
