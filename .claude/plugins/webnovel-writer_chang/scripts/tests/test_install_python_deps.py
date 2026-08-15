@@ -226,7 +226,7 @@ def test_should_install_module_stale_stamp(tmp_path, monkeypatch):
     venv = tmp_path / "cache" / "venvs" / "m"
     venv.mkdir(parents=True)
     (venv / ".install-stamp").write_text("stale-stamp-not-matching\n")
-    assert should_install_module(module) != "ok"
+    assert should_install_module(module).startswith("stale stamp")
 
 
 def test_should_install_module_up_to_date(tmp_path, monkeypatch):
@@ -240,4 +240,61 @@ def test_should_install_module_up_to_date(tmp_path, monkeypatch):
     stamp = compute_install_stamp(module)
     (venv / ".install-stamp").write_text(stamp + "\n")
     assert should_install_module(module) == "ok"
+
+
+def test_should_install_module_missing_stamp(tmp_path, monkeypatch):
+    from hooks.install_python_deps import should_install_module
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='x'\n")
+    venv = tmp_path / "cache" / "venvs" / "m"
+    venv.mkdir(parents=True)
+    # Deliberately do NOT create .install-stamp
+    assert should_install_module(module) == "missing stamp"
+
+
+@pytest.mark.parametrize("stamp_content", [
+    "",                    # empty file
+    "   \n",               # whitespace only
+    "valid-stamp\r\n",     # Windows CRLF (should still work via .strip())
+    "valid-stamp",         # no trailing newline
+])
+def test_should_install_module_stamp_content_variants(tmp_path, monkeypatch, stamp_content):
+    """Verify stamp file content variants are handled correctly."""
+    from hooks.install_python_deps import should_install_module, compute_install_stamp
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='x'\n")
+    venv = tmp_path / "cache" / "venvs" / "m"
+    venv.mkdir(parents=True)
+    (venv / ".install-stamp").write_text(stamp_content)
+    result = should_install_module(module)
+    # Either matches (ok) or is stale stamp — never missing stamp (file exists)
+    assert result != "missing stamp"
+    assert result != "missing venv"
+    # If stamp_content (after strip) matches expected, should be ok
+    expected = compute_install_stamp(module)
+    if stamp_content.strip() == expected:
+        assert result == "ok"
+    else:
+        assert result.startswith("stale stamp")
+
+
+def test_should_install_module_corrupt_stamp_does_not_crash(tmp_path, monkeypatch):
+    """Corrupted stamp (non-UTF-8 bytes) should not crash the function."""
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    from hooks.install_python_deps import should_install_module
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='x'\n")
+    venv = tmp_path / "cache" / "venvs" / "m"
+    venv.mkdir(parents=True)
+    # Write non-UTF-8 bytes directly
+    (venv / ".install-stamp").write_bytes(b"\xff\xfe\xfd")
+    # Should NOT raise UnicodeDecodeError after the fix
+    result = should_install_module(module)
+    # Should be classified as stale stamp (content doesn't match expected)
+    assert result.startswith("stale stamp")
 

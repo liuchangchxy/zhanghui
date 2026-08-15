@@ -144,7 +144,12 @@ def should_install_module(module_dir: Path) -> str:
         module_dir: 含 pyproject.toml 的目录。
 
     Returns:
-        "ok" 如果 venv 存在且 stamp 匹配；否则返回原因字符串（"missing venv" / "stale stamp"）。
+        以下 4 个字符串之一:
+            - "ok"                       venv 存在且 stamp 匹配
+            - "missing venv"             venv 目录不存在
+            - "missing stamp"            venv 目录存在但 .install-stamp 文件不存在
+            - "stale stamp (disk=X expected=Y)"  venv+stamp 都存在但内容不匹配
+                                         (X, Y 是 sha256 前 8 字符用于调试)
     """
     cache = resolve_cache_dir()
     venv = cache / "venvs" / module_dir.name
@@ -153,7 +158,9 @@ def should_install_module(module_dir: Path) -> str:
     stamp_path = venv / ".install-stamp"
     if not stamp_path.exists():
         return "missing stamp"
-    on_disk = stamp_path.read_text().strip()
+    # errors="replace" defends against corrupted stamp files (e.g., process
+    # killed mid-write, disk corruption). Crash here would block SessionStart.
+    on_disk = stamp_path.read_text(errors="replace").strip()
     expected = compute_install_stamp(module_dir)
     if on_disk != expected:
         return f"stale stamp (disk={on_disk[:8]} expected={expected[:8]})"
