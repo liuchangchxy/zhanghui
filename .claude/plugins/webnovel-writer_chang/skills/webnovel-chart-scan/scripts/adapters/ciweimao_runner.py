@@ -41,15 +41,15 @@ JS_SCRAPER_PATH = (
 )
 
 
-# Map our (category, period) → ciweimao rank_type understood by the JS.
-# ciweimao has 9 rank types: 点击榜 / 收藏榜 / 推荐榜 / 订阅榜 / 月票榜 /
-# 吐槽榜 / 新书榜 / 刀片榜 / 更新榜. We map "weekly" → 点击榜 (default
-# click rank = most-active on the platform), "daily" → 更新榜 (today's
-# updates), "monthly" → 月票榜 (monthly tickets).
+# Map our (period) → worldwonderer JS --type value.
+# Verified against upstream ciweimao-rank-scraper.js (commit 6af05297):
+#   --type click  → 点击榜 (most-active, refreshes often)
+#   --type monthly → 月票榜 (monthly tickets)
+#   --type all    → all ranks (heavier; not used by us)
 PERIOD_TO_RANK_TYPE = {
-    "daily": "更新榜",
-    "weekly": "点击榜",
-    "monthly": "月票榜",
+    "daily": "click",
+    "weekly": "click",
+    "monthly": "monthly",
 }
 
 
@@ -182,14 +182,15 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    # The worldwonderer scraper accepts --rank-type and --output-dir args
-    # (verified against upstream source 2026-08-16). Adjust if upstream API
-    # has changed — see vendor/worldwonderer_subset/README.md.
+    # The worldwonderer scraper accepts --type, --outdir, --port args
+    # (verified against upstream commit 6af05297, 2026-08-14). Adjust if
+    # upstream API has changed — see vendor/worldwonderer_subset/README.md.
     cmd = [
         "node",
         str(JS_SCRAPER_PATH),
-        "--rank-type", rank_type,
-        "--output-dir", str(output_dir),
+        "--type", rank_type,
+        "--outdir", str(output_dir),
+        "--port", "9222",
     ]
     try:
         result = subprocess.run(
