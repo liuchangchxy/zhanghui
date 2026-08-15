@@ -55,8 +55,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import httpx
+import pytest
 
-from scripts.adapters.fanqie import FanqieAdapter
+from scripts.adapters import fanqie as fanqie_mod
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "fanqie_dump_20260815.json"
@@ -67,6 +68,16 @@ def _fake_httpx_get_factory(fixture_path: Path):
     def _fake_get(url, **kwargs):
         content = fixture_path.read_bytes()
         return httpx.Response(200, content=content, request=httpx.Request("GET", url))
+    return _fake_get
+
+
+def _fake_httpx_status_factory(status_code: int, body: str = ""):
+    """Return a fake httpx.get that returns a response with the given status."""
+    def _fake_get(url, **kwargs):
+        return httpx.Response(
+            status_code, text=body,
+            request=httpx.Request("GET", url),
+        )
     return _fake_get
 
 
@@ -119,3 +130,128 @@ def test_fanqie_adapter_status_is_live_after_fix():
     a = FanqieAdapter()
     assert a.status.value in ("live", "live_with_setup"), \
         f"adapter still BLOCKED_*: {a.status.value}"
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Adversarial review v0.2.1 fixes (C1+C2+C3+I1+I2)
+# ─────────────────────────────────────────────────────────────────────
+
+def test_fanqie_corrupted_cache_recovers_and_redownloads(monkeypatch, tmp_path):
+    """C1: a corrupted cache file (e.g. truncated download) must not crash;
+    _download_dump should log a warning, delete the cache, and re-download.
+    """
+    monkeypatch.setattr(fanqie_mod, "CACHE_DIR", tmp_path)
+
+    # Pre-write a corrupted cache file (today's date)
+    from datetime import datetime, timezone
+    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    cache_file = tmp_path / f"fanqie_dump_{date_str}.json"
+    cache_file.write_text("{not valid json", encoding="utf-8")
+
+    # HTTP will be called once after the corrupted cache is wiped.
+    fake_get = _fake_httpx_get_factory(FIXTURE_PATH)
+    with patch("scripts.adapters.fanqie.httpx.get", side_effect=fake_get):
+        books = FanqieAdapter().fetch("玄幻", "weekly", top=3)
+
+    assert len(books) > 0
+    # The cache file should now contain valid JSON (re-written).
+    assert json.loads(cache_file.read_text(encoding="utf-8"))
+
+
+def test_fanqie_non_json_200_ok_raises_clear_runtime_error(monkeypatch, tmp_path):
+    """C2: a non-JSON 200 OK response (e.g. HTML error page) must raise a
+    RuntimeError with a clear message naming content-type + first chars,
+    not the cryptic ``json.JSONDecodeError``.
+    """
+    monkeypatch.setattr(fanqie_mod, "CACHE_DIR", tmp_path)
+    fake_get = _fake_httpx_status_factory(
+        200, body="<html><body>Cloudflare challenge</body></html>",
+    )
+    with patch("scripts.adapters.fanqie.httpx.get", side_effect=fake_get):
+        with pytest.raises(RuntimeError, match="non-JSON"):
+            FanqieAdapter().fetch("玄幻", "weekly", top=3)
+
+
+def test_fanqie_non_json_200_ok_does_not_cache(monkeypatch, tmp_path):
+    """C3: if json.loads fails, no cache file should be written so the next
+    call retries from upstream.
+    """
+    monkeypatch.setattr(fanqie_mod, "CACHE_DIR", tmp_path)
+    fake_get = _fake_httpx_status_factory(
+        200, body="<html><body>Cloudflare</body></html>",
+    )
+    with patch("scripts.adapters.fanqie.httpx.get", side_effect=fake_get):
+        with pytest.raises(RuntimeError):
+            FanqieAdapter().fetch("玄幻", "weekly", top=3)
+
+    # No cache file should exist (the non-JSON body was never persisted).
+    cache_files = list(tmp_path.glob("fanqie_dump_*.json"))
+    assert cache_files == [], (
+        f"non-JSON body should not be cached, found: {cache_files}"
+    )
+
+
+def test_fanqie_empty_categories_steps_back_and_succeeds(monkeypatch, tmp_path):
+    """I1: if a dump's ``categories`` list is empty, treat as 404-equivalent
+    and step back a day so the fallback loop can find yesterday's dump.
+    """
+    monkeypatch.setattr(fanqie_mod, "CACHE_DIR", tmp_path)
+
+    empty_dump = json.dumps({"date": "2026-08-15", "categories": []})
+
+    def _fake_get(url, **kwargs):
+        # First call (today) returns an empty dump; second call
+        # (yesterday) returns the real fixture.
+        if not hasattr(_fake_get, "_called"):
+            _fake_get._called = True
+            return httpx.Response(
+                200, text=empty_dump,
+                request=httpx.Request("GET", url),
+            )
+        return httpx.Response(
+            200, content=FIXTURE_PATH.read_bytes(),
+            request=httpx.Request("GET", url),
+        )
+
+    with patch("scripts.adapters.fanqie.httpx.get", side_effect=_fake_get):
+        books = FanqieAdapter().fetch("玄幻", "weekly", top=3)
+
+    assert len(books) > 0, "should have stepped back to yesterday's dump"
+
+
+def test_fanqie_transient_http_error_steps_back_and_succeeds(monkeypatch, tmp_path):
+    """I2: httpx transport errors should be caught and treated like 404
+    (step back a day). After the first error, a normal response should
+    yield books.
+    """
+    monkeypatch.setattr(fanqie_mod, "CACHE_DIR", tmp_path)
+
+    def _fake_get(url, **kwargs):
+        if not hasattr(_fake_get, "_called"):
+            _fake_get._called = True
+            raise httpx.ConnectError("simulated transient network error")
+        return httpx.Response(
+            200, content=FIXTURE_PATH.read_bytes(),
+            request=httpx.Request("GET", url),
+        )
+
+    with patch("scripts.adapters.fanqie.httpx.get", side_effect=_fake_get):
+        books = FanqieAdapter().fetch("玄幻", "weekly", top=3)
+
+    assert len(books) > 0
+
+
+def test_fanqie_max_fallback_days_constant_exists():
+    """M4: the magic number 3 must be exposed as a module-level constant."""
+    assert fanqie_mod.MAX_FALLBACK_DAYS == 3
+    assert isinstance(fanqie_mod.MAX_FALLBACK_DAYS, int)
+
+
+def test_fanqie_raw_payload_uses_period_arg_key():
+    """M7 part 1: the echoed user period arg must be keyed ``period_arg``
+    (clearer that it's the user's arg, not upstream data)."""
+    fake_get = _fake_httpx_get_factory(FIXTURE_PATH)
+    with patch("scripts.adapters.fanqie.httpx.get", side_effect=fake_get):
+        books = FanqieAdapter().fetch("玄幻", "weekly", top=1)
+    assert "period_arg" in books[0].raw_payload
+    assert "period" not in books[0].raw_payload
