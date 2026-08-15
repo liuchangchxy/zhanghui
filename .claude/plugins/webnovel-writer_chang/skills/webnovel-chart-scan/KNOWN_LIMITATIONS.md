@@ -1,6 +1,6 @@
-# Known Limitations (v0.1.4)
+# Known Limitations (v0.2.0)
 
-Last updated: 2026-08-13
+Last updated: 2026-08-16
 
 Each platform adapter is explicitly marked with `status`:
 - **LIVE**: works against real upstream today
@@ -8,27 +8,52 @@ Each platform adapter is explicitly marked with `status`:
 - **BLOCKED_EXTERNAL**: external blocker (anti-bot / dead endpoint) — needs upstream-side fix
 - **BLOCKED_IMPLEMENTATION**: needs code work — clearly documented next steps
 
-## Platform status (verified 2026-08-13)
+## Platform status (verified 2026-08-16)
 
 | Platform | Status | Why | Enable path |
 |----------|--------|-----|-------------|
-| **ciweimao** (刺猬猫) | 🔴 BLOCKED_EXTERNAL | Captcha 307 (man-machine verify) added 2026-08-13 — `/book_list/*` now redirects to `/signup/man_machine_verify` even minutes after a first success | v0.2: Playwright + hCaptcha solver, or alternative endpoint |
-| **fanqie** (番茄) | 🔴 BLOCKED_IMPLEMENTATION | Even with Playwright installed, vendored `run_scraper` is a site-wide JSON dump that doesn't match our per-(category, period, top) signature — needs a thin adapter over `run_scraper` | v0.2: read dump file (vendor/fanqie_rank_tracker/data/fanqie_all_ranks_YYYYMMDD.json) and slice by category |
+| **ciweimao** (刺猬猫) | 🟡 LIVE_WITH_SETUP | Vendored worldwonderer/oh-story-claudecode (MIT) Node scraper uses CDP to bypass captcha. Needs Node.js ≥18 + Chrome accessible via agent-browser | Setup: `brew install node` + install agent-browser. See `vendor/worldwonderer_subset/README.md` |
+| **fanqie** (番茄) | 🟡 LIVE_WITH_SETUP | Fetches pre-built daily dump from FanqieRankTracker's GitHub raw (74 categories × 20 books, ~2MB). No Playwright needed. 1-day data lag. | Setup: ensure outbound HTTPS to raw.githubusercontent.com works. Cache at `~/.cache/webnovel-chart-scan/` |
 | **qimao** (七猫) | LIVE | Vendored regex rewrite fixed (v0.1.2); shared Nuxt SSR parser in `scripts/nuxt_parser.py` | n/a |
 | **qidian** (起点) | LIVE | Mobile-subdomain bypass — `https://m.qidian.com/rank` and `/category/catid<id>` return server-rendered HTML with the iPhone Safari User-Agent (no probe.js) | n/a |
 | **zongheng** (纵横) | LIVE | Nuxt SSR scraping — `/rank?nav=new-book&rankType=4` returns 200 with `window.__NUXT__` payload containing all 6 rank lists; uses shared parser | n/a |
 
-3/5 platforms are LIVE. 2/5 are blocked (1 external, 1 implementation).
+3/5 platforms are LIVE. 2/5 are LIVE_WITH_SETUP.
 
-## Test counts (verified 2026-08-13)
+## Test counts (verified 2026-08-16)
 
-- Fast tests (default, `pytest tests/`): 89 — all pass; no skips
+- Fast tests (default, `pytest tests/`): 104 — all pass; no skips
 - Slow tests (`pytest -m slow`): 10 — 8 pass (qidian ×3, qimao ×2, zongheng ×3), 2 skipped (ciweimao captcha-regression HTTP smoke tests; @pytest.mark.skip)
-- Total: 99
+- Total: 114
 
 Skipped at runtime by `addopts = "-m 'not slow'"` in `pyproject.toml`. Run
 slow tests explicitly with `pytest -m slow` once you have network access
 and want to verify the LIVE adapters.
+
+## v0.2.0 changelog (2026-08-16)
+
+### Platform upgrades
+- **fanqie: BLOCKED_IMPLEMENTATION → LIVE_WITH_SETUP.** Replaced Playwright-based `run_scraper` wrapper with direct fetch of upstream's pre-built daily dump from `raw.githubusercontent.com/Despacito0o/FanqieRankTracker/master/data/fanqie_all_ranks_YYYYMMDD.json`. No Chromium, no batch blocking. New subcategory→normalized mapping (`scripts/adapters/fanqie_subcat_map.py`) covers all 34 fanqie subcategories.
+- **ciweimao: BLOCKED_EXTERNAL → LIVE_WITH_SETUP.** Vendored `worldwonderer/oh-story-claudecode` `ciweimao-rank-scraper.js` (MIT, 5600★) — uses Chrome DevTools Protocol to bypass the 307 captcha. Python shells out to Node.js + the JS, parses Markdown output via `scripts/adapters/ciweimao_runner.py`. New category mapping (`scripts/adapters/ciweimao_cat_map.py`) handles native→normalized conversion.
+- **Strategy enum:** Added `Strategy.DIRECT_DUMP` for adapters that fetch pre-built upstream data (vs scraping).
+
+### New files
+- `scripts/adapters/fanqie_subcat_map.py` — fanqie native subcategory → normalized category mapping (34 entries)
+- `scripts/adapters/ciweimao_cat_map.py` — ciweimao native category → normalized category mapping (~24 entries)
+- `scripts/adapters/ciweimao_runner.py` — Markdown parser + Node subprocess wrapper
+- `vendor/worldwonderer_subset/ciweimao-rank-scraper.js` — vendored upstream (MIT)
+- `vendor/worldwonderer_subset/README.md` — attribution + how-to-use
+- `tests/fixtures/ciweimao_rank_click.md` — sample Markdown output for parser tests
+- `tests/fixtures/fanqie_dump_20260815.json` — sample dump for parser tests (already added 2026-08-16)
+- `tests/test_fanqie_subcat_map.py` — subcategory mapping tests (6 tests)
+- `tests/test_ciweimao_runner.py` — Markdown parser tests (4 tests)
+
+### Test count change
+- v0.1.4: 89 fast + 10 slow = 99 total
+- v0.2.0: 104 fast + 10 slow = 114 total
+- +15 fast tests (6 fanqie_subcat_map + 4 ciweimao_runner + 1 fanqie_status + 4 ciweimao_adapter rewrite)
+
+5/5 platforms now LIVE or LIVE_WITH_SETUP.
 
 ## v0.1.4 changelog (2026-08-13)
 

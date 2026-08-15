@@ -68,10 +68,10 @@ chart-scan/
 | 平台 | Strategy | 说明 |
 |------|----------|------|
 | 起点 | HYBRID | parser + URL 模板 + 分类 ID（reference-only vendor） |
-| 番茄 | VENDOR | fork FanqieRankTracker（需 chromium） |
+| 番茄 | DIRECT_DUMP | fetch GitHub raw daily dump（无需 chromium，T-1 天延迟） |
 | 纵横 | DIRECT_API | 自写 httpx 调公开 API |
 | 七猫 | VENDOR | clone WebCrawler（个人自用） |
-| 刺猬猫 | WEBFETCH | 自写 httpx + BS4 |
+| 刺猬猫 | WEBFETCH (vendored CDP) | shell-out to vendored Node scraper（需 Node.js + Chrome） |
 
 详见 `references/upstream-survey.md`。
 
