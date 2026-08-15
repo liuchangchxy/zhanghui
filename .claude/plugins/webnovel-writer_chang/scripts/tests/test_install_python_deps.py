@@ -318,6 +318,30 @@ def test_should_install_module_corrupt_stamp_does_not_crash(tmp_path, monkeypatc
     assert result.startswith("stale stamp")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix-only path/chmod/binary")
+def test_should_install_module_corrupted_venv_deletes_and_returns_corrupted(tmp_path, monkeypatch):
+    """corrupted venv (broken bin/python) should trigger nuke + return 'corrupted venv'."""
+    from hooks.install_python_deps import should_install_module
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='x'\n")
+    venv = tmp_path / "cache" / "venvs" / "m"
+    venv.mkdir(parents=True)
+    # Create a CORRUPTED bin/python (non-executable text file)
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").write_text("not a real binary")
+    # Don't chmod — file is non-executable
+    # Optionally add a fresh stamp to verify nuke removes EVERYTHING (not just bin/)
+    (venv / ".install-stamp").write_text("stale-stamp-should-be-deleted")
+
+    result = should_install_module(module)
+    assert result == "corrupted venv"
+
+    # Verify venv was deleted (nuke_venv should have removed the whole dir)
+    assert not venv.exists()
+
+
 # --- find_python_modules ---
 
 def test_find_python_modules_finds_pyproject_toml(tmp_path):
@@ -464,4 +488,27 @@ def test_is_venv_corrupted_healthy(tmp_path, monkeypatch):
     fake_py.chmod(0o755)
     from hooks.install_python_deps import is_venv_corrupted
     assert is_venv_corrupted("x") is False
+
+
+# --- nuke_venv ---
+
+def test_nuke_venv_removes_existing_dir(tmp_path, monkeypatch):
+    """nuke_venv should remove the venv directory entirely."""
+    from hooks.install_python_deps import nuke_venv
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    venv = tmp_path / "cache" / "venvs" / "x"
+    venv.mkdir(parents=True)
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").write_text("fake")
+    assert venv.exists()
+    nuke_venv("x")
+    assert not venv.exists()
+
+
+def test_nuke_venv_noop_on_missing(tmp_path, monkeypatch):
+    """nuke_venv should not raise when venv doesn't exist."""
+    from hooks.install_python_deps import nuke_venv
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    # Don't create venv at all
+    nuke_venv("x")  # should not raise
 
