@@ -7,7 +7,9 @@ from __future__ import annotations
 import hashlib
 import os
 import platform as _platform
+import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -186,3 +188,56 @@ def find_python_modules(plugin_root: Path) -> list[Path]:
     if (dashboard / "pyproject.toml").exists():
         modules.append(dashboard)
     return modules
+
+
+DEFAULT_INSTALL_TIMEOUT = 300  # 5 min
+
+
+def install_module(module_dir: Path) -> None:
+    """为单个 module 创建 venv + uv pip install + 写 stamp。
+
+    Args:
+        module_dir: 含 pyproject.toml 的目录。
+
+    Raises:
+        RuntimeError: uv venv 或 uv pip install 返回非 0；log 写到 logs/。
+    """
+    cache = resolve_cache_dir()
+    venv = cache / "venvs" / module_dir.name
+    logs = cache / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    log_path = logs / f"install-{module_dir.name}-{timestamp}.log"
+
+    # Locate uv via $CLAUDE_PLUGIN_ROOT/vendor/uv (set by Claude Code).
+    plugin_root_env = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if not plugin_root_env:
+        raise RuntimeError("CLAUDE_PLUGIN_ROOT 未设置；这个脚本必须在 plugin hook 里跑")
+    uv = select_uv_binary(Path(plugin_root_env) / "vendor" / "uv")
+
+    venv.parent.mkdir(parents=True, exist_ok=True)
+
+    # Step 1: uv venv
+    r = subprocess.run(
+        [str(uv), "venv", str(venv), "--python", "3.11"],
+        capture_output=True, text=True, timeout=DEFAULT_INSTALL_TIMEOUT,
+    )
+    if r.returncode != 0:
+        log_path.write_text(f"uv venv failed:\n{r.stderr}\n")
+        raise RuntimeError(f"uv venv 失败：{r.stderr[:200]}")
+
+    # Step 2: uv pip install
+    r = subprocess.run(
+        [str(uv), "pip", "install", "-e", str(module_dir)],
+        capture_output=True, text=True, timeout=DEFAULT_INSTALL_TIMEOUT,
+        env={**os.environ, "VIRTUAL_ENV": str(venv)},
+    )
+    if r.returncode != 0:
+        log_path.write_text(f"uv pip install failed:\n{r.stderr}\n")
+        raise RuntimeError(f"uv pip install 失败：{r.stderr[:200]}")
+
+    # Step 3: write stamp
+    stamp = compute_install_stamp(module_dir)
+    (venv / ".install-stamp").write_text(stamp + "\n")
+    log_path.write_text(f"OK: installed {module_dir.name}, stamp={stamp[:8]}\n")
+

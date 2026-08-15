@@ -313,3 +313,61 @@ def test_find_python_modules_finds_pyproject_toml(tmp_path):
     names = sorted(m.name for m in modules)
     assert names == ["chart-scan", "dashboard"]
 
+
+# --- install_module ---
+
+def test_install_module_creates_venv_and_stamp(tmp_path, monkeypatch):
+    """集成测试：mock uv subprocess 调用，验证 venv + stamp 创建。"""
+    from hooks import install_python_deps as ipd
+    monkeypatch.setattr(ipd, "resolve_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
+    fake_uv_calls = []
+
+    def fake_uv_run(argv, **kwargs):
+        fake_uv_calls.append(argv)
+        # 模拟 uv venv 创建目录
+        if "venv" in argv:
+            venv_idx = argv.index("venv") + 1
+            Path(argv[venv_idx]).mkdir(parents=True, exist_ok=True)
+            # 创建 site-packages 父目录
+            (Path(argv[venv_idx]) / "lib" / "site-packages").mkdir(parents=True, exist_ok=True)
+            (Path(argv[venv_idx]) / "lib" / "site-packages" / "foo.py").write_text("# ok")
+        return type("R", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(ipd.subprocess, "run", fake_uv_run)
+
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='m'\n")
+    ipd.install_module(module)
+
+    venv = tmp_path / "cache" / "venvs" / "m"
+    assert venv.exists()
+    assert (venv / ".install-stamp").exists()
+    assert (venv / ".install-stamp").read_text().strip() == ipd.compute_install_stamp(module)
+    assert len(fake_uv_calls) == 2  # uv venv + uv pip install
+
+
+def test_install_module_failure_writes_log(tmp_path, monkeypatch):
+    """uv 失败的场景：写 log，不写 stamp。"""
+    from hooks import install_python_deps as ipd
+    monkeypatch.setattr(ipd, "resolve_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
+
+    def fake_uv_fail(argv, **kwargs):
+        # uv venv 成功；uv pip install 失败（这才触发目标 RuntimeError 消息）
+        if "pip" in argv:
+            return type("R", (), {"returncode": 1, "stderr": "ERROR: package 'foo' not found"})()
+        return type("R", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(ipd.subprocess, "run", fake_uv_fail)
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='m'\n")
+
+    with pytest.raises(RuntimeError, match="uv pip install 失败"):
+        ipd.install_module(module)
+
+    venv = tmp_path / "cache" / "venvs" / "m"
+    assert not (venv / ".install-stamp").exists()
+
