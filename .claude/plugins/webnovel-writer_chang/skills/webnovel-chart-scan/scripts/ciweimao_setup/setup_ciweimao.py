@@ -15,6 +15,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -147,4 +148,25 @@ def launch_chrome(port: int, user_data_dir: Path) -> subprocess.Popen:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
+    )
+
+
+def verify_cdp_ready(port: int, retries: int = 10, delay: float = 0.5) -> None:
+    """Poll check_chrome_running until it returns True or retries exhausted.
+
+    Raises RuntimeError if Chrome doesn't come up. Default 10×0.5s = 5s
+    total — long enough for Chrome to start listening, short enough to
+    fail fast on misconfiguration.
+    """
+    for attempt in range(1, retries + 1):
+        if check_chrome_running(port):
+            return
+        time.sleep(delay)
+    raise RuntimeError(
+        f"Chrome 启动后 {retries * delay:.1f}s 内 CDP @ {port} 未就绪。\n"
+        f"可能原因：\n"
+        f"  - Chrome 进程被 OOM killer 或 sandbox 杀掉\n"
+        f"  - 端口 {port} 被另一个进程占用（试 WEBNOVEL_CIWEIMAO_CDP_PORT=9333）\n"
+        f"  - 防火墙拦截 127.0.0.1:{port}\n"
+        f"手动检查：curl http://127.0.0.1:{port}/json/version"
     )

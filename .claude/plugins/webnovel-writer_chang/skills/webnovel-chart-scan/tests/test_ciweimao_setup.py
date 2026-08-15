@@ -191,3 +191,46 @@ def test_launch_chrome_includes_headless_flag(monkeypatch, tmp_path):
     monkeypatch.setattr("subprocess.Popen", FakePopen)
     launch_chrome(9222, tmp_path / "chrome-profile")
     assert "--headless=new" in captured["cmd"]
+
+
+def test_verify_cdp_ready_returns_silently_when_check_succeeds(monkeypatch):
+    """If check_chrome_running is True immediately → no exception, no sleep."""
+    from scripts.ciweimao_setup.setup_ciweimao import verify_cdp_ready
+
+    calls = []
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.check_chrome_running",
+        lambda port: calls.append(port) or True,
+    )
+    monkeypatch.setattr("scripts.ciweimao_setup.setup_ciweimao.time.sleep", lambda *_: None)
+    verify_cdp_ready(9222, retries=5, delay=0.1)  # should not raise
+    assert calls == [9222]
+
+
+def test_verify_cdp_ready_retries_then_raises(monkeypatch):
+    """If check_chrome_running stays False across all retries → RuntimeError."""
+    from scripts.ciweimao_setup.setup_ciweimao import verify_cdp_ready
+
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.check_chrome_running",
+        lambda port: False,
+    )
+    monkeypatch.setattr("scripts.ciweimao_setup.setup_ciweimao.time.sleep", lambda *_: None)
+    with pytest.raises(RuntimeError, match="未就绪"):
+        verify_cdp_ready(9222, retries=3, delay=0.01)
+
+
+def test_verify_cdp_ready_succeeds_after_some_retries(monkeypatch):
+    """Succeeds on attempt 2 → no error."""
+    from scripts.ciweimao_setup.setup_ciweimao import verify_cdp_ready
+
+    state = {"n": 0}
+    def fake_check(port):
+        state["n"] += 1
+        return state["n"] >= 2
+    monkeypatch.setattr(
+        "scripts.ciweimao_setup.setup_ciweimao.check_chrome_running", fake_check,
+    )
+    monkeypatch.setattr("scripts.ciweimao_setup.setup_ciweimao.time.sleep", lambda *_: None)
+    verify_cdp_ready(9222, retries=5, delay=0.01)  # should not raise
+    assert state["n"] == 2
