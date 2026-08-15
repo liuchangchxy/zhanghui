@@ -7,14 +7,16 @@ mock the subprocess so they run offline.
 """
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import patch
 
 from scripts.adapters.ciweimao import CiweimaoAdapter
 from scripts.adapters.base import AdapterStatus
 
 
-FIXTURE_PATH = Path(__file__).parent / "fixtures" / "ciweimao_rank_click.md"
+FIXTURE_PATH = (
+    __import__("pathlib").Path(__file__).parent
+    / "fixtures" / "ciweimao_rank_click.md"
+)
 
 
 def test_ciweimao_adapter_metadata():
@@ -25,19 +27,23 @@ def test_ciweimao_adapter_metadata():
     assert a.status == AdapterStatus.LIVE_WITH_SETUP
 
 
-def test_ciweimao_fetch_returns_real_books_via_subprocess(monkeypatch):
+def test_ciweimao_fetch_returns_real_books_via_subprocess(monkeypatch, tmp_path):
     """fetch() shells out to node, parses the Markdown output, returns books.
 
     We mock run_scraper to return a pre-created fixture file path,
     bypassing the actual subprocess call (Node + Chrome CDP).
+
+    I5: use ``tmp_path`` (pytest builtin) instead of a hardcoded
+    ``/tmp/...`` path that flakes under pytest-xdist / parallel runners.
     """
     a = CiweimaoAdapter()
 
-    # Pre-create the "output" file the JS would have written
-    fake_output_dir = Path("/tmp/webnovel-chart-scan-test-ciweimao")
-    fake_output_dir.mkdir(parents=True, exist_ok=True)
-    fake_md_file = fake_output_dir / "刺猬猫点击榜_20260815.md"
-    fake_md_file.write_text(FIXTURE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    # Pre-create the "output" file the JS would have written, under
+    # the per-test tmp_path so parallel test runners don't collide.
+    fake_md_file = tmp_path / "刺猬猫点击榜_20260815.md"
+    fake_md_file.write_text(
+        FIXTURE_PATH.read_text(encoding="utf-8"), encoding="utf-8",
+    )
 
     from scripts.adapters import ciweimao_runner
     monkeypatch.setattr(
@@ -50,14 +56,17 @@ def test_ciweimao_fetch_returns_real_books_via_subprocess(monkeypatch):
     assert books[0].platform_book_id == "100123456"
 
 
-def test_ciweimao_fetch_filters_by_category(monkeypatch):
-    """fetch(category='灵异') should filter out non-matching categories."""
+def test_ciweimao_fetch_filters_by_category(monkeypatch, tmp_path):
+    """fetch(category='灵异') should filter out non-matching categories.
+
+    I5: use ``tmp_path`` (pytest builtin) instead of /tmp.
+    """
     a = CiweimaoAdapter()
 
-    fake_output_dir = Path("/tmp/webnovel-chart-scan-test-ciweimao")
-    fake_output_dir.mkdir(parents=True, exist_ok=True)
-    fake_md_file = fake_output_dir / "刺猬猫点击榜_20260815.md"
-    fake_md_file.write_text(FIXTURE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    fake_md_file = tmp_path / "刺猬猫点击榜_20260815.md"
+    fake_md_file.write_text(
+        FIXTURE_PATH.read_text(encoding="utf-8"), encoding="utf-8",
+    )
 
     from scripts.adapters import ciweimao_runner
     monkeypatch.setattr(

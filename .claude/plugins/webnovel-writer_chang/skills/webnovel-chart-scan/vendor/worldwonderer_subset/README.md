@@ -57,5 +57,9 @@ upstream changes.
 
 ## License
 
-Upstream is MIT. This file and the vendored JS retain their original
-MIT license terms. See https://github.com/worldwonderer/oh-story-claudecode/blob/main/LICENSE
+Upstream is MIT. The full upstream MIT LICENSE text is included in this
+directory as `LICENSE` (sibling of this README, also fetched from
+`https://raw.githubusercontent.com/worldwonderer/oh-story-claudecode/main/LICENSE`
+on 2026-08-16). Both vendored JS files retain their original MIT license
+terms per upstream. See also
+https://github.com/worldwonderer/oh-story-claudecode/blob/main/LICENSE

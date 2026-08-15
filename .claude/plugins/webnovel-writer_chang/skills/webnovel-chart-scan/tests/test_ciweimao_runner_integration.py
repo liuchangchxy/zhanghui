@@ -106,11 +106,15 @@ def test_scraper_does_not_fail_with_module_not_found(tmp_path):
     # The scraper should mention either Chrome/CDP failure or have
     # written 0 files. Either is acceptable — what matters is that it
     # got past the require() check.
-    assert (
-        "CDP" in combined
-        or "agent-browser" in combined
-        or "Chrome" in combined
-        or "connection" in combined.lower()
+    # M5: assert the line-based presence of the EXPECTED error (CDP
+    # connection failure), not the regressed error (MODULE_NOT_FOUND).
+    # The combined output may include unrelated noise lines (deprecation
+    # warnings, empty lines, etc.) — check per-line so we don't flake
+    # on incidental string matches.
+    combined_lines = combined.splitlines()
+    assert any(
+        "agent-browser" in line or "CDP" in line
+        for line in combined_lines
     ), (
         f"Scraper output didn't look like a Chrome/CDP failure. "
         f"Was cdp-utils.js vendored correctly? Output:\n{combined[:1000]}"
