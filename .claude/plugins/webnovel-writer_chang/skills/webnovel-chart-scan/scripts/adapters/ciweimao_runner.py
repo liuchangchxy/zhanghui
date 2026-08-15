@@ -64,6 +64,7 @@ also fails to match, we leave ``category=""`` and set the flag.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -341,12 +342,15 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
     # The worldwonderer scraper accepts --type, --outdir, --port args
     # (verified against upstream commit 6af05297, 2026-08-14). Adjust if
     # upstream API has changed — see vendor/worldwonderer_subset/README.md.
+    # Read CDP port from env (default 9222). Honors WEBNOVEL_CIWEIMAO_CDP_PORT
+    # for users running multiple worktrees or non-default CDP setups.
+    port = os.environ.get("WEBNOVEL_CIWEIMAO_CDP_PORT", "9222")
     cmd = [
         "node",
         str(JS_SCRAPER_PATH),
         "--type", rank_type,
         "--outdir", str(output_dir),
-        "--port", "9222",
+        "--port", port,
     ]
     try:
         result = subprocess.run(
