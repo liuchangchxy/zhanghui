@@ -89,3 +89,40 @@ def check_chrome_running(port: int) -> bool:
 def check_agent_browser() -> bool:
     """Return True if `agent-browser` is on PATH."""
     return shutil.which("agent-browser") is not None
+
+
+def install_agent_browser() -> None:
+    """Run `npm install -g agent-browser` (120s timeout).
+
+    Raises RuntimeError with actionable message on any failure mode
+    (npm missing, EACCES, network error, timeout).
+    """
+    cmd = ["npm", "install", "-g", "agent-browser"]
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=120, check=False,
+        )
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "找不到 npm 可执行文件。请安装 Node.js ≥18（brew install node 或 "
+            "https://nodejs.org），它会附带 npm。"
+        ) from e
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(
+            "npm install -g agent-browser 超时（120s）。请检查网络或手动运行："
+            "sudo npm install -g agent-browser"
+        ) from e
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or b"").decode("utf-8", errors="replace") if isinstance(e.stderr, (bytes, bytearray)) else (e.stderr or "")
+        raise RuntimeError(
+            f"npm install -g agent-browser 失败（exit {e.returncode}）。\n"
+            f"stderr: {stderr[:300]}\n"
+            "请手动运行 `sudo npm install -g agent-browser` 并重试。"
+        ) from e
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"npm install -g agent-browser 失败（exit {result.returncode}）。\n"
+            f"stderr: {result.stderr[:300]}\n"
+            "请手动运行 `sudo npm install -g agent-browser` 并重试。"
+        )

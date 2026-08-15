@@ -5,6 +5,7 @@ or running npm. Subprocess-touching helpers are tested with unittest.mock.
 """
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -104,3 +105,55 @@ def test_check_agent_browser_returns_false_when_missing(monkeypatch):
     from scripts.ciweimao_setup.setup_ciweimao import check_agent_browser
     monkeypatch.setattr("shutil.which", lambda cmd: None)
     assert check_agent_browser() is False
+
+
+def test_install_agent_browser_runs_npm_install_g(monkeypatch):
+    """Install runs `npm install -g agent-browser` with 120s timeout."""
+    from scripts.ciweimao_setup.setup_ciweimao import install_agent_browser
+
+    captured = {}
+    def fake_run(cmd, *args, **kwargs):
+        captured["cmd"] = cmd
+        captured["timeout"] = kwargs.get("timeout")
+        captured["env"] = kwargs.get("env")
+        class R: returncode = 0; stderr = ""
+        return R()
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    install_agent_browser()
+    assert captured["cmd"][:3] == ["npm", "install", "-g"]
+    assert captured["cmd"][3] == "agent-browser"
+    assert captured["timeout"] == 120
+
+
+def test_install_agent_browser_raises_runtime_error_on_failure(monkeypatch):
+    from scripts.ciweimao_setup.setup_ciweimao import install_agent_browser
+
+    def fake_run(cmd, *args, **kwargs):
+        class R: returncode = 1; stderr = "EACCES permission denied"
+        raise subprocess.CalledProcessError(1, cmd, stderr=b"EACCES permission denied")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    with pytest.raises(RuntimeError, match="npm install -g agent-browser 失败"):
+        install_agent_browser()
+
+
+def test_install_agent_browser_raises_on_file_not_found(monkeypatch):
+    """`npm` itself missing → clear error."""
+    from scripts.ciweimao_setup.setup_ciweimao import install_agent_browser
+
+    def fake_run(cmd, *args, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", "npm")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    with pytest.raises(RuntimeError, match="找不到 npm"):
+        install_agent_browser()
+
+
+def test_install_agent_browser_raises_on_timeout(monkeypatch):
+    from scripts.ciweimao_setup.setup_ciweimao import install_agent_browser
+    def fake_run(cmd, *args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, 120)
+    monkeypatch.setattr("subprocess.run", fake_run)
+    with pytest.raises(RuntimeError, match="超时"):
+        install_agent_browser()
