@@ -1,6 +1,7 @@
 """install_python_deps.py 的单元测试。"""
 import hashlib
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -318,9 +319,16 @@ def test_should_install_module_corrupt_stamp_does_not_crash(tmp_path, monkeypatc
     assert result.startswith("stale stamp")
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Unix-only path/chmod/binary")
-def test_should_install_module_corrupted_venv_deletes_and_returns_corrupted(tmp_path, monkeypatch):
-    """corrupted venv (broken bin/python) should trigger nuke + return 'corrupted venv'."""
+@pytest.mark.parametrize("platform,venv_python_path", [
+    ("linux", "bin/python"),
+    ("darwin", "bin/python"),
+    ("win32", "Scripts/python.exe"),
+])
+def test_should_install_module_corrupted_venv_deletes_and_returns_corrupted(
+    tmp_path, monkeypatch, platform, venv_python_path
+):
+    """corrupted venv (missing python binary) → nuke + 'corrupted venv' (cross-platform)."""
+    monkeypatch.setattr(sys, "platform", platform)
     from hooks.install_python_deps import should_install_module
     monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
     module = tmp_path / "m"
@@ -328,10 +336,9 @@ def test_should_install_module_corrupted_venv_deletes_and_returns_corrupted(tmp_
     (module / "pyproject.toml").write_text("[project]\nname='x'\n")
     venv = tmp_path / "cache" / "venvs" / "m"
     venv.mkdir(parents=True)
-    # Create a CORRUPTED bin/python (non-executable text file)
-    (venv / "bin").mkdir(parents=True)
-    (venv / "bin" / "python").write_text("not a real binary")
-    # Don't chmod — file is non-executable
+    # Create the parent dir (bin/ or Scripts/) but NOT the python binary — that's
+    # the corrupted-venv state after our existence-only is_venv_corrupted refactor.
+    (venv / venv_python_path).parent.mkdir(parents=True)
     # Optionally add a fresh stamp to verify nuke removes EVERYTHING (not just bin/)
     (venv / ".install-stamp").write_text("stale-stamp-should-be-deleted")
 
@@ -448,45 +455,130 @@ def test_install_module_missing_uv_raises_runtime_error(tmp_path, monkeypatch):
     assert len(log_files) == 1
 
 
-# --- is_venv_corrupted ---
-#
-# Skip on Windows: venv path uses Unix /bin/python; tests below use chmod 0o755
-# (Unix permission semantics) and a shell script binary. Both are Unix-only.
+def test_install_module_venv_timeout_raises_runtime_error(tmp_path, monkeypatch):
+    """uv venv 超时 → 写 log + 抛 RuntimeError（spec §4.6.5 logging-on-failure）。"""
+    from hooks import install_python_deps as ipd
+    monkeypatch.setattr(ipd, "resolve_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Unix-only path/chmod/binary")
-def test_is_venv_corrupted_missing_python_bin(tmp_path, monkeypatch):
-    """venv 目录存在但 bin/python 不存在 → corrupted。"""
+    def fake_uv_timeout(argv, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=argv[0] if argv else "uv", timeout=300)
+
+    monkeypatch.setattr(ipd.subprocess, "run", fake_uv_timeout)
+
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='m'\n")
+
+    with pytest.raises(RuntimeError, match="uv venv 超时"):
+        ipd.install_module(module)
+
+    # Log file should be written with the timeout marker (spec §4.6.5)
+    logs = tmp_path / "cache" / "logs"
+    log_files = list(logs.glob("install-m-*.log"))
+    assert len(log_files) == 1
+    assert "timeout" in log_files[0].read_text().lower()
+
+
+def test_install_module_pip_timeout_continues_to_next_attempt(tmp_path, monkeypatch):
+    """uv pip install 超时 → 视为失败 attempt，继续 URL 重试链。"""
+    from hooks import install_python_deps as ipd
+    monkeypatch.setattr(ipd, "resolve_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
+
+    call_count = {"venv": 0, "pip": 0}
+
+    def fake_uv(argv, **kwargs):
+        # uv venv: 成功（一次）
+        if "venv" in argv:
+            call_count["venv"] += 1
+            venv_path = Path(argv[argv.index("venv") + 1])
+            venv_path.mkdir(parents=True, exist_ok=True)
+            (venv_path / "lib" / "site-packages").mkdir(parents=True, exist_ok=True)
+            return type("R", (), {"returncode": 0, "stderr": ""})()
+        # uv pip install: 全部超时
+        call_count["pip"] += 1
+        raise subprocess.TimeoutExpired(cmd="uv pip", timeout=300)
+
+    monkeypatch.setattr(ipd.subprocess, "run", fake_uv)
+
+    module = tmp_path / "m"
+    module.mkdir()
+    (module / "pyproject.toml").write_text("[project]\nname='m'\n")
+
+    with pytest.raises(RuntimeError, match="uv pip install"):
+        ipd.install_module(module)
+
+    # 1 venv call + 12 pip install calls (4 URLs × 3 retries = 12)
+    assert call_count["venv"] == 1
+    assert call_count["pip"] == 12
+
+    # Log file should be written with TimeoutExpired history
+    logs = tmp_path / "cache" / "logs"
+    log_files = list(logs.glob("install-m-*.log"))
+    assert len(log_files) == 1
+    log_content = log_files[0].read_text()
+    assert log_content.count("TimeoutExpired") == 12  # each attempt logged
+
+
+def test_is_venv_corrupted_under_2s_with_hung_binary(tmp_path, monkeypatch):
+    """is_venv_corrupted must not invoke python --version — verify it's fast even
+    when the venv 'binary' would block. Per spec §4.6.4 main hook <2s promise.
+    """
+    import time
     monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
     venv = tmp_path / "cache" / "venvs" / "x"
     venv.mkdir(parents=True)
+    (venv / "bin").mkdir(parents=True)
+    # Write a python that would block forever IF called. Existence check should
+    # short-circuit and never invoke it.
+    py_path = venv / "bin" / "python"
+    py_path.write_text("#!/bin/sh\nsleep 999\n")
+    py_path.chmod(0o755)
+
+    from hooks.install_python_deps import is_venv_corrupted
+    start = time.monotonic()
+    result = is_venv_corrupted("x")
+    elapsed = time.monotonic() - start
+    assert result is False  # binary exists → not corrupted
+    assert elapsed < 0.5, f"is_venv_corrupted took {elapsed:.3f}s — must be <0.5s"
+
+
+# --- is_venv_corrupted ---
+#
+# Cross-platform: existence-only check. Parametrize covers Unix vs Windows venv
+# layouts (uv creates bin/python on *nix, Scripts/python.exe on Windows).
+
+@pytest.mark.parametrize("platform,venv_python_path", [
+    ("linux", "bin/python"),
+    ("darwin", "bin/python"),
+    ("win32", "Scripts/python.exe"),
+])
+def test_is_venv_corrupted_missing_python_bin(tmp_path, monkeypatch, platform, venv_python_path):
+    """venv 目录存在但 python 二进制不存在 → corrupted（覆盖全平台）。"""
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
+    venv = tmp_path / "cache" / "venvs" / "x"
+    # Create the parent dir (bin/ or Scripts/) but NOT the python binary itself
+    (venv / venv_python_path).parent.mkdir(parents=True)
     from hooks.install_python_deps import is_venv_corrupted
     assert is_venv_corrupted("x") is True
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Unix-only path/chmod/binary")
-def test_is_venv_corrupted_python_version_fails(tmp_path, monkeypatch):
-    """bin/python 存在但 --version 失败 → corrupted。"""
+@pytest.mark.parametrize("platform,venv_python_path", [
+    ("linux", "bin/python"),
+    ("darwin", "bin/python"),
+    ("win32", "Scripts/python.exe"),
+])
+def test_is_venv_corrupted_healthy(tmp_path, monkeypatch, platform, venv_python_path):
+    """python 二进制存在 → not corrupted（覆盖全平台）。"""
+    monkeypatch.setattr(sys, "platform", platform)
     monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
     venv = tmp_path / "cache" / "venvs" / "x"
-    bin_dir = venv / "bin"
-    bin_dir.mkdir(parents=True)
-    fake_py = bin_dir / "python"
-    fake_py.write_text("#!/bin/sh\nexit 1\n")
-    fake_py.chmod(0o755)
-    from hooks.install_python_deps import is_venv_corrupted
-    assert is_venv_corrupted("x") is True
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="Unix-only path/chmod/binary")
-def test_is_venv_corrupted_healthy(tmp_path, monkeypatch):
-    """bin/python 健康 (--version 退出 0) → not corrupted。"""
-    monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
-    venv = tmp_path / "cache" / "venvs" / "x"
-    bin_dir = venv / "bin"
-    bin_dir.mkdir(parents=True)
-    fake_py = bin_dir / "python"
-    fake_py.write_text("#!/bin/sh\necho Python 3.11.0\nexit 0\n")
-    fake_py.chmod(0o755)
+    py_path = venv / venv_python_path
+    py_path.parent.mkdir(parents=True)
+    # Content doesn't matter — only existence is checked (per spec §4.6.4 <2s promise)
+    py_path.write_text("#!/bin/sh\necho Python 3.11.0\nexit 0\n")
     from hooks.install_python_deps import is_venv_corrupted
     assert is_venv_corrupted("x") is False
 

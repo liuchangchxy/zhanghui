@@ -276,6 +276,9 @@ def install_module(module_dir: Path) -> None:
     except FileNotFoundError as e:
         log_path.write_text(f"uv binary not found: {uv}\n{e}\n")
         raise RuntimeError(f"uv 二进制不存在：{uv}（请重新安装 plugin 或 vendor uv）") from e
+    except subprocess.TimeoutExpired:
+        log_path.write_text(f"uv venv timeout after {install_timeout}s\n")
+        raise RuntimeError(f"uv venv 超时（{install_timeout}s）")
     if r.returncode != 0:
         log_path.write_text(f"uv venv failed:\n{r.stderr}\n")
         raise RuntimeError(f"uv venv 失败：{r.stderr[:200]}")
@@ -308,6 +311,13 @@ def install_module(module_dir: Path) -> None:
                 attempt_log.append(f"attempt {attempt} on {url}: FileNotFoundError: {e}")
                 last_error = "uv 二进制不存在"
                 break  # Don't retry on FileNotFoundError — binary is missing
+            except subprocess.TimeoutExpired:
+                # Treat timeout as a failed attempt; continue to next retry/URL
+                attempt_log.append(
+                    f"attempt {attempt} on {url}: TimeoutExpired after {install_timeout}s"
+                )
+                last_error = f"uv pip install 超时（{install_timeout}s）"
+                continue  # Next attempt within this URL
             if r.returncode == 0:
                 # Success
                 attempt_log.append(f"OK on {url} (attempt {attempt})")
@@ -342,11 +352,16 @@ def install_module(module_dir: Path) -> None:
 
 
 def is_venv_corrupted(module_name: str) -> bool:
-    """检测 venv 是否损坏（python 二进制不存在或 --version 失败）。
+    """检测 venv 是否损坏（python 二进制是否存在）。
 
-    检测两类损坏：
-    1. bin/python 完全不存在（venv 目录被外部删空、或 uv 创建到一半失败）
-    2. bin/python 存在但 --version 退出非 0（可执行文件被覆盖、权限丢失、动态库丢失）
+    仅做轻量存在性检查，不跑 ``python --version``。原因：
+
+    - ``python --version`` 子进程会被 sandbox / 动态链接问题阻塞，
+      违反 spec §4.6.4 "main hook <2s" 承诺。
+    - 二次校验（binary 存在但 --version 失败）改由 background
+      ``install_module`` 处理；main hook 只负责发现明显损坏（binary 缺失）。
+    - 平台感知：Windows 上 uv 创建 ``Scripts/python.exe`` 而非
+      ``bin/python``，否则 Windows 永远视为损坏，导致死循环删 / 重建 venv。
 
     Args:
         module_name: venv 名（对应 modules/<name> 目录）。
@@ -355,17 +370,11 @@ def is_venv_corrupted(module_name: str) -> bool:
         True = 损坏（需要重建）；False = 健康。
     """
     venv = resolve_cache_dir() / "venvs" / module_name
-    py = venv / "bin" / "python"
-    if not py.exists():
-        return True
-    try:
-        r = subprocess.run(
-            [str(py), "--version"],
-            capture_output=True, timeout=5,
-        )
-        return r.returncode != 0
-    except (subprocess.TimeoutExpired, OSError):
-        return True
+    if sys.platform == "win32":
+        py = venv / "Scripts" / "python.exe"
+    else:
+        py = venv / "bin" / "python"
+    return not py.exists()
 
 
 def nuke_venv(module_name: str) -> None:
