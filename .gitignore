@@ -31,3 +31,9 @@ node_modules/
 
 # Git worktrees (per using-git-worktrees skill)
 .worktrees/
+.claude/worktrees/
+
+# Python package build artifacts (egg-info, dist, build)
+*.egg-info/
+dist/
+build/
