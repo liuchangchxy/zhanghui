@@ -20,6 +20,35 @@ Why shell-out instead of porting the JS to Python:
 Word-count parsing: the JS output uses Chinese 万/亿 suffixes
 ("234万" → 2,340,000; "1.2亿" → 120,000,000). Native English digit
 strings are passed through unchanged.
+
+Markdown format (verified against vendored ciweimao-rank-scraper.js,
+commit 6af052974fd86fbdbbafce3e363d643221c6ce27):
+
+    # 刺猬猫 · {榜单}
+
+    - 来源：https://www.ciweimao.com/rank-index
+    - 抓取时间：{ISO timestamp}
+    - 条目数：{N}
+    - 作品页链接：{linked} / {N}
+
+    ---
+
+    ### #1 {title}
+    *{author} · {metric}*            # NO.1: author + metric (no genre)
+    [作品页]({url})
+
+    ---
+
+    ### #2 {title}
+    *{genre} · {metric}*             # #2-10: genre + metric (no author)
+    [作品页]({url})
+
+    ---
+
+The two distinct meta-line shapes (NO.1 vs #2-10) exist because the
+upstream parser extracts NO.1 from a 3-line block (title/author/metric)
+where genre is empty, while #2-10 entries come from a single
+"N[genre]title" line with author empty.
 """
 from __future__ import annotations
 
@@ -69,40 +98,73 @@ def parse_word_count(text: str) -> Optional[int]:
     return None
 
 
-# Pattern matches each "## N. 《书名》" block. Capture group 1 is the rank
-# number, group 2 is the title (without 《 》).
+# Pattern matches each "### #N {title}" block. Capture group 1 is the rank
+# number (without the leading "#"), group 2 is the title (raw, no 《 》 wrapping
+# in real JS output).
 _BOOK_HEADER_RE = re.compile(
-    r"^##\s+(\d+)\.\s+《([^》]+)》\s*$", re.MULTILINE
+    r"^###\s+#(\d+)\s+(.+?)\s*$", re.MULTILINE
 )
 
-# Each field line is "- 字段名: 值". Map field name → parser.
-_FIELD_PARSERS = {
-    "作者": ("author", lambda s: s.strip()),
-    "分类": ("category", lambda s: s.strip()),
-    "字数": ("word_count", parse_word_count),
-    "简介": ("intro", lambda s: s.strip()),
-    "链接": ("detail_url", lambda s: s.strip()),
-    "最新章节": ("latest_chapter", lambda s: s.strip()),
-}
+# The italic meta line — either "*author · metric*" (NO.1) or
+# "*genre · metric*" (#2-10). Captures the inner content (without the *).
+_META_LINE_RE = re.compile(r"^\*(.+?)\*\s*$")
+
+# The book URL link line — exactly "[作品页](https://www.ciweimao.com/book/N)".
+_LINK_LINE_RE = re.compile(r"^\[作品页\]\(([^)]+)\)\s*$")
+
+# Meta values use " · " (middle dot, U+00B7) as the field separator.
+# The metric field (always last when present) matches a number with optional
+# 万/亿 suffix. Anything else is either an author name (rank 1) or a genre
+# label (rank 2-10).
+_META_SEPARATOR = " · "
+_METRIC_RE = re.compile(r"^[\d.]+\s*(?:万|亿)?$")
+
+
+def _split_meta_line(meta_content: str, rank_num: int) -> tuple[str, str, str]:
+    """Parse a meta line into (author, category, metric).
+
+    For rank=1 (NO.1): parts are [author, metric] (genre is empty upstream).
+    For rank>=2 (#2-10): parts are [genre, metric] (author is empty upstream).
+
+    A meta line is "*X · Y*" (2 parts, one of which is metric) or
+    "*X*" (1 part — could be just metric or just author/genre). Unknown
+    ordering is disambiguated by rank.
+    """
+    parts = [p.strip() for p in meta_content.split(_META_SEPARATOR)]
+    author = ""
+    category = ""
+    metric = ""
+
+    if len(parts) == 0:
+        return author, category, metric
+
+    # Identify which part is the metric (last part if it parses as a number,
+    # else no metric present).
+    last = parts[-1]
+    if _METRIC_RE.match(last) or parse_word_count(last) is not None:
+        metric = last
+        label_parts = parts[:-1]
+    else:
+        label_parts = parts
+
+    if not label_parts:
+        return author, category, metric
+
+    # The single remaining label is author (rank 1) or category (rank >= 2).
+    label = label_parts[0]
+    if rank_num == 1:
+        author = label
+    else:
+        category = label
+
+    return author, category, metric
 
 
 def parse_rank_markdown(md_text: str, top: int = 50) -> list[RawBook]:
     """Parse ciweimao-rank-scraper.js's Markdown output into RawBook list.
 
-    Markdown format (per worldwonderer/oh-story-claudecode upstream):
-
-        # 刺猬猫{榜单} {YYYY-MM-DD}
-
-        ## 1. 《书名》
-        - 作者: XXX
-        - 分类: XXX
-        - 字数: 234万
-        - 简介: ...
-        - 链接: https://www.ciweimao.com/book/12345
-        - 最新章节: ...
-
-        ## 2. 《书名二》
-        ...
+    See module docstring for the exact Markdown shape produced by the
+    vendored JS (verified against upstream commit 6af05297).
     """
     if not md_text.strip():
         return []
@@ -112,46 +174,55 @@ def parse_rank_markdown(md_text: str, top: int = 50) -> list[RawBook]:
     headers = list(_BOOK_HEADER_RE.finditer(md_text))
     for idx, match in enumerate(headers):
         rank_num = int(match.group(1))
-        title = match.group(2)
+        title = match.group(2).strip()
         # Block = from end of this header to start of next (or end of text)
         block_start = match.end()
         block_end = headers[idx + 1].start() if idx + 1 < len(headers) else len(md_text)
         block = md_text[block_start:block_end]
 
-        fields: dict[str, str] = {}
+        author = ""
+        native_category = ""
+        metric = ""
+        detail_url = ""
+
         for line in block.splitlines():
             line = line.strip()
-            if not line.startswith("- "):
+            if not line:
                 continue
-            # "- 作者: XXX" or "- 链接: https://..."
-            kv = line[2:].split(":", 1)
-            if len(kv) != 2:
-                continue
-            key, val = kv[0].strip(), kv[1].strip()
-            if key in _FIELD_PARSERS:
-                target_field, parser = _FIELD_PARSERS[key]
-                fields[target_field] = parser(val)
 
-        detail_url = fields.get("detail_url", "")
-        # platform_book_id is the last URL segment for ciweimao (/book/<id>)
-        platform_book_id = detail_url.rsplit("/", 1)[-1] if detail_url else ""
+            meta_match = _META_LINE_RE.match(line)
+            if meta_match:
+                author, native_category, metric = _split_meta_line(
+                    meta_match.group(1), rank_num
+                )
+                continue
+
+            link_match = _LINK_LINE_RE.match(line)
+            if link_match:
+                detail_url = link_match.group(1).strip()
+                continue
 
         # Map ciweimao native category → our normalized category
-        raw_category = fields.get("category", "")
-        normalized_category = map_native_category(raw_category)
+        normalized_category = map_native_category(native_category)
+        # Metric (e.g., "234万") is rank-specific (clicks for click rank,
+        # tickets for monthly rank). We surface it as word_count for
+        # backwards compatibility with the existing API contract — the
+        # schema doesn't have a separate "metric_value" field.
+        word_count = parse_word_count(metric) if metric else None
+        # platform_book_id is the last URL segment for ciweimao (/book/<id>)
+        platform_book_id = detail_url.rsplit("/", 1)[-1] if detail_url else ""
 
         books.append(RawBook(
             platform_book_id=platform_book_id,
             title=title,
-            author=fields.get("author", ""),
+            author=author,
             category=normalized_category,
-            word_count=fields.get("word_count"),
+            word_count=word_count,
             detail_url=detail_url,
             rank_position=rank_num,
             raw_payload={
-                "intro": fields.get("intro", ""),
-                "latest_chapter": fields.get("latest_chapter", ""),
-                "native_category": raw_category,
+                "metric": metric,
+                "native_category": native_category,
             },
         ))
 

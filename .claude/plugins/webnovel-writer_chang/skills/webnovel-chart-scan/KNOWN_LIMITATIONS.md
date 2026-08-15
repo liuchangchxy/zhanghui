@@ -1,4 +1,4 @@
-# Known Limitations (v0.2.0)
+# Known Limitations (v0.2.1)
 
 Last updated: 2026-08-16
 
@@ -22,13 +22,74 @@ Each platform adapter is explicitly marked with `status`:
 
 ## Test counts (verified 2026-08-16)
 
-- Fast tests (default, `pytest tests/`): 104 — all pass; no skips
-- Slow tests (`pytest -m slow`): 10 — 8 pass (qidian ×3, qimao ×2, zongheng ×3), 2 skipped (ciweimao captcha-regression HTTP smoke tests; @pytest.mark.skip)
-- Total: 114
+- Fast tests (default, `pytest tests/`): 108 — all pass; no skips
+- Slow tests (`pytest -m slow`): 13 — 11 pass (qidian ×3, qimao ×2, zongheng ×3, ciweimao_runner_integration ×3), 2 skipped (ciweimao captcha-regression HTTP smoke tests; @pytest.mark.skip)
+- Total: 121
 
 Skipped at runtime by `addopts = "-m 'not slow'"` in `pyproject.toml`. Run
 slow tests explicitly with `pytest -m slow` once you have network access
 and want to verify the LIVE adapters.
+
+## v0.2.1 patch (2026-08-16)
+
+Hotfixes from the v0.2.0 final code review (adversarial pass). Two
+critical bugs that prevented the ciweimao adapter from actually working
+end-to-end, despite the `LIVE_WITH_SETUP` label:
+
+- **C1: parser regex didn't match the real JS output format.**
+  `scripts/adapters/ciweimao_runner.py::_BOOK_HEADER_RE` expected
+  `^##\s+(\d+)\.\s+《([^》]+)》\s*$` (h2 heading with `《》` wrappers and
+  a period after the rank number) — but the vendored
+  `ciweimao-rank-scraper.js` actually emits `### #N {title}` (h3, hash
+  prefix, no 《》). The hand-crafted fixture
+  `tests/fixtures/ciweimao_rank_click.md` was synthesized against the
+  regex, not against the JS, so the parser was tested in a closed loop
+  that never matched reality. Fixed by:
+  - Rewriting `_BOOK_HEADER_RE` to match `### #N {title}`
+  - Replacing the per-field `"- key: value"` parser with three small
+    regexes: `_BOOK_HEADER_RE` for the heading, `_META_LINE_RE` for
+    `*author · metric*` (NO.1) / `*genre · metric*` (#2-10), and
+    `_LINK_LINE_RE` for `[作品页]({url})`
+  - Disambiguating author vs genre by rank (`rank==1` → author is the
+    first meta part, genre is empty upstream; `rank>=2` → genre is the
+    first meta part, author is empty upstream). Verified against the
+    vendored JS source lines 73-86 (NO.1 / #2-10 extraction) and lines
+    190-222 (Markdown formatting).
+  - Regenerating `tests/fixtures/ciweimao_rank_click.md` to be a
+    line-by-line match of what the vendored JS emits.
+- **C2: missing vendored dependency `cdp-utils.js`.**
+  `ciweimao-rank-scraper.js` line 20 requires `./cdp-utils` (helpers:
+  `ab`, `sleep`, `evalJSONBase64`, `scrollLoad`, `getArg`,
+  `localDateStamp`, `runCli`). v0.2.0 vendored only the scraper and
+  documented cdp-utils as "caller's responsibility" — but our caller
+  IS the vendored scraper itself, so the very first `node` invocation
+  died with `Error: Cannot find module './cdp-utils'`, masking the
+  real "Chrome isn't running" error. Fixed by vendoring cdp-utils.js
+  (8564 bytes, upstream commit `6af052974fd86fbdbbafce3e363d643221c6ce27`,
+  same as the scraper) and noting in
+  `vendor/worldwonderer_subset/README.md` that it's required, not
+  optional. cdp-utils.js requires only Node built-ins (`child_process`,
+  `fs`, `path`) — no further chained dependencies to vendor.
+
+After these fixes, `node ciweimao-rank-scraper.js --type click --port 9222`
+fails with a clean "agent-browser failed: CDP discovery failed for
+127.0.0.1:9222" instead of MODULE_NOT_FOUND, and the parser correctly
+extracts books from the JS output.
+
+### New file
+- `tests/test_ciweimao_runner_integration.py` — 3 `@pytest.mark.slow`
+  tests that actually invoke the vendored JS via Node.js:
+  `test_vendored_cdp_utils_exists` (regression guard for C2),
+  `test_scraper_does_not_fail_with_module_not_found` (asserts no
+  `Cannot find module` in output), `test_scraper_accepts_known_cli_args`
+  (asserts `--type` / `--outdir` / `--port` parse without TypeError).
+
+### Test count change
+- v0.2.0: 104 fast + 10 slow = 114 total
+- v0.2.1: 108 fast + 13 slow = 121 total
+- +4 fast tests (split NO.1 vs rank-2 fixtures, native category
+  normalization, missing metric, missing link line)
+- +3 slow tests (integration test for vendored JS invocation)
 
 ## v0.2.0 changelog (2026-08-16)
 
@@ -42,6 +103,7 @@ and want to verify the LIVE adapters.
 - `scripts/adapters/ciweimao_cat_map.py` — ciweimao native category → normalized category mapping (~24 entries)
 - `scripts/adapters/ciweimao_runner.py` — Markdown parser + Node subprocess wrapper
 - `vendor/worldwonderer_subset/ciweimao-rank-scraper.js` — vendored upstream (MIT)
+- `vendor/worldwonderer_subset/cdp-utils.js` — vendored upstream (MIT), required dependency of the scraper
 - `vendor/worldwonderer_subset/README.md` — attribution + how-to-use
 - `tests/fixtures/ciweimao_rank_click.md` — sample Markdown output for parser tests
 - `tests/fixtures/fanqie_dump_20260815.json` — sample dump for parser tests (already added 2026-08-16)
