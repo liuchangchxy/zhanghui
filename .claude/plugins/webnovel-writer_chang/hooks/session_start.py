@@ -64,11 +64,16 @@ def main() -> int:
     return 0
 
 
-def trigger_background_python_install(plugin_root: Path) -> None:
-    """扫描 plugin 的 Python module，对需要重装的 fork 后台进程跑 install_python_deps.py。
+def trigger_background_python_install(plugin_root) -> None:
+    """扫描 plugin_root 下属的 Python module，对需要重装的 fork 后台进程跑 install_python_deps.py。
 
     主 hook 不等子进程完成；子进程日志写到 ~/.cache/.../logs/。
+
+    Args:
+        plugin_root: plugin 根目录 Path；如果为 None 则跳过。
     """
+    if plugin_root is None:
+        return
     sys.path.insert(0, str(plugin_root / "hooks"))
     try:
         from install_python_deps import find_python_modules, should_install_module
@@ -85,11 +90,17 @@ def trigger_background_python_install(plugin_root: Path) -> None:
         return
 
     # Detach：用 subprocess.Popen + start_new_session=True 让子进程脱离父 hook 的生命周期
-    subprocess.Popen(
-        [sys.executable, str(install_script), "--plugin-root", str(plugin_root)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        start_new_session=True, close_fds=True,
-    )
+    try:
+        subprocess.Popen(
+            [sys.executable, str(install_script), "--plugin-root", str(plugin_root)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True, close_fds=True,
+        )
+    except (OSError, FileNotFoundError, PermissionError) as e:
+        # 资源耗尽 / 可执行文件丢失 / 权限拒绝 — 静默失败
+        # 下次 SessionStart 会重新检测；spec §4.6.5 允许
+        print(f"trigger_background_python_install: Popen failed: {e}", file=sys.stderr, flush=True)
+        return
 
 
 if __name__ == "__main__":
