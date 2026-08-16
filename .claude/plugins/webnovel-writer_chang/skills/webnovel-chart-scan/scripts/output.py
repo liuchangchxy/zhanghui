@@ -13,7 +13,11 @@ def slug_timestamp(dt: datetime) -> str:
             "Use datetime.now(timezone.utc) or attach tzinfo."
         )
     dt = dt.astimezone(timezone.utc)
-    return dt.strftime("%Y%m%dT%H%M%SZ")
+    # M1 fix: microsecond precision + Z separator. `%f` returns 6 digits
+    # (e.g. "123456"); we use a literal `_` so the microsecond block is
+    # visually distinct from the seconds block and avoids same-second
+    # collisions when two scans run in quick succession.
+    return dt.strftime("%Y%m%dT%H%M%S_%fZ")
 
 
 def write_scan_result(result: ScanResult, output_dir: Path) -> list[Path]:
@@ -53,15 +57,32 @@ def write_scan_result(result: ScanResult, output_dir: Path) -> list[Path]:
     return written
 
 
-def write_marked_references(references: list[dict], output_dir: str | Path) -> Path:
+def write_chart_scan_marked_references(references: list[dict], output_dir: str | Path) -> Path:
     """Write chart-scan/marked-references.json with the schema from P1+P2 spec.
 
     References is a list of {platform, title, author?, category?}.
     Output path is output_dir / "marked-references.json".
 
     Returns the resolved path.
+
+    M3 fix: validate output_dir is under cwd before writing anywhere.
+    M4 fix: renamed from `write_marked_references` to avoid collision with
+    the shared data_modules.marked_references.write_marked_references.
     """
     import sys
+
+    # M3 fix: refuse to write outside cwd. The marked-references.json
+    # product is a project-relative artifact; an absolute or escaping
+    # output_dir here usually means a caller bug or path injection.
+    output_dir_resolved = Path(output_dir).expanduser().resolve()
+    cwd = Path.cwd().resolve()
+    try:
+        output_dir_resolved.relative_to(cwd)
+    except ValueError:
+        raise ValueError(
+            f"output_dir must be within current working directory: "
+            f"{output_dir_resolved} not under {cwd}"
+        )
 
     # Import the validation helper from data_modules (relative path resolution).
     # output.py lives at skills/webnovel-chart-scan/scripts/output.py,
@@ -72,11 +93,11 @@ def write_marked_references(references: list[dict], output_dir: str | Path) -> P
 
     from data_modules.marked_references import validate_marked_references  # noqa: E402
 
-    output_path = Path(output_dir).expanduser().resolve() / "marked-references.json"
+    output_path = output_dir_resolved / "marked-references.json"
     payload = {
         "schema_version": 1,
         "marked_at": datetime.now(timezone.utc).isoformat(),
-        "from_scan": str((Path(output_dir) / "books.json").resolve()),
+        "from_scan": str((output_dir_resolved / "books.json")),
         "references": references,
     }
     validate_marked_references(payload)  # raises ValueError on schema mismatch

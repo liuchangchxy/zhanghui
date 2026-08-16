@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 PLATFORMS = Literal["qidian", "fanqie", "zongheng", "qimao", "ciweimao"]
 PERIODS = Literal["daily", "weekly", "monthly"]
@@ -61,6 +61,19 @@ class ScanMeta(BaseModel):
     duration_seconds: float
     total_books: int
     total_errors: int
+
+    @field_validator("scanned_at")
+    @classmethod
+    def _scanned_at_must_be_utc(cls, v: datetime) -> datetime:
+        # M5 fix: tzinfo is None == naive datetime. Naive datetimes
+        # silently drop the UTC tag and downstream slug_timestamp()
+        # raises — better to fail fast at parse time with a clear
+        # message. Use datetime.now(timezone.utc) or attach tzinfo=UTC.
+        if v.tzinfo is None:
+            raise ValueError(
+                "scanned_at must be timezone-aware (use datetime.now(timezone.utc))"
+            )
+        return v
 
 
 class ScanResult(BaseModel):

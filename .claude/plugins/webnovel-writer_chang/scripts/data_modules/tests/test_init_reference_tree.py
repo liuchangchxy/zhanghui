@@ -188,3 +188,31 @@ def test_sanitize_book_title_strips_cjk_punctuation():
         title = f"凡人修仙传{punct}"
         result = sanitize_book_title(title)
         assert punct not in result, f"{punct} leaked into slug: {result!r}"
+
+
+# --- Adversarial M2: backup timestamp microsecond precision ---
+
+def test_build_reference_tree_backup_timestamp_includes_microseconds(tmp_path):
+    """M2: overwrite backup filename must include microsecond precision so
+    two backups in the same wall-clock second do not collide."""
+    import re
+    from init_reference_tree import build_reference_tree, sanitize_book_title
+
+    schema = _minimal_schema()
+    # First build (fresh — no backup yet).
+    build_reference_tree(tmp_path, schema, "X")
+    # Second build with overwrite — produces a .bak-TS file.
+    build_reference_tree(tmp_path, schema, "X", overwrite=True)
+
+    safe = sanitize_book_title("X")
+    tree = tmp_path / ".webnovel" / "reference_research" / safe
+    backups = sorted(tree.glob("_schema.json.bak-*"))
+    assert backups, "overwrite should have produced a backup file"
+    # Filename shape: _schema.json.bak-20260816T143045_123456Z
+    # The literal `_` separator between seconds and microseconds is what
+    # distinguishes this from the old 1-second format.
+    pattern = re.compile(r"_schema\.json\.bak-\d{8}T\d{6}_\d{6}Z$")
+    for b in backups:
+        assert pattern.search(b.name), (
+            f"backup filename {b.name!r} missing microsecond precision (expected *_NNNNNNZ)"
+        )
