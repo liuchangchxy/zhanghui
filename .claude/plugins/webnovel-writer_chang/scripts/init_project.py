@@ -322,6 +322,8 @@ def init_project(
     sect_hierarchy: str = "",
     cultivation_chain: str = "",
     cultivation_subtiers: str = "",
+    reference_research_dir: str = "",
+    reference_overwrite: bool = False,
 ) -> None:
     project_path = Path(project_dir).expanduser().resolve()
     if ".claude" in project_path.parts:
@@ -747,6 +749,40 @@ __pycache__/
     except Exception as e:
         print(f"Default project pointer update failed (non-fatal): {e}")
 
+    # === reference_research/ 验证（spec 2026-08-16 §D3/D7）===
+    if reference_research_dir:
+        import datetime as _dt_mod
+
+        src_tree = Path(reference_research_dir).expanduser().resolve()
+        if not src_tree.is_dir():
+            raise SystemExit(
+                f"--reference-research-dir not found or not a directory: {src_tree}"
+            )
+        from init_reference_tree import validate_reference_tree
+        if not validate_reference_tree(src_tree):
+            raise SystemExit(
+                f"--reference-research-dir is not a valid reference_research tree (missing required files): {src_tree}"
+            )
+        # Copy tree into project
+        book_safe = src_tree.name
+        target_tree = project_path / ".webnovel" / "reference_research" / book_safe
+        if target_tree.exists() and not reference_overwrite:
+            raise SystemExit(
+                f"reference_research tree already exists at {target_tree}. "
+                f"Pass reference_overwrite=True (or --reference-overwrite CLI flag) to overwrite."
+            )
+        if target_tree.exists():
+            # Backup existing schema
+            existing_schema = target_tree / "_schema.json"
+            if existing_schema.exists():
+                backup = target_tree / f"_schema.json.bak-{_dt_mod.datetime.now(_dt_mod.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+                existing_schema.rename(backup)
+        target_tree.parent.mkdir(parents=True, exist_ok=True)
+        if target_tree.exists():
+            shutil.rmtree(target_tree)
+        shutil.copytree(src_tree, target_tree)
+        print(f"已写入 {target_tree}")
+
     # === 个人语料 + 写作宪法模板写入（Phase E）===
     # 从 plugin templates/ 复制默认模板到 <book>/.webnovel/writer-profile/，
     # 仅在书项目副本不存在时 copy（避免覆盖用户已编辑的内容）。
@@ -807,6 +843,11 @@ def main() -> None:
     parser.add_argument("--cultivation-chain", default="", help="典型境界链")
     parser.add_argument("--cultivation-subtiers", default="", help="小境界划分（初/中/后/巅 等）")
 
+    parser.add_argument("--reference-research-dir", default="",
+                        help="预构建的 reference_research 树路径；init 主流程在 Step 1.5 落盘后传进来验证")
+    parser.add_argument("--reference-overwrite", action="store_true",
+                        help="强制覆盖已存在的 reference_research 树（默认拒绝覆盖）")
+
     # 深度模式可选参数（用于预填模板）
     parser.add_argument("--protagonist-desire", default="", help="主角核心欲望（深度模式）")
     parser.add_argument("--protagonist-flaw", default="", help="主角性格弱点（深度模式）")
@@ -853,6 +894,8 @@ def main() -> None:
         sect_hierarchy=args.sect_hierarchy,
         cultivation_chain=args.cultivation_chain,
         cultivation_subtiers=args.cultivation_subtiers,
+        reference_research_dir=args.reference_research_dir,
+        reference_overwrite=args.reference_overwrite,
     )
 
 

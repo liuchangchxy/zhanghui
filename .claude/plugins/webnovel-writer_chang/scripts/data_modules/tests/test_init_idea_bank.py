@@ -73,3 +73,120 @@ def test_validate_idea_bank_accepts_missing_reference_research_path():
     }
     parsed = _validate_idea_bank_payload(json.dumps(payload))
     assert "reference_research_path" not in parsed
+
+
+# --- P0-Full Task 6: 4 new tests for --reference-research-dir / --reference-overwrite ---
+
+def test_init_validates_reference_research_dir_when_flag_present(tmp_path, monkeypatch):
+    """With --reference-research-dir pointing to a valid pre-built tree, init succeeds."""
+    import init_project as init_project_module
+    from init_reference_tree import build_reference_tree
+
+    monkeypatch.setattr(init_project_module, "is_git_available", lambda: False)
+    project_root = tmp_path / "book"
+
+    # Build a valid tree in a separate location
+    source_tree_root = tmp_path / "src_ws"
+    source_tree_root.mkdir()
+    schema = {
+        "source": {"reference_title": "X", "reference_source": "book_name", "analysis_mode": "quick", "confidence": 0.5},
+        "selected_idea": {}, "constraints_inherited": {}, "borrowed_patterns": [], "do_not_copy": [], "canon_contamination_warnings": [],
+        "reader_promise": "", "opening_hook_patterns": [], "cool_point_loops": [], "protagonist_patterns": "", "antagonist_pressure_patterns": "", "pacing_notes": "",
+        "narrative_function": "", "boundary_reason": {}, "protagonist_action_chain": [], "emotion_curve": [], "satisfaction_point": [], "foreshadowing": [], "gains_costs": [], "character_changes": [],
+        "borrowable_structures": [], "differentiation_requirements": "", "init_candidates": {}, "quality": {"passed": True, "confidence": 0.5, "coverage": 0.5},
+    }
+    tree = build_reference_tree(source_tree_root, schema, "X")
+
+    init_project_module.init_project(
+        str(project_root), title="T", genre="仙侠", protagonist_name="P",
+        reference_research_dir=str(tree),
+    )
+    # Tree should have been copied (or at least validated) — assert source tree still validates
+    assert (tree / "_schema.json").is_file()
+    # Project should have a copy under .webnovel/reference_research/x/
+    assert (project_root / ".webnovel" / "reference_research" / "x" / "_schema.json").is_file()
+
+
+def test_init_refuses_missing_reference_research_dir(tmp_path, monkeypatch):
+    """Nonexistent --reference-research-dir triggers hard error."""
+    import init_project as init_project_module
+
+    monkeypatch.setattr(init_project_module, "is_git_available", lambda: False)
+    project_root = tmp_path / "book"
+    nonexistent = tmp_path / "does_not_exist"
+
+    with pytest.raises(SystemExit):
+        init_project_module.init_project(
+            str(project_root), title="T", genre="仙侠", protagonist_name="P",
+            reference_research_dir=str(nonexistent),
+        )
+
+
+def test_init_refuses_overwrite_existing_reference_research_without_force(tmp_path, monkeypatch):
+    """Existing tree without --reference-overwrite refuses to overwrite."""
+    import init_project as init_project_module
+    from init_reference_tree import build_reference_tree
+    import shutil
+
+    monkeypatch.setattr(init_project_module, "is_git_available", lambda: False)
+    project_root = tmp_path / "book"
+
+    schema = {
+        "source": {"reference_title": "X", "reference_source": "book_name", "analysis_mode": "quick", "confidence": 0.5},
+        "selected_idea": {}, "constraints_inherited": {}, "borrowed_patterns": [], "do_not_copy": [], "canon_contamination_warnings": [],
+        "reader_promise": "", "opening_hook_patterns": [], "cool_point_loops": [], "protagonist_patterns": "", "antagonist_pressure_patterns": "", "pacing_notes": "",
+        "narrative_function": "", "boundary_reason": {}, "protagonist_action_chain": [], "emotion_curve": [], "satisfaction_point": [], "foreshadowing": [], "gains_costs": [], "character_changes": [],
+        "borrowable_structures": [], "differentiation_requirements": "", "init_candidates": {}, "quality": {"passed": True, "confidence": 0.5, "coverage": 0.5},
+    }
+    src_tree = build_reference_tree(tmp_path / "src", schema, "X")
+    project_root.mkdir()
+    target_tree = project_root / ".webnovel" / "reference_research" / "x"
+    # Pre-create the target tree by copying src_tree
+    shutil.copytree(src_tree, target_tree)
+    sentinel = target_tree / "_schema.json"
+
+    with pytest.raises(SystemExit):
+        init_project_module.init_project(
+            str(project_root), title="T", genre="仙侠", protagonist_name="P",
+            reference_research_dir=str(src_tree),
+        )
+
+    # Original sentinel should be unchanged
+    assert sentinel.read_text(encoding="utf-8") == src_tree.joinpath("_schema.json").read_text(encoding="utf-8")
+
+
+def test_init_overwrites_with_explicit_force_flag(tmp_path, monkeypatch):
+    """With --reference-overwrite, the diff path overwrites."""
+    import init_project as init_project_module
+    from init_reference_tree import build_reference_tree
+    import shutil
+    import json as _json
+
+    monkeypatch.setattr(init_project_module, "is_git_available", lambda: False)
+    project_root = tmp_path / "book"
+
+    schema_v1 = {
+        "source": {"reference_title": "X", "reference_source": "book_name", "analysis_mode": "quick", "confidence": 0.5},
+        "selected_idea": {}, "constraints_inherited": {}, "borrowed_patterns": [], "do_not_copy": [], "canon_contamination_warnings": [],
+        "reader_promise": "VERSION_1", "opening_hook_patterns": [], "cool_point_loops": [], "protagonist_patterns": "", "antagonist_pressure_patterns": "", "pacing_notes": "",
+        "narrative_function": "", "boundary_reason": {}, "protagonist_action_chain": [], "emotion_curve": [], "satisfaction_point": [], "foreshadowing": [], "gains_costs": [], "character_changes": [],
+        "borrowable_structures": [], "differentiation_requirements": "", "init_candidates": {}, "quality": {"passed": True, "confidence": 0.5, "coverage": 0.5},
+    }
+    schema_v2 = dict(schema_v1)
+    schema_v2["reader_promise"] = "VERSION_2"
+
+    src_v1 = build_reference_tree(tmp_path / "src1", schema_v1, "X")
+    src_v2 = build_reference_tree(tmp_path / "src2", schema_v2, "X")
+
+    project_root.mkdir()
+    target = project_root / ".webnovel" / "reference_research" / "x"
+    shutil.copytree(src_v1, target)
+
+    init_project_module.init_project(
+        str(project_root), title="T", genre="仙侠", protagonist_name="P",
+        reference_research_dir=str(src_v2),
+        reference_overwrite=True,
+    )
+
+    written = _json.loads((target / "_schema.json").read_text(encoding="utf-8"))
+    assert written["reader_promise"] == "VERSION_2"
