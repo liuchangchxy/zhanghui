@@ -886,3 +886,17 @@ def test_reviewer_has_no_react_meta_narrative():
     text = _read_text(AGENTS_DIR / "reviewer.md")
     assert "ReAct" not in text, "reviewer 不应出现 ReAct 字样"
     assert "思维链" not in text, "reviewer 不应保留思维链元叙述"
+
+
+# ---------------------------------------------------------------------------
+# P0-Full Task 7：webnovel-plan 必须消费 reference_research 拆书产物树
+# ---------------------------------------------------------------------------
+
+def test_plan_reads_reference_research_when_pointer_set():
+    """webnovel-plan SKILL.md must consume reference_research tree when idea_bank pointer is set."""
+    text = _read_text(SKILLS_DIR / "webnovel-plan" / "SKILL.md")
+    assert "reference_research_path" in text
+    assert ".webnovel/reference_research" in text or "reference_research/" in text
+    # Should mention at least one product-tree file
+    for filename in ("_schema.json", "report.md"):
+        assert filename in text, f"webnovel-plan/SKILL.md must consume {filename} from the tree"

@@ -97,6 +97,25 @@ python "${SCRIPTS_DIR}/migrate_story_craft.py" "${PROJECT_ROOT}/.webnovel/state.
 
 按需读取设定集：`设定集/世界观.md`、`设定集/力量体系.md`、`设定集/主角卡.md`、`设定集/反派设计.md`、`.webnovel/idea_bank.json`。
 
+#### 按需读取 reference_research 拆书产物
+
+读完 `idea_bank.json` 后，若 `reference_research_path` 字段存在，按以下规则加载 `.webnovel/reference_research/<book-safe>/`：
+
+1. **完整加载**：`_schema.json`（机器可校验，全量注入）
+2. **节选加载**：`report.md` 中的"可复现模块"、"反套路"、"硬约束"三段（最多 ~500 行）
+3. **独立加载**：`do_not_copy.md`、`canon_contamination_warnings.md`（短，全文）
+
+在卷纲 / 章纲阶段使用：
+
+- `narrative_function` + `boundary_reason` → 对齐卷级结构
+- `emotion_curve` + `satisfaction_point` → 章节级节奏参考
+- `foreshadowing` → 跨章连续性约束
+- `gains_costs` + `character_changes` → 主角缺陷兑现提醒
+
+如果 `reference_research_path` 字段缺失（老项目 / 用户未提供参考书），按历史行为运行，不报错。
+
+如果路径指向不存在的目录，输出提示 "reference_research missing: <path>"，继续运行。
+
 **跨卷状态读取**（已有已完成卷，即 `.webnovel/summaries/` 下有文件时必须执行）：
 
 ```bash
