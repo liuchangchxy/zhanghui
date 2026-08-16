@@ -221,6 +221,33 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
 
 ```
 
+## 状态产物所有权（reviewer → 主流程单一写入者）
+
+- 唯一写入者（reviewer 链路）：主流程从 reviewer 的 Agent 返回结构化 JSON 落盘到 `.webnovel/tmp/review_results.json`（含 `review_metrics` 落到 `.webnovel/tmp/review_metrics.json`）。
+- reviewer 本身不直接写文件；主流程不直接重写 review 结果，只在 review-pipeline 中落库与重放。
+- write 链路下其余状态产物（state/index/summaries/memory/vectors/projection）的唯一写入者是 `data-agent`，主流程只检查文件存在与 schema，不直接写。
+- 产物所有权凭证：`.webnovel/tmp/subagent_runs/{skill}-reviewer.jsonl` / `write-data-agent.jsonl`。
+
+## SubagentRun 可汇总信号
+
+主流程对每个 subagent 调用必须记录一次 `SubagentRun` JSON：
+
+```json
+{
+  "name": "reviewer",
+  "status": "completed | partial | failed | skipped",
+  "problems": [],
+  "auto_handled": [],
+  "needs_user_action": false,
+  "duration_ms": 0,
+  "outputs": []
+}
+```
+
+写入路径：`.webnovel/tmp/subagent_runs/review-{chapter}.jsonl`（每行一个 SubagentRun）。
+
+主流程"汇总 Step N 已确认的 subagent 输出"并把它整合到下一步输入。
+
 ## 作者友好最终报告契约
 
 最终回复必须面向作者，不输出原始 JSON、traceback 或长命令日志。使用固定三段式，并以一句总状态开头：

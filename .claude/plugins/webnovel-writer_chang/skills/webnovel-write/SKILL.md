@@ -463,6 +463,23 @@ tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || t
 - 审查分数可追溯，`overall_score` 与 Step 5 输入一致。
 - 润色后未破坏大纲与设定约束。
 
+### 状态产物所有权（data-agent 唯一写入者）
+
+主流程对 reviewer JSON 的落盘语义：reviewer 通过 Agent tool 返回结构化 JSON，主流程落盘到 `.webnovel/tmp/review_results.json`（review-pipeline 后续接续）。主流程不直接重写该文件。
+
+其余状态产物（state/index/summaries/memory/vectors/projection）的所有权约束：
+
+- 唯一写入者：`data-agent` subagent（Step 5 调用）
+- 主流程只检查文件存在与 schema，不直接写 state/index/summaries/memory/vectors/projection
+- 写入路径约定：
+  - `state.json` → data-agent 写入（主流程读）
+  - `index.db` → data-agent 写入（主流程查询）
+  - `summaries/*.json` → data-agent 写入
+  - `memory/*.json` → data-agent 写入
+  - `vectors/*.npz` → data-agent 写入
+  - `projection/*.json` → data-agent 写入
+- 产物所有权凭证：`.webnovel/tmp/subagent_runs/write-data-agent.jsonl`
+
 ## 失败处理（最小回滚）
 
 触发条件：
@@ -529,6 +546,20 @@ tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || t
 最终状态不得写"已完成"，除非所有产物落盘 + tests 跑通。
 
 不写 token 统计；如需排查故障，只给日志路径或建议运行 `/webnovel-doctor`。
+
+## SubagentRun 可汇总信号
+
+主流程对每个 subagent 调用必须记录一次 `SubagentRun` JSON（按调用顺序逐行写入）：
+
+```json
+{"name": "context-agent", "status": "completed | partial | failed | skipped", "problems": [], "auto_handled": [], "needs_user_action": false, "duration_ms": 0, "outputs": []}
+{"name": "reviewer", "status": "completed | partial | failed | skipped", "problems": [], "auto_handled": [], "needs_user_action": false, "duration_ms": 0, "outputs": []}
+{"name": "data-agent", "status": "completed | partial | failed | skipped", "problems": [], "auto_handled": [], "needs_user_action": false, "duration_ms": 0, "outputs": []}
+```
+
+写入路径：`.webnovel/tmp/subagent_runs/write-{chapter}.jsonl`（每行一个 SubagentRun）。
+
+主流程"汇总 Step N 已确认的 subagent 输出"并把它整合到下一步输入。
 
 ## 作者友好过程提示与恢复契约
 

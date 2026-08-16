@@ -548,6 +548,26 @@ test -f "{project_root}/.webnovel/writer-profile/写作宪法.md"
 
 不写 token 统计；如需排查故障，只给日志路径或建议运行 `/webnovel-doctor`。
 
+## SubagentRun 可汇总信号
+
+主流程对每个 subagent 调用必须记录一次 `SubagentRun` JSON：
+
+```json
+{
+  "name": "deconstruction-agent",
+  "status": "completed | partial | failed | skipped",
+  "problems": [],
+  "auto_handled": [],
+  "needs_user_action": false,
+  "duration_ms": 0,
+  "outputs": []
+}
+```
+
+写入路径：`.webnovel/tmp/subagent_runs/init-{chapter}.jsonl`（每行一个 SubagentRun）。
+
+主流程"汇总 Step 1.5 已确认的灵感来源"并把它整合到下一步输入。
+
 ## 作者友好过程提示与恢复契约
 
 初始化开始前先说明本次会经历：解项目根 -> 收集创作意图 -> 生成设定集 -> 拆解参考书 -> 落地总纲 -> 写入作者档案。过程提示用作者语言，不直接输出原始 JSON、traceback 或长命令日志；技术详情写入 `.webnovel/logs/run_last.log`：
