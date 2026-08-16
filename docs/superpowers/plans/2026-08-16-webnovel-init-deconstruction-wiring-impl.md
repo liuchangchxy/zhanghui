@@ -123,7 +123,7 @@ Expected: PASS. If still red, diff against `test_prompt_integrity.py:635-680` an
 
 ```bash
 cd /Users/chang/Desktop/ai写小说工具开发
-git add webnovel-writer_chang/skills/webnovel-init/SKILL.md
+git add .claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md
 git commit -m "feat(init): Step 1.5 wiring — multi-file tree call + plan consumption pointer
 
 Turns test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate
@@ -236,7 +236,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/ai写小说工具开发
-git add webnovel-writer_chang/agents/deconstruction-agent.md webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
+git add .claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(agent): extend deconstruction-agent schema with 9 new fields (P0-Full)
 
 Additive: chapter_rhythm / narrative_function / boundary_reason /
@@ -385,7 +385,7 @@ Create `scripts/data_modules/templates/reference_report.md.j2`:
 
 ```bash
 cd /Users/chang/Desktop/ai写小说工具开发
-git add webnovel-writer_chang/scripts/data_modules/templates/reference_report.md.j2
+git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/templates/reference_report.md.j2
 git commit -m "feat(init): reference_research report.md Jinja template
 
 Renders init_reference_research JSON to a human-readable Markdown
@@ -769,7 +769,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/ai写小说工具开发
-git add webnovel-writer_chang/scripts/data_modules/init_reference_tree.py webnovel-writer_chang/scripts/data_modules/tests/test_init_reference_tree.py
+git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/init_reference_tree.py webnovel-writer_chang/scripts/data_modules/tests/test_init_reference_tree.py
 git commit -m "feat(init): init_reference_tree builder — multi-file product tree from JSON
 
 Implements spec §D3:
@@ -872,7 +872,7 @@ Expected: All (existing + 2 new) PASS.
 
 ```bash
 cd /Users/chang/Desktop/ai写小说工具开发
-git add webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): idea_bank.json accepts optional reference_research_path field
 
 Backward-compatible: existing payloads without the field still validate.
@@ -1096,7 +1096,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/ai写小说工具开发
-git add webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): --reference-research-dir + --reference-overwrite CLI flags
 
 Adds 2 kwargs to init_project() and 2 argparse entries. Validates the
@@ -1185,7 +1185,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/ai写小说工具开发
-git add webnovel-writer_chang/skills/webnovel-plan/SKILL.md webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
+git add .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(plan): consume reference_research tree when idea_bank pointer set
 
 webnovel-plan now reads .webnovel/reference_research/<book-safe>/
