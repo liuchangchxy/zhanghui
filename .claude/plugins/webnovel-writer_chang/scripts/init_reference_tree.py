@@ -40,32 +40,55 @@ MAX_BOOK_NAME = 64
 _CJK_BRACKETS = "《》「」『』【】"
 
 
-def _try_pinyin_slug(chars: str) -> str | None:
-    """Best-effort Chinese-to-pinyin slug.
+def _is_cjk(ch: str) -> bool:
+    """Return True if char is in CJK Unified Ideographs BMP range (U+4E00-U+9FFF)."""
+    return "一" <= ch <= "鿿"
 
-    Returns the pinyin-joined slug (using jieba word boundaries when available,
-    otherwise per-character), or None if pinyin libs are unavailable / input
-    contains no Chinese.
+
+def _pinyin_slug_with_jieba(text: str) -> str | None:
+    """Word-segmented pinyin slug: '凡人修仙传' -> 'fanren-xiuxian-chuan'.
+
+    Uses jieba for word boundaries. Non-CJK segments (punctuation, ASCII)
+    are passed through unchanged. Returns None if jieba or pypinyin missing.
     """
-    if not any("一" <= ch <= "鿿" for ch in chars):
+    try:
+        import jieba
+        from pypinyin import lazy_pinyin
+    except ImportError:
         return None
+    words = [w for w in jieba.cut(text) if w.strip()]
+    pieces: list[str] = []
+    for w in words:
+        if all((not _is_cjk(c)) for c in w):
+            pieces.append(w.lower())
+            continue
+        pinyin_chars = lazy_pinyin(w)
+        pieces.append("".join(pinyin_chars))
+    return "-".join(pieces)
+
+
+def _pinyin_slug_fallback(text: str) -> str | None:
+    """Per-char pinyin slug without word segmentation: '凡人修仙传' -> 'fanrenxiuxianchuan'.
+
+    Used when jieba is unavailable. Returns None if pypinyin missing.
+    Non-CJK chars are appended unchanged (lowercased).
+
+    Note: This produces a different shape than the jieba path (no word
+    boundaries), so the same input may yield different slugs depending on
+    whether jieba is installed. Documented in sanitize_book_title's docstring.
+    """
     try:
         from pypinyin import lazy_pinyin
     except ImportError:
         return None
-
-    pieces: list[str]
-    try:
-        import jieba
-        words = [w for w in jieba.cut(chars) if w.strip()]
-        pieces = []
-        for w in words:
-            for syllable in lazy_pinyin(w):
-                pieces.append(syllable)
-    except ImportError:
-        pieces = list(lazy_pinyin(chars))
-
-    return "-".join(pieces)
+    pieces: list[str] = []
+    for c in text:
+        if _is_cjk(c):
+            py = lazy_pinyin(c)
+            pieces.append("".join(py))
+        else:
+            pieces.append(c.lower())
+    return "".join(pieces)
 
 
 def sanitize_book_title(title: str) -> str:
@@ -73,15 +96,22 @@ def sanitize_book_title(title: str) -> str:
 
     Rules:
       - Strip path-illegal characters (ASCII + CJK fullwidth brackets).
-      - Transliterate Chinese characters to pinyin (if pypinyin/jieba
-        are installed; otherwise leave the chars as-is and fall back
-        to a safe ASCII transliteration).
       - Replace whitespace with `-`.
       - Lowercase.
       - Collapse multiple `-` to single.
       - Strip leading/trailing `-` and `.`.
       - If empty after sanitization, raise ValueError.
       - Truncate to MAX_BOOK_NAME chars.
+      - Transliterate CJK characters to pinyin:
+        * If `jieba` + `pypinyin` available: word-segmented pinyin
+          (e.g. "凡人修仙传" -> "fanren-xiuxian-chuan")
+        * If only `pypinyin` available: per-char concatenated pinyin
+          (e.g. "凡人修仙传" -> "fanrenxiuxianchuan")
+        * If neither available: CJK characters preserved as-is
+
+    Note: The test `test_sanitize_book_title_basic` asserts the jieba
+    shape ("fanren-xiuxian-chuan"). On a CI env without jieba, the
+    fallback shape ("fanrenxiuxianchuan") will NOT match.
     """
     if not title:
         raise ValueError("book title must not be empty")
@@ -89,26 +119,14 @@ def sanitize_book_title(title: str) -> str:
     # Strip path-illegal chars (ASCII) + CJK fullwidth brackets.
     safe = re.sub(rf"[\\/:*?\"<>|{_CJK_BRACKETS}]", "", title)
 
-    # Pull out any Chinese run and pinyin-transliterate it. We preserve
-    # jieba word boundaries (凡人 / 修仙 / 传 → fanren / xiuxian / chuan)
-    # by emitting a "-" between adjacent Chinese words. Syllables within
-    # a single word are concatenated without separator.
-    pinyin = _try_pinyin_slug(safe)
-    if pinyin:
-        try:
-            import jieba
-            words = [w for w in jieba.cut(safe) if w.strip()]
-            pieces: list[str] = []
-            for w in words:
-                pinyin_words = _pinyin_for_segment(w)
-                if pinyin_words is None:
-                    pieces.append(w)
-                else:
-                    pieces.append("".join(pinyin_words))
-            safe = "-".join(pieces)
-        except ImportError:
-            # Without jieba, fall back to the precomputed pinyin slug.
-            safe = pinyin
+    # Transliterate CJK runs to pinyin. Try jieba path first (word
+    # boundaries), then fallback (per-char concatenated). If neither lib
+    # is available, keep ASCII-safe chars as-is.
+    slug = _pinyin_slug_with_jieba(safe)
+    if slug is None:
+        slug = _pinyin_slug_fallback(safe)
+    if slug is not None:
+        safe = slug
 
     safe = re.sub(r"\s+", "-", safe)
     safe = re.sub(r"-+", "-", safe)
@@ -117,17 +135,6 @@ def sanitize_book_title(title: str) -> str:
     if not safe:
         raise ValueError(f"book title {title!r} sanitizes to empty string")
     return safe[:MAX_BOOK_NAME]
-
-
-def _pinyin_for_segment(segment: str) -> list[str] | None:
-    """Return pinyin syllables for a Chinese segment, or None if segment has no Chinese."""
-    if not any("一" <= ch <= "鿿" for ch in segment):
-        return None
-    try:
-        from pypinyin import lazy_pinyin
-    except ImportError:
-        return None
-    return list(lazy_pinyin(segment))
 
 
 # ---------------------------------------------------------------------------
