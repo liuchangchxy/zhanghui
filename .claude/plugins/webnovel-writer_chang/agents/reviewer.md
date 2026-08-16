@@ -196,5 +196,17 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 
 - 无法读取角色状态 → 跳过设定一致性检查，在 summary 中标注"无法校验设定一致性：数据读取失败"
 - 无法读取上章摘要 → 跳过连贯性检查中的"上章钩子回应"项
-- `do_not_copy_check.json` 不存在或不是合法 JSON → 对标书禁抄合规性结论写 `pass`，不产出 issue、不报错
+- `do_not_copy_check.json` 不存在或不是合法 JSON → 对标书禁抄合规性维度结论写 `error` 并产出 1 个 `category: "do_not_copy_violation"` issue（severity: high）：
+
+```
+{
+  "severity": "high",
+  "category": "do_not_copy_violation",
+  "location": "全章",
+  "description": "无法读取 do_not_copy_check.json（文件不存在或格式错误）。请确认 .webnovel/reference_research/<book>/ 存在并重跑 /webnovel-review。",
+  "evidence": "do_not_copy_check.json missing or invalid JSON",
+  "fix_hint": "确认 reference_research 树存在；review 主流程重跑",
+  "blocking": false
+}
+```
 - 正文为空 → 输出单条 critical issue："正文为空"
