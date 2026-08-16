@@ -503,3 +503,47 @@ test -f "{project_root}/.webnovel/writer-profile/写作宪法.md"
    - 总纲缺字段 -> 只 patch 总纲；
    - idea_bank 不一致 -> 只重写该文件。
 3. 重新验证，全部通过后结束。
+
+## 作者友好最终报告契约
+
+最终回复必须面向作者，不输出原始 JSON、traceback 或长命令日志。使用固定三段式，并以一句总状态开头：
+
+```text
+总状态：已完成 / 部分完成 / 需要你处理 / 未完成。
+
+一、产生的文件与完成情况
+- ...
+
+二、过程中遇到的问题与异常耗时
+- 已自动处理：...
+- 建议确认：...
+- 必须处理：...
+
+三、下一步建议
+- ...
+
+```
+
+必须汇报：
+- `state.json` 关键字段是否齐备（title/genre/target_words/target_chapters）。
+- 设定集核心文件是否落盘：`世界观.md`、`力量体系.md`、`主角卡.md`、`金手指设计.md`。
+- `总纲.md` 核心主线与约束字段是否填齐。
+- `idea_bank.json` 是否与最终选定方案一致。
+- `.webnovel/writer-profile/{个人语料.md, 写作宪法.md}` 是否 copy 完成（Phase E 新增）。
+- 对参考书的 `deconstruction-agent` 拆解是否落盘到 `.webnovel/deconstructions/`（不污染新书 canon）。
+- 项目根 guard、`PROJECT_ROOT` 解析、`CLAUDE_PLUGIN_ROOT` / `WORKSPACE_ROOT` 环境变量是否设置成功。
+
+异常分类：
+- 已自动处理：自动补缺失字段、自动重跑最小步骤、自动 patch 总纲、自动补 idea_bank。
+- 建议确认：参考书候选、主角人设倾向、金手指方向、卖点主张、目标读者分层等需要作者看一眼。
+- 必须处理：核心文件缺失且无法补齐、总纲关键字段空白、`BLOCKER` 未裁决、设定集冲突。
+
+下一步建议必须使用任务化语言 + 可复制命令，例如：
+
+```text
+- 接下来可以进入大纲规划阶段：
+  /webnovel-plan 1
+
+```
+
+不写 token 统计；如需排查故障，只给日志路径或建议运行 `/webnovel-doctor`。

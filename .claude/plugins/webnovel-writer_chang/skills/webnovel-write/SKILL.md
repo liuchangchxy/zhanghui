@@ -478,3 +478,54 @@ tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || t
    - 润色失真：恢复 Step 2A 输出并重做 Step 4；
    - 摘要/状态缺失：只重跑 Step 5；
 3. 重新执行"验证与交付"全部检查，通过后结束。
+
+## 作者友好最终报告契约
+
+最终回复必须面向作者，不输出原始 JSON、traceback 或长命令日志。使用固定三段式，并以一句总状态开头：
+
+```text
+总状态：已完成 / 部分完成 / 需要你处理 / 未完成。
+
+一、产生的文件与完成情况
+- ...
+
+二、过程中遇到的问题与异常耗时
+- 已自动处理：...
+- 建议确认：...
+- 必须处理：...
+
+三、下一步建议
+- ...
+
+```
+
+必须汇报：
+- `正文/第{NNN}章-章名.md`、`正文/第{NNN}章-{slug}.md` 是否落盘。
+- 审查报告路径（`审查报告/第{NNN}章审查报告.md` 或对应 range 报告）。
+- `state.json` / index / summary / memory / vector 更新状态。
+- `.webnovel/tmp/{context, draft, polish, review_results, fulfillment_result, disambiguation_result, extraction_result}.json` 是否齐全。
+- `.story-system/commits/chapter_{NNN}.commit.json` 是否落盘（若被拒 `chapter-commit rejected` 则不算"已完成"）。
+- 备份状态、是否可以继续写下一章。
+
+异常分类：
+- 已自动处理：自动重跑失败 batch、自动重做 anti-slop 扫描、自动重投影合同、自动重写 data artifacts。
+- 建议确认：人物小传细节、微世界观表述、节拍微调、伏笔登记需要作者看一眼。
+- 必须处理：`chapter-commit rejected`、projection retry 仍失败、`BLOCKER` 未裁决、关键产物缺失。
+
+下一步建议必须使用任务化语言 + 可复制命令，例如：
+
+```text
+- 继续写下一章：
+  /webnovel-write {NNN+1}
+
+- 如需快车道（跳过 reviewer/polish）：
+  /webnovel-fast-write {NNN+1}
+
+- 如需最少链路（仅 draft + commit）：
+  /webnovel-write {NNN+1} --minimal
+
+```
+
+最终状态不得写"已完成"，除非所有产物落盘 + tests 跑通。
+
+不写 token 统计；如需排查故障，只给日志路径或建议运行 `/webnovel-doctor`。
