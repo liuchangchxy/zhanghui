@@ -1,0 +1,101 @@
+# 拆书报告：{{ reference_title }}
+
+> 参考书：{{ reference_title }}
+> 分析模式：`{{ analysis_mode }}` | 置信度：`{{ confidence }}` | 覆盖率：`{{ coverage }}`
+> 报告生成：自动化（init Step 1.5）
+
+## 1. 读者承诺
+
+{{ reader_promise }}
+
+## 2. 开篇钩子套路
+
+{% for hook in opening_hook_patterns %}
+- {{ hook }}
+{% endfor %}
+
+## 3. 爽点循环
+
+{% for cp in cool_point_loops %}
+- {{ cp }}
+{% endfor %}
+
+## 4. 主角原型
+
+{{ protagonist_patterns }}
+
+## 5. 反派压力模式
+
+{{ antagonist_pressure_patterns }}
+
+## 6. 节奏备注
+
+{{ pacing_notes }}
+
+## 7. 叙事功能与边界
+
+- 叙事功能：`{{ narrative_function }}`
+- 第一弧边界：第 `{{ boundary_reason.first_arc_start }}` 章 → 第 `{{ boundary_reason.first_arc_end }}` 章
+- 边界理由：{{ boundary_reason.reason }}
+
+## 8. 主角行动链
+
+{% for chain in protagonist_action_chain %}
+- **触发** {{ chain.trigger }} → **行动** {{ chain.action }} → **结果** {{ chain.result }}
+{% endfor %}
+
+## 9. 情绪曲线
+
+{% for point in emotion_curve %}
+- 第 {{ point.chapter }} 章：强度 `{{ "%.2f" | format(point.intensity) }}` · {{ point.label }}
+{% endfor %}
+
+## 10. 核心爽点
+
+{% for sp in satisfaction_point %}
+- {{ sp }}
+{% endfor %}
+
+## 11. 伏笔地图
+
+{% for f in foreshadowing %}
+- **第 {{ f.setup_chapter }} 章** 设伏 → **预计第 {{ f.payoff_chapter_estimate }} 章** 兑现：{{ f.content }}
+{% endfor %}
+
+## 12. 收获与代价
+
+{% for gc in gains_costs %}
+- 第 {{ gc.chapter }} 章 · {{ gc.category }}：得 `{{ gc.gain }}` / 失 `{{ gc.cost }}`
+{% endfor %}
+
+## 13. 角色变化
+
+{% for cc in character_changes %}
+- 第 {{ cc.chapter }} 章 · {{ cc.character }}：`{{ cc.before }}` → `{{ cc.after }}`
+{% endfor %}
+
+## 14. 可复用结构
+
+{% for bs in borrowable_structures %}
+- {{ bs }}
+{% endfor %}
+
+## 15. 差异化要求
+
+{{ differentiation_requirements }}
+
+## 16. Init 候选
+
+- **一句话卖点**：{{ init_candidates.one_liner }}
+- **反套路**：{{ init_candidates.anti_trope }}
+- **硬约束**：
+{% for hc in init_candidates.hard_constraints %}
+  - {{ hc }}
+{% endfor %}
+- **主角缺陷**：{{ init_candidates.protagonist_flaw }}
+- **反派镜像**：{{ init_candidates.antagonist_mirror }}
+- **开篇钩子**：{{ init_candidates.opening_hook }}
+
+---
+
+> ⚠️ 本报告由 deconstruction-agent 自动生成，仅作为 init Step 5 创意约束的输入。`do_not_copy` 与 `canon_contamination_warnings` 字段见同目录独立文件。
