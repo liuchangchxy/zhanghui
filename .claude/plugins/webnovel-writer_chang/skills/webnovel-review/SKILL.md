@@ -122,6 +122,33 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 - `high-point-checker`
 - `pacing-checker`
 
+**do_not_copy 检查（reviewer 任务之前执行）**：
+
+1. 定位本章正文文件 `CHAPTER_FILE`：优先 `正文/第{NNNN}章-{title_safe}.md`，无标题时回退 `正文/第{NNNN}章.md`。
+2. 调用 `reference_research_injector.build_do_not_copy_check_data()`，用本章正文全文扫描 `do_not_copy` 条目：
+
+   ```bash
+   mkdir -p "${PROJECT_ROOT}/.webnovel/tmp"
+   python3 -X utf8 -c '
+   import sys, json, pathlib
+   sys.path.insert(0, sys.argv[1])
+   from data_modules.reference_research_injector import build_do_not_copy_check_data
+   text = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+   v = build_do_not_copy_check_data(pathlib.Path(sys.argv[2]), text)
+   print(json.dumps({"violations": v}, ensure_ascii=False, indent=2))
+   ' "${SCRIPTS_DIR}" "${PROJECT_ROOT}" "${PROJECT_ROOT}/${CHAPTER_FILE}" \
+     > "${PROJECT_ROOT}/.webnovel/tmp/do_not_copy_check.json"
+   ```
+
+3. 输出写入 `.webnovel/tmp/do_not_copy_check.json`，每个 violation 含 item / source_book / chapter_line / matched_text / severity / category：
+
+   ```json
+   {"violations": [{"item": "韩立人设", "source_book": "凡人修仙传", "chapter_line": 12, "matched_text": "韩立微微一笑道……", "severity": "critical", "category": "do_not_copy_violation"}]}
+   ```
+
+4. 无 `reference_research/` 树或无命中 → 上述命令自然产出 `{"violations": []}`，不报错、不阻断。
+5. reviewer 任务读取此 artifact 并把每个 violation 加入 `issues` 数组（见 `reviewer` 的"对标书禁抄合规性"维度）。
+
 ## Step 4: 生成审查报告
 
 保存到：`审查报告/第{start}-{end}章审查报告.md`

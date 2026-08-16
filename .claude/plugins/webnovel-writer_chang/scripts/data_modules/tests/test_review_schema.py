@@ -169,3 +169,20 @@ def test_ai_flavor_review_feedback_dedupes_evidence(tmp_path):
     patterns = json.loads(existing.read_text(encoding="utf-8"))
     assert added == 0
     assert len(patterns) == 1
+
+
+def test_do_not_copy_violation_category_is_preserved():
+    """P3: do_not_copy_violation must survive validation, not be coerced to 'other'."""
+    issue = ReviewIssue(
+        severity="critical",
+        category="do_not_copy_violation",
+        description="出现 do_not_copy 中禁止的元素：韩立人设",
+        evidence="韩立微微一笑道",
+    )
+    assert issue.category == "do_not_copy_violation"
+    assert issue.blocking is True
+
+    metrics = ReviewResult(chapter=7, issues=[issue]).to_metrics_dict()
+    assert "do_not_copy_violation" in metrics["dimension_scores"]
+    assert metrics["dimension_scores"]["do_not_copy_violation"] < 100
+    assert "do_not_copy_violation" in metrics["categories"]

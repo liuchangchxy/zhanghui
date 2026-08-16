@@ -23,6 +23,7 @@ VALID_CATEGORIES = {
     "continuity", "setting", "character", "timeline",
     "ai_flavor", "logic", "pacing", "other",
     "beat_compliance", "foreshadow_compliance",
+    "do_not_copy_violation",
 }
 SCORE_CATEGORIES = (
     "continuity",
@@ -35,6 +36,7 @@ SCORE_CATEGORIES = (
     "other",
     "beat_compliance",
     "foreshadow_compliance",
+    "do_not_copy_violation",
 )
 SEVERITY_PENALTIES = {
     "critical": 35.0,

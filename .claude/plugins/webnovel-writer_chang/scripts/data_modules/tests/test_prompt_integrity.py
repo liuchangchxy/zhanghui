@@ -971,3 +971,19 @@ def test_write_skill_references_reference_research_injector():
     assert "reference_research_injector" in text, "write SKILL must inject reference_research"
     assert "build-step1-summary" in text or "build_step1_summary" in text
     assert "build-step2a-section" in text or "build_step2a_prompt_section" in text
+
+
+def test_review_skill_references_do_not_copy_check():
+    """webnovel-review SKILL.md must perform do_not_copy check in Step 3."""
+    text = _read_text(SKILLS_DIR / "webnovel-review" / "SKILL.md")
+    assert "do_not_copy" in text, "review SKILL must check do_not_copy"
+    assert "do_not_copy_check.json" in text, "review must reference new artifact"
+    assert "reference_research_injector" in text or "build-do-not-copy-check-data" in text, (
+        "review must call injector helper"
+    )
+
+
+def test_reviewer_agent_supports_do_not_copy_violation_category():
+    """agents/reviewer.md must declare do_not_copy_violation as a valid issue category."""
+    text = _read_text(AGENTS_DIR / "reviewer.md")
+    assert "do_not_copy_violation" in text, "reviewer.md must list do_not_copy_violation category"
