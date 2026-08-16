@@ -280,7 +280,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
 异常分类：
 - 已自动处理：自动重跑失败 sub-agent、自动重生成 metrics、自动补 checkpoint 记录。
 - 建议确认：人物小传细节、微世界观表述、节拍微调、伏笔登记需要作者看一眼。
-- 必须处理：有 blocking 问题且用户未选择处理策略（最终状态为"需要你处理"）、`BLOCKER` 未裁决、关键产物缺失。
+- 必须处理：有 blocking 问题且用户未选择处理策略（最终状态为“需要你处理”）、`BLOCKER` 未裁决、关键产物缺失。
 
 下一步建议必须使用任务化语言 + 可复制命令，例如：
 

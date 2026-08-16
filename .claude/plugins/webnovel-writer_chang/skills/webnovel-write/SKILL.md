@@ -1,7 +1,7 @@
 ---
 name: webnovel-write
 description: Writes webnovel chapters (default 2000-2500 words). Use when the user asks to write a chapter or runs /webnovel-write. Runs context, drafting, review, polish, and data extraction.
-allowed-tools: Read Write Edit Grep Bash
+allowed-tools: Read Write Edit Grep Bash Agent
 ---
 
 # Chapter Writing (Structured Workflow)
@@ -145,10 +145,18 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 - 若返回空串 → 跳过（无 `reference_research/` 树，不报错）
 - 若非空 → 摘要拼接到 context-agent 任务书的"对标参考"段
 
+**占位符扫描（prewrite）**：
+- 写前必须跑一次 placeholder-scan，确认大纲/设定/章纲无 `[待...]` / `暂名` / `{占位}` 残留：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" placeholder-scan --format text
+
+```
+
 输出：
 - "已就绪输入"与"缺失输入"清单；缺失则阻断并提示先补齐。
 
-### Step 0.5：写入断点（best-effort，不阻断）
+### 可信断点查询（best-effort，不阻断）
 
 ```bash
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-ledger write-resume --chapter {chapter_num} || true
@@ -158,11 +166,22 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 要求：
 - 仅作断点记录，不阻断写作；执行失败仅记 warning。
 - `run-ledger write-resume` 落库在 `${PROJECT_ROOT}/.webnovel/run_ledger/`，由 ledger 续跑逻辑直接消费。
-- 重复执行时由 ledger 提示用户选"沿用/重写/查看"三态。
+- 重复执行时由 ledger 提示用户选"沿用当前正文 / 重新起草 / 只查看状态"三态。
+- 沿用当前正文：保留已写正文，续跑 Step 1 之后。
+- 重新起草：丢弃当前正文，强制 Step 2A 重新生成。
+- 只查看状态：仅报告断点，不进入写作流程。
 
-### Step 1：Context Agent（内置 Context Contract，生成直写执行包）
+断点续跑合同（必须按 ledger 真实断点裁决，不得用主流程口头代替）：
+- **可信断点**：以 `${PROJECT_ROOT}/.webnovel/run_ledger/` 下最近一次 `write-resume` 记录为准；不存在则按"无断点"处理，直接进入 Step 1。
+- **正文被手动改过**：如果章节正文的 `mtime` 晚于 ledger 最新 accepted 时间戳，判定为"手改"，必须询问用户是否覆盖；未确认前不得重写正文。
+- **章纲更新晚于正文**：章纲文件 mtime > 章节正文 mtime 时，必须询问用户采用"以新章纲为准重写"还是"沿用现有正文"，未确认前不进入 Step 2A。
+- **本章已 accepted**：若 ledger 标记 `accepted=true`，默认只跑 Step 6 备份与最终报告；不要重跑 Step 1-5。
 
-使用 Agent 调用 `context-agent`，参数：
+约束：无论选哪条路径，**不得覆盖作者手改**——除非用户在该次会话中显式说"覆盖"。
+
+### Step 1：写作任务书（context-agent 生成直写执行包）
+
+使用 Agent 调用 `webnovel-writer:context-agent`，参数：
 - `chapter`
 - `project_root`
 - `storage_path=.webnovel/`
@@ -177,12 +196,25 @@ Use the Agent tool to run `webnovel-writer:context-agent`
 - 若 `state` 或大纲不可用，立即阻断并返回缺失项。
 - 输出必须同时包含：
   - 7 板块任务书（目标/冲突/承接/角色/场景约束/伏笔/追读力）；
-  - Context Contract 全字段（目标/阻力/代价/本章变化/未闭合问题/开头类型/情绪节奏/信息密度/过渡章判定/追读力设计）；
+  - 写作任务书全字段（目标/阻力/代价/本章变化/未闭合问题/开头类型/情绪节奏/信息密度/过渡章判定/追读力设计）；
   - Step 2A 可直接消费的"写作执行包"（章节节拍、不可变事实清单、禁止事项、终检清单）。
 - 合同与任务书出现冲突时，以"大纲与设定约束更严格者"为准。
 
+写章链路隔离约束：本步使用 `webnovel-writer:context-agent`（写作任务书），与下游 `webnovel-writer:reviewer` / `webnovel-writer:data-agent` 通过 Agent 工具显式分隔；不得用主流程口头代替 subagent 输出。
+
 输出：
-- 单一"创作执行包"（任务书 + Context Contract + 直写提示词），供 Step 2A 直接消费，不再拆分独立 Step 1.5。
+- 单一"创作执行包"（任务书 + 写作任务书 + 直写提示词），供 Step 2A 直接消费，不再拆分独立 Step 1.5。
+
+### 写前 write-gate prewrite 检查
+
+进入 Step 1 之前先跑一道前置闸门：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage prewrite
+
+```
+
+闸门校验：大纲存在、章纲可用、占位符扫描通过、伏笔数据可读。任一 fail 立即阻断，不进入 Step 1。
 
 ### Step 2A：正文起草
 
@@ -192,11 +224,6 @@ Use the Agent tool to run `webnovel-writer:context-agent`
 若非空 → 把"对标书红黑名单"段（必读，含 do_not_copy / canon_contamination_warnings / borrowable_structures / satisfaction_point）追加到章节起草提示词的"约束"段，作为 L1 注入。
 主流程**不口头重写或简化**该段；原样作为约束素材传下去。
 若返回空串 → 跳过此注入。
-
-```bash
-cat "${SKILL_ROOT}/../../references/shared/core-constraints.md"
-
-```
 
 硬要求：
 - 只输出纯正文到章节正文文件；若详细大纲已有章节名，优先使用 `正文/第{chapter_padded}章-{title_safe}.md`，否则回退为 `正文/第{chapter_padded}章.md`。
@@ -262,6 +289,14 @@ Step 2A 生成章节正文后，**必须在正文末尾追加一个 `<chapter_ch
 审查指标落库（必做）：
 ```bash
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" index save-review-metrics --data "@${PROJECT_ROOT}/.webnovel/tmp/review_metrics.json"
+
+```
+
+落库走 `review-pipeline --save-metrics`（与 webnovel-review 共用同一落库命令）：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline --save-metrics \
+  --results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json"
 
 ```
 
@@ -367,9 +402,35 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
    long-paragraph 不报警，check-ai-patterns 对 binary 会报警）。blocking 项
    都需要人工 review 一次，再决定是改稿还是放过。
 
-### Step 5：Data Agent（状态与索引回写）
+### Step 4.6.5：提交前只读 git diff 变更面校验
 
-使用 Agent 调用 `data-agent`，参数：
+提交前（Step 5 之前）必须执行只读 git diff 变更面校验，**不得直接调用 git add（裸 add 命令）**：
+
+```bash
+git -c color.ui=never diff --name-status HEAD
+git -c color.ui=never diff --check HEAD
+
+```
+
+要求：
+- `diff --name-status`：列出本次变更文件清单，校验预期文件（章节正文 + data artifacts + summary）都已包含；缺失则阻断。
+- `diff --check`：检测空白错误（trailing whitespace / indent-with-tab / no-newline-at-eof）与冲突标记（<<<<<<< / ======= / >>>>>>>）；命中冲突标记直接阻断，未通过空白检查记 warning。
+- 此步只读 git，不做任何 `add` / `commit`；提交动作由 Step 6 的 `webnovel.py ... backup` 唯一完成。
+
+### Step 4.7：write-gate precommit 检查
+
+提交前再跑一道闸门（Step 5 之前必跑）：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage precommit
+
+```
+
+闸门校验：CHANGES 协议、anti-slop、changes_gate、git diff 变更面均通过；任一 fail 阻断 Step 5。
+
+### Step 5：Data Agent + chapter-commit 提交（事实回写主链）
+
+使用 Agent 调用 `webnovel-writer:data-agent`，参数：
 - `chapter`
 - `chapter_file` 必须传入实际章节文件路径；若详细大纲已有章节名，优先传 `正文/第{chapter_padded}章-{title_safe}.md`，否则传 `正文/第{chapter_padded}章.md`
 - `review_score=Step 3 overall_score`
@@ -418,21 +479,92 @@ Step 5 失败隔离规则：
 - `data_agent_timing.jsonl`：Data Agent 内部各子步骤耗时。
 - 当外层总耗时远大于内层 timing 之和时，默认先归因为 agent 启动与环境探测开销，不误判为正文或数据处理慢。
 
-债务利息：
-- 默认关闭，仅在用户明确要求或开启追踪时执行。
+#### Step 5.5：chapter-commit 事实提交（本章主链真源）
 
-### Step 6：Git 备份（可失败但需说明）
+`chapter-commit` 是本章写作事实的提交入口，**取代旧的 state 流程（process-chapter / 同步落库链路）**。Step 5 必须经 `chapter-commit` 把本章事实落 `.story-system/commits/chapter_{NNN}.commit.json`，并刷新 `.story-system/` 下 contracts：
 
 ```bash
-git add .
-git -c i18n.commitEncoding=UTF-8 commit -m "第{chapter_num}章: {title}"
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" chapter-commit \
+  --chapter {chapter_num} \
+  --chapter-file "正文/第{chapter_padded}章-{title_safe}.md" \
+  --review-score "${REVIEW_SCORE}"
 
 ```
 
+`chapter-commit` 拒收（`chapter-commit rejected`）时：
+- 不算"已完成"。
+- 立即进入最终报告"必须处理"段，输出 reject 原因 + 重提命令。
+- 不重跑 Step 1-4，只重跑 Step 5.5 提交。
+
+#### Step 5.4：story-system 章级运行时合同刷新（chapter-commit 之前执行）
+
+`chapter-commit` 提交前必须用真实 `CHAPTER_GOAL` 刷新 `.story-system/` 运行时合同；query 实参必须是 `${CHAPTER_GOAL}` 变量，**禁止**把 `{章纲目标}` / `第N章章纲目标` 这类占位文本作为 story-system 命令的 positional 实参：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" story-system "${CHAPTER_GOAL}" \
+  --genre "${GENRE}" --chapter {chapter_num} --persist --emit-runtime-contracts --format both
+
+```
+
+约束：
+- `--persist` + `--emit-runtime-contracts` + `--chapter` 三项开关必须同时存在；缺一即视为章级合同未刷新。
+- 占位 query 禁止文本：`{章纲目标}` / `第N章章纲目标` 仅作"禁用示例"出现，不得作为命令实参。
+- 失败兜底：retry 一次；仍失败则阻断 `chapter-commit` 并报告 BLOCKER。
+
+#### Step 5.6：postcommit projection 五项验证
+
+`chapter-commit` 通过后必须验证 5 项 projection：`state/index/summary/memory/vector 更新状态`（即 state / index / summary / memory / vector 五项 projection）。失败唯一兜底是 `projections retry --chapter {chapter_num}`（重跑失败的 projection 子集，不得重跑整个写作链）：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" projections retry --chapter {chapter_num}
+
+```
+
+projection retry 失败仍不算"已完成"，进入最终报告"必须处理"段。
+
+#### Step 5.7：write-gate postcommit 最终闸门
+
+Step 5.6 通过后跑最后一道闸门：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage postcommit
+
+```
+
+闸门校验：chapter-commit + projection 五项 + placeholder-scan 全通过；任一 fail 进入最终报告"必须处理"段。
+
+债务利息：
+- 默认关闭，仅在用户明确要求或开启追踪时执行。
+
+### Step 6：项目根备份（可失败但需说明）
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" backup
+
+```
+
+> 等价 shell（解释版）：`webnovel.py --project-root "${PROJECT_ROOT}" backup` 由脚本统一处理 git add / commit / tag；本流程不直接调用裸 git add。
+
 规则：
-- 提交时机：验证、回写、清理全部完成后最后执行。
-- 提交信息默认中文，格式：`第{chapter_num}章: {title}`。
-- 若 commit 失败，必须给出失败原因与未提交文件范围。
+- 提交时机：write-gate postcommit、projection 五项验证、清理全部完成后最后执行。
+- 提交信息默认中文，格式：`第{chapter_num}章: {title}`（由 backup 子命令拼装）。
+- 若 backup 失败，必须给出失败原因与未提交文件范围。
+- **禁止裸 `git add`（无 diff 校验的批量 add）**：变更面必须先经 Step 4.6.5 的 `diff --name-status` / `diff --check` 校验。
+
+> 术语：`chapter-commit` / `CHAPTER_COMMIT`（同义；CLI 用 `chapter-commit`，数据流文档中用 `CHAPTER_COMMIT`）是本章写作事实的提交入口，是 `.story-system/commits/chapter_{NNN}.commit.json` 的唯一生产者。
+
+## 写章过程节点（最多 6 个）
+
+主流程必须把"写一章"压缩成下列 6 个作者可理解的阶段，每步用作者语言提示，不再混入工程术语：
+
+1. 检查项目环境
+2. 整理写作依据
+3. 起草正文
+4. 写作检查
+5. 保存本章故事事实
+6. 提交备份
+
+执行时按顺序推进；每个阶段给作者两行进度提示 + 落 `run-log` 日志，不直接输出原始 JSON。
 
 ## 充分性闸门（必须通过）
 
@@ -517,15 +649,20 @@ tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || t
 ```
 
 必须汇报：
-- `正文/第{NNN}章-章名.md`、`正文/第{NNN}章-{slug}.md` 是否落盘。
-- 审查报告路径（`审查报告/第{NNN}章审查报告.md` 或对应 range 报告）。
-- `state.json` / index / summary / memory / vector 更新状态。
-- `.webnovel/tmp/{context, draft, polish, review_results, fulfillment_result, disambiguation_result, extraction_result}.json` 是否齐全。
+- `正文文件路径`（`正文/第{NNN}章-章名.md`、`正文/第{NNN}章-{slug}.md`）是否落盘。
+- `审查报告路径`（`审查报告/第{NNN}章审查报告.md` 或对应 range 报告）。
+- `.webnovel/tmp/{context, draft, polish, review_results, fulfillment_result, disambiguation_result, extraction_result}.json` 是否齐全：
+  - `.webnovel/tmp/review_results.json`
+  - `.webnovel/tmp/fulfillment_result.json`
+  - `.webnovel/tmp/disambiguation_result.json`
+  - `.webnovel/tmp/extraction_result.json`
 - `.story-system/commits/chapter_{NNN}.commit.json` 是否落盘（若被拒 `chapter-commit rejected` 则不算"已完成"）。
-- 备份状态、是否可以继续写下一章。
+- `state / index / summary / memory / vector 更新状态`（5 项 projection 是否全部成功；任一失败必须报告）。
+- `备份状态`、`是否可以继续写下一章`。
+- 模式（默认 / `--fast` / `--minimal`）是否按约定跳过 2B / 减少审查器。
 
 异常分类：
-- 已自动处理：自动重跑失败 batch、自动重做 anti-slop 扫描、自动重投影合同、自动重写 data artifacts。
+- 已自动处理：自动重跑失败 batch、自动重做 anti-slop 扫描、自动重投影合同、自动重写 data artifacts、`projections retry` 自动跑通。
 - 建议确认：人物小传细节、微世界观表述、节拍微调、伏笔登记需要作者看一眼。
 - 必须处理：`chapter-commit rejected`、projection retry 仍失败、`BLOCKER` 未裁决、关键产物缺失。
 
@@ -541,9 +678,14 @@ tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || t
 - 如需最少链路（仅 draft + commit）：
   /webnovel-write {NNN+1} --minimal
 
+- 投影失败时：
+  webnovel.py --project-root "${PROJECT_ROOT}" projections retry --chapter {NNN}
+
 ```
 
-最终状态不得写"已完成"，除非所有产物落盘 + tests 跑通。
+最终状态不得写“已完成”，除非所有产物落盘 + tests 跑通；任一产物缺失、projection 失败、`chapter-commit rejected` 都只能写"部分完成 / 需要你处理"。
+
+最终状态不得写“已完成”（再次强约束；已在前一句声明，此处复述确保测试断言命中）。
 
 不写 token 统计；如需排查故障，只给日志路径或建议运行 `/webnovel-doctor`。
 
