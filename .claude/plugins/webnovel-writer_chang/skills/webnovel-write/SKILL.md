@@ -165,7 +165,7 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 - 不存在 → 跳过，不报错（不再回退到 skill 内 templates/）。
 
 **对标参考检测（reference_research）**：
-- 调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step1-summary --project-root "${PROJECT_ROOT}"`，得到 ≤ 200 token 摘要字符串
+- 调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step1-summary --project-root "${PROJECT_ROOT}"`，得到 ≤ 800 chars (~1200 CJK tokens) 摘要字符串
 - 若返回空串 → 跳过（无 `reference_research/` 树，不报错）
 - 若非空 → 摘要拼接到 context-agent 任务书的"对标参考"段
 

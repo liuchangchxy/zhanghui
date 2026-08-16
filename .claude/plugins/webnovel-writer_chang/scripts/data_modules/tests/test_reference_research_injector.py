@@ -108,7 +108,11 @@ def test_build_step2a_section_includes_satisfaction(tmp_path):
 def test_build_do_not_copy_check_data_finds_violation(tmp_path):
     from data_modules.reference_research_injector import build_do_not_copy_check_data
     _build_minimal_tree(tmp_path, do_not_copy=["韩立人设"])
-    chapter_text = "第一章：觉醒。\n韩立微微一笑道：让我们开始修炼。"
+    # NOTE (P3 C3 fix): the matcher no longer splits 韩立人设 to a 2-char
+    # '韩立' token (avoids false positives like 韩立群 → 韩立). The full
+    # item '韩立人设' is now used as the match token. Update chapter_text
+    # to contain the full token.
+    chapter_text = "第一章：觉醒。\n韩立人设的设定不能照搬。"
     violations = build_do_not_copy_check_data(tmp_path, chapter_text)
     assert len(violations) >= 1
     assert violations[0]["item"] == "韩立人设"
@@ -144,3 +148,79 @@ def test_build_step1_summary_multiple_trees_primary_first(tmp_path):
     )
     summary = build_step1_summary(tmp_path)
     assert summary.index("B书") < summary.index("A书")
+
+
+# --- P3 adversarial fix tests (C2 + C3 + C4 + C5) ---
+
+
+def test_cli_build_step1_summary(tmp_path):
+    """CLI invocation produces non-empty output when trees exist."""
+    import subprocess
+    import sys
+    _build_minimal_tree(tmp_path, borrowable=["宗门升级"])
+    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py"
+    result = subprocess.run(
+        [sys.executable, helper, "build-step1-summary", "--project-root", str(tmp_path)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, f"CLI failed: stderr={result.stderr}"
+    assert result.stdout.strip(), "CLI produced empty output"
+
+
+def test_cli_build_step2a_section(tmp_path):
+    import subprocess, sys
+    _build_minimal_tree(tmp_path, do_not_copy=["韩立人设"])
+    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py"
+    result = subprocess.run(
+        [sys.executable, helper, "build-step2a-section", "--project-root", str(tmp_path)],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0
+    assert "对标书红黑名单" in result.stdout
+
+
+def test_cli_build_do_not_copy_check_data(tmp_path):
+    import subprocess, sys, json
+    _build_minimal_tree(tmp_path, do_not_copy=["韩立人设"])
+    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py"
+    # Use full forbidden token to trigger violation under the new 3-char
+    # matcher (see C3 fix).
+    chapter_text = "韩立人设不能照搬。\n"
+    result = subprocess.run(
+        [sys.executable, helper, "build-do-not-copy-check-data",
+         "--project-root", str(tmp_path),
+         "--chapter-text", chapter_text],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    assert len(data) >= 1
+
+
+def test_do_not_copy_check_skips_subtoken_false_positive(tmp_path):
+    """Sub-3-char tokens must NOT trigger violations (avoids false positives like 韩立群 on 韩立人设)."""
+    from data_modules.reference_research_injector import build_do_not_copy_check_data
+    _build_minimal_tree(tmp_path, do_not_copy=["韩立人设"])
+    chapter_text = "李明与韩立群一同走进山谷。"
+    violations = build_do_not_copy_check_data(tmp_path, chapter_text)
+    # 韩立 alone is 2 chars; tokens < 3 must not match
+    assert violations == [], f"false positive: {violations}"
+
+
+def test_do_not_copy_check_matches_colon_form_value(tmp_path):
+    """Colon-prefix items like '原作人物名: 韩立' should match the value '韩立'."""
+    from data_modules.reference_research_injector import build_do_not_copy_check_data
+    _build_minimal_tree(tmp_path, do_not_copy=["原作人物名: 韩立"])
+    chapter_text = "第一章：韩立出场。"
+    violations = build_do_not_copy_check_data(tmp_path, chapter_text)
+    assert len(violations) >= 1
+    assert violations[0]["item"] == "原作人物名: 韩立"
+    assert "韩立" in violations[0]["matched_text"]
+
+
+def test_step1_summary_docstring_mentions_char_cap():
+    """Docstring must document actual 800-char cap (not the lying 200-token claim)."""
+    import inspect
+    from data_modules.reference_research_injector import build_step1_summary
+    doc = inspect.getdoc(build_step1_summary) or ""
+    assert "800" in doc or "char" in doc.lower(), f"docstring misleading: {doc}"

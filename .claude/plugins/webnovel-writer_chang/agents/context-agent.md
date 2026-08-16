@@ -35,7 +35,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "{project_root}" ind
 
 ```
 
-load-context 已含（不要重复查）：`story_contracts`（MASTER/volume/chapter/review）、`recent_summaries`、`urgent_loops`、`active_rules`、`protagonist`、`memory_pack`（追读力）、`genre_profile_excerpt`、`author_style_patterns`（/webnovel-learn 累积的作者文风修正）、`style_contract`（设定集/风格契约）、`reference_research_summary`（对标参考摘要，由 `reference_research_injector.build_step1_summary()` 生成，≤ 200 token）。只有返回空 contracts 时才直接 Read `.story-system/*.json`。
+load-context 已含（不要重复查）：`story_contracts`（MASTER/volume/chapter/review）、`recent_summaries`、`urgent_loops`、`active_rules`、`protagonist`、`memory_pack`（追读力）、`genre_profile_excerpt`、`author_style_patterns`（/webnovel-learn 累积的作者文风修正）、`style_contract`（设定集/风格契约）、`reference_research_summary`（对标参考摘要，由 `reference_research_injector.build_step1_summary()` 生成，≤ 800 chars / ~1200 CJK tokens）。只有返回空 contracts 时才直接 Read `.story-system/*.json`。
 
 裁决层（chapter 合同的 `reasoning` 对象）：`style_priority`、`pacing_strategy`、`genre`，必须在第 4 段消费。`chapter_focus` / `dynamic_context` 等 CSV 派生项仅作写法参考，不得覆盖章纲与 `chapter_directive.goal` 约束。
 

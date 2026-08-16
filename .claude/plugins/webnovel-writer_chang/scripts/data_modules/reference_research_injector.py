@@ -99,7 +99,14 @@ def _read_json_field(tree: Path, field: str, default=None) -> Any:
         return default
 
 
-def build_step1_summary(project_root: Path, max_tokens: int = 200) -> str:
+def build_step1_summary(project_root: Path) -> str:
+    """Build a compact "对标参考" summary string for Step 1 prompt injection.
+
+    Output is hard-capped at 800 chars (~1200 CJK tokens), so it stays a
+    small fraction of any L1 prompt. The previous docstring claimed a
+    200-token cap that the implementation never honored — that claim
+    has been removed; 800 chars is the actual contract.
+    """
     trees = _ordered_trees(project_root)
     if not trees:
         return ""
@@ -170,29 +177,52 @@ _CLASSIFIER_SUFFIXES = (
 def _do_not_copy_match_tokens(item: str) -> list[str]:
     """Split a do_not_copy item into match tokens.
 
-    Items typically look like "<name><classifier_suffix>" — e.g. "韩立人设",
-    "神秘小瓶机制". The atomic concept is the name part. We split on common
-    classifier suffixes and return each remaining piece (>= 2 chars). The full
-    item is also returned as a fallback.
+    Items typically look like:
 
-    Always yields at least one token (the item itself, when no split occurs).
+    * ``"<name><classifier_suffix>"`` — e.g. ``"韩立人设"``, ``"神秘小瓶机制"``
+    * ``"<category>: <name>"`` — e.g. ``"原作人物名: 韩立"``
+
+    Rules:
+
+    1. **Colon-prefix form** (``"原作人物名: 韩立"``): strip the prefix and use
+       the value side (``"韩立"``) as the literal forbidden term — match it
+       even if it is short (1-2 chars), because the user has explicitly named
+       the value as forbidden.
+    2. **Name+classifier form** (``"韩立人设"``): split on classifier suffixes
+       to recover the name part(s), and drop tokens shorter than 3 chars so
+       ``"韩立人设"`` does not split to the 2-char ``"韩立"`` (which would
+       false-positive on innocent text like ``"韩立群"``).
+
+    Returns a list of match tokens. Always yields at least one token when the
+    item is non-empty and ≥ 2 chars, otherwise ``[]``.
     """
-    pattern = "|".join(_CLASSIFIER_SUFFIXES)
+    # Rule 1: colon-prefix form → value side, no length filter (it's the
+    # explicit forbidden name as stored by the user).
+    if ":" in item:
+        value = item.split(":", 1)[1].strip()
+        if value:
+            return [value]
+
+    # Rule 2: name+classifier form → split on classifier suffixes; keep only
+    # tokens ≥ 3 chars to avoid 2-char false positives like '韩立' on '韩立群'.
+    pattern = "|".join(re.escape(s) for s in _CLASSIFIER_SUFFIXES)
     parts = re.split(f"({pattern})", item)
     tokens: list[str] = []
     seen: set[str] = set()
     for p in parts:
         if not p:
             continue
-        if p in _CLASSIFIER_SUFFIXES:
+        if re.fullmatch(pattern, p):
             continue
-        if len(p) < 2:
+        if len(p) < 3:
             continue
         if p in seen:
             continue
         seen.add(p)
         tokens.append(p)
-    if not tokens and len(item) >= 2:
+
+    # Fallback: keep the full item if it's ≥ 3 chars (and wasn't already added).
+    if not tokens and len(item) >= 3 and item not in seen:
         tokens.append(item)
     return tokens
 
@@ -220,3 +250,47 @@ def build_do_not_copy_check_data(project_root: Path, chapter_text: str) -> list[
                         "category": "do_not_copy_violation",
                     })
     return violations
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys as _sys
+
+    # When invoked as `python3 data_modules/reference_research_injector.py ...`,
+    # `data_modules` is not on sys.path. Add the parent (scripts/) so the
+    # `from data_modules.*` imports inside the helpers resolve.
+    _HERE = Path(__file__).resolve().parent
+    _PARENT = _HERE.parent
+    if str(_PARENT) not in _sys.path:
+        _sys.path.insert(0, str(_PARENT))
+
+    parser = argparse.ArgumentParser(
+        description="reference_research_injector — build prompt sections for write/review",
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p1 = sub.add_parser("build-step1-summary")
+    p1.add_argument("--project-root", required=True)
+    p1.set_defaults(fn=lambda a: print(build_step1_summary(Path(a.project_root))))
+
+    p2 = sub.add_parser("build-step2a-section")
+    p2.add_argument("--project-root", required=True)
+    p2.set_defaults(fn=lambda a: print(build_step2a_prompt_section(Path(a.project_root))))
+
+    p3 = sub.add_parser("build-do-not-copy-check-data")
+    p3.add_argument("--project-root", required=True)
+    p3.add_argument("--chapter-text", default="")
+    p3.add_argument("--chapter-file", default=None,
+                    help="Read chapter text from this file (alternative to --chapter-text)")
+    p3.set_defaults(fn=lambda a: print(json.dumps(
+        build_do_not_copy_check_data(
+            Path(a.project_root),
+            a.chapter_text if a.chapter_text
+            else Path(a.chapter_file).read_text(encoding="utf-8") if a.chapter_file
+            else "",
+        ),
+        ensure_ascii=False,
+    )))
+
+    args = parser.parse_args()
+    args.fn(args)
