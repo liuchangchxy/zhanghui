@@ -101,13 +101,11 @@ python "${SCRIPTS_DIR}/migrate_story_craft.py" "${PROJECT_ROOT}/.webnovel/state.
 
 读完 `idea_bank.json` 后，按以下规则加载所有可用拆书产物：
 
-1. **如果 `idea_bank.reference_research_path` 存在** → 该路径指向的树是**主对标书**（primary）
-2. **扫描 `.webnovel/reference_research/*/`**（glob 模式）：
-   - 每个子目录都是一本书的拆书树（`<book-safe>/`）
-   - 加载所有树的 `_schema.json` + `report.md`（节选）+ `do_not_copy.md` + `canon_contamination_warnings.md`
-   - 多本书作为**次要参考**（secondary）参与章节级对齐；这些树来自 `/webnovel-deconstruct` 等独立拆书流程
-3. **去重**：相同 `<book-safe>` 不重复加载
-4. **主从优先级**：主对标书（来自 init §1.5）的字段优先；次要参考（来自 standalone deconstruct）补充多样性
+1. **如果 `idea_bank.reference_research_path` 存在** → 先调用 `scripts/data_modules/reference_research_scanner.py:validate_idea_bank_pointer()` 验证路径安全（拒绝绝对路径、`..`、非字符串）。通过后该路径指向的树是**主对标书**（primary）。
+2. **扫描所有可用树**：调用 `scan_reference_research_trees(project_root)` 返回所有合法 `<book-safe>/` 子目录（Python 强制：5 个必需文件 + 拒绝 symlink）。
+3. **加载每棵树**：`_schema.json` + `report.md`（节选）+ `do_not_copy.md` + `canon_contamination_warnings.md`。
+4. **去重**：相同 `<book-safe>` 不重复加载。
+5. **主从优先级**：主对标书（来自 init §1.5）的字段优先；次要参考（来自 standalone deconstruct）补充多样性。
 
 在卷纲 / 章纲阶段使用：
 
