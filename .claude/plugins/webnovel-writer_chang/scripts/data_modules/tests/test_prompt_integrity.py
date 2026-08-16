@@ -665,6 +665,13 @@ def test_deconstruction_agent_schema_extension():
         assert existing_field in text, f"deconstruction-agent.md lost existing field: {existing_field}"
 
 
+def test_deconstruction_agent_is_not_init_only():
+    """Agent description must allow multiple callers (init Step 1.5 + standalone deconstruct)."""
+    text = _read_text(AGENTS_DIR / "deconstruction-agent.md")
+    assert "/webnovel-deconstruct" in text, "agent must mention deconstruct skill as caller"
+    assert "/webnovel-init" in text, "agent must still mention init Step 1.5 as caller"
+
+
 def test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate():
     """init may consume only confirmed, transformed reference patterns."""
     text = _read_text(SKILLS_DIR / "webnovel-init" / "SKILL.md")

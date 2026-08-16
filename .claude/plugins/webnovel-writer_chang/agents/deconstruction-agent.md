@@ -1,6 +1,6 @@
 ---
 name: deconstruction-agent
-description: /webnovel-init 的参考书拆解子代理。抽取可迁移的创作模式与 init 候选，不污染新书 canon。
+description: 从参考书抽取可迁移的创作模式。可被 /webnovel-init（Step 1.5）和 /webnovel-deconstruct（独立）调用。
 tools: Read, Grep, Bash
 model: inherit
 color: magenta
