@@ -751,9 +751,13 @@ __pycache__/
 
     # === reference_research/ 验证（spec 2026-08-16 §D3/D7）===
     if reference_research_dir:
-        import datetime as _dt_mod
-
-        src_tree = Path(reference_research_dir).expanduser().resolve()
+        raw_src_tree = Path(reference_research_dir).expanduser()
+        # C3 fix: refuse symlinks BEFORE resolving (resolve() would follow and lose the symlink info)
+        if raw_src_tree.is_symlink():
+            raise SystemExit(
+                f"--reference-research-dir is a symlink (refusing to follow): {raw_src_tree}"
+            )
+        src_tree = raw_src_tree.resolve()
         if not src_tree.is_dir():
             raise SystemExit(
                 f"--reference-research-dir not found or not a directory: {src_tree}"
@@ -771,16 +775,17 @@ __pycache__/
                 f"reference_research tree already exists at {target_tree}. "
                 f"Pass reference_overwrite=True (or --reference-overwrite CLI flag) to overwrite."
             )
-        if target_tree.exists():
-            # Backup existing schema
-            existing_schema = target_tree / "_schema.json"
-            if existing_schema.exists():
-                backup = target_tree / f"_schema.json.bak-{_dt_mod.datetime.now(_dt_mod.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
-                existing_schema.rename(backup)
+        # Backup existing schema to OUTSIDE target_tree (preserves even on overwrite)
+        existing_schema = target_tree / "_schema.json"
+        if existing_schema.exists():
+            from datetime import timezone as _tz
+            backups_dir = project_path / ".webnovel" / "backups"
+            backups_dir.mkdir(parents=True, exist_ok=True)
+            backup = backups_dir / f"{book_safe}__schema__{datetime.now(_tz.utc).strftime('%Y%m%dT%H%M%S_%fZ')}.bak"
+            shutil.copy2(existing_schema, backup)
         target_tree.parent.mkdir(parents=True, exist_ok=True)
-        if target_tree.exists():
-            shutil.rmtree(target_tree)
-        shutil.copytree(src_tree, target_tree)
+        # In-place overwrite (no rmtree — shutil.copytree with dirs_exist_ok overwrites files)
+        shutil.copytree(src_tree, target_tree, dirs_exist_ok=True)
         print(f"已写入 {target_tree}")
 
     # === 个人语料 + 写作宪法模板写入（Phase E）===

@@ -232,6 +232,13 @@ def build_reference_tree(
     webnovel = project_path / ".webnovel"
     tree = webnovel / "reference_research" / safe
 
+    # C3 fix: refuse to write through a symlink (could be attacker-controlled target).
+    if tree.is_symlink():
+        raise SystemExit(
+            f"refusing to write through symlink: {tree}. "
+            f"Remove the symlink first or choose a different <book-safe> name."
+        )
+
     if tree.exists():
         if not overwrite:
             raise FileExistsError(
@@ -240,7 +247,7 @@ def build_reference_tree(
             )
         existing_schema = tree / "_schema.json"
         if existing_schema.exists():
-            backup = tree / f"_schema.json.bak-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+            backup = tree / f"_schema.json.bak-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ')}"
             existing_schema.rename(backup)
 
     tree.mkdir(parents=True, exist_ok=True)

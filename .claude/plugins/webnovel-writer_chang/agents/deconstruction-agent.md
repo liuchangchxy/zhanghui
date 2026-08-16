@@ -101,7 +101,7 @@ color: magenta
   "borrowable_structures": [ { "structure": "", "use_case": "", "required_transformation": "" } ],
   "do_not_copy": [],
   "differentiation_requirements": [],
-  "init_candidates": [ { "one_liner": "", "anti_trope": "", "hard_constraints": [], "protagonist_flaw": "", "antagonist_mirror": "", "opening_hook": "", "source_patterns_used": [], "transformation_notes": "" } ],
+  "init_candidates": { "one_liner": "", "anti_trope": "", "hard_constraints": [], "protagonist_flaw": "", "antagonist_mirror": "", "opening_hook": "", "source_patterns_used": [], "transformation_notes": "" },
   "quality": { "confidence": 0.0, "coverage": 0.0, "overlap": 0.0, "passed": false, "warnings": [] },
   "resume_state": { "current_stage": "", "processed_chapters": [], "next_action": "", "character_merges": [], "quality_checks": [] },
   "orphan_plot_fallback": [],
@@ -129,7 +129,7 @@ color: magenta
 
 新增字段必须遵循与原 9 字段一致的"差异化要求"原则——**不能复制原作人物/地点/组织/能力名/剧情事实**，全部变形为功能位/条件组合/情绪方向。
 
-`init_candidates` 是候选创意约束包，不是最终设定；每个候选都必须显式说明与参考书的差异化处理。
+`init_candidates` 是候选创意约束包（**单个对象**，不是数组），含 one_liner / anti_trope / hard_constraints / protagonist_flaw / antagonist_mirror / opening_hook 六个键；不是最终设定；每个候选都必须显式说明与参考书的差异化处理。
 
 ## 8. SubagentRun 可汇总信号
 

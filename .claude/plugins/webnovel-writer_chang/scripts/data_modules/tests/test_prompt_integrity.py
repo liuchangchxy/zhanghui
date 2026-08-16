@@ -580,6 +580,25 @@ def test_no_direct_state_writes_in_agents():
         )
 
 
+def test_init_candidates_is_object_not_list_in_agent_schema():
+    """deconstruction-agent.md must declare init_candidates as a SINGLE OBJECT, not a list."""
+    text = _read_text(AGENTS_DIR / "deconstruction-agent.md")
+    # Must mention init_candidates and reference it as object-like access (not a list)
+    assert "init_candidates" in text
+    # Spec §D1: init_candidates is an object with one_liner, anti_trope, hard_constraints, etc.
+    for field in ("one_liner", "anti_trope", "hard_constraints", "protagonist_flaw", "antagonist_mirror", "opening_hook"):
+        assert field in text, f"init_candidates.{field} must be referenced in agent schema"
+
+    # init_candidates must be declared as an OBJECT literal `{` not a LIST literal `[`.
+    # Find the schema declaration line and verify it starts with `{` (object) not `[` (list).
+    m = re.search(r'"init_candidates"\s*:\s*([\[\{])', text)
+    assert m, "init_candidates declaration not found in agent schema"
+    assert m.group(1) == "{", (
+        f"init_candidates must be declared as an OBJECT ({{...}}), not a LIST ([...]). "
+        f"Found declaration starts with '{m.group(1)}'"
+    )
+
+
 def test_deconstruction_agent_preserves_init_handoff_and_boundaries():
     """reference deconstruction must remain extraction-only and init-scoped."""
     text = _read_text(AGENTS_DIR / "deconstruction-agent.md")

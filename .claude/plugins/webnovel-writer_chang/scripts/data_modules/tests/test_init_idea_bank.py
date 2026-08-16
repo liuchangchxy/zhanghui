@@ -5,6 +5,33 @@ import pytest
 import json
 
 
+def _minimal_schema() -> dict:
+    """Minimal valid init_reference_research schema for tree builder tests."""
+    return {
+        "source": {"reference_title": "X", "reference_source": "book_name", "analysis_mode": "quick", "confidence": 0.5},
+        "reader_promise": "",
+        "opening_hook_patterns": [],
+        "cool_point_loops": [],
+        "protagonist_patterns": "",
+        "antagonist_pressure_patterns": "",
+        "pacing_notes": "",
+        "narrative_function": "",
+        "boundary_reason": {},
+        "protagonist_action_chain": [],
+        "emotion_curve": [],
+        "satisfaction_point": [],
+        "foreshadowing": [],
+        "gains_costs": [],
+        "character_changes": [],
+        "borrowable_structures": [],
+        "differentiation_requirements": "",
+        "init_candidates": {},
+        "do_not_copy": [],
+        "canon_contamination_warnings": [],
+        "quality": {"passed": True, "confidence": 0.5, "coverage": 0.5},
+    }
+
+
 # --- Lite plan Task 3: 4 base validation tests ---
 
 def test_validate_idea_bank_accepts_minimal_valid_payload():
@@ -153,6 +180,78 @@ def test_init_refuses_overwrite_existing_reference_research_without_force(tmp_pa
 
     # Original sentinel should be unchanged
     assert sentinel.read_text(encoding="utf-8") == src_tree.joinpath("_schema.json").read_text(encoding="utf-8")
+
+
+def test_init_refuses_symlink_reference_research_dir(tmp_path, monkeypatch):
+    """Symlink at --reference-research-dir target raises SystemExit."""
+    import init_project as init_project_module
+    from init_reference_tree import build_reference_tree
+    monkeypatch.setattr(init_project_module, "is_git_available", lambda: False)
+
+    # Create a real reference_research tree, then a symlink pointing to it.
+    # When the user passes the symlink path as --reference-research-dir, init
+    # MUST refuse with a SystemExit mentioning "Symlink" (C3 fix).
+    real_tree = tmp_path / "real_book"
+    real_tree.mkdir()
+    schema = _minimal_schema()
+    real_tree_path = build_reference_tree(real_tree, schema, "X")  # creates real_tree/X/
+
+    # Pass --reference-research-dir through a symlink — this is the actual C3 attack vector
+    symlink_target = tmp_path / "link_to_real"
+    symlink_target.symlink_to(real_tree_path)
+
+    project_root = tmp_path / "book"
+    with pytest.raises(SystemExit, match="[Ss]ymlink"):
+        init_project_module.init_project(
+            str(project_root), title="T", genre="仙侠", protagonist_name="P",
+            reference_research_dir=str(symlink_target),
+        )
+
+
+def test_init_overwrite_preserves_old_schema_outside_target(tmp_path, monkeypatch):
+    """--reference-overwrite must preserve old _schema.json OUTSIDE target_tree."""
+    import init_project as init_project_module
+    from init_reference_tree import build_reference_tree
+    import shutil, json as _json
+
+    monkeypatch.setattr(init_project_module, "is_git_available", lambda: False)
+
+    schema_v1 = _minimal_schema()
+    schema_v1["reader_promise"] = "VERSION_1"
+    schema_v2 = _minimal_schema()
+    schema_v2["reader_promise"] = "VERSION_2"
+
+    project_root = tmp_path / "book"
+    project_root.mkdir()
+    # Pre-build v1 in target
+    target = project_root / ".webnovel" / "reference_research" / "x"
+    build_reference_tree(project_root, schema_v1, "X")
+
+    # Build v2 in separate source dir
+    src_v2_root = tmp_path / "src2"
+    src_v2_root.mkdir()
+    src_v2 = build_reference_tree(src_v2_root, schema_v2, "X")
+
+    # Run init with --reference-overwrite
+    init_project_module.init_project(
+        str(project_root), title="T", genre="仙侠", protagonist_name="P",
+        reference_research_dir=str(src_v2),
+        reference_overwrite=True,
+    )
+
+    # Old _schema.json must be preserved SOMEWHERE (not in target which is overwritten)
+    # Check backup directory or in-place backup pattern
+    target_schema = _json.loads((target / "_schema.json").read_text(encoding="utf-8"))
+    assert target_schema["reader_promise"] == "VERSION_2"  # new is in target
+
+    # Old must be preserved — check backups/ or in-place .bak
+    backups_dir = project_root / ".webnovel" / "backups"
+    has_backup = (
+        backups_dir.exists() and any(backups_dir.glob("*x*"))
+        or any(target.parent.glob("*.bak-*"))
+        or any(target.glob("_schema.json.bak-*"))
+    )
+    assert has_backup, "old _schema.json must be preserved in backup location"
 
 
 def test_init_overwrites_with_explicit_force_flag(tmp_path, monkeypatch):

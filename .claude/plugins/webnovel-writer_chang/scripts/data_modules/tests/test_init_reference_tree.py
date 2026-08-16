@@ -137,6 +137,38 @@ def test_build_reference_tree_refuses_overwrite_without_flag(tmp_path):
         build_reference_tree(tmp_path, schema, "《测试书》")
 
 
+def test_build_reference_tree_with_minimal_init_candidates():
+    """init_candidates must be an OBJECT (not a list) for template to render."""
+    from init_reference_tree import build_reference_tree
+    import json, pathlib, tempfile
+    schema = _minimal_schema()
+    # Schema's _minimal_schema() already uses init_candidates as object — verify it stays so
+    assert isinstance(schema["init_candidates"], dict), \
+        "_minimal_schema() fixture must use OBJECT init_candidates (not list)"
+
+    with tempfile.TemporaryDirectory() as td:
+        tree = build_reference_tree(pathlib.Path(td), schema, "X")
+        report = (tree / "report.md").read_text(encoding="utf-8")
+        # Must contain the actual values (not empty due to type mismatch)
+        assert "一句话" in report, "report.md must render init_candidates.one_liner value"
+        assert "硬约束1" in report, "report.md must render init_candidates.hard_constraints items"
+
+
+def test_build_reference_tree_refuses_symlink_target(tmp_path):
+    """Symlink at target path raises SystemExit."""
+    from init_reference_tree import build_reference_tree
+    # Pre-create a symlink at the final tree path: <project>/.webnovel/reference_research/<safe>
+    real_dir = tmp_path / "real_target"
+    real_dir.mkdir()
+    sym_target = tmp_path / "project" / ".webnovel" / "reference_research" / "x"
+    sym_target.parent.mkdir(parents=True)
+    sym_target.symlink_to(real_dir)
+
+    schema = _minimal_schema()
+    with pytest.raises(SystemExit, match="[Ss]ymlink"):
+        build_reference_tree(tmp_path / "project", schema, "X")
+
+
 def test_build_reference_tree_overwrites_with_flag(tmp_path):
     from init_reference_tree import build_reference_tree
 
