@@ -98,6 +98,24 @@ PERIOD_TO_RANK_TYPE = {
 }
 
 
+# Map JS --type id (English) → Chinese label used in the JS-generated filename.
+# Source: vendor/worldwonderer_subset/ciweimao-rank-scraper.js:35-45 (RANK_TYPES array).
+# The JS uses rt.label (Chinese) in the filename, but accepts rt.id (English) via --type.
+# We pass the English --type but glob for the Chinese label. Without this mapping,
+# run_scraper("click", ...) globs for "刺猬猫click_*" but the file is "刺猬猫点击榜_*".
+RANK_TYPE_TO_LABEL = {
+    "click": "点击榜",
+    "favor": "收藏榜",
+    "recommend": "推荐榜",
+    "subscribe": "订阅榜",
+    "monthly": "月票榜",
+    "tsukkomi": "吐槽榜",
+    "newbook": "新书榜",
+    "blade": "刀片榜",
+    "update": "更新榜",
+}
+
+
 # Loose title-based genre heuristic for rank-1 (when upstream emits no
 # genre and no author — see C4/I6). Order matters: longer keywords
 # come first so 仙侠 doesn't accidentally match before 修仙小说.
@@ -397,7 +415,10 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
     # I3: pick the most-recently-modified matching file. Lexical sort
     # (sorted(...)[-1]) is fragile to upstream filename variations like
     # 刺猬猫点击榜_20260815.md.bak or 刺猬猫点击榜_20260815.md.OLD.
-    expected_pattern = f"刺猬猫{rank_type}_"
+    # Translate English rank_type → Chinese label for the filename glob.
+    # Falls back to raw rank_type if unmapped (defensive).
+    label = RANK_TYPE_TO_LABEL.get(rank_type, rank_type)
+    expected_pattern = f"刺猬猫{label}_"
     matching = list(output_dir.glob(f"{expected_pattern}*.md"))
     if not matching:
         # Fallback glob: allow .bak / .OLD / etc. — anything starting
