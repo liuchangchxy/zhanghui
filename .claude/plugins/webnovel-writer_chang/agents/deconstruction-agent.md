@@ -110,6 +110,25 @@ color: magenta
 
 ```
 
+## 扩展字段（P0-Full 新增）
+
+下列字段是 2026-08-16 spec §D1 引入的新维度，全部为**可选项**——如果参考书无原文摘录无法提取（如 quick 模式且无 excerpt），可置为空数组/空对象，并在 `quality.coverage` 中标 `partial`。**不要伪造数据**。
+
+- `chapter_rhythm`：对象数组，每项 `{ chapter, core_content, emotion_tone, beat_detail }`。仅覆盖黄金三章（如有原文）。
+  - `core_content` ≤ 30 字短语链
+  - `emotion_tone` ∈ `{紧张, 热血, 爽, 甜, 温馨, 压抑, 悲伤, 轻松, 恐怖, 其他}`
+  - `beat_detail` ≤ 80 字细节奏
+- `narrative_function`：字符串，整体情节功能原型（如 `升级流` / `复仇线` / `多线交织` / `单元剧` / `重生回溯` / `系统签到` / 其他）。
+- `boundary_reason`：对象 `{ first_arc_start, first_arc_end, reason }`，黄金三章内的自然叙事边界。
+- `protagonist_action_chain`：对象数组 `{ trigger, action, result }`，主角的 trigger→action→result 链。
+- `emotion_curve`：对象数组 `{ chapter, intensity, label }`，情绪强度曲线（intensity ∈ [0, 1]）。
+- `satisfaction_point`：字符串数组，1-6 条单行亮点（金句/梗/爆点）。
+- `foreshadowing`：对象数组 `{ setup_chapter, payoff_chapter_estimate, content }`，伏笔地图。
+- `gains_costs`：对象数组 `{ chapter, gain, cost, category }`，category ∈ `{物质, 实力, 关系, 认知}`。
+- `character_changes`：对象数组 `{ chapter, character, before, after }`，角色变化前后对比。
+
+新增字段必须遵循与原 9 字段一致的"差异化要求"原则——**不能复制原作人物/地点/组织/能力名/剧情事实**，全部变形为功能位/条件组合/情绪方向。
+
 `init_candidates` 是候选创意约束包，不是最终设定；每个候选都必须显式说明与参考书的差异化处理。
 
 ## 8. SubagentRun 可汇总信号

@@ -632,6 +632,39 @@ def test_deconstruction_agent_preserves_init_handoff_and_boundaries():
     assert "MIT License attribution" not in text
 
 
+def test_deconstruction_agent_schema_extension():
+    """Adding 9 new fields to deconstruction-agent.md must preserve existing 9."""
+    text = _read_text(AGENTS_DIR / "deconstruction-agent.md")
+
+    # New fields (P0-Full spec D1)
+    for new_field in (
+        "chapter_rhythm",
+        "narrative_function",
+        "boundary_reason",
+        "protagonist_action_chain",
+        "emotion_curve",
+        "satisfaction_point",
+        "foreshadowing",
+        "gains_costs",
+        "character_changes",
+    ):
+        assert new_field in text, f"deconstruction-agent.md missing new field: {new_field}"
+
+    # Existing 9 fields must be preserved (no rename, no removal)
+    for existing_field in (
+        "reader_promise",
+        "opening_hook_patterns",
+        "cool_point_loops",
+        "protagonist_patterns",
+        "antagonist_pressure_patterns",
+        "pacing_notes",
+        "borrowable_structures",
+        "differentiation_requirements",
+        "init_candidates",
+    ):
+        assert existing_field in text, f"deconstruction-agent.md lost existing field: {existing_field}"
+
+
 def test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate():
     """init may consume only confirmed, transformed reference patterns."""
     text = _read_text(SKILLS_DIR / "webnovel-init" / "SKILL.md")
