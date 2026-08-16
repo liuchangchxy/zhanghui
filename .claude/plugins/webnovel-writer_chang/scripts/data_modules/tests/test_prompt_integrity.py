@@ -963,3 +963,11 @@ def test_chart_scan_skill_mentions_marked_references():
     assert "/webnovel-deconstruct" in text or "webnovel-deconstruct" in text, (
         "chart-scan SKILL.md must mention deconstruct skill for handoff"
     )
+
+
+def test_write_skill_references_reference_research_injector():
+    """webnovel-write SKILL.md must call reference_research_injector at Step 0 + Step 2A."""
+    text = _read_text(SKILLS_DIR / "webnovel-write" / "SKILL.md")
+    assert "reference_research_injector" in text, "write SKILL must inject reference_research"
+    assert "build-step1-summary" in text or "build_step1_summary" in text
+    assert "build-step2a-section" in text or "build_step2a_prompt_section" in text

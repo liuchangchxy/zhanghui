@@ -35,7 +35,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "{project_root}" ind
 
 ```
 
-load-context 已含（不要重复查）：`story_contracts`（MASTER/volume/chapter/review）、`recent_summaries`、`urgent_loops`、`active_rules`、`protagonist`、`memory_pack`（追读力）、`genre_profile_excerpt`、`author_style_patterns`（/webnovel-learn 累积的作者文风修正）、`style_contract`（设定集/风格契约）。只有返回空 contracts 时才直接 Read `.story-system/*.json`。
+load-context 已含（不要重复查）：`story_contracts`（MASTER/volume/chapter/review）、`recent_summaries`、`urgent_loops`、`active_rules`、`protagonist`、`memory_pack`（追读力）、`genre_profile_excerpt`、`author_style_patterns`（/webnovel-learn 累积的作者文风修正）、`style_contract`（设定集/风格契约）、`reference_research_summary`（对标参考摘要，由 `reference_research_injector.build_step1_summary()` 生成，≤ 200 token）。只有返回空 contracts 时才直接 Read `.story-system/*.json`。
 
 裁决层（chapter 合同的 `reasoning` 对象）：`style_priority`、`pacing_strategy`、`genre`，必须在第 4 段消费。`chapter_focus` / `dynamic_context` 等 CSV 派生项仅作写法参考，不得覆盖章纲与 `chapter_directive.goal` 约束。
 
@@ -77,6 +77,11 @@ load-context 已含（不要重复查）：`story_contracts`（MASTER/volume/cha
 2. **这章的故事**：前文摘要、本章目标 / 阻力、情节节点（CBN/CPNs/CEN）、必须覆盖 / 禁区、跨章约束、RAG 线索。
 3. **这章的人物**：每人一段——状态、驱动力、本章作用、说话倾向。
 4. **怎么写更顺**：最关键一段。把裁决层风格 / 节奏翻成具体指导；题材基调；`writing_guidance`；`anti_patterns` 翻为自然提醒；审查得分趋势。
+
+### 对标参考（来自 reference_research/）
+
+<`reference_research_summary` 内容，自然语言改写，不暴露字段名 / 路径 / 系统术语>
+
 5. **收在哪里**：结尾停在什么感觉，留什么未完感。
 
 ## 8. SubagentRun 可汇总信号

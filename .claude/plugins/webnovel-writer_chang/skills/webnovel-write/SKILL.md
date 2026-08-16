@@ -164,6 +164,11 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 - 存在 → 作为 L1 prompt 注入的一部分（作者风格底线，硬约束）。
 - 不存在 → 跳过，不报错（不再回退到 skill 内 templates/）。
 
+**对标参考检测（reference_research）**：
+- 调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step1-summary --project-root "${PROJECT_ROOT}"`，得到 ≤ 200 token 摘要字符串
+- 若返回空串 → 跳过（无 `reference_research/` 树，不报错）
+- 若非空 → 摘要拼接到 context-agent 任务书的"对标参考"段
+
 输出：
 - "已就绪输入"与"缺失输入"清单；缺失则阻断并提示先补齐。
 
@@ -204,6 +209,12 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wo
 ### Step 2A：正文起草
 
 执行前必须加载：
+
+调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step2a-section --project-root "${PROJECT_ROOT}"`，
+若非空 → 把"对标书红黑名单"段（必读，含 do_not_copy / canon_contamination_warnings / borrowable_structures / satisfaction_point）追加到章节起草提示词的"约束"段，作为 L1 注入。
+主流程**不口头重写或简化**该段；原样作为约束素材传下去。
+若返回空串 → 跳过此注入。
+
 ```bash
 cat "${SKILL_ROOT}/../../references/shared/core-constraints.md"
 
