@@ -909,6 +909,32 @@ def test_plan_reads_reference_research_when_pointer_set():
         assert filename in text, f"webnovel-plan/SKILL.md must consume {filename} from the tree"
 
 
+def test_plan_auto_discovers_reference_research():
+    """plan SKILL.md must scan .webnovel/reference_research/*/ for ALL trees, not just idea_bank pointer."""
+    text = _read_text(SKILLS_DIR / "webnovel-plan" / "SKILL.md")
+    # The reference_research consumption section must use a glob-style pattern to enumerate
+    # multiple book trees, not just the single pointer from idea_bank.reference_research_path.
+    assert ".webnovel/reference_research/" in text, "plan must reference the directory"
+    # Look for the consumption section specifically (it lives under the reference_research
+    # heading), and require a glob/wildcard scan there — not just any incidental `scan` text.
+    import re as _re
+    # Find the reference_research heading block (up to the next "## " or "### " heading)
+    m = _re.search(
+        r"####\s*按需读取\s+reference_research[^\n]*\n(.*?)(?=\n####|\n###|\n##\s|\Z)",
+        text,
+        _re.DOTALL,
+    )
+    assert m, "plan must have a '按需读取 reference_research' section"
+    section = m.group(1)
+    assert "*" in section or "glob" in section.lower() or "扫描" in section, (
+        "plan reference_research section must indicate it scans for multiple trees (glob/扫描/*)"
+    )
+    # Must mention standalone deconstruct as a source of these trees
+    assert "deconstruct" in section.lower(), (
+        "plan reference_research section must mention deconstruct as a tree source"
+    )
+
+
 def test_chart_scan_skill_mentions_marked_references():
     """chart-scan SKILL.md must mention marked-references.json + /webnovel-deconstruct."""
     text = _read_text(SKILLS_DIR / "webnovel-chart-scan" / "SKILL.md")

@@ -99,20 +99,24 @@ python "${SCRIPTS_DIR}/migrate_story_craft.py" "${PROJECT_ROOT}/.webnovel/state.
 
 #### 按需读取 reference_research 拆书产物
 
-读完 `idea_bank.json` 后，若 `reference_research_path` 字段存在，按以下规则加载 `.webnovel/reference_research/<book-safe>/`：
+读完 `idea_bank.json` 后，按以下规则加载所有可用拆书产物：
 
-1. **完整加载**：`_schema.json`（机器可校验，全量注入）
-2. **节选加载**：`report.md` 中的"可复现模块"、"反套路"、"硬约束"三段（最多 ~500 行）
-3. **独立加载**：`do_not_copy.md`、`canon_contamination_warnings.md`（短，全文）
+1. **如果 `idea_bank.reference_research_path` 存在** → 该路径指向的树是**主对标书**（primary）
+2. **扫描 `.webnovel/reference_research/*/`**（glob 模式）：
+   - 每个子目录都是一本书的拆书树（`<book-safe>/`）
+   - 加载所有树的 `_schema.json` + `report.md`（节选）+ `do_not_copy.md` + `canon_contamination_warnings.md`
+   - 多本书作为**次要参考**（secondary）参与章节级对齐；这些树来自 `/webnovel-deconstruct` 等独立拆书流程
+3. **去重**：相同 `<book-safe>` 不重复加载
+4. **主从优先级**：主对标书（来自 init §1.5）的字段优先；次要参考（来自 standalone deconstruct）补充多样性
 
 在卷纲 / 章纲阶段使用：
 
-- `narrative_function` + `boundary_reason` → 对齐卷级结构
-- `emotion_curve` + `satisfaction_point` → 章节级节奏参考
+- `narrative_function` + `boundary_reason` → 对齐卷级结构（主对标书优先）
+- `emotion_curve` + `satisfaction_point` → 章节级节奏参考（多本书交叉验证）
 - `foreshadowing` → 跨章连续性约束
 - `gains_costs` + `character_changes` → 主角缺陷兑现提醒
 
-如果 `reference_research_path` 字段缺失（老项目 / 用户未提供参考书），按历史行为运行，不报错。
+如果 `reference_research_path` 字段缺失（老项目 / 用户未提供参考书），按历史行为运行，仅依赖 directory scan。如果目录也不存在，跳过 reference 加载。
 
 如果路径指向不存在的目录，输出提示 "reference_research missing: <path>"，继续运行。
 
