@@ -547,3 +547,28 @@ test -f "{project_root}/.webnovel/writer-profile/写作宪法.md"
 ```
 
 不写 token 统计；如需排查故障，只给日志路径或建议运行 `/webnovel-doctor`。
+
+## 作者友好过程提示与恢复契约
+
+初始化开始前先说明本次会经历：解项目根 -> 收集创作意图 -> 生成设定集 -> 拆解参考书 -> 落地总纲 -> 写入作者档案。过程提示用作者语言，不直接输出原始 JSON、traceback 或长命令日志；技术详情写入 `.webnovel/logs/run_last.log`：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
+  --event init-progress \
+  --payload-json "{\"stage\": \"init\"}" \
+  --format text
+
+```
+
+过程提示每次不超过两行，只说当前动作和影响，例如"正在落总纲：会把核心主线、约束字段和参考书拆解结果一起写盘"。少打扰确认策略：默认继续推进；只有项目根 guard 失败、设定冲突、参考书候选取舍、需要覆盖已有项目时才询问。
+
+需要用户裁决时使用有限选项，并说明影响；例如沿用默认 / 修改设定 / 暂停初始化。卡住时必须说明卡点、已完成内容和恢复建议，例如"设定集和总纲已保留，参考书拆解失败；重新运行 `/webnovel-init` 会只重做拆解批次"。
+
+不可恢复故障才在最终报告提示 `.webnovel/logs/run_last.log`；平时只保留日志，不打扰作者。收尾必须调用作者报告 helper：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" user-report \
+  --stage init \
+  --format text
+
+```

@@ -267,3 +267,29 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
 ```
 
 不写 token 统计；如需排查故障，只给日志路径或建议运行 `/webnovel-doctor`。
+
+## 作者友好过程提示与恢复契约
+
+审查开始前先说明本次会经历：解项目根 -> 收集章节 -> 调度 reviewer -> 生成 metrics -> 落审查报告 -> 写回 state。过程提示用作者语言，不直接输出原始 JSON、traceback 或长命令日志；技术详情写入 `.webnovel/logs/run_last.log`：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
+  --event review-progress \
+  --payload-json "{\"stage\": \"review\", \"range\": \"{start}-{end}\"}" \
+  --format text
+
+```
+
+过程提示每次不超过两行，只说当前动作和影响，例如"正在过 reviewer：会按设定/时间线/节奏/角色/逻辑五维度逐章扫一遍"。少打扰确认策略：默认继续推进；只有审查范围不明、有 blocking 问题且需要返工取舍、review 报告被覆盖风险时才询问。
+
+需要用户裁决时使用有限选项，并说明影响；例如修复 / 仅保留报告 / 暂停审查。卡住时必须说明卡点、已完成内容和恢复建议，例如"前两章 reviewer 已完成，第三章 metrics 生成失败；重新运行 `/webnovel-review {start}-{end}` 会只重做失败批次"。
+
+不可恢复故障才在最终报告提示 `.webnovel/logs/run_last.log`；平时只保留日志，不打扰作者。收尾必须调用作者报告 helper：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" user-report \
+  --stage review \
+  --range "{start}-{end}" \
+  --format text
+
+```

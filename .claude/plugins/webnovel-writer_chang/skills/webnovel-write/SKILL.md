@@ -529,3 +529,29 @@ tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || t
 最终状态不得写"已完成"，除非所有产物落盘 + tests 跑通。
 
 不写 token 统计；如需排查故障，只给日志路径或建议运行 `/webnovel-doctor`。
+
+## 作者友好过程提示与恢复契约
+
+写章开始前先说明本次会经历：解项目根 -> 准备写作依据 -> 起草正文 -> 写作检查 -> 保存本章事实 -> 提交备份。过程提示用作者语言，不直接输出原始 JSON、traceback 或长命令日志；技术详情写入 `.webnovel/logs/run_last.log`：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
+  --event write-progress \
+  --payload-json "{\"stage\": \"write\", \"chapter\": {N}}" \
+  --format text
+
+```
+
+过程提示每次不超过两行，只说当前动作和影响，例如"正在写检查：会按设定/伏笔/节奏逐维度过一遍本章正文"。少打扰确认策略：默认继续推进；只有正文被手动改过、章纲更新晚于正文、本章已 accepted、需要覆盖 run-ledger 已记录的 step 时才询问。
+
+需要用户裁决时使用有限选项，并说明影响；例如沿用当前正文 / 重新起草 / 只查看状态。卡住时必须说明卡点、已完成内容和恢复建议，例如"起草与审查已保留，提交备份失败；重新运行 `/webnovel-write {N}` 会只重做提交与归档"。
+
+不可恢复故障才在最终报告提示 `.webnovel/logs/run_last.log`；平时只保留日志，不打扰作者。收尾必须调用作者报告 helper：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" user-report \
+  --stage write \
+  --chapter {N} \
+  --format text
+
+```
