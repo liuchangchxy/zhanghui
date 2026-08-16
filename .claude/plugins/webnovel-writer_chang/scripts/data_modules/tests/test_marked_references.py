@@ -51,3 +51,26 @@ def test_load_returns_none_if_file_missing(tmp_path):
     from data_modules.marked_references import load_marked_references
     result = load_marked_references(tmp_path / "does_not_exist.json")
     assert result is None
+
+
+# --- P0-Full Adversarial I1: strict type validation ---
+
+def test_marked_references_rejects_empty_string_title():
+    """I1: Empty-string title must raise ValueError mentioning 'title'."""
+    from data_modules.marked_references import validate_marked_references
+    with pytest.raises(ValueError, match="title"):
+        validate_marked_references({"schema_version": 1, "references": [{"platform": "qidian", "title": ""}]})
+
+
+def test_marked_references_rejects_whitespace_only_title():
+    """I1: Whitespace-only title must raise ValueError mentioning 'title'."""
+    from data_modules.marked_references import validate_marked_references
+    with pytest.raises(ValueError, match="title"):
+        validate_marked_references({"schema_version": 1, "references": [{"platform": "qidian", "title": "   "}]})
+
+
+def test_marked_references_rejects_non_string_platform():
+    """I1: Non-string platform (e.g. integer) must raise ValueError mentioning 'platform'."""
+    from data_modules.marked_references import validate_marked_references
+    with pytest.raises(ValueError, match="platform"):
+        validate_marked_references({"schema_version": 1, "references": [{"platform": 123, "title": "X"}]})

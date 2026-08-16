@@ -251,8 +251,12 @@ def _validate_idea_bank_payload(raw: str) -> dict:
     if not isinstance(data, dict):
         raise ValueError("idea_bank.json must be a JSON object")
 
-    if data.get("version") != 1:
-        raise ValueError(f"idea_bank.json version must be 1, got {data.get('version')!r}")
+    # I2 fix: identity check rejects True (which == 1) and 1.0 (which == 1 in Python)
+    version = data.get("version")
+    if version is None or not isinstance(version, int) or isinstance(version, bool) or version != 1:
+        raise ValueError(
+            f"idea_bank.json version must be exactly the int 1, got {version!r}"
+        )
 
     required_top = {
         "source", "selected_idea", "constraints_inherited",
@@ -281,6 +285,24 @@ def _validate_idea_bank_payload(raw: str) -> dict:
         raise ValueError(
             f"idea_bank.json source.analysis_mode must be quick or deep, got {mode!r}"
         )
+
+    # I3 fix: optional reference_research_path validation
+    # (P0-Full spec §D4 + adversarial finding I3)
+    if "reference_research_path" in data:
+        rrp = data["reference_research_path"]
+        if not isinstance(rrp, str):
+            raise ValueError(
+                f"idea_bank.reference_research_path must be a string, got {type(rrp).__name__}"
+            )
+        from pathlib import Path as _Path
+        if _Path(rrp).is_absolute():
+            raise ValueError(
+                f"idea_bank.reference_research_path must be relative, got {rrp!r}"
+            )
+        if ".." in _Path(rrp).parts:
+            raise ValueError(
+                f"idea_bank.reference_research_path must not contain '..', got {rrp!r}"
+            )
 
     return data
 

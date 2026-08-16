@@ -177,3 +177,14 @@ def test_build_reference_tree_overwrites_with_flag(tmp_path):
     # Should not raise
     tree = build_reference_tree(tmp_path, schema, "《测试书》", overwrite=True)
     assert tree.is_dir()
+
+
+# --- P0-Full Adversarial I4: CJK punctuation stripping ---
+
+def test_sanitize_book_title_strips_cjk_punctuation():
+    """I4: sanitize_book_title must strip CJK punctuation (U+3000-U+303F, U+FF00-U+FFEF)."""
+    from init_reference_tree import sanitize_book_title
+    for punct in ["！", "。", "？", "，", "：", "（", "）", "、", "；"]:
+        title = f"凡人修仙传{punct}"
+        result = sanitize_book_title(title)
+        assert punct not in result, f"{punct} leaked into slug: {result!r}"

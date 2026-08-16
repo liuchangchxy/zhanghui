@@ -41,10 +41,17 @@ def validate_marked_references(data: dict) -> dict:
     for i, ref in enumerate(references):
         if not isinstance(ref, dict):
             raise ValueError(f"marked-references.json references[{i}] must be an object")
-        if "platform" not in ref:
-            raise ValueError(f"marked-references.json references[{i}] missing 'platform'")
-        if "title" not in ref:
-            raise ValueError(f"marked-references.json references[{i}] missing 'title'")
+        # I1 fix: strict type/format validation — empty/whitespace/non-string must raise
+        platform = ref.get("platform")
+        if not isinstance(platform, str) or not platform.strip():
+            raise ValueError(
+                f"marked-references.json references[{i}] missing or invalid 'platform'"
+            )
+        title = ref.get("title")
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError(
+                f"marked-references.json references[{i}] missing or invalid 'title'"
+            )
 
     return data
 

@@ -254,6 +254,56 @@ def test_init_overwrite_preserves_old_schema_outside_target(tmp_path, monkeypatc
     assert has_backup, "old _schema.json must be preserved in backup location"
 
 
+# --- P0-Full Adversarial I2/I3: strict version + path validation ---
+
+def test_validate_idea_bank_rejects_version_true():
+    """I2: version=True must raise ValueError (Python True == 1 would pass loose check)."""
+    from init_project import _validate_idea_bank_payload
+    bad = {"version": True, "source": {"reference_title": "X", "reference_source": "book_name", "analysis_mode": "quick", "confidence": 0.5},
+           "selected_idea": {}, "constraints_inherited": {}, "borrowed_patterns": [], "do_not_copy": [], "canon_contamination_warnings": []}
+    with pytest.raises(ValueError):
+        _validate_idea_bank_payload(json.dumps(bad))
+
+
+def test_validate_idea_bank_rejects_version_float():
+    """I2: version=1.0 must raise ValueError (loose != 1 would accept float)."""
+    from init_project import _validate_idea_bank_payload
+    bad = {"version": 1.0, "source": {"reference_title": "X", "reference_source": "book_name", "analysis_mode": "quick", "confidence": 0.5},
+           "selected_idea": {}, "constraints_inherited": {}, "borrowed_patterns": [], "do_not_copy": [], "canon_contamination_warnings": []}
+    with pytest.raises(ValueError):
+        _validate_idea_bank_payload(json.dumps(bad))
+
+
+def test_validate_idea_bank_rejects_non_string_reference_research_path():
+    """I3: non-string reference_research_path (e.g. int) must raise ValueError."""
+    from init_project import _validate_idea_bank_payload
+    bad = {"version": 1, "source": {"reference_title": "X", "reference_source": "book_name", "analysis_mode": "quick", "confidence": 0.5},
+           "selected_idea": {}, "constraints_inherited": {}, "borrowed_patterns": [], "do_not_copy": [], "canon_contamination_warnings": [],
+           "reference_research_path": 123}
+    with pytest.raises(ValueError):
+        _validate_idea_bank_payload(json.dumps(bad))
+
+
+def test_validate_idea_bank_rejects_path_traversal_reference_research_path():
+    """I3: reference_research_path containing '..' must raise ValueError."""
+    from init_project import _validate_idea_bank_payload
+    bad = {"version": 1, "source": {"reference_title": "X", "reference_source": "book_name", "analysis_mode": "quick", "confidence": 0.5},
+           "selected_idea": {}, "constraints_inherited": {}, "borrowed_patterns": [], "do_not_copy": [], "canon_contamination_warnings": [],
+           "reference_research_path": "../etc/passwd"}
+    with pytest.raises(ValueError):
+        _validate_idea_bank_payload(json.dumps(bad))
+
+
+def test_validate_idea_bank_rejects_absolute_reference_research_path():
+    """I3: absolute reference_research_path must raise ValueError."""
+    from init_project import _validate_idea_bank_payload
+    bad = {"version": 1, "source": {"reference_title": "X", "reference_source": "book_name", "analysis_mode": "quick", "confidence": 0.5},
+           "selected_idea": {}, "constraints_inherited": {}, "borrowed_patterns": [], "do_not_copy": [], "canon_contamination_warnings": [],
+           "reference_research_path": "/etc/passwd"}
+    with pytest.raises(ValueError):
+        _validate_idea_bank_payload(json.dumps(bad))
+
+
 def test_init_overwrites_with_explicit_force_flag(tmp_path, monkeypatch):
     """With --reference-overwrite, the diff path overwrites."""
     import init_project as init_project_module

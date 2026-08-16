@@ -39,6 +39,17 @@ MAX_BOOK_NAME = 64
 # CJK fullwidth brackets that should be stripped alongside ASCII path-illegal chars.
 _CJK_BRACKETS = "《》「」『』【】"
 
+# I4 fix: broader CJK punctuation ranges — U+3000-U+303F (CJK Symbols & Punctuation,
+# including ！ 。 ？ ， ： 、 ；) and U+FF00-U+FFEF (Halfwidth and Fullwidth Forms,
+# including fullwidth （ ）). Without these, CJK titles like "凡人修仙传！" leak the
+# punctuation into the filesystem slug.
+_CJK_PUNCTUATION_PATTERN = re.compile(
+    r"["
+    r"　-〿"
+    r"＀-￯"
+    r"]"
+)
+
 
 def _is_cjk(ch: str) -> bool:
     """Return True if char is in CJK Unified Ideographs BMP range (U+4E00-U+9FFF)."""
@@ -118,6 +129,9 @@ def sanitize_book_title(title: str) -> str:
 
     # Strip path-illegal chars (ASCII) + CJK fullwidth brackets.
     safe = re.sub(rf"[\\/:*?\"<>|{_CJK_BRACKETS}]", "", title)
+    # I4 fix: strip broader CJK punctuation (U+3000-U+303F, U+FF00-U+FFEF)
+    # before pinyin transliteration so they don't leak as pinyin fragments.
+    safe = _CJK_PUNCTUATION_PATTERN.sub("", safe)
 
     # Transliterate CJK runs to pinyin. Try jieba path first (word
     # boundaries), then fallback (per-char concatenated). If neither lib
