@@ -64,6 +64,7 @@ also fails to match, we leave ``category=""`` and set the flag.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -91,8 +92,27 @@ JS_SCRAPER_PATH = (
 #   --type all    → all ranks (heavier; not used by us)
 PERIOD_TO_RANK_TYPE = {
     "daily": "click",
+    # 注意：ciweimao 没有原生 weekly 榜；weekly 复用 click 榜（最近 24h 数据）。
     "weekly": "click",
     "monthly": "monthly",
+}
+
+
+# Map JS --type id (English) → Chinese label used in the JS-generated filename.
+# Source: vendor/worldwonderer_subset/ciweimao-rank-scraper.js:35-45 (RANK_TYPES array).
+# The JS uses rt.label (Chinese) in the filename, but accepts rt.id (English) via --type.
+# We pass the English --type but glob for the Chinese label. Without this mapping,
+# run_scraper("click", ...) globs for "刺猬猫click_*" but the file is "刺猬猫点击榜_*".
+RANK_TYPE_TO_LABEL = {
+    "click": "点击榜",
+    "favor": "收藏榜",
+    "recommend": "推荐榜",
+    "subscribe": "订阅榜",
+    "monthly": "月票榜",
+    "tsukkomi": "吐槽榜",
+    "newbook": "新书榜",
+    "blade": "刀片榜",
+    "update": "更新榜",
 }
 
 
@@ -341,12 +361,15 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
     # The worldwonderer scraper accepts --type, --outdir, --port args
     # (verified against upstream commit 6af05297, 2026-08-14). Adjust if
     # upstream API has changed — see vendor/worldwonderer_subset/README.md.
+    # Read CDP port from env (default 9222). Honors WEBNOVEL_CIWEIMAO_CDP_PORT
+    # for users running multiple worktrees or non-default CDP setups.
+    port = os.environ.get("WEBNOVEL_CIWEIMAO_CDP_PORT", "9222")
     cmd = [
         "node",
         str(JS_SCRAPER_PATH),
         "--type", rank_type,
         "--outdir", str(output_dir),
-        "--port", "9222",
+        "--port", port,
     ]
     try:
         result = subprocess.run(
@@ -354,26 +377,48 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
             check=False,
         )
     except FileNotFoundError as e:
+        # `node` not on PATH
         raise RuntimeError(
-            "node executable not found on PATH. Install Node.js ≥18 to "
-            "enable ciweimao adapter."
+            "找不到 node 可执行文件。请安装 Node.js ≥18：\n"
+            "  - macOS: brew install node\n"
+            "  - Linux: 见 https://nodejs.org/en/download/package-manager\n"
+            "  - 或访问 https://nodejs.org 下载安装包\n"
+            "装好后 ciweimao adapter 才能用。"
         ) from e
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(
-            f"ciweimao scraper timed out after 180s. Site may be slow "
-            "or the CDP connection failed."
+            f"ciweimao scraper 超时（180s）。可能原因：\n"
+            f"  - 站点慢或网络问题\n"
+            f"  - CDP 连接失败（运行 webnovel-chart-scan-setup-ciweimao\n"
+            f"    （等价于: python -m scripts.ciweimao_setup.setup_ciweimao）排查）"
         ) from e
 
     if result.returncode != 0:
+        stderr = result.stderr[:500] if result.stderr else "(no stderr)"
+        # Detect "CDP discovery failed" / "agent-browser" → Chrome not running
+        cdp_hint = ""
+        if "CDP" in stderr or "agent-browser" in stderr or "9222" in stderr:
+            cdp_hint = (
+                f"\n\n排查步骤：\n"
+                f"  1. Chrome @ 9222 没起来？运行：\n"
+                f"     webnovel-chart-scan-setup-ciweimao\n"
+                f"     （等价于: python -m scripts.ciweimao_setup.setup_ciweimao）\n"
+                f"  2. agent-browser 不在 PATH？运行：\n"
+                f"     npm install -g agent-browser\n"
+                f"  3. 端口冲突？设置 WEBNOVEL_CIWEIMAO_CDP_PORT=9333 重试"
+            )
         raise RuntimeError(
-            f"ciweimao scraper failed (exit {result.returncode}): "
-            f"stderr={result.stderr[:500]}"
+            f"ciweimao scraper 失败（exit {result.returncode}）。\n"
+            f"stderr: {stderr}{cdp_hint}"
         )
 
     # I3: pick the most-recently-modified matching file. Lexical sort
     # (sorted(...)[-1]) is fragile to upstream filename variations like
     # 刺猬猫点击榜_20260815.md.bak or 刺猬猫点击榜_20260815.md.OLD.
-    expected_pattern = f"刺猬猫{rank_type}_"
+    # Translate English rank_type → Chinese label for the filename glob.
+    # Falls back to raw rank_type if unmapped (defensive).
+    label = RANK_TYPE_TO_LABEL.get(rank_type, rank_type)
+    expected_pattern = f"刺猬猫{label}_"
     matching = list(output_dir.glob(f"{expected_pattern}*.md"))
     if not matching:
         # Fallback glob: allow .bak / .OLD / etc. — anything starting

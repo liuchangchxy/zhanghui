@@ -16,6 +16,7 @@ dev = ["pytest>=7.4", "pytest-cov>=4.1"]
 
 [project.scripts]
 chart-scan = "scripts.scan:main"
+webnovel-chart-scan-setup-ciweimao = "scripts.ciweimao_setup.setup_ciweimao:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -106,6 +106,9 @@ def main() -> int:
     prompt = check_chromium_prompt(plugin_root)
     if prompt:
         print(prompt)
+    prompt2 = check_ciweimao_prompt(plugin_root)
+    if prompt2:
+        print(prompt2)
     return 0
 
 
@@ -146,6 +149,48 @@ def check_chromium_prompt(plugin_root: Path) -> str | None:
     except (ImportError, OSError, PermissionError):
         # chromium nag must never crash a session hook — 包括 should_install_module
         # 内部调用 resolve_cache_dir() 抛 PermissionError 的情况。
+        return None
+
+
+def check_ciweimao_prompt(plugin_root: Path) -> str | None:
+    """检查 webnovel-chart-scan 是否需要 ciweimao SETUP 弹窗。
+
+    Returns:
+        需要弹窗时返回 prompt 文本（给 Claude）；否则 None。
+
+    整个函数体都被 try/except 包住：ciweimao nag 永远不应该 crash SessionStart hook。
+    缓存路径通过 install_python_deps.resolve_cache_dir()（spec §4.6.5 fallback chain）
+    解析，和 chromium 模式共用同一套 cache 根。
+    """
+    try:
+        sys.path.insert(0, str(plugin_root / "skills" / "webnovel-chart-scan" / "scripts"))
+        try:
+            from ciweimao_setup.sessionstart_integration import (
+                should_prompt_ciweimao,
+                format_ciweimao_prompt,
+            )
+        except (ImportError, OSError, PermissionError):
+            return None  # sessionstart_integration.py 还没部署；静默 skip
+
+        # Suppress unless install_python_deps.py has marked chart-scan as fully installed.
+        chart_scan = plugin_root / "skills" / "webnovel-chart-scan"
+        if not chart_scan.exists():
+            return None
+        # Lazy-import to avoid forcing chart-scan to be installed first
+        sys.path.insert(0, str(plugin_root / "hooks"))
+        try:
+            from install_python_deps import should_install_module
+        except ImportError:
+            return None
+        if should_install_module(chart_scan) != "ok":
+            return None
+
+        # Now check if user has already been prompted
+        if not should_prompt_ciweimao("webnovel-chart-scan"):
+            return None
+
+        return format_ciweimao_prompt()
+    except (ImportError, OSError, PermissionError):
         return None
 
 
