@@ -907,3 +907,14 @@ def test_plan_reads_reference_research_when_pointer_set():
     # Should mention at least one product-tree file
     for filename in ("_schema.json", "report.md"):
         assert filename in text, f"webnovel-plan/SKILL.md must consume {filename} from the tree"
+
+
+def test_chart_scan_skill_mentions_marked_references():
+    """chart-scan SKILL.md must mention marked-references.json + /webnovel-deconstruct."""
+    text = _read_text(SKILLS_DIR / "webnovel-chart-scan" / "SKILL.md")
+    assert "marked-references" in text or "marked_references" in text, (
+        "chart-scan SKILL.md must mention marked-references manifest"
+    )
+    assert "/webnovel-deconstruct" in text or "webnovel-deconstruct" in text, (
+        "chart-scan SKILL.md must mention deconstruct skill for handoff"
+    )

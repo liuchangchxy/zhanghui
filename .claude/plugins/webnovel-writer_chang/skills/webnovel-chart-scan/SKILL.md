@@ -103,3 +103,26 @@ webnovel-chart-scan-setup-ciweimao
 ```bash
 WEBNOVEL_CIWEIMAO_CDP_PORT=9333 webnovel-chart-scan-setup-ciweimao --port 9333
 ```
+
+### 标记对标书（联动 /webnovel-deconstruct）
+
+读完 `report.md` 后，可以告诉 Claude "标记对标：《A》《B》《C》"（书名列表）。Claude 会把标记清单写到 `./chart-scan/marked-references.json`。
+
+之后运行 `/webnovel-deconstruct --from-scan` 会读取这个清单，批量拆解所有标记的书。
+
+`marked-references.json` schema：
+
+```json
+{
+  "schema_version": 1,
+  "marked_at": "<ISO8601>",
+  "from_scan": "./chart-scan/books.json",
+  "references": [
+    {"platform": "qidian", "title": "凡人修仙传", "author": "忘语", "category": "仙侠"}
+  ]
+}
+```
+
+查看当前标记清单：直接读 `./chart-scan/marked-references.json`（如果有）。
+
+**注意**：chart-scan 自身**不会**自动写 `marked-references.json`——用户必须明确告诉 Claude "标记对标"。这是有意的设计：保持 chart-scan 的 hermetic 性质，避免自动行为带来的认知负担。
