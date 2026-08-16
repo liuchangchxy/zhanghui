@@ -51,3 +51,38 @@ def write_scan_result(result: ScanResult, output_dir: Path) -> list[Path]:
     written.append(log_path)
 
     return written
+
+
+def write_marked_references(references: list[dict], output_dir: str | Path) -> Path:
+    """Write chart-scan/marked-references.json with the schema from P1+P2 spec.
+
+    References is a list of {platform, title, author?, category?}.
+    Output path is output_dir / "marked-references.json".
+
+    Returns the resolved path.
+    """
+    import sys
+
+    # Import the validation helper from data_modules (relative path resolution).
+    # output.py lives at skills/webnovel-chart-scan/scripts/output.py,
+    # so 4 parents up reaches the webnovel-writer_chang/ plugin root, which
+    # contains the shared scripts/ tree (with data_modules/).
+    _plugin_root = Path(__file__).resolve().parent.parent.parent.parent
+    sys.path.insert(0, str(_plugin_root / "scripts"))
+
+    from data_modules.marked_references import validate_marked_references  # noqa: E402
+
+    output_path = Path(output_dir).expanduser().resolve() / "marked-references.json"
+    payload = {
+        "schema_version": 1,
+        "marked_at": datetime.now(timezone.utc).isoformat(),
+        "from_scan": str((Path(output_dir) / "books.json").resolve()),
+        "references": references,
+    }
+    validate_marked_references(payload)  # raises ValueError on schema mismatch
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return output_path
