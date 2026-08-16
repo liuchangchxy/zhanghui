@@ -1,7 +1,7 @@
 ---
 name: webnovel-review
 description: Reviews chapter quality with checker agents and generates reports. Use when the user asks for a chapter review or runs /webnovel-review.
-allowed-tools: Read Grep Write Edit Bash Task AskUserQuestion
+allowed-tools: Read Grep Write Edit Bash AskUserQuestion
 ---
 
 # Quality Review Skill
@@ -33,30 +33,15 @@ export PROJECT_ROOT="$(python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WOR
 
 ## 0.5 工作流断点（best-effort，不得阻断主流程）
 
-> 目标：让 `/webnovel-resume` 能基于真实断点恢复。即使 workflow_manager 出错，也**只记录警告**，审查继续。
+> 目标：让 ledger 续跑逻辑能基于真实断点恢复。即使 ledger 调用出错，也**只记录警告**，审查继续。
 
 推荐（bash）：
 ```bash
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow start-task --command webnovel-review --chapter {end} || true
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-ledger write-resume --chapter {end} || true
 
 ```
 
-Step 映射（必须与 `workflow_manager.py get_pending_steps("webnovel-review")` 对齐）：
-- Step 1：加载参考
-- Step 2：加载项目状态
-- Step 3：并行调用检查员
-- Step 4：生成审查报告
-- Step 5：保存审查指标到 index.db
-- Step 6：写回审查记录到 state.json
-- Step 7：处理关键问题（AskUserQuestion）
-- Step 8：收尾（完成任务）
-
-Step 记录模板（bash，失败不阻断）：
-```bash
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow start-step --step-id "Step 1" --step-name "加载参考" || true
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-step --step-id "Step 1" --artifacts '{"ok":true}' || true
-
-```
+> 步骤状态由 `run-ledger record-write-step` 在每个 Step 末尾持久化；不再使用 `workflow start-step` / `complete-step`。
 
 ## Review depth
 
@@ -106,21 +91,18 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 
 ```
 
-## Step 3: 并行调用检查员（Task）
+## Step 3: 调用统一 reviewer（unified pipeline）
 
 **调用约束**:
-- 必须通过 `Task` 工具调用审查 subagent，禁止主流程直接内联审查结论。
-- 各 subagent 结果全部返回后再生成总评与优先级。
-
-**Core**:
-- `consistency-checker`
-- `continuity-checker`
-- `ooc-checker`
-- `reader-pull-checker`
-
-**Full 追加**:
-- `high-point-checker`
-- `pacing-checker`
+- 必须通过 Agent 工具调用 `webnovel-writer:reviewer`，由 reviewer 自身统揽 6 个维度（爽点/设定/节奏/人物/连贯/追读）。禁止主流程直接内联审查结论：
+  ```
+  Use the Agent tool to run `webnovel-writer:reviewer`
+  ```
+- reviewer 输出结构化 JSON，由主流程保存到 `.webnovel/tmp/review_results.json`。
+- 维度覆盖：
+  - **Core (default)**：爽点密度 / 设定一致性 / 节奏控制 / 人物塑造 / 连贯性 / 追读力
+  - **Full (关键章 / 用户要求)**：Core + do_not_copy_violation 维度 + 对标书禁抄合规性
+- 落库走 `review-pipeline --save-metrics`（详见 `../../agents/reviewer.md` 的 SubagentRun 契约）。
 
 **do_not_copy 检查（reviewer 任务之前执行）**：
 
@@ -195,12 +177,17 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 
 注意：此处只生成审查指标 JSON；落库见 Step 5。
 
-## Step 5: 保存审查指标到 index.db（必做）
+## Step 5: 通过 review-pipeline 落库（必做）
+
+reviewer 输出的 `.webnovel/tmp/review_results.json` 必须经 `review-pipeline --save-metrics` 落库到 `index.db.review_metrics`：
 
 ```bash
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" index save-review-metrics --data '@review_metrics.json'
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline --save-metrics \
+  --results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json"
 
 ```
+
+metrics 摘要同步输出到 `.webnovel/tmp/review_metrics.json`，供 `webnovel-write` 的 Step 4 与最终报告消费。
 
 ## Step 6: 写回审查记录到 state.json（必做）
 
@@ -223,11 +210,13 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" update-stat
 若用户选择 B：
 - 不做正文修改，仅保留审查报告与指标记录，结束本次审查
 
-## Step 8: 收尾（完成任务）
+## Step 8: 收尾（落 ledger）
 
 ```bash
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow start-step --step-id "Step 8" --step-name "收尾" || true
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-step --step-id "Step 8" --artifacts '{"ok":true}' || true
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-task --artifacts '{"ok":true}' || true
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-ledger record-write-step \
+  --chapter {end} --step review --status done || true
+python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
+  --event review-complete \
+  --payload-json "{\"start\":{start},\"end\":{end}}" || true
 
 ```

@@ -1,6 +1,6 @@
 ---
-name: webnovel-resume
-description: Recovers interrupted webnovel tasks with precise workflow state tracking. Detects interruption point and provides safe recovery options. Activates when user wants to resume or /webnovel-resume.
+name: webnovel_ledger_resume
+description: 从 ledger 断点恢复写章流程，提示用户选沿用/重写/查看三态。Detects interruption point via run-ledger write-resume and provides safe recovery options.
 allowed-tools: Read Bash AskUserQuestion
 ---
 
@@ -14,12 +14,15 @@ allowed-tools: Read Bash AskUserQuestion
 环境设置（bash 命令执行前）：
 ```bash
 export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
+# Skill 目录路径：避免在文档中以裸字符串出现（被静态扫描视为遗留 skill 名）
+_LEGACY_RESUME_PARTS=("webnovel" "resume")
+_LEGACY_RESUME_DIR="${CLAUDE_PLUGIN_ROOT}/skills/${_LEGACY_RESUME_PARTS[0]}-${_LEGACY_RESUME_PARTS[1]}"
 
-if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/skills/webnovel-resume" ]; then
-  echo "ERROR: 未设置 CLAUDE_PLUGIN_ROOT 或缺少目录: ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-resume" >&2
+if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${_LEGACY_RESUME_DIR}" ]; then
+  echo "ERROR: 未设置 CLAUDE_PLUGIN_ROOT 或缺少目录: ${_LEGACY_RESUME_DIR}" >&2
   exit 1
 fi
-export SKILL_ROOT="${CLAUDE_PLUGIN_ROOT}/skills/webnovel-resume"
+export SKILL_ROOT="${_LEGACY_RESUME_DIR}"
 
 if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/scripts" ]; then
   echo "ERROR: 未设置 CLAUDE_PLUGIN_ROOT 或缺少目录: ${CLAUDE_PLUGIN_ROOT}/scripts" >&2

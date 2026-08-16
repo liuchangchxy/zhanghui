@@ -1,7 +1,7 @@
 ---
 name: webnovel-chart-scan
 description: 扫起点/番茄/纵横/七猫/刺猬猫五个网文平台的分类榜单，提取元数据（书名/作者/分类/简介/字数/状态/标签/排名），输出 JSON + Markdown 报告到当前项目目录。写新书前手动调用，调研题材和找对标书。
-allowed-tools: Read Write Edit Grep Bash Task WebFetch
+allowed-tools: Read Write Edit Grep Bash WebFetch
 ---
 
 # /webnovel-chart-scan — 扫网文平台分类榜单

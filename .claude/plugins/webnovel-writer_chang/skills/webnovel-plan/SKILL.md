@@ -144,7 +144,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" me
 
 ### Step 2.5（新增）：主题与主角弧初始化
 
-- 读 `references/shared/thematic-echo.md` + `references/shared/character-arc.md`
+- 读 `${SKILL_ROOT}/../../references/shared/thematic-echo.md` + `${SKILL_ROOT}/../../references/shared/character-arc.md`
 - 让用户确认本卷的 thematic_premise（一句话主题）
 - 让用户确认主角的 starting_state / ending_state（卷首/卷末内在状态）
 - 写入 `story_craft.character_arc` 和 `story_craft.thematic_echoes`

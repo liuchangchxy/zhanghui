@@ -1,7 +1,7 @@
 ---
 name: webnovel-write
 description: Writes webnovel chapters (default 2000-2500 words). Use when the user asks to write a chapter or runs /webnovel-write. Runs context, drafting, review, polish, and data extraction.
-allowed-tools: Read Write Edit Grep Bash Task
+allowed-tools: Read Write Edit Grep Bash
 ---
 
 # Chapter Writing (Structured Workflow)
@@ -56,27 +56,12 @@ allowed-tools: Read Write Edit Grep Bash Task
 
 ### 根目录
 
-- `references/step-3-review-gate.md`
-  - 用途：Step 3 审查调用模板、汇总格式、落库 JSON 规范。
-  - 触发：Step 3 必读。
-- `references/step-5-debt-switch.md`
-  - 用途：Step 5 债务利息开关规则（默认关闭）。
-  - 触发：Step 5 必读。
 - `../../references/shared/core-constraints.md`
   - 用途：Step 2A 写作硬约束（大纲即法律 / 设定即物理 / 发明需识别）。
   - 触发：Step 2A 必读。
-- `references/polish-guide.md`
-  - 用途：Step 4 问题修复、Anti-AI 与 No-Poison 规则。
-  - 触发：Step 4 必读。
 - `references/writing/typesetting.md`
   - 用途：Step 4 移动端阅读排版与发布前速查。
   - 触发：Step 4 必读。
-- `references/style-adapter.md`
-  - 用途：Step 2B 风格转译规则，不改剧情事实。
-  - 触发：Step 2B 执行时必读（`--fast`/`--minimal` 跳过）。
-- `references/style-variants.md`
-  - 用途：Step 1（内置 Contract）开头/钩子/节奏变体与重复风险控制。
-  - 触发：Step 1 当需要做差异化设计时加载。
 - `../../references/reading-power-taxonomy.md`
   - 用途：Step 1（内置 Contract）钩子、爽点、微兑现 taxonomy。
   - 触发：Step 1 当需要追读力设计时加载。
@@ -86,15 +71,6 @@ allowed-tools: Read Write Edit Grep Bash Task
 - `references/writing/genre-hook-payoff-library.md`
   - 用途：电竞/直播文/克苏鲁的钩子与微兑现快速库。
   - 触发：Step 1 题材命中 `esports/livestream/cosmic-horror` 时必读。
-- `../../skills/webnovel-init/references/creativity/shuangwen-deep.md`
-  - 用途：爽文节奏与质量检查表（爽点密度、打脸合理性、金手指约束、避坑）。
-  - 触发：Step 1 题材命中爽文相关 canonical（玄幻/仙侠/都市/历史/科幻/游戏）时按需加载。
-- `../../skills/webnovel-init/references/creativity/shuangwen-opening.md`
-  - 用途：爽文黄金开篇五法则（前 3 章结构）。
-  - 触发：Step 1 写第 1-3 章时题材命中爽文 canonical 时必读。
-- `../../skills/webnovel-init/references/creativity/shuangwen-faceslap.md`
-  - 用途：装逼打脸五步递进模板与反转六原则。
-  - 触发：Step 1 写打脸/装逼章节时题材命中爽文 canonical 时按需加载。
 
 ### writing（问题定向加读）
 
@@ -112,7 +88,7 @@ allowed-tools: Read Write Edit Grep Bash Task
 ## 工具策略（按需）
 
 - `Read/Grep`：读取 `state.json`、大纲、章节正文与参考文件。
-- `Bash`：运行 `extract_chapter_context.py`、`index_manager`、`workflow_manager`。
+- `Bash`：运行 `extract_chapter_context.py`、`index_manager`、CLI 工具（webnovel.py）。
 - `Task`：调用 `context-agent`、审查 subagent、`data-agent` 并行执行。
 
 ## 交互流程
@@ -172,28 +148,30 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 输出：
 - "已就绪输入"与"缺失输入"清单；缺失则阻断并提示先补齐。
 
-### Step 0.5：工作流断点记录（best-effort，不阻断）
+### Step 0.5：写入断点（best-effort，不阻断）
 
 ```bash
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow start-task --command webnovel-write --chapter {chapter_num} || true
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow start-step --step-id "Step 1" --step-name "Context Agent" || true
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-step --step-id "Step 1" --artifacts '{"ok":true}' || true
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" workflow complete-task --artifacts '{"ok":true}' || true
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-ledger write-resume --chapter {chapter_num} || true
 
 ```
 
 要求：
-- `--step-id` 仅允许：`Step 1` / `Step 2A` / `Step 2B` / `Step 3` / `Step 4` / `Step 5` / `Step 6`。
-- 任何记录失败只记警告，不阻断写作。
-- 每个 Step 执行结束后，同样需要 `complete-step`（失败不阻断）。
+- 仅作断点记录，不阻断写作；执行失败仅记 warning。
+- `run-ledger write-resume` 落库在 `${PROJECT_ROOT}/.webnovel/run_ledger/`，由 ledger 续跑逻辑直接消费。
+- 重复执行时由 ledger 提示用户选"沿用/重写/查看"三态。
 
 ### Step 1：Context Agent（内置 Context Contract，生成直写执行包）
 
-使用 Task 调用 `context-agent`，参数：
+使用 Agent 调用 `context-agent`，参数：
 - `chapter`
 - `project_root`
 - `storage_path=.webnovel/`
 - `state_file=.webnovel/state.json`
+
+按以下字面调用方式触发：
+```
+Use the Agent tool to run `webnovel-writer:context-agent`
+```
 
 硬要求：
 - 若 `state` 或大纲不可用，立即阻断并返回缺失项。
@@ -247,11 +225,7 @@ Step 2A 生成章节正文后，**必须在正文末尾追加一个 `<chapter_ch
 
 ### Step 2B：风格适配（`--fast` / `--minimal` 跳过）
 
-执行前加载：
-```bash
-cat "${SKILL_ROOT}/references/style-adapter.md"
-
-```
+执行前加载：（本 Step 已被 `--fast`/`--minimal` 跳过；删版内联风格契约，由 `Step 2A 写作执行包` 直接消费）
 
 硬要求：
 - 只做表达层转译，不改剧情事实、事件顺序、角色行为结果、设定规则。
@@ -260,16 +234,14 @@ cat "${SKILL_ROOT}/references/style-adapter.md"
 输出：
 - 风格化正文（覆盖原章节文件）。
 
-### Step 3：审查（auto 路由，必须由 Task 子代理执行）
-
-执行前加载：
-```bash
-cat "${SKILL_ROOT}/references/step-3-review-gate.md"
-
-```
+### Step 3：审查（auto 路由，必须由 Agent 子代理执行）
 
 调用约束：
-- 必须用 `Task` 调用审查 subagent，禁止主流程伪造审查结论。
+- 必须用 `Agent` 工具按注册名 `webnovel-writer:reviewer` 调用审查 subagent：
+  ```
+  Use the Agent tool to run `webnovel-writer:reviewer`
+  ```
+- 禁止主流程伪造审查结论。
 - 可并行发起审查，统一汇总 `issues/severity/overall_score`。
 - 默认使用 `auto` 路由：根据"本章执行合同 + 正文信号 + 大纲标签"动态选择审查器。
 
@@ -318,7 +290,6 @@ review_metrics 字段约束（当前工作流约定只传以下字段）：
 
 执行前必须加载：
 ```bash
-cat "${SKILL_ROOT}/references/polish-guide.md"
 cat "${SKILL_ROOT}/references/writing/typesetting.md"
 
 ```
@@ -348,7 +319,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py \
 **判定逻辑**：
 - `passed=true`：进入 Step 5（data-agent）。
 - `passed=false`：读取 `failures` 列表，把每条规则的报错反馈给主流程 LLM，要求**只重写 `<chapter_changes>` 块**（不改正文）。最多 2 次。
-- 2 次仍未通过：记录到 `.webnovel/tmp/changes_gate_failures.jsonl`，人工介入后走 `/webnovel-resume`。
+- 2 次仍未通过：记录到 `.webnovel/tmp/changes_gate_failures.jsonl`，人工介入后由 ledger 续跑接管。
 
 **调 changes_gate.py R4b**（advisory 子规则，不阻塞）：
 - `changes_gate.py` 默认 `--json` 已启用 `R4b`（伏笔超期 advisory），阈值 20 章。
@@ -398,13 +369,18 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
 
 ### Step 5：Data Agent（状态与索引回写）
 
-使用 Task 调用 `data-agent`，参数：
+使用 Agent 调用 `data-agent`，参数：
 - `chapter`
 - `chapter_file` 必须传入实际章节文件路径；若详细大纲已有章节名，优先传 `正文/第{chapter_padded}章-{title_safe}.md`，否则传 `正文/第{chapter_padded}章.md`
 - `review_score=Step 3 overall_score`
 - `project_root`
 - `storage_path=.webnovel/`
 - `state_file=.webnovel/state.json`
+
+按以下字面调用方式触发：
+```
+Use the Agent tool to run `webnovel-writer:data-agent`
+```
 
 Data Agent 默认子步骤（全部执行）：
 - A. 加载上下文
@@ -443,7 +419,7 @@ Step 5 失败隔离规则：
 - 当外层总耗时远大于内层 timing 之和时，默认先归因为 agent 启动与环境探测开销，不误判为正文或数据处理慢。
 
 债务利息：
-- 默认关闭，仅在用户明确要求或开启追踪时执行（见 `step-5-debt-switch.md`）。
+- 默认关闭，仅在用户明确要求或开启追踪时执行。
 
 ### Step 6：Git 备份（可失败但需说明）
 

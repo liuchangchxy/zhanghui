@@ -1,7 +1,7 @@
 ---
 name: webnovel-init
 description: 深度初始化网文项目。通过分阶段交互收集完整创作信息，生成可直接进入规划与写作的项目骨架与约束文件。
-allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
+allowed-tools: Read Write Edit Grep Bash AskUserQuestion WebSearch WebFetch
 ---
 
 # Project Initialization (Deep Mode)
@@ -42,9 +42,7 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
   - 金手指：`templates/golden-finger-templates.md`
   - 世界观：`references/worldbuilding/faction-systems.md`
   - 创意约束：按下方"逐文件引用清单"触发加载
-  - 爽文深度：`references/creativity/shuangwen-deep.md` / `shuangwen-opening.md` / `shuangwen-faceslap.md` —— 题材命中爽文相关 canonical（玄幻/都市/仙侠/历史 等）时按需加载
-- L3（显式请求）：
-  - `references/creativity/market-trends-2026.md`
+  - 爽文深度：题材命中爽文相关 canonical（玄幻/都市/仙侠/历史 等）时按需加载
 
 ## References（逐文件引用清单）
 
@@ -80,12 +78,6 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
 - `references/creativity/creativity-constraints.md`
   - 用途：Step 5 创意约束包主 schema。
   - 触发：Step 5 必读。
-- `references/creativity/category-constraint-packs.md`
-  - 用途：Step 5 按平台/题材选择约束包模板。
-  - 触发：Step 5 必读。
-- `references/creativity/creative-combination.md`
-  - 用途：复合题材（A+B）融合规则。
-  - 触发：用户选择复合题材时加载。
 - `references/creativity/inspiration-collection.md`
   - 用途：用户卡住时提供卖点/钩子候选。
   - 触发：Step 1 或 Step 5 卡顿时加载。
@@ -95,9 +87,6 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
 - `references/creativity/market-positioning.md`
   - 用途：目标读者/平台定位与商业化语义统一。
   - 触发：Step 1 用户提及平台或商业目标时加载。
-- `references/creativity/market-trends-2026.md`
-  - 用途：时间敏感市场趋势参考。
-  - 触发：仅用户明确要求"参考当下趋势"时加载。
 - `references/creativity/anti-trope-xianxia.md`
   - 用途：反套路库（修仙/玄幻/高武/西幻）。
   - 触发：题材命中对应映射时加载。
@@ -110,15 +99,6 @@ allowed-tools: Read Write Edit Grep Bash Task AskUserQuestion WebSearch WebFetch
 - `references/creativity/anti-trope-rules-mystery.md`
   - 用途：反套路库（规则/悬疑/灵异/克苏鲁）。
   - 触发：题材命中对应映射时加载。
-- `references/creativity/shuangwen-deep.md`
-  - 用途：爽文类型核心特征、常见流派、爽点节奏、质量检查、避坑。
-  - 触发：题材命中爽文相关 canonical（玄幻/仙侠/都市/历史/科幻/游戏 等）或用户显式选择"爽文"时加载。
-- `references/creativity/shuangwen-opening.md`
-  - 用途：爽文黄金开篇五法则（动态切入/冲突前置/滴灌信息/限人物/快显金手指）。
-  - 触发：题材命中爽文 canonical 时必读；亦可作为开篇 Step 1 的写作前置参考。
-- `references/creativity/shuangwen-faceslap.md`
-  - 用途：装逼打脸五步递进法（上门被拒/冷眼相待/当众羞辱/对比/强迫分手 + 反转爆发）。
-  - 触发：题材命中爽文 canonical 时必读；写打脸剧情时按需重读。
 
 ## 工具策略（按需）
 
