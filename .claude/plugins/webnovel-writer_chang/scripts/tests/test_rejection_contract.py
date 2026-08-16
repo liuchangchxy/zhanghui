@@ -165,3 +165,25 @@ def test_merge_contracts_source_is_sorted():
     # 反向传入也得同样结果
     merged2 = merge_contracts([b, c, a])
     assert merged2.source == "anti-slop+data-agent+reviewer"
+
+
+def test_rejection_contract_accepts_do_not_copy_violation():
+    """C1: VALID_CATEGORIES 白名单必须包含 P3 新增的 do_not_copy_violation。
+
+    否则 reviewer 在 do_not_copy 维度抛 high issue 时，revise_chapter.py:264
+    validate_contract() 会拒绝该 contract → EXIT_INVALID → 章节永远无法
+    自动局部重写（silent flow breakage）。
+    """
+    contract = build_contract_from_reviewer_output({
+        "chapter": 1,
+        "issues": [{
+            "severity": "critical",
+            "category": "do_not_copy_violation",
+            "location": "第2段",
+            "description": "出现禁用元素",
+            "fix_hint": "改写",
+            "blocking": True,
+        }]
+    })
+    validate_contract(contract)  # MUST NOT raise
+    assert contract.issues[0].category == "do_not_copy_violation"

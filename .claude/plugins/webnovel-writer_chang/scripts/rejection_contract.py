@@ -19,6 +19,7 @@ from typing import Any, Iterable
 
 VALID_CATEGORIES = frozenset({
     "continuity", "setting", "character", "timeline", "logic", "pacing", "other",
+    "do_not_copy_violation",
 })
 
 
