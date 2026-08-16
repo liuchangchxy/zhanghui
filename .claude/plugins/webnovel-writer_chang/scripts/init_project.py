@@ -231,6 +231,60 @@ def _inject_volume_rows(template_text: str, target_chapters: int, *, chapters_pe
     return "\n".join(lines[:insert_idx] + rows + lines[insert_idx:])
 
 
+def _validate_idea_bank_payload(raw: str) -> dict:
+    """Parse and validate an idea_bank.json payload string.
+
+    Required schema (matches 2026-08-16-webnovel-init-deconstruction-wiring-design §D2):
+      - version == 1
+      - top-level keys: source, selected_idea, constraints_inherited,
+        borrowed_patterns, do_not_copy, canon_contamination_warnings
+      - source.reference_source in {"none", "book_name", "local_text", "excerpt"}
+      - source.analysis_mode in {"quick", "deep"}
+
+    Optional (P0-Full): reference_research_path (str, relative path).
+    """
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"idea_bank.json is not valid JSON: {e}") from e
+
+    if not isinstance(data, dict):
+        raise ValueError("idea_bank.json must be a JSON object")
+
+    if data.get("version") != 1:
+        raise ValueError(f"idea_bank.json version must be 1, got {data.get('version')!r}")
+
+    required_top = {
+        "source", "selected_idea", "constraints_inherited",
+        "borrowed_patterns", "do_not_copy", "canon_contamination_warnings",
+    }
+    missing = required_top - set(data.keys())
+    if missing:
+        raise ValueError(f"idea_bank.json missing required top-level keys: {sorted(missing)}")
+
+    # Optional fields (P0-Full): silently accept if absent (backward compat)
+    # Currently just reference_research_path; future fields can be added here.
+
+    source = data.get("source")
+    if not isinstance(source, dict):
+        raise ValueError("idea_bank.json source must be an object")
+
+    ref_src = source.get("reference_source")
+    if ref_src not in {"none", "book_name", "local_text", "excerpt"}:
+        raise ValueError(
+            f"idea_bank.json source.reference_source must be one of "
+            f"{{none, book_name, local_text, excerpt}}, got {ref_src!r}"
+        )
+
+    mode = source.get("analysis_mode")
+    if mode not in {"quick", "deep"}:
+        raise ValueError(
+            f"idea_bank.json source.analysis_mode must be quick or deep, got {mode!r}"
+        )
+
+    return data
+
+
 def init_project(
     project_dir: str,
     title: str,
