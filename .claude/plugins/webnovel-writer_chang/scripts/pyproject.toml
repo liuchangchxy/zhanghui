@@ -7,6 +7,10 @@ dependencies = [
     "pydantic>=2.6",
     "aiohttp>=3.8",
     "filelock>=3.0",
+    # P0-Full addition: init_reference_tree.py uses these for Chinese title slugs and report rendering
+    "jieba>=0.42",
+    "jinja2>=3.1",
+    "pypinyin>=0.49",
 ]
 
 [project.optional-dependencies]
