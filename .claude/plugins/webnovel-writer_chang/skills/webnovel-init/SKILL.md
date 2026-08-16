@@ -190,7 +190,51 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 - 优先让用户自由描述，再二次结构化确认。
 - 若用户卡住，给 2-4 个候选方向供选。
 
+### Step 1.5：灵感来源询问
+
+进入故事核采集前，先问用户灵感来源——**不要默认拆书**。
+
+向用户抛出唯一开场问题（必须包含字面串"你这本书的灵感来源想从哪里开始"）：
+
+```
+你这本书的灵感来源想从哪里开始？
+  A) 原创 / 暂无参考书 → 跳过拆解，跳过 reference_research/ 与 idea_bank.json 写入
+  B) 有参考书名 + 平台线索（如"起点《XX》"）→ quick 模式（无文本，quality.passed=false 风险高）
+  C) 有参考书名 + 本地正文路径 → deep 模式（路径不可读时降级 quick）
+  D) 有参考书名 + 仅摘录（粘进对话）→ quick 模式
+```
+
+用户选 A：记录 `reference_source = "none"`，**不写任何文件**，直接进入 Step 2。
+
+用户选 B/C/D：用以下字面调用方式触发拆解子代理（主流程**不得由 init 主流程口头替代拆解结果**，必须拿原始 JSON）：
+
+```
+Use the Agent tool to run `webnovel-writer:deconstruction-agent`
+```
+
+调用时传入字段（参考 `agents/deconstruction-agent.md §2`）：`reference_title`、`reference_source`、`reference_text_path` 或 `reference_text_excerpt`、`analysis_mode`、`init_goal`、`target_genre`。**禁止使用 `subagent-type` 字段**——Claude Code 的 Agent tool 不接受该参数。拆解子代理还必须返回 9 个 handoff 字段：`reader_promise`、`opening_hook_patterns`、`cool_point_loops`、`protagonist_patterns`、`antagonist_pressure_patterns`、`pacing_notes`、`borrowable_structures`、`differentiation_requirements`、`init_candidates`。
+
+子代理返回 `init_reference_research` JSON 对象（即 init_reference_research JSON 对象，包含 9 个新增字段：`chapter_rhythm`、`narrative_function`、`boundary_reason`、`protagonist_action_chain`、`emotion_curve`、`satisfaction_point`、`foreshadowing`、`gains_costs`、`character_changes`）。**用户确认前**，以下行为禁止：
+
+- 写入 `.webnovel/reference_research/`、`idea_bank.json`、`.story-system`、`设定集/`、`大纲/`、`正文/`、`.webnovel/state.json`
+- 由主流程口头重写拆解结论
+
+检查返回 JSON 的 `quality` 字段（必须含字面 `` `quality` `` 和 `` `quality.passed=false` ``）：
+
+- 若 `quality.passed=false` 或 `confidence < 0.85`（含字面 `` `confidence < 0.85` ``）：把缺漏展示给用户，问三种处理：(i) 用更多文本重跑；(ii) 用稀疏模式继续；(iii) 放弃参考（默认 (iii)）。
+- 否则：调用 `scripts/data_modules/init_reference_tree.py:build_reference_tree()` 把 JSON 渲染成 `.webnovel/reference_research/<book-safe>/` 多文件树（见 D3 目录结构）。把 `do_not_copy` 字段和 `canon_contamination_warnings` 字段**原文**展示给用户。
+
+用户确认后，主流程：
+1. 调用 `init_reference_tree.py` 落盘树
+2. 写 `idea_bank.json`，新增 `reference_research_path` 字段指向树
+3. 通过临时文件 + `--reference-research-dir` 传给 `webnovel.py init` 验证树存在
+4. **禁止**直接拼接到 CLI argv 大字段里
+
+> Step 2-6 只能使用用户确认过、并已变形为本书差异化表达的模式；不可借用尚未确认或仍携带原作设定的字段。
+
 ### Step 2：角色骨架与关系冲突
+
+> Step 2-6 只能使用用户确认过、并已变形为本书差异化表达的模式。
 
 收集项（必收）：
 - 主角姓名
@@ -265,6 +309,7 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 - 金手指核（能力与代价）
 - 世界核（规模/力量/势力）
 - 创意约束核（反套路 + 硬约束）
+- 汇总 Step 1.5 已确认的灵感来源（参考书名 / 分析模式 / 置信度 / reference_research 路径 / 反套路 / 硬约束数量）
 
 确认规则：
 - 用户未明确确认，不执行生成。
