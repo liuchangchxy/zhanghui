@@ -13,7 +13,22 @@ class ConsistencyRunner:
         self.patches = patches
 
     def _default_patches(self) -> list[Patch]:
-        raise NotImplementedError("Default patches not yet wired; pass explicit list")
+        from ..patches.p1_foreshadow_dag import P1ForeshadowDAG
+        from ..patches.p2_volume_anchor import P2VolumeAnchor
+        from ..patches.p3_event_matrix import P3EventMatrix
+        from ..patches.p4_pacing_tracker import P4PacingTracker
+        from ..patches.p5_state_revision import P5StateRevision
+        from ..patches.p6_reader_contract import P6ReaderContract
+        from ..patches.p7_derived_views import P7DerivedViews
+        return [
+            P1ForeshadowDAG(),
+            P2VolumeAnchor(),
+            P3EventMatrix(),
+            P4PacingTracker(),
+            P5StateRevision(),
+            P6ReaderContract(),
+            P7DerivedViews(),
+        ]
 
     def run_all(
         self,

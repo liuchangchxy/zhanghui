@@ -44,6 +44,15 @@ def test_runner_runs_all_patches():
 
 def test_runner_uses_default_patches_when_none_given():
     runner = ConsistencyRunner(project_root=Path("/tmp"))
-    import pytest
-    with pytest.raises(NotImplementedError):
-        runner.run_all(chapter=1)
+    defaults = runner._default_patches()
+    assert len(defaults) == 7
+    names = [p.name for p in defaults]
+    assert names == [
+        "foreshadow_dag",
+        "volume_anchor",
+        "event_matrix",
+        "pacing_tracker",
+        "state_revision",
+        "reader_contract",
+        "derived_views",
+    ]
