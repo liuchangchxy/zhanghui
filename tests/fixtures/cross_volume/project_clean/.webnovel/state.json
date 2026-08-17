@@ -1,0 +1,45 @@
+{
+  "project_info": {"name": "test-clean", "genre": "xianxia"},
+  "state": {"_revision": 5, "_last_modified_by": "init", "_last_modified_at": "2026-08-18T00:00:00Z"},
+  "story_craft": {
+    "foreshadow_chain": {
+      "version": 1,
+      "dag": [
+        {"id": "fs_001", "content": "神秘戒指", "level": "中层", "planted_chapter": 1, "paid_off_chapter": null, "status": "active", "depends_on": [], "introduced_by": "init"}
+      ],
+      "validated_at": null,
+      "validation_history": []
+    },
+    "volume_anchors": {
+      "version": 1,
+      "anchors": [
+        {"volume": 1, "volume_name": "测试卷", "core_conflict": "测试冲突", "volume_end_climax": "测试高潮", "must_not_reveal": [], "must_achieve": ["主角觉醒"], "foreshadows_to_plant": ["fs_001"], "total_chapters": 10, "current_chapter": 0}
+      ]
+    },
+    "event_matrix_state": {
+      "version": 1,
+      "types": {
+        "conflict_thrill": {"cooldown": 2, "last_used_chapter": 0},
+        "bond_deepening": {"cooldown": 4, "last_used_chapter": 0},
+        "faction_building": {"cooldown": 4, "last_used_chapter": 0},
+        "world_painting": {"cooldown": 3, "last_used_chapter": 0},
+        "tension_escalation": {"cooldown": 2, "last_used_chapter": 0}
+      },
+      "history": [],
+      "gentle_window": 5,
+      "max_consecutive_fast": 2
+    },
+    "pacing_history": {
+      "version": 1,
+      "history": [],
+      "rules": {"max_consecutive_fast": 1, "slow_per_4_chapters_min": 1}
+    },
+    "reader_contract": {
+      "version": 1,
+      "expectation_debt": [],
+      "causal_credits": {"protagonist_actions_used_without_setup": []},
+      "endgame_reserves": [],
+      "swap_debts": []
+    }
+  }
+}
