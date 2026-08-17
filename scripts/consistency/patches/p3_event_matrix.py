@@ -17,11 +17,20 @@ class P3EventMatrix(Patch):
     depends_on = ("foreshadow_dag",)
 
     def check(self, ctx: CheckContext) -> list[Blocker]:
+        if "_load_error" in ctx.state:
+            return [Blocker(patch=self.name, chapter=ctx.chapter_num,
+                            message=f"无法读取 state.json: {ctx.state['_load_error']}",
+                            fix_hint="修复 state.json 后重试")]
+
         ems = ctx.state.get("story_craft", {}).get("event_matrix_state")
         if ems is None:
             return [Blocker(patch=self.name, chapter=ctx.chapter_num, message="event_matrix_state 未初始化", fix_hint="运行 consistency init")]
 
         history = ems.get("history", [])
+        if not isinstance(history, list):
+            return [Blocker(patch=self.name, chapter=ctx.chapter_num,
+                            message=f"event_matrix_state.history 必须是 list，实际类型：{type(history).__name__}",
+                            fix_hint="运行 consistency init 重建")]
         if not history:
             return []
 

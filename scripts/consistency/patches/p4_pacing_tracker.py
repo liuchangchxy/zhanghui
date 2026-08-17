@@ -12,11 +12,20 @@ class P4PacingTracker(Patch):
     depends_on = ()
 
     def check(self, ctx: CheckContext) -> list[Blocker]:
+        if "_load_error" in ctx.state:
+            return [Blocker(patch=self.name, chapter=ctx.chapter_num,
+                            message=f"无法读取 state.json: {ctx.state['_load_error']}",
+                            fix_hint="修复 state.json 后重试")]
+
         ph = ctx.state.get("story_craft", {}).get("pacing_history")
         if ph is None:
             return [Blocker(patch=self.name, chapter=ctx.chapter_num, message="pacing_history 未初始化", fix_hint="运行 consistency init")]
 
         history = ph.get("history", [])
+        if not isinstance(history, list):
+            return [Blocker(patch=self.name, chapter=ctx.chapter_num,
+                            message=f"pacing_history.history 必须是 list，实际类型：{type(history).__name__}",
+                            fix_hint="运行 consistency init 重建")]
         rules = ph.get("rules", {"max_consecutive_fast": 1, "slow_per_4_chapters_min": 1})
 
         blockers = []

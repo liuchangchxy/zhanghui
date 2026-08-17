@@ -14,6 +14,11 @@ class P2VolumeAnchor(Patch):
     PROGRESS_THRESHOLD = 0.15  # 进度偏离阈值
 
     def check(self, ctx: CheckContext) -> list[Blocker]:
+        if "_load_error" in ctx.state:
+            return [Blocker(patch=self.name, chapter=ctx.chapter_num,
+                            message=f"无法读取 state.json: {ctx.state['_load_error']}",
+                            fix_hint="修复 state.json 后重试")]
+
         anchors_data = ctx.state.get("story_craft", {}).get("volume_anchors")
         if anchors_data is None:
             return [Blocker(patch=self.name, chapter=ctx.chapter_num, message="volume_anchors 未初始化", fix_hint="运行 consistency init")]
@@ -21,7 +26,16 @@ class P2VolumeAnchor(Patch):
         anchors = anchors_data.get("anchors", [])
         blockers = []
 
-        for anchor in anchors:
+        for i, anchor in enumerate(anchors):
+            if not isinstance(anchor, dict):
+                blockers.append(Blocker(
+                    patch=self.name,
+                    chapter=ctx.chapter_num,
+                    message=f"anchors[{i}] 不是 dict，实际类型：{type(anchor).__name__}",
+                    fix_hint="运行 consistency init 重建"
+                ))
+                continue
+
             total = anchor.get("total_chapters", 0)
             current = anchor.get("current_chapter", 0)
 
@@ -38,14 +52,24 @@ class P2VolumeAnchor(Patch):
                 blockers.append(Blocker(
                     patch=self.name,
                     chapter=ctx.chapter_num,
-                    message=f"第{anchor['volume']}卷进度偏离预期 {actual_progress:.0%} vs 期望 {expected_progress:.0%}（偏差 {deviation:.0%}）",
+                    message=f"第{anchor.get('volume', i+1)}卷进度偏离预期 {actual_progress:.0%} vs 期望 {expected_progress:.0%}（偏差 {deviation:.0%}）",
                     fix_hint="加快/放缓节奏，或调整剩余章纲"
                 ))
 
-            # must_not_reveal 检查
-            if ctx.chapter_text:
-                for forbidden in anchor.get("must_not_reveal", []):
-                    if forbidden and forbidden in ctx.chapter_text:
+            # must_not_reveal 检查（带类型守卫：必须为 list[str]）
+            must_not_reveal = anchor.get("must_not_reveal", [])
+            if not isinstance(must_not_reveal, list):
+                blockers.append(Blocker(
+                    patch=self.name,
+                    chapter=ctx.chapter_num,
+                    message=f"anchor[{i}].must_not_reveal 必须是 list，实际类型：{type(must_not_reveal).__name__}",
+                    fix_hint="运行 consistency init 重建"
+                ))
+            elif ctx.chapter_text:
+                for forbidden in must_not_reveal:
+                    if not isinstance(forbidden, str) or len(forbidden) < 1:
+                        continue
+                    if forbidden in ctx.chapter_text:
                         blockers.append(Blocker(
                             patch=self.name,
                             chapter=ctx.chapter_num,

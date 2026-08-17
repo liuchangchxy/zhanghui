@@ -7,6 +7,22 @@ Original algorithm: 无环（DFS）+ 有向（planted<paid_off）+ 可达（路�
 from ..core.patch_base import Patch, CheckContext, ApplyContext, Blocker
 
 
+def _get_dag(state: dict) -> tuple[list[dict], str]:
+    """Returns (dag_list, format) where format is 'dict', 'list', or 'missing'/'unknown'.
+
+    Real state.json from migrate_story_craft.py has foreshadow_chain as a list of dicts.
+    Our test fixtures wrap it as {dag: [...], version: ...}.
+    """
+    chain = state.get("story_craft", {}).get("foreshadow_chain")
+    if chain is None:
+        return [], "missing"
+    if isinstance(chain, list):
+        return chain, "list"
+    if isinstance(chain, dict) and "dag" in chain:
+        return chain["dag"], "dict"
+    return [], "unknown"
+
+
 class P1ForeshadowDAG(Patch):
     name = "foreshadow_dag"
     description = "伏笔 DAG 验证：无环 / 有向 / 可达 / 超期"
@@ -15,16 +31,38 @@ class P1ForeshadowDAG(Patch):
     OVERDUE_TOLERANCE = 50  # 超期容忍窗口（章）
 
     def check(self, ctx: CheckContext) -> list[Blocker]:
-        chain = ctx.state.get("story_craft", {}).get("foreshadow_chain")
-        if chain is None:
+        # Special-case: state failed to load
+        if "_load_error" in ctx.state:
+            return [Blocker(
+                patch=self.name,
+                chapter=ctx.chapter_num,
+                message=f"无法读取 state.json: {ctx.state['_load_error']}",
+                fix_hint="修复 state.json 后重试，或运行 consistency init 重建",
+            )]
+
+        dag, fmt = _get_dag(ctx.state)
+        if fmt == "missing":
             return [Blocker(
                 patch=self.name,
                 chapter=ctx.chapter_num,
                 message="state.json 缺少 foreshadow_chain 字段，未初始化",
                 fix_hint="运行 `python webnovel.py consistency init --volume <current_volume>`"
             )]
+        if fmt == "unknown":
+            return [Blocker(
+                patch=self.name,
+                chapter=ctx.chapter_num,
+                message="foreshadow_chain 格式未知（既不是 list 也不是 {dag: [...]}）",
+                fix_hint="运行 consistency init 重建"
+            )]
+        if not isinstance(dag, list):
+            return [Blocker(
+                patch=self.name,
+                chapter=ctx.chapter_num,
+                message=f"foreshadow_chain.dag 必须是 list，实际类型：{type(dag).__name__}",
+                fix_hint="运行 consistency init 重建"
+            )]
 
-        dag = chain.get("dag", [])
         blockers: list[Blocker] = []
 
         # 0. missing id guard
@@ -36,6 +74,23 @@ class P1ForeshadowDAG(Patch):
                 message=f"伏笔 DAG 缺少 id 字段（共 {len(missing_id)} 处）",
                 fix_hint="为每个 foreshadow DAG 条目补充 id 字段"
             ))
+
+        # 0b. duplicate id detection
+        ids = [fs.get("id") for fs in dag if fs.get("id")]
+        if ids:
+            seen: set[str] = set()
+            duplicates: set[str] = set()
+            for i in ids:
+                if i in seen:
+                    duplicates.add(i)
+                seen.add(i)
+            if duplicates:
+                blockers.append(Blocker(
+                    patch=self.name,
+                    chapter=ctx.chapter_num,
+                    message=f"伏笔 DAG 有重复 id: {sorted(duplicates)}",
+                    fix_hint="为重复 id 的条目改名，保证唯一"
+                ))
 
         # 1. 无环检测（DFS）
         if self._has_cycle(dag):
@@ -76,12 +131,23 @@ class P1ForeshadowDAG(Patch):
         return blockers
 
     def apply(self, ctx: ApplyContext) -> None:
-        chain = ctx.state.setdefault("story_craft", {}).setdefault("foreshadow_chain", {"version": 1, "dag": [], "validated_at": None, "validation_history": []})
-        chain["validated_at"] = ctx.state.get("_last_modified_at")
+        # Real format (list): no-op (no validated_at / version metadata to maintain)
+        chain = ctx.state.setdefault("story_craft", {}).get("foreshadow_chain")
+        if isinstance(chain, list):
+            return  # real migrate_story_craft format: leave the list alone
+        # Legacy dict format: maintain validated_at pointer for backward compat
+        chain_dict = ctx.state.setdefault("story_craft", {}).setdefault(
+            "foreshadow_chain", {"version": 1, "dag": [], "validated_at": None, "validation_history": []}
+        )
+        chain_dict["validated_at"] = ctx.state.get("_last_modified_at")
 
     def _has_cycle(self, dag: list[dict]) -> bool:
         """DFS 检测环"""
-        graph: dict[str, list[str]] = {fs["id"]: fs.get("depends_on", []) for fs in dag if fs.get("id")}
+        # Defensive: ensure depends_on is iterable and contains strings
+        graph: dict[str, list[str]] = {
+            fs["id"]: [d for d in (fs.get("depends_on") or []) if isinstance(d, str)]
+            for fs in dag if fs.get("id")
+        }
         visited: set[str] = set()
         path: set[str] = set()
 

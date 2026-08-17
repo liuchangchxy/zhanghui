@@ -28,7 +28,11 @@ class P5StateRevision(Patch):
         return []
 
     def apply(self, ctx: ApplyContext) -> None:
+        from datetime import datetime, timezone
         state_meta = ctx.state.setdefault("state", {})
         state_meta["_revision"] = state_meta.get("_revision", 0) + 1
         state_meta["_last_modified_by"] = f"webnovel-write/ch{ctx.chapter_num}"
-        # _last_modified_at 留给 caller 在写盘前注入 wall-clock
+        # Stamp real wall-clock timestamp here so apply() is no longer a no-op.
+        # The runner also stamps this defensively after apply_all, but doing it here
+        # ensures the field is correct even when apply() is called individually.
+        state_meta["_last_modified_at"] = datetime.now(timezone.utc).isoformat()
