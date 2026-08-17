@@ -265,6 +265,16 @@ BLOCKER 处理：
 
 输出文件：`大纲/第{volume_id}卷-详细大纲.md`
 
+### 一致性检查（plan 阶段）
+
+拆完章后，对每个新章调用：
+
+```bash
+python3 -m scripts.consistency.cli check --project-root "$PROJECT_ROOT" --chapter {chapter_num}
+```
+
+如有 BLOCKER：用户改章纲后再跑，直到通过。退出码非 0 表示有 blocker。
+
 ### Step 8：把新增设定写回现有设定集
 
 输入：卷节拍表、卷时间线表、卷详细大纲、现有设定集文件。

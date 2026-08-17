@@ -91,6 +91,16 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 
 ```
 
+### 一致性维度
+
+Review 阶段额外输出"一致性"维度：
+
+```bash
+python3 -m scripts.consistency.cli check --project-root "$PROJECT_ROOT" --chapter {chapter_num}
+```
+
+把所有 BLOCKER 列在 review 报告里（patch + message + fix_hint）。
+
 ## Step 3: 调用统一 reviewer（unified pipeline）
 
 **调用约束**:

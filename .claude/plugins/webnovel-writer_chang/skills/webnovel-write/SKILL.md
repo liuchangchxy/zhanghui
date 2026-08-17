@@ -216,6 +216,16 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 
 闸门校验：大纲存在、章纲可用、占位符扫描通过、伏笔数据可读。任一 fail 立即阻断，不进入 Step 1。
 
+### 一致性检查（写前）
+
+写前必须通过一致性检查：
+
+```bash
+python3 -m scripts.consistency.cli check --project-root "$PROJECT_ROOT" --chapter {chapter_num}
+```
+
+如有 BLOCKER，必须先解决再写。
+
 ### Step 2A：正文起草
 
 执行前必须加载：
@@ -427,6 +437,23 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 ```
 
 闸门校验：CHANGES 协议、anti-slop、changes_gate、git diff 变更面均通过；任一 fail 阻断 Step 5。
+
+### 一致性 apply（写后）
+
+写后 commit 时触发一致性 apply（更新 state + 派生视图）：
+
+```bash
+python3 -m scripts.consistency.cli apply --project-root "$PROJECT_ROOT" --chapter {chapter_num} 2>/dev/null || python3 -c "
+import sys; sys.path.insert(0, '.')
+from scripts.consistency.core.runner import ConsistencyRunner
+from scripts.consistency.cli import _require_project_root
+import json
+project_root = _require_project_root(['--project-root', '$PROJECT_ROOT'])
+r = ConsistencyRunner(project_root)
+for p in r.patches:
+    p.apply(__import__('scripts.consistency.core.patch_base', fromlist=['ApplyContext']).ApplyContext(project_root=project_root, chapter_num={chapter_num}, state=json.loads(open(project_root/'.webnovel/state.json', encoding='utf-8').read_text())))
+"
+```
 
 ### Step 5：Data Agent + chapter-commit 提交（事实回写主链）
 
