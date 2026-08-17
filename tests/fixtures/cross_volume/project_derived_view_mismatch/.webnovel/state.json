@@ -1,0 +1,16 @@
+{
+  "project_info": {"name": "test-derived-bad", "genre": "xianxia"},
+  "state": {"_revision": 1, "_last_modified_by": "init", "_last_modified_at": "2026-08-18T00:00:00Z"},
+  "story_craft": {
+    "foreshadow_chain": {
+      "version": 1,
+      "dag": [
+        {"id": "fs_001", "content": "伏笔1", "level": "表层", "planted_chapter": 1, "paid_off_chapter": null, "status": "active", "depends_on": [], "introduced_by": "init"},
+        {"id": "fs_002", "content": "伏笔2", "level": "中层", "planted_chapter": 3, "paid_off_chapter": null, "status": "active", "depends_on": [], "introduced_by": "init"},
+        {"id": "fs_005", "content": "缺失", "level": "深层", "planted_chapter": 5, "paid_off_chapter": null, "status": "active", "depends_on": [], "introduced_by": "init"}
+      ],
+      "validated_at": null,
+      "validation_history": []
+    }
+  }
+}
