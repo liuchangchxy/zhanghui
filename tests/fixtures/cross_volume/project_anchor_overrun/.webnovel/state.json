@@ -1,0 +1,22 @@
+{
+  "project_info": {"name": "test-anchor-bad", "genre": "xianxia"},
+  "state": {"_revision": 1, "_last_modified_by": "init", "_last_modified_at": "2026-08-18T00:00:00Z"},
+  "story_craft": {
+    "volume_anchors": {
+      "version": 1,
+      "anchors": [
+        {
+          "volume": 1,
+          "volume_name": "测试卷",
+          "core_conflict": "测试冲突",
+          "volume_end_climax": "测试高潮",
+          "must_not_reveal": ["秘密身份"],
+          "must_achieve": ["主角觉醒", "反派现身"],
+          "foreshadows_to_plant": [],
+          "total_chapters": 10,
+          "current_chapter": 5
+        }
+      ]
+    }
+  }
+}
