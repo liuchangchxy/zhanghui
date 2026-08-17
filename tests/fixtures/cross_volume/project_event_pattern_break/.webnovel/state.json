@@ -1,0 +1,25 @@
+{
+  "project_info": {"name": "test-event-bad", "genre": "xianxia"},
+  "state": {"_revision": 1, "_last_modified_by": "init", "_last_modified_at": "2026-08-18T00:00:00Z"},
+  "story_craft": {
+    "event_matrix_state": {
+      "version": 1,
+      "types": {
+        "conflict_thrill": {"cooldown": 2, "last_used_chapter": 0},
+        "tension_escalation": {"cooldown": 2, "last_used_chapter": 0},
+        "bond_deepening": {"cooldown": 4, "last_used_chapter": 0},
+        "faction_building": {"cooldown": 4, "last_used_chapter": 0},
+        "world_painting": {"cooldown": 3, "last_used_chapter": 0}
+      },
+      "history": [
+        {"chapter": 1, "types": ["conflict_thrill"], "primary": "conflict_thrill"},
+        {"chapter": 2, "types": ["conflict_thrill"], "primary": "conflict_thrill"},
+        {"chapter": 3, "types": ["conflict_thrill"], "primary": "conflict_thrill"},
+        {"chapter": 4, "types": ["conflict_thrill"], "primary": "conflict_thrill"},
+        {"chapter": 5, "types": ["conflict_thrill"], "primary": "conflict_thrill"}
+      ],
+      "gentle_window": 5,
+      "max_consecutive_fast": 2
+    }
+  }
+}
