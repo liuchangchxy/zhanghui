@@ -1,0 +1,31 @@
+{
+  "project_info": {"name": "test-reader-bad", "genre": "xianxia"},
+  "state": {"_revision": 1, "_last_modified_by": "init", "_last_modified_at": "2026-08-18T00:00:00Z"},
+  "story_craft": {
+    "reader_contract": {
+      "version": 1,
+      "expectation_debt": [
+        {"id": "exp_001", "created_chapter": 1, "category": "主角觉醒", "satisfied_chapter": null},
+        {"id": "exp_002", "created_chapter": 2, "category": "反派现身", "satisfied_chapter": null},
+        {"id": "exp_003", "created_chapter": 3, "category": "突破境界", "satisfied_chapter": null},
+        {"id": "exp_004", "created_chapter": 4, "category": "盟友加入", "satisfied_chapter": null},
+        {"id": "exp_005", "created_chapter": 5, "category": "秘密揭示", "satisfied_chapter": null},
+        {"id": "exp_006", "created_chapter": 6, "category": "师徒反目", "satisfied_chapter": null},
+        {"id": "exp_007", "created_chapter": 7, "category": "宗门危机", "satisfied_chapter": null},
+        {"id": "exp_008", "created_chapter": 8, "category": "神器获得", "satisfied_chapter": null},
+        {"id": "exp_009", "created_chapter": 9, "category": "爱情线", "satisfied_chapter": null},
+        {"id": "exp_010", "created_chapter": 10, "category": "复仇开始", "satisfied_chapter": null},
+        {"id": "exp_011", "created_chapter": 11, "category": "势力战", "satisfied_chapter": null}
+      ],
+      "causal_credits": {
+        "protagonist_actions_used_without_setup": ["突然领悟绝学", "使用未知道具"]
+      },
+      "endgame_reserves": [
+        {"id": "er_001", "description": "最终决战伏笔", "used_chapter": 5},
+        {"id": "er_002", "description": "终局揭示", "used_chapter": null},
+        {"id": "er_003", "description": "隐藏身世", "used_chapter": 8}
+      ],
+      "swap_debts": []
+    }
+  }
+}
