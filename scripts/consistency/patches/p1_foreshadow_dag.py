@@ -27,6 +27,16 @@ class P1ForeshadowDAG(Patch):
         dag = chain.get("dag", [])
         blockers: list[Blocker] = []
 
+        # 0. missing id guard
+        missing_id = [i for i, fs in enumerate(dag) if not fs.get("id")]
+        if missing_id:
+            blockers.append(Blocker(
+                patch=self.name,
+                chapter=ctx.chapter_num,
+                message=f"伏笔 DAG 缺少 id 字段（共 {len(missing_id)} 处）",
+                fix_hint="为每个 foreshadow DAG 条目补充 id 字段"
+            ))
+
         # 1. 无环检测（DFS）
         if self._has_cycle(dag):
             blockers.append(Blocker(
@@ -71,7 +81,7 @@ class P1ForeshadowDAG(Patch):
 
     def _has_cycle(self, dag: list[dict]) -> bool:
         """DFS 检测环"""
-        graph: dict[str, list[str]] = {fs["id"]: fs.get("depends_on", []) for fs in dag}
+        graph: dict[str, list[str]] = {fs["id"]: fs.get("depends_on", []) for fs in dag if fs.get("id")}
         visited: set[str] = set()
         path: set[str] = set()
 
@@ -88,4 +98,4 @@ class P1ForeshadowDAG(Patch):
             path.remove(node)
             return False
 
-        return any(dfs(fs["id"]) for fs in dag if fs["id"] not in visited)
+        return any(dfs(fs["id"]) for fs in dag if fs.get("id") and fs["id"] not in visited)

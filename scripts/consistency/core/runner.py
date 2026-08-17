@@ -4,7 +4,7 @@ Source: 借鉴 oh-story-claudecode/skills/story-long-write/references/tracking-t
 Path in references: references/01-ai-webnovel-repos/upstream/02-skills/oh-story-claudecode/skills/story-import/references/tracking-transaction.md
 """
 from pathlib import Path
-from .patch_base import Patch, CheckContext, Blocker
+from .patch_base import Patch, CheckContext, ApplyContext, Blocker
 
 
 class ConsistencyRunner:
@@ -60,6 +60,21 @@ class ConsistencyRunner:
             all_blockers.extend(patch.check(ctx))
         return all_blockers
 
+    def apply_all(self, chapter: int) -> None:
+        """Apply all patches' state mutations and persist."""
+        if self.patches is None:
+            self.patches = self._default_patches()
+
+        state = self._load_state()
+        for patch in self.patches:
+            ctx = ApplyContext(
+                project_root=self.project_root,
+                chapter_num=chapter,
+                state=state,
+            )
+            patch.apply(ctx)
+        self._save_state(state)
+
     def _load_state(self) -> dict:
         state_path = self.project_root / ".webnovel" / "state.json"
         if not state_path.exists():
@@ -67,6 +82,12 @@ class ConsistencyRunner:
         import json
         with open(state_path, encoding="utf-8") as f:
             return json.load(f)
+
+    def _save_state(self, state: dict) -> None:
+        state_path = self.project_root / ".webnovel" / "state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        import json
+        state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _load_summaries(self, chapter: int) -> list[dict]:
         summaries_dir = self.project_root / ".webnovel" / "summaries"

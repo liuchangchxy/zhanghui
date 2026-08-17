@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     override.add_argument("--chapter", type=int, required=True)
     override.add_argument("--reason", type=str, required=True)
 
+    # apply
+    apply_p = subparsers.add_parser("apply", help="Apply patch state mutations and persist")
+    apply_p.add_argument("--project-root", type=str, required=True)
+    apply_p.add_argument("--chapter", type=int, required=True)
+
     return parser
 
 
@@ -107,6 +112,12 @@ def main(argv: list[str] | None = None) -> int:
         override_path.parent.mkdir(parents=True, exist_ok=True)
         override_path.write_text(json.dumps(overrides, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"Override recorded for chapter {args.chapter}")
+        return 0
+
+    elif args.command == "apply":
+        runner = ConsistencyRunner(project_root=Path(args.project_root))
+        runner.apply_all(chapter=args.chapter)
+        print(f"Applied all patches for chapter {args.chapter}")
         return 0
 
     return 1  # unknown command

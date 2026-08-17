@@ -3,6 +3,8 @@
 Source: 借鉴 oh-story-claudecode tracking_commit.py 的"派生视图由工具生成"模式
 Path in references: references/01-ai-webnovel-repos/upstream/02-skills/oh-story-claudecode/skills/story-import/references/state-tracking.md
 """
+import re
+
 from ..core.patch_base import Patch, CheckContext, ApplyContext, Blocker
 
 
@@ -22,13 +24,15 @@ class P7DerivedViews(Patch):
             content = fs_table.read_text(encoding="utf-8")
             dag = ctx.state.get("story_craft", {}).get("foreshadow_chain", {}).get("dag", [])
             for fs in dag:
-                if fs.get("id") and fs["id"] not in content:
-                    blockers.append(Blocker(
-                        patch=self.name,
-                        chapter=ctx.chapter_num,
-                        message=f"派生视图 foreshadow_table.md 缺少伏笔 {fs.get('id')}",
-                        fix_hint="运行 consistency apply 重新生成 views/",
-                    ))
+                if fs.get("id"):
+                    pattern = r'\b' + re.escape(fs["id"]) + r'\b'
+                    if not re.search(pattern, content):
+                        blockers.append(Blocker(
+                            patch=self.name,
+                            chapter=ctx.chapter_num,
+                            message=f"派生视图 foreshadow_table.md 缺少伏笔 {fs.get('id')}",
+                            fix_hint="运行 consistency apply 重新生成 views/",
+                        ))
 
         return blockers
 

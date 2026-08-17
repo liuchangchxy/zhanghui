@@ -67,6 +67,28 @@ def test_check_passes_when_views_dir_missing():
         assert blockers == []
 
 
+def test_check_no_false_positive_with_substring():
+    """fs_1 should not match fs_10 in view."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        views_dir = root / ".webnovel" / "views"
+        views_dir.mkdir(parents=True)
+        (views_dir / "foreshadow_table.md").write_text(
+            "| ID | 内容 |\n| fs_10 | unrelated |\n",
+            encoding="utf-8",
+        )
+        state = {
+            "story_craft": {
+                "foreshadow_chain": {
+                    "dag": [{"id": "fs_1", "content": "ok"}]
+                }
+            }
+        }
+        p = P7DerivedViews()
+        blockers = p.check(_ctx(state, root))
+        assert any("fs_1" in b.message for b in blockers)
+
+
 def test_apply_generates_foreshadow_table():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)

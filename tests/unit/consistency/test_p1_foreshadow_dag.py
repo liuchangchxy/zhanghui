@@ -70,3 +70,22 @@ def test_missing_foreshadow_chain_fails():
     p = P1ForeshadowDAG()
     blockers = p.check(_ctx({}, chapter=5))
     assert any("未初始化" in b.message or "foreshadow_chain" in b.message for b in blockers)
+
+
+def test_dag_with_missing_id_does_not_crash():
+    p = P1ForeshadowDAG()
+    state = {
+        "story_craft": {
+            "foreshadow_chain": {
+                "version": 1,
+                "dag": [
+                    {"content": "no id"},  # missing id
+                    {"id": "fs_001", "content": "ok"},
+                ],
+                "validated_at": None,
+                "validation_history": []
+            }
+        }
+    }
+    blockers = p.check(_ctx(state, chapter=5))
+    assert any("缺少 id" in b.message for b in blockers)
