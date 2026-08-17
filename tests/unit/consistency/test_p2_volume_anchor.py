@@ -76,3 +76,48 @@ def test_apply_advances_current_chapter():
     ctx = ApplyContext(project_root=Path("/tmp"), chapter_num=5, state=state)
     p.apply(ctx)
     assert state["story_craft"]["volume_anchors"]["anchors"][0]["current_chapter"] == 5
+
+
+def test_must_not_reveal_wrong_type_blocks():
+    """Fix H: must_not_reveal must be list, not str/dict."""
+    p = P2VolumeAnchor()
+    state = {
+        "story_craft": {
+            "volume_anchors": {
+                "version": 1,
+                "anchors": [
+                    {
+                        "volume": 1, "total_chapters": 10, "current_chapter": 5,
+                        "must_not_reveal": "秘密身份",  # str instead of list
+                    }
+                ]
+            }
+        }
+    }
+    blockers = p.check(_ctx(state, chapter=8, chapter_text="主角揭露了秘密身份"))
+    assert any("must_not_reveal 必须是 list" in b.message for b in blockers)
+
+
+def test_anchor_as_non_dict_does_not_crash():
+    """If an anchor is not a dict, report it without crashing the whole loop."""
+    p = P2VolumeAnchor()
+    state = {
+        "story_craft": {
+            "volume_anchors": {
+                "version": 1,
+                "anchors": [
+                    "not a dict",
+                    {"volume": 1, "total_chapters": 10, "current_chapter": 0, "must_not_reveal": []}
+                ]
+            }
+        }
+    }
+    blockers = p.check(_ctx(state, chapter=8))
+    assert any("不是 dict" in b.message for b in blockers)
+
+
+def test_load_error_reports_blocker():
+    p = P2VolumeAnchor()
+    state = {"_load_error": "OSError: locked"}
+    blockers = p.check(_ctx(state, chapter=5))
+    assert any("无法读取 state.json" in b.message for b in blockers)

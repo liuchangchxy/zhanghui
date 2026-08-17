@@ -3,8 +3,28 @@
 Source: 借鉴 oh-story-claudecode/skills/story-long-write/references/tracking-transaction.md 的事务模式
 Path in references: references/01-ai-webnovel-repos/upstream/02-skills/oh-story-claudecode/skills/story-import/references/tracking-transaction.md
 """
+import json
+import sys
 from pathlib import Path
+
 from .patch_base import Patch, CheckContext, ApplyContext, Blocker
+
+
+def _import_atomic_write_json():
+    """Lazy import: prefer security_utils, fallback to inline raw write."""
+    try:
+        # The plugin ships security_utils at a known path; allow running outside the plugin context.
+        from security_utils import atomic_write_json  # type: ignore
+        return atomic_write_json
+    except ImportError:
+        try:
+            plugin_root = Path(__file__).resolve().parents[3] / ".claude" / "plugins" / "webnovel-writer_chang" / "scripts"
+            if str(plugin_root) not in sys.path:
+                sys.path.insert(0, str(plugin_root))
+            from security_utils import atomic_write_json  # type: ignore
+            return atomic_write_json
+        except ImportError:
+            return None
 
 
 class ConsistencyRunner:
@@ -20,7 +40,7 @@ class ConsistencyRunner:
         from ..patches.p5_state_revision import P5StateRevision
         from ..patches.p6_reader_contract import P6ReaderContract
         from ..patches.p7_derived_views import P7DerivedViews
-        return [
+        patches = [
             P1ForeshadowDAG(),
             P2VolumeAnchor(),
             P3EventMatrix(),
@@ -29,6 +49,15 @@ class ConsistencyRunner:
             P6ReaderContract(),
             P7DerivedViews(),
         ]
+        # Validate depends_on chain: every dependency must resolve to a patch
+        # registered in the default set. Catches typos and missing imports at
+        # init time rather than during a chapter check.
+        names = {p.name for p in patches}
+        for p in patches:
+            for dep in p.depends_on:
+                if dep not in names:
+                    raise RuntimeError(f"Patch {p.name} depends on unknown patch {dep}")
+        return patches
 
     def run_all(
         self,
@@ -57,7 +86,16 @@ class ConsistencyRunner:
                 previous_chapters=previous_chapters,
                 chapter_text=chapter_text,
             )
-            all_blockers.extend(patch.check(ctx))
+            try:
+                patch_blockers = patch.check(ctx)
+            except Exception as e:
+                patch_blockers = [Blocker(
+                    patch=patch.name,
+                    chapter=ctx.chapter_num,
+                    message=f"patch crashed: {type(e).__name__}: {e}",
+                    fix_hint="检查 state.json 是否被手动改坏，或运行 consistency init 重建",
+                )]
+            all_blockers.extend(patch_blockers)
         return all_blockers
 
     def apply_all(self, chapter: int) -> None:
@@ -66,28 +104,47 @@ class ConsistencyRunner:
             self.patches = self._default_patches()
 
         state = self._load_state()
+        # Pop stale fields before applying (Fix F: prevent next check from immediately failing)
+        state.pop("_expected_revision", None)
+        state.pop("_load_error", None)
         for patch in self.patches:
             ctx = ApplyContext(
                 project_root=self.project_root,
                 chapter_num=chapter,
                 state=state,
             )
-            patch.apply(ctx)
+            try:
+                patch.apply(ctx)
+            except Exception as e:
+                # Don't let one bad patch abort the rest — log via state
+                state.setdefault("_apply_errors", []).append(
+                    f"{patch.name}: {type(e).__name__}: {e}"
+                )
+        # Stamp wall-clock timestamp at the end (P5 leaves the field for caller to fill)
+        from datetime import datetime, timezone
+        state.setdefault("state", {})["_last_modified_at"] = datetime.now(timezone.utc).isoformat()
         self._save_state(state)
 
     def _load_state(self) -> dict:
         state_path = self.project_root / ".webnovel" / "state.json"
         if not state_path.exists():
             return {}
-        import json
-        with open(state_path, encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(state_path, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+            return {"_load_error": f"{type(e).__name__}: {e}"}
 
     def _save_state(self, state: dict) -> None:
         state_path = self.project_root / ".webnovel" / "state.json"
         state_path.parent.mkdir(parents=True, exist_ok=True)
-        import json
-        state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_json = _import_atomic_write_json()
+        if atomic_write_json is not None:
+            atomic_write_json(state_path, state, use_lock=True, backup=True)
+        else:
+            state_path.write_text(
+                json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
     def _load_summaries(self, chapter: int) -> list[dict]:
         summaries_dir = self.project_root / ".webnovel" / "summaries"

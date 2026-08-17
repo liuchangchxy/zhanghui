@@ -270,7 +270,13 @@ BLOCKER 处理：
 拆完章后，对每个新章调用：
 
 ```bash
-python3 -m scripts.consistency.cli check --project-root "$PROJECT_ROOT" --chapter {chapter_num}
+# PYTHONPATH 必须指向工具根（${CLAUDE_PROJECT_DIR}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
+# Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
+PYTHONPATH="${CLAUDE_PROJECT_DIR}" python3 -c "
+from scripts.consistency.cli import main
+import sys
+sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
+"
 ```
 
 如有 BLOCKER：用户改章纲后再跑，直到通过。退出码非 0 表示有 blocker。

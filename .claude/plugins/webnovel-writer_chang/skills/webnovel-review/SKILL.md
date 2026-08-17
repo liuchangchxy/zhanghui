@@ -96,7 +96,13 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 Review 阶段额外输出"一致性"维度：
 
 ```bash
-python3 -m scripts.consistency.cli check --project-root "$PROJECT_ROOT" --chapter {chapter_num}
+# PYTHONPATH 必须指向工具根（${CLAUDE_PROJECT_DIR}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
+# Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
+PYTHONPATH="${CLAUDE_PROJECT_DIR}" python3 -c "
+from scripts.consistency.cli import main
+import sys
+sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
+"
 ```
 
 把所有 BLOCKER 列在 review 报告里（patch + message + fix_hint）。

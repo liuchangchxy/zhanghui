@@ -1,4 +1,4 @@
-from scripts.consistency.cli import build_parser
+from scripts.consistency.cli import build_parser, main
 import pytest
 
 
@@ -35,3 +35,25 @@ def test_parser_override_command():
     args = parser.parse_args(["override", "--chapter", "5", "--reason", "user confirmed"])
     assert args.command == "override"
     assert args.reason == "user confirmed"
+
+
+def test_cli_init_creates_state(tmp_path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    rc = main(["init", "--project-root", str(proj), "--volume", "1"])
+    assert rc == 0
+    state_path = proj / ".webnovel" / "state.json"
+    assert state_path.exists()
+    import json
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert "story_craft" in state
+
+
+def test_cli_override_writes_override_file(tmp_path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / ".webnovel").mkdir()
+    rc = main(["override", "--project-root", str(proj), "--chapter", "5", "--reason", "test"])
+    assert rc == 0
+    override_path = proj / ".webnovel" / "consistency_overrides.json"
+    assert override_path.exists()

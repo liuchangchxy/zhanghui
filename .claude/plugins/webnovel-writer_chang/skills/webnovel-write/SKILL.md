@@ -221,7 +221,13 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 写前必须通过一致性检查：
 
 ```bash
-python3 -m scripts.consistency.cli check --project-root "$PROJECT_ROOT" --chapter {chapter_num}
+# PYTHONPATH 必须指向工具根（${CLAUDE_PROJECT_DIR}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
+# Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
+PYTHONPATH="${CLAUDE_PROJECT_DIR}" python3 -c "
+from scripts.consistency.cli import main
+import sys
+sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
+"
 ```
 
 如有 BLOCKER，必须先解决再写。
@@ -443,15 +449,12 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 写后 commit 时触发一致性 apply（更新 state + 派生视图）：
 
 ```bash
-python3 -m scripts.consistency.cli apply --project-root "$PROJECT_ROOT" --chapter {chapter_num} 2>/dev/null || python3 -c "
-import sys; sys.path.insert(0, '.')
-from scripts.consistency.core.runner import ConsistencyRunner
-from scripts.consistency.cli import _require_project_root
-import json
-project_root = _require_project_root(['--project-root', '$PROJECT_ROOT'])
-r = ConsistencyRunner(project_root)
-for p in r.patches:
-    p.apply(__import__('scripts.consistency.core.patch_base', fromlist=['ApplyContext']).ApplyContext(project_root=project_root, chapter_num={chapter_num}, state=json.loads(open(project_root/'.webnovel/state.json', encoding='utf-8').read_text())))
+# PYTHONPATH 必须指向工具根（${CLAUDE_PROJECT_DIR}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
+# Exit 0 = applied。Exit 1 = BLOCKER。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
+PYTHONPATH="${CLAUDE_PROJECT_DIR}" python3 -c "
+from scripts.consistency.cli import main
+import sys
+sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
 "
 ```
 

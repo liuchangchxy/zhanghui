@@ -89,3 +89,83 @@ def test_dag_with_missing_id_does_not_crash():
     }
     blockers = p.check(_ctx(state, chapter=5))
     assert any("缺少 id" in b.message for b in blockers)
+
+
+def test_real_list_format_dag_passes():
+    """Real migrate_story_craft.py format: foreshadow_chain is a list, not wrapped in {dag: ...}."""
+    p = P1ForeshadowDAG()
+    state = {
+        "story_craft": {
+            "foreshadow_chain": [
+                {"id": "fs_001", "content": "ok", "planted_chapter": 1, "paid_off_chapter": None, "status": "active", "depends_on": []}
+            ]
+        }
+    }
+    blockers = p.check(_ctx(state, chapter=5))
+    assert blockers == []
+
+
+def test_real_list_format_detects_cycle():
+    """Cycle detection must work in the real list-of-dicts format too."""
+    p = P1ForeshadowDAG()
+    state = {
+        "story_craft": {
+            "foreshadow_chain": [
+                {"id": "fs_001", "planted_chapter": 1, "paid_off_chapter": 5, "status": "active", "depends_on": ["fs_002"]},
+                {"id": "fs_002", "planted_chapter": 1, "paid_off_chapter": 5, "status": "active", "depends_on": ["fs_001"]},
+            ]
+        }
+    }
+    blockers = p.check(_ctx(state, chapter=5))
+    assert any("循环" in b.message for b in blockers)
+
+
+def test_dag_with_duplicate_ids_blocks():
+    p = P1ForeshadowDAG()
+    state = {
+        "story_craft": {
+            "foreshadow_chain": {
+                "version": 1,
+                "dag": [
+                    {"id": "fs_001", "content": "first"},
+                    {"id": "fs_001", "content": "second"},  # duplicate
+                ]
+            }
+        }
+    }
+    blockers = p.check(_ctx(state, chapter=5))
+    assert any("重复" in b.message for b in blockers)
+
+
+def test_dag_with_depends_on_none_does_not_crash():
+    """depends_on=None should be handled, not raise TypeError on iteration."""
+    p = P1ForeshadowDAG()
+    state = {
+        "story_craft": {
+            "foreshadow_chain": {
+                "version": 1,
+                "dag": [
+                    {"id": "fs_001", "depends_on": None, "planted_chapter": 1, "paid_off_chapter": None, "status": "active"},
+                ]
+            }
+        }
+    }
+    # Should not raise; should pass (no cycle, no overdue)
+    blockers = p.check(_ctx(state, chapter=5))
+    # No cycle because depends_on is None
+    assert not any("循环" in b.message for b in blockers)
+
+
+def test_load_error_reports_blocker():
+    """If state has _load_error (corrupt JSON), P1 should report it."""
+    p = P1ForeshadowDAG()
+    state = {"_load_error": "JSONDecodeError: bad json"}
+    blockers = p.check(_ctx(state, chapter=5))
+    assert any("无法读取 state.json" in b.message for b in blockers)
+
+
+def test_unknown_foreshadow_chain_format_blocks():
+    p = P1ForeshadowDAG()
+    state = {"story_craft": {"foreshadow_chain": "some string"}}
+    blockers = p.check(_ctx(state, chapter=5))
+    assert any("格式未知" in b.message for b in blockers)
