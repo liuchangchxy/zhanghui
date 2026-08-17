@@ -1,0 +1,17 @@
+{
+  "project_info": {"name": "test-dag-bad", "genre": "xianxia"},
+  "state": {"_revision": 1, "_last_modified_by": "init", "_last_modified_at": "2026-08-18T00:00:00Z"},
+  "story_craft": {
+    "foreshadow_chain": {
+      "version": 1,
+      "dag": [
+        {"id": "fs_001", "content": "环A", "level": "中层", "planted_chapter": 1, "paid_off_chapter": 5, "status": "active", "depends_on": ["fs_002"], "introduced_by": "init"},
+        {"id": "fs_002", "content": "环B", "level": "中层", "planted_chapter": 1, "paid_off_chapter": 5, "status": "active", "depends_on": ["fs_001"], "introduced_by": "init"},
+        {"id": "fs_003", "content": "提前回收", "level": "表层", "planted_chapter": 5, "paid_off_chapter": 3, "status": "active", "depends_on": [], "introduced_by": "init"},
+        {"id": "fs_004", "content": "超期未收", "level": "深层", "planted_chapter": 1, "paid_off_chapter": 5, "status": "active", "depends_on": [], "introduced_by": "init"}
+      ],
+      "validated_at": null,
+      "validation_history": []
+    }
+  }
+}
