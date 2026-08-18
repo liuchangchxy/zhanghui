@@ -236,26 +236,60 @@ def _inject_craft_issues(project_root: Path, result, chapter: int) -> None:
 
 
 def chapter_to_volume(state: dict, chapter: int) -> int:
-    """Return current volume. Single-volume assumption: returns volume_beat.volume.
+    """Return current volume.
 
-    Note: this function does NOT actually use the `chapter` argument — the current
-    state model only tracks one volume_beat (the active volume). Multi-volume
-    support would require volumes_planned lookup; falls back to 1 when
-    volume_beat is missing. Future maintainers: do NOT expect this function to
+    C3: sibling-aware — V2+ story-craft stores `volume_beats: dict[str, beat]`.
+    V1 still uses singular `volume_beat: {..., volume: N}`. Falls back to 1
+    when both keys are missing.
+
+    Note: this function does NOT actually use the `chapter` argument — the
+    current state model only tracks one active volume. Multi-volume support
+    would require volumes_planned lookup; falls back to 1 when no beat key
+    is present. Future maintainers: do NOT expect this function to
     compute volume from chapter boundaries — see _resolve_volume_for_chapter in
     dashboard/app.py for the multi-volume-aware variant.
     """
-    return state.get("story_craft", {}).get("volume_beat", {}).get("volume", 1)
+    craft = state.get("story_craft", {})
+    # Prefer V2+ sibling key; fall back to V1 singular key (back-compat)
+    v2_beats = craft.get("volume_beats")
+    if isinstance(v2_beats, dict) and v2_beats:
+        # Use the lexically largest index that has a beat (proxy for "current").
+        try:
+            return max(int(k) for k in v2_beats.keys())
+        except (TypeError, ValueError):
+            pass
+    return craft.get("volume_beat", {}).get("volume", 1)
 
 
 def run_craft_checks(state: dict, chapter: int) -> dict:
     """Run all story_craft checks for a given chapter. Return issues dict."""
     issues: dict[str, list[str]] = {"blockers": [], "warnings": []}
 
+    # C3: sibling-aware read for V2+ (volume_beats) with V1 fallback (volume_beat).
+    craft = state.get("story_craft", {})
+    active_volume_beat: dict | None = None
+    if isinstance(craft.get("volume_beats"), dict) and craft["volume_beats"]:
+        # Pick the active volume's beat for beat-compliance check.
+        # Prefer the entry with `volume` field; otherwise pick the highest key.
+        candidates = craft["volume_beats"]
+        for vb in candidates.values():
+            if isinstance(vb, dict) and isinstance(vb.get("volume"), int):
+                active_volume_beat = vb
+                break
+        if active_volume_beat is None:
+            try:
+                top_key = max(candidates.keys(), key=lambda k: int(k))
+                active_volume_beat = candidates[top_key] if isinstance(candidates[top_key], dict) else None
+            except (TypeError, ValueError):
+                pass
+    if active_volume_beat is None and isinstance(craft.get("volume_beat"), dict):
+        # V1 legacy path (kept 100% unchanged)
+        active_volume_beat = craft["volume_beat"]
+
     # Volume beat (only if initialized)
-    if "volume_beat" in state.get("story_craft", {}):
-        vol = state["story_craft"]["volume_beat"]["volume"]
-        if vol == chapter_to_volume(state, chapter):
+    if active_volume_beat is not None:
+        vol = active_volume_beat.get("volume")
+        if isinstance(vol, int) and vol == chapter_to_volume(state, chapter):
             vol_issues = check_volume_beat(state, volume=vol)
             for issue in vol_issues:
                 if "BLOCKER" in issue:

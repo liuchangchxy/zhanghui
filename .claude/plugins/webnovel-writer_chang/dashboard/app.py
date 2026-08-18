@@ -964,8 +964,20 @@ def create_app(project_root: str | Path | None = None) -> FastAPI:
     def craft_beat_panel(volume: int):
         """15-beat 卷节拍面板。"""
         craft = _load_story_craft()
-        volume_beat = craft.get("volume_beat") if isinstance(craft.get("volume_beat"), dict) else {}
-        beats = volume_beat.get("beats") if isinstance(volume_beat.get("beats"), list) else []
+        # C3: sibling-aware read — V2+ story-craft stores beat sheets under the
+        # `volume_beats` key (per-volume dict). V1 still uses the singular
+        # `volume_beat` key (back-compat: V1 path MUST stay unchanged).
+        beats: list = []
+        if isinstance(craft.get("volume_beats"), dict):
+            v2 = craft["volume_beats"].get(str(volume))
+            if isinstance(v2, dict):
+                maybe_beats = v2.get("beats")
+                if isinstance(maybe_beats, list):
+                    beats = maybe_beats
+        if not beats:
+            # V1 legacy path (kept 100% unchanged)
+            volume_beat = craft.get("volume_beat") if isinstance(craft.get("volume_beat"), dict) else {}
+            beats = volume_beat.get("beats") if isinstance(volume_beat.get("beats"), list) else []
         if not beats:
             return _empty_panel(
                 "节拍",
