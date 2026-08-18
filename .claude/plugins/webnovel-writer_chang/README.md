@@ -95,6 +95,24 @@ ls .webnovel/observability/ 2>/dev/null
 | `/webnovel-style-profile` | 无 | 文风指纹 + 漂移检测（≥ 3 章时建基线）|
 - **Multi-volume init** (`webnovel-init` Step 1.6 + Step 5.5) — collect V1-VN skeleton with optional AI drafting; status state machine per spec `docs/superpowers/specs/2026-08-18-multi-volume-init-design.md`
 
+## `--all-volumes` 模式（macro upfront + micro chunked）
+
+`init_project.py` 新增 `--all-volumes` CLI 选项：
+
+````markdown
+```bash
+python3 scripts/init_project.py <project_dir> <title> \
+    --genre <genre> --target-chapters <N> --target-words <W> \
+    --all-volumes
+```
+````
+
+**效果**：一次性铺 N 卷蓝图（每卷产 `详细大纲.md` / `15节拍.md` / `时间线.md` 三件套）。
+
+**默认行为不变**（无 `--all-volumes`）：只更新 V+1 锚点，与旧版本兼容。
+
+详见 `docs/superpowers/specs/2026-08-19-macro-upfront-micro-chunked-design.md`。
+
 ## CHANGES 协议
 
 每章末尾追加 `<chapter_changes>...</chapter_changes>` 块，8 个顶级字段声明本章对设定集/人物/物品/伏笔的所有变更。详见 `changes-protocol.md`。

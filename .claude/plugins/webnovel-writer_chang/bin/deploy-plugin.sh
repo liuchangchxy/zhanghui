@@ -51,21 +51,31 @@ fi
 RUNTIME_FILES=(
     "scripts/data_modules/volume_state.py"
     "scripts/data_modules/ai_volume_drafter.py"
+    "scripts/data_modules/promise_ledger.py"     # NEW
+    "scripts/data_modules/chunked_write.py"      # NEW
     "scripts/init_project.py"
+    "scripts/story_craft.py"
     "scripts/update_master_outline.py"
     "skills/webnovel-init/SKILL.md"
     "skills/webnovel-init/references/multi-volume-ux.md"
     "skills/webnovel-plan/SKILL.md"
+    "skills/webnovel-write/SKILL.md"             # NEW
     "templates/output/大纲-总纲.md"
     "README.md"
+    "bin/deploy-plugin.sh"
 )
 
 # Test files to sync if --skip-tests is NOT set (e.g., if user wants e2e tests in marketplace)
 TEST_FILES=(
     "scripts/tests/unit/test_volume_state.py"
     "scripts/tests/unit/test_ai_volume_drafter.py"
+    "scripts/tests/unit/test_promise_ledger.py"           # NEW
+    "scripts/tests/unit/test_chunked_write.py"            # NEW
+    "scripts/tests/unit/test_story_craft_multivolume.py"  # NEW
     "scripts/tests/integration/test_init_multi_volume.py"
     "scripts/tests/integration/test_plan_v_plus_one_anchor.py"
+    "scripts/tests/integration/test_plan_all_volumes.py"  # NEW
+    "scripts/tests/integration/test_e2e_macro_micro.py"   # NEW
     "scripts/tests/integration/test_e2e_multi_volume_init.py"
     "scripts/tests/integration/test_update_master_outline_volumes.py"
 )
