@@ -102,3 +102,51 @@ class PromiseLedger:
 
     def to_list(self) -> list[dict]:
         return [e.to_dict() for e in self.entries]
+
+    # --- T2 cross-volume ledger API ---
+
+    def upsert(self, entry: ForeshadowEntry) -> None:
+        """Add or replace entry by id. Updates updated_at via new entry's value."""
+        for i, existing in enumerate(self.entries):
+            if existing.id == entry.id:
+                self.entries[i] = entry
+                return
+        self.entries.append(entry)
+
+    def advance(self, entry_id: str, at_chapter: int) -> None:
+        """Transition entry to ADVANCED status. Note: at_chapter not stored on entry (audit log separate)."""
+        self._mutate_status(entry_id, ForeshadowStatus.ADVANCED)
+
+    def payoff(self, entry_id: str, at_chapter: int) -> None:
+        """Transition entry to PAID_OFF status."""
+        self._mutate_status(entry_id, ForeshadowStatus.PAID_OFF)
+
+    def _mutate_status(self, entry_id: str, new_status: ForeshadowStatus) -> None:
+        """Replace entry with a new ForeshadowEntry with new status (frozen-compatible)."""
+        for i, existing in enumerate(self.entries):
+            if existing.id == entry_id:
+                # Build replacement via from_dict (frozen-safe construction)
+                d = existing.to_dict()
+                d["status"] = new_status.value
+                d["updated_at"] = datetime.now(timezone.utc).isoformat()
+                self.entries[i] = ForeshadowEntry.from_dict(d)
+                return
+        raise KeyError(f"foreshadow not found: {entry_id}")
+
+    def list_overdue(self, current_chapter: int, current_volume: int) -> list[ForeshadowEntry]:
+        """Return entries that should have been paid off but aren't."""
+        result: list[ForeshadowEntry] = []
+        for e in self.entries:
+            if e.status == ForeshadowStatus.PAID_OFF:
+                continue
+            if e.expected_payoff_volume < current_volume:
+                result.append(e)
+            elif (e.expected_payoff_volume == current_volume
+                  and e.expected_payoff_chapter < current_chapter):
+                result.append(e)
+        return result
+
+    def list_for_volume(self, volume: int) -> list[ForeshadowEntry]:
+        """Return entries planted OR scheduled to payoff in given volume."""
+        return [e for e in self.entries
+                if e.planted_volume == volume or e.expected_payoff_volume == volume]
