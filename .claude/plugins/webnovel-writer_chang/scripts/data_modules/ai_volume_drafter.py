@@ -68,7 +68,10 @@ def _parse(raw: str, target_index: int) -> CandidateVolume:
 
 
 def _extract(text: str, key: str) -> str:
+    # Normalize half-width colon to full-width before parsing
+    # (LLMs sometimes return either form)
     for line in text.splitlines():
-        if line.strip().startswith(key + "："):
-            return line.split("：", 1)[1].strip()
+        normalized = line.replace(":", "：")
+        if normalized.strip().startswith(key + "："):
+            return normalized.split("：", 1)[1].strip()
     return ""

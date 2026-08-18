@@ -51,3 +51,18 @@ def test_draft_raises_on_missing_fields():
             one_line_concept="c", confirmed_volumes=[],
             genre="玄幻", target_index=1, llm_call=fake_llm,
         )
+
+
+def test_draft_accepts_half_width_colon():
+    """Some LLMs return ASCII ':' instead of full-width '：'; both should parse."""
+    fake_response = "卷名:起势\n核心冲突:宗门考核\n卷末高潮:夺得首席\n"
+    cand = draft_next_volume(
+        one_line_concept="少年修仙",
+        confirmed_volumes=[],
+        genre="修仙",
+        target_index=1,
+        llm_call=lambda prompt: fake_response,
+    )
+    assert cand.title == "起势"
+    assert cand.core_conflict == "宗门考核"
+    assert cand.climax == "夺得首席"
