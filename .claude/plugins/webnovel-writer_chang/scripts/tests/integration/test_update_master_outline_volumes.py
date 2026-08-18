@@ -20,9 +20,13 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
+
 # File: scripts/tests/integration/test_update_master_outline_volumes.py
 # Path bug to avoid: do NOT append "/scripts" — parents[2] IS the scripts dir.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from update_master_outline import _require_current_volume_artifacts, MasterOutlineSyncError  # noqa: E402
 
 
 def test_module_imports():
@@ -80,3 +84,19 @@ def test_sync_master_outline_writes_v_plus_1_row_from_writeback():
         assert not (outline_dir / "第2卷-节拍表.md").exists()
         assert not (outline_dir / "第2卷-时间线.md").exists()
         assert not (outline_dir / "第3卷-详细大纲.md").exists()
+
+
+def test_require_current_volume_artifacts_all_volumes_mode_skips(tmp_path):
+    """Spec §6.3: in --all-volumes mode, missing V1 artifacts must NOT raise."""
+    # No artifacts created
+    (tmp_path / "大纲").mkdir()
+    # Should NOT raise — all_volumes_mode=True short-circuits
+    result = _require_current_volume_artifacts(tmp_path, volume=1, all_volumes_mode=True)
+    assert result == []
+
+
+def test_require_current_volume_artifacts_default_still_enforces(tmp_path):
+    """Default behavior unchanged: missing artifacts raise MasterOutlineSyncError."""
+    (tmp_path / "大纲").mkdir()
+    with pytest.raises(MasterOutlineSyncError, match="planning artifacts are incomplete"):
+        _require_current_volume_artifacts(tmp_path, volume=1)

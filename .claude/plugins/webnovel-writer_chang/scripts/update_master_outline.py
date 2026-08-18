@@ -34,7 +34,14 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _require_current_volume_artifacts(project_root: Path, volume: int) -> list[str]:
+def _require_current_volume_artifacts(
+    project_root: Path,
+    volume: int,
+    all_volumes_mode: bool = False,
+) -> list[str]:
+    """在 --all-volumes 模式下, 不需要当前卷已写过."""
+    if all_volumes_mode:
+        return []
     missing: list[str] = []
     outline_dir = project_root / "大纲"
     for pattern in REQUIRED_VOLUME_ARTIFACTS:
