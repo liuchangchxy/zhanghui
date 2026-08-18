@@ -333,7 +333,23 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
 
 ```
 
-执行最小总纲写回（只更新 `大纲/总纲.md` 的 V+1 卷名 / 核心冲突 / 卷末高潮与伏笔表，不生成下一卷详细大纲 / 节拍表 / 时间线 / 章纲）：
+执行最小总纲写回（语义调整）：从 `.webnovel/state.json` 读取 `volumes[]`，按状态决定 V+1 行的填充：
+
+- 若 V+1 `status=confirmed`：从 state.json 取其 `title / core_conflict / climax`，写回总纲 V+1 行
+- 若 V+1 `status=deferred` 或不存在：V+1 行留空（不伪造）
+- **不生成** V+2+ 详细大纲 / 节拍表 / 时间线 / 章纲（与原硬约束一致）
+
+读 V+1 字段用 `VolumeStateManager.get_volume(volume_id + 1)`：
+
+```python
+from data_modules.volume_state import VolumeStateManager
+import json
+state = json.loads(open("${PROJECT_ROOT}/.webnovel/state.json", encoding="utf-8").read())
+mgr = VolumeStateManager(state)
+next_vol = mgr.get_volume(${volume_id} + 1)
+# next_vol is None 或 status=deferred → 跳过
+# next_vol.status=confirmed → 用其字段填总纲 V+1 行
+```
 
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" master-outline-sync \
