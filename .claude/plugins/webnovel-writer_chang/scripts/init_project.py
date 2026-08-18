@@ -480,7 +480,9 @@ def init_project(
     if protagonist_name:
         state["protagonist_state"]["name"] = protagonist_name
 
-    # Volume skeleton: write volumes[] to state.json per spec §4
+    # Volume skeleton: write volumes[] to state.json per spec §4.
+    # Fail-fast on malformed entries (missing `index` etc.) — these are
+    # structural errors the caller should fix, not silently coerced.
     if volume_skeleton:
         from data_modules.volume_state import (
             VolumeRecord, VolumeSource, VolumeStatus,
@@ -510,8 +512,9 @@ def init_project(
         confirmed_max = max(
             (v["index"] for v in volumes if v["status"] == "confirmed"), default=0
         )
+        # Preserve prior planning_horizon values if already set; only set defaults for first init
+        state["project_info"].setdefault("later_volumes_status", "deferred")
         state["project_info"]["confirmed_through_volume"] = confirmed_max
-        state["project_info"]["later_volumes_status"] = "deferred"
     else:
         # No skeleton: still initialize empty volumes[] and defaults so plan skill can read
         state.setdefault("volumes", [])
