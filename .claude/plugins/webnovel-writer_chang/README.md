@@ -46,6 +46,18 @@ ai写小说工具开发/
 
 测试环境未自带（请按上面第 1-2 步手动建一个）。
 
+## 部署到 marketplace（每次 merge 到 main 后必跑）
+
+Claude Code 从 `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/` 加载技能，不是从这个 source 目录。**改完代码必须跑 deploy 才能让 AI 看到新功能**：
+
+```bash
+bin/deploy-plugin.sh                # 真正同步
+bin/deploy-plugin.sh --dry-run      # 看会同步哪些文件，不动 marketplace
+bin/deploy-plugin.sh --skip-tests   # 不同步测试文件（默认会同步）
+```
+
+Source plugin 和 marketplace 是两份独立副本，**不是 symlink**。`sync_plugin_version.py` 只同步版本号字段，不同步文件；`bin/deploy-plugin.sh` 是新的 wrapper，负责文件同步 + 调用 version sync。
+
 ## 文档
 
 - **设计文档**：`docs/superpowers/specs/2026-08-08-webnovel-writer-fork-design.md`
