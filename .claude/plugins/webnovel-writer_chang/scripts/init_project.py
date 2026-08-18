@@ -481,40 +481,34 @@ def init_project(
         state["protagonist_state"]["name"] = protagonist_name
 
     # Volume skeleton: write volumes[] to state.json per spec §4.
-    # Fail-fast on malformed entries (missing `index` etc.) — these are
+    # Use VolumeStateManager to enforce invariants (index continuity, etc.).
+    # Fail-fast on malformed entries (missing `index` or invalid
+    # status/source enum values raise ValueError) — these are
     # structural errors the caller should fix, not silently coerced.
     if volume_skeleton:
         from data_modules.volume_state import (
-            VolumeRecord, VolumeSource, VolumeStatus,
+            VolumeRecord, VolumeSource, VolumeStatus, VolumeStateManager,
         )
-        volumes: list[dict] = []
+
+        # Validate the FULL skeleton for index continuity BEFORE writing.
+        # VolumeStateManager.append_or_update enforces one-at-a-time,
+        # so we pre-check by walking through and calling it.
+        mgr = VolumeStateManager(state)
         for v in volume_skeleton:
-            try:
-                status = VolumeStatus(v.get("status", "confirmed"))
-            except ValueError:
-                status = VolumeStatus.CONFIRMED
-            try:
-                source = VolumeSource(v.get("source", "human"))
-            except ValueError:
-                source = VolumeSource.HUMAN
             rec = VolumeRecord(
                 index=int(v["index"]),
                 title=v.get("title", ""),
                 chapter_range=v.get("chapter_range", [0, 0]),
                 core_conflict=v.get("core_conflict", ""),
                 climax=v.get("climax", ""),
-                status=status,
-                source=source,
-            ).to_dict()
-            rec["updated_at"] = _now_iso()
-            volumes.append(rec)
-        state["volumes"] = volumes
-        confirmed_max = max(
-            (v["index"] for v in volumes if v["status"] == "confirmed"), default=0
-        )
-        # Preserve prior planning_horizon values if already set; only set defaults for first init
+                status=VolumeStatus(v.get("status", "confirmed")),  # raises ValueError on invalid
+                source=VolumeSource(v.get("source", "human")),       # raises ValueError on invalid
+            )
+            mgr.append_or_update(rec)
+        # mgr has already written to state["volumes"] via append_or_update
+        # update planning_horizon (VolumeStateManager._update_horizon was called per append)
+        # setdefault for later_volumes_status to preserve re-init state
         state["project_info"].setdefault("later_volumes_status", "deferred")
-        state["project_info"]["confirmed_through_volume"] = confirmed_max
     else:
         # No skeleton: still initialize empty volumes[] and defaults so plan skill can read
         state.setdefault("volumes", [])

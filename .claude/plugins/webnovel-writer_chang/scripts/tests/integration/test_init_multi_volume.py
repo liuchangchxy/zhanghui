@@ -106,3 +106,46 @@ def test_init_single_volume_does_not_fabricate_v2():
         outline = (project_path / "大纲" / "总纲.md").read_text(encoding="utf-8")
         assert "### 第1卷" in outline
         assert "### 第2卷" not in outline  # not pre-generated
+
+
+def test_init_rejects_hole_in_skeleton():
+    """Skeleton with index gap (e.g. [1, 3]) must raise ValueError (spec §4.2)."""
+    import pytest
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_path = Path(tmpdir)
+        with pytest.raises(ValueError):
+            init_project(
+                project_dir=str(project_path),
+                title="Hole",
+                genre="玄幻",
+                target_chapters=100,
+                target_words=300000,
+                volume_skeleton=[
+                    {"index": 1, "title": "V1", "chapter_range": [1, 50],
+                     "core_conflict": "A", "climax": "B",
+                     "status": "confirmed", "source": "human"},
+                    {"index": 3, "title": "V3", "chapter_range": [81, 100],
+                     "core_conflict": "X", "climax": "Y",
+                     "status": "confirmed", "source": "human"},
+                ],
+            )
+
+
+def test_init_rejects_invalid_status():
+    """Invalid status string in skeleton must raise ValueError (fail-fast)."""
+    import pytest
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_path = Path(tmpdir)
+        with pytest.raises(ValueError):
+            init_project(
+                project_dir=str(project_path),
+                title="BadStatus",
+                genre="玄幻",
+                target_chapters=100,
+                target_words=300000,
+                volume_skeleton=[
+                    {"index": 1, "title": "V1", "chapter_range": [1, 100],
+                     "core_conflict": "A", "climax": "B",
+                     "status": "INVALID_ENUM_VALUE", "source": "human"},
+                ],
+            )
