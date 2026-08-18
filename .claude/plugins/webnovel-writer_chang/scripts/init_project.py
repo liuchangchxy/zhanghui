@@ -962,6 +962,88 @@ __pycache__/
     print(" - 大纲/总纲.md")
 
 
+def _render_volume_blueprint(volume: dict, total_project_chapters: int) -> tuple[str, str, str]:
+    """Render 详细大纲 / 15节拍 / 时间线 三件套 for one volume."""
+    idx = volume["index"]
+    title = volume.get("title", f"V{idx}")
+    ch_range = volume.get("chapter_range") or [0, 0]
+    core_conflict = volume.get("core_conflict", "")
+    climax = volume.get("climax", "")
+    vol_chapters = max(1, ch_range[1] - ch_range[0] + 1)
+
+    # 第N卷-详细大纲.md
+    detailed = (
+        f"# 第{idx}卷 详细大纲 — {title}\n\n"
+        f"**章节范围**: {ch_range[0]}-{ch_range[1]} ({vol_chapters} 章)\n"
+        f"**核心冲突**: {core_conflict}\n"
+        f"**卷末高潮**: {climax}\n\n"
+        f"## 章节蓝图\n\n"
+        f"（plan 流程 Step 7 填充 chapter list；本骨架由 --all-volumes 自动生成）\n"
+    )
+
+    # 第N卷-15节拍.md (Save the Cat)
+    beats = [
+        "Opening Image", "Theme Stated", "Setup", "Catalyst",
+        "Debate", "Break Into Two", "B Story", "Fun and Games",
+        "Midpoint", "Bad Guys Close In", "All Is Lost",
+        "Dark Night of the Soul", "Break Into Three", "Finale", "Final Image",
+    ]
+    percentages = [0.01, 0.05, 0.10, 0.10, 0.20, 0.20, 0.22, 0.50, 0.50, 0.75, 0.75, 0.80, 0.80, 0.99, 1.00]
+    beat_lines = []
+    for name, pct in zip(beats, percentages):
+        ch = max(1, round(pct * vol_chapters))
+        beat_lines.append(f"- **{name}** — ch {ch}")
+    beat_sheet = (
+        f"# 第{idx}卷 15-节拍表 — {title}\n\n"
+        f"**节拍分布算法**: 比例法 (vol_chapters={vol_chapters})\n\n"
+        + "\n".join(beat_lines) + "\n"
+    )
+
+    # 第N卷-时间线.md
+    timeline = (
+        f"# 第{idx}卷 时间线 — {title}\n\n"
+        f"**章节范围**: ch {ch_range[0]} - ch {ch_range[1]}\n"
+        f"**项目总章节**: {total_project_chapters}\n\n"
+        f"（事件时间线由 plan 流程 Step 6.5 填充；本骨架由 --all-volumes 自动生成）\n"
+    )
+    return detailed, beat_sheet, timeline
+
+
+def generate_volume_blueprints(project_root, all_volumes: bool = False) -> int:
+    """按 confirmed volumes[] 生成 N 卷蓝图三件套.
+
+    Args:
+        project_root: 项目根目录.
+        all_volumes: True 一次性铺全部 confirmed 卷; False 不铺.
+
+    Returns:
+        实际写入的卷数.
+    """
+    if not all_volumes:
+        return 0
+    state_path = Path(project_root) / ".webnovel" / "state.json"
+    if not state_path.is_file():
+        return 0
+    import json
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    volumes = state.get("volumes", [])
+    confirmed = [v for v in volumes if v.get("status") == "confirmed"]
+    if not confirmed:
+        return 0
+    total_project_chapters = state.get("project_info", {}).get("target_chapters", 600)
+    outline_dir = Path(project_root) / "大纲"
+    outline_dir.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for vol in confirmed:
+        idx = vol["index"]
+        detailed, beat_sheet, timeline = _render_volume_blueprint(vol, total_project_chapters)
+        (outline_dir / f"第{idx}卷-详细大纲.md").write_text(detailed, encoding="utf-8")
+        (outline_dir / f"第{idx}卷-15节拍.md").write_text(beat_sheet, encoding="utf-8")
+        (outline_dir / f"第{idx}卷-时间线.md").write_text(timeline, encoding="utf-8")
+        written += 1
+    return written
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="网文项目初始化脚本（生成项目结构 + state.json + 基础模板）")
     parser.add_argument("project_dir", help="项目目录（建议 ./webnovel-project）")
@@ -1011,6 +1093,10 @@ def main() -> None:
     parser.add_argument("--antagonist-level", default="", help="反派等级（深度模式）")
     parser.add_argument("--target-reader", default="", help="目标读者（深度模式）")
     parser.add_argument("--platform", default="", help="发布平台（深度模式）")
+    parser.add_argument(
+        "--all-volumes", action="store_true",
+        help="一次性铺 N 卷蓝图 (覆盖所有 confirmed volumes). 默认关闭保持现状兼容."
+    )
 
     args = parser.parse_args()
 
@@ -1053,6 +1139,10 @@ def main() -> None:
         reference_research_dir=args.reference_research_dir,
         reference_overwrite=args.reference_overwrite,
     )
+
+    if getattr(args, 'all_volumes', False):
+        written = generate_volume_blueprints(args.project_dir, all_volumes=True)
+        print(f"--all-volumes: wrote {written} volume blueprint(s)")
 
 
 if __name__ == "__main__":
