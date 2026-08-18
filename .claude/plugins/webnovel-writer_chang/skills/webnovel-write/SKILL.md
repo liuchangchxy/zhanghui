@@ -207,6 +207,20 @@ if issues:
 
 **逃生口**：`WEBNOVEL_DISABLE_CHUNKED_GATE=1` 临时跳过本检查。
 
+### Step 0.6：Snapshot Checkpoint（oh-story 模式）
+
+每写 N 章（默认 3）触发一次 snapshot checkpoint；用于强制回写 CHANGES + 状态校验。
+
+```python
+from data_modules.chunked_write import should_take_snapshot
+
+if should_take_snapshot(chapter=next_ch, snapshot_every=3):
+    print(f"Snapshot checkpoint at chapter {next_ch}")
+    # 强制写 CHANGES + 状态校验（由 Step 4.5 + Step 5.4/5.6 联合覆盖）
+```
+
+默认 `snapshot_every=3`（参考 oh-story 模式），可通过 `ChunkedWritePolicy.snapshot_every` 调整；`WEBNOVEL_DISABLE_CHUNKED_SNAPSHOT=1` 可跳过本 checkpoint。
+
 ### Step 1：写作任务书（context-agent 生成直写执行包）
 
 使用 Agent 调用 `webnovel-writer:context-agent`，参数：
