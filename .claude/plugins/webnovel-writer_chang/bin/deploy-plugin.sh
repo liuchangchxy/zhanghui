@@ -56,6 +56,8 @@ RUNTIME_FILES=(
     "scripts/init_project.py"
     "scripts/story_craft.py"
     "scripts/update_master_outline.py"
+    "scripts/review_pipeline.py"          # NEW
+    "dashboard/app.py"                    # NEW
     "skills/webnovel-init/SKILL.md"
     "skills/webnovel-init/references/multi-volume-ux.md"
     "skills/webnovel-plan/SKILL.md"
