@@ -302,3 +302,116 @@ def test_volume_state_payoff_writes_back(fresh_state):
     ))
     mgr.payoff_foreshadow("fs_p", at_chapter=98)
     assert fresh_state["project_info"]["promise_ledger"][0]["status"] == "paid_off"
+
+
+# ===== Phase 1 fix: I1 wrapper =====
+
+
+def test_mark_overdue_foreshadows_flips_status(fresh_state):
+    """VolumeStateManager.mark_overdue_foreshadows flips eligible overdue entries."""
+    from data_modules.volume_state import VolumeStateManager
+    mgr = VolumeStateManager(fresh_state)
+    mgr.upsert_promise_entry(ForeshadowEntry(
+        id="fs_mo", type="foreshadow", depth=1,
+        planted_chapter=10, planted_volume=1,
+        expected_payoff_chapter=100, expected_payoff_volume=2,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    ))
+    flipped = mgr.mark_overdue_foreshadows(current_chapter=110, current_volume=2)
+    assert flipped == 1
+    assert fresh_state["project_info"]["promise_ledger"][0]["status"] == "overdue"
+
+
+def test_mark_overdue_foreshadows_zero_when_nothing_overdue(fresh_state):
+    """mark_overdue_foreshadows returns 0 if nothing is overdue (no write)."""
+    from data_modules.volume_state import VolumeStateManager
+    mgr = VolumeStateManager(fresh_state)
+    mgr.upsert_promise_entry(ForeshadowEntry(
+        id="fs_fine", type="foreshadow", depth=1,
+        planted_chapter=10, planted_volume=1,
+        expected_payoff_chapter=100, expected_payoff_volume=2,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    ))
+    # Current chapter well before payoff
+    flipped = mgr.mark_overdue_foreshadows(current_chapter=50, current_volume=1)
+    assert flipped == 0
+    # Status untouched
+    assert fresh_state["project_info"]["promise_ledger"][0]["status"] == "pending"
+
+
+# ===== Phase 2 fix: C4 cross-volume helpers =====
+
+
+def test_get_cross_volume_foreshadowing_includes_plant_and_payoff(fresh_state):
+    """get_cross_volume_foreshadowing(v) returns entries where v is plant OR payoff."""
+    from data_modules.volume_state import VolumeStateManager
+    mgr = VolumeStateManager(fresh_state)
+    # Planted V1, payoff V3 — touching V1, V2? No. Touching V3 directly via payoff.
+    mgr.upsert_promise_entry(ForeshadowEntry(
+        id="fs_v1_plant", type="foreshadow", depth=1,
+        planted_chapter=10, planted_volume=1,
+        expected_payoff_chapter=100, expected_payoff_volume=3,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    ))
+    mgr.upsert_promise_entry(ForeshadowEntry(
+        id="fs_v4_plant", type="foreshadow", depth=1,
+        planted_chapter=10, planted_volume=4,
+        expected_payoff_chapter=100, expected_payoff_volume=4,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    ))
+    # For V3: includes fs_v1_plant (payoff=3) but not fs_v4_plant (plant=4, payoff=4)
+    in_v3 = mgr.get_cross_volume_foreshadowing(3)
+    ids = {e.id for e in in_v3}
+    assert ids == {"fs_v1_plant"}
+    # For V1: also fs_v1_plant (plant=1)
+    in_v1 = mgr.get_cross_volume_foreshadowing(1)
+    assert {e.id for e in in_v1} == {"fs_v1_plant"}
+    # For V2: empty (nothing plants or pays off here)
+    assert mgr.get_cross_volume_foreshadowing(2) == []
+
+
+def test_cascade_foreshadow_impact_lists_volumes_and_ids(fresh_state):
+    """cascade_foreshadow_impact returns other affected volumes and entry ids."""
+    from data_modules.volume_state import VolumeStateManager
+    mgr = VolumeStateManager(fresh_state)
+    mgr.upsert_promise_entry(ForeshadowEntry(
+        id="fs_xv1_3", type="foreshadow", depth=1,
+        planted_chapter=10, planted_volume=1,
+        expected_payoff_chapter=100, expected_payoff_volume=3,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    ))
+    mgr.upsert_promise_entry(ForeshadowEntry(
+        id="fs_xv2_2", type="foreshadow", depth=1,
+        planted_chapter=10, planted_volume=2,
+        expected_payoff_chapter=50, expected_payoff_volume=2,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    ))
+    mgr.upsert_promise_entry(ForeshadowEntry(
+        id="fs_xv5_5", type="foreshadow", depth=1,
+        planted_chapter=10, planted_volume=5,
+        expected_payoff_chapter=100, expected_payoff_volume=5,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    ))
+    # Revising V2 affects: fs_xv2_2 (touching V2) and fs_xv1_3 (plant=1 — wait, no, plant=1)
+    # For V2: touching entries are xv2_2 only. Other affected volumes = {} (it pays off in same vol).
+    result = mgr.cascade_foreshadow_impact(volume=2)
+    assert result["entry_ids"] == ["fs_xv2_2"]
+    assert result["affected_volumes"] == []
+    # For V1: only fs_xv1_3 is touching; affected other volumes = [3]
+    result1 = mgr.cascade_foreshadow_impact(volume=1)
+    assert result1["entry_ids"] == ["fs_xv1_3"]
+    assert result1["affected_volumes"] == [3]

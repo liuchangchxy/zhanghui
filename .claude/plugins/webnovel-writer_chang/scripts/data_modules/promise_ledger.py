@@ -31,8 +31,25 @@ class ForeshadowEntry:
     created_at: str = ""
     updated_at: str = ""
     notes: str = ""
+    # audit_log is list[dict] (frozen dataclass allows mutation of mutable fields' contents).
+    # Each entry: {"action": "advance"|"payoff"|"mark_overdue", "chapter": int, "ts": iso_now}
+    # backward-additive: not present in entries created before this column existed.
+    audit_log: list[dict] = field(default_factory=list)
+
+    _ALLOWED_TYPES = frozenset({"foreshadow", "promise", "callback"})
+    _MAX_NOTES_LEN = 4096
 
     def __post_init__(self):
+        # I3: type whitelist
+        if self.type not in self._ALLOWED_TYPES:
+            raise ValueError(
+                f"type must be one of {sorted(self._ALLOWED_TYPES)}, got {self.type!r}"
+            )
+        # I4: notes max length
+        if len(self.notes) > self._MAX_NOTES_LEN:
+            raise ValueError(
+                f"notes exceeds {self._MAX_NOTES_LEN} chars (got {len(self.notes)})"
+            )
         # Boundary checks (Critical 2)
         if not self.id:
             raise ValueError("id must be non-empty")
@@ -84,6 +101,7 @@ class ForeshadowEntry:
             created_at=d.get("created_at", ""),
             updated_at=d.get("updated_at", ""),
             notes=d.get("notes", ""),
+            audit_log=list(d.get("audit_log", []) or []),
         )
 
 
@@ -114,14 +132,44 @@ class PromiseLedger:
         self.entries.append(entry)
 
     def advance(self, entry_id: str, at_chapter: int) -> None:
-        """Transition entry to ADVANCED status. Note: at_chapter not stored on entry (audit log separate)."""
-        self._mutate_status(entry_id, ForeshadowStatus.ADVANCED)
+        """Transition entry to ADVANCED status; record audit_log entry (I2)."""
+        self._mutate_status(entry_id, ForeshadowStatus.ADVANCED,
+                            action="advance", at_chapter=at_chapter)
 
     def payoff(self, entry_id: str, at_chapter: int) -> None:
-        """Transition entry to PAID_OFF status."""
-        self._mutate_status(entry_id, ForeshadowStatus.PAID_OFF)
+        """Transition entry to PAID_OFF status; record audit_log entry (I2)."""
+        self._mutate_status(entry_id, ForeshadowStatus.PAID_OFF,
+                            action="payoff", at_chapter=at_chapter)
 
-    def _mutate_status(self, entry_id: str, new_status: ForeshadowStatus) -> None:
+    def mark_overdue(self, entry_id: str) -> None:
+        """I1: flip an entry whose payoff is overdue to OVERDUE.
+
+        Entries already paid off are not touched (they're already resolved).
+        Side-effecting writeback — callers are expected to persist the
+        updated ledger via the VolumeStateManager method that wraps this.
+        """
+        # Read current status first; PAID_OFF entries must not flip.
+        current_status = None
+        for existing in self.entries:
+            if existing.id == entry_id:
+                current_status = existing.status
+                break
+        if current_status is None:
+            raise KeyError(f"foreshadow not found: {entry_id}")
+        if current_status == ForeshadowStatus.PAID_OFF:
+            return  # already resolved — leave untouched
+        # Use at_chapter=0 to mean "lifecycle marker, no specific chapter event"
+        self._mutate_status(entry_id, ForeshadowStatus.OVERDUE,
+                            action="mark_overdue", at_chapter=0)
+
+    def _mutate_status(
+        self,
+        entry_id: str,
+        new_status: ForeshadowStatus,
+        *,
+        action: str | None = None,
+        at_chapter: int | None = None,
+    ) -> None:
         """Replace entry with a new ForeshadowEntry with new status (frozen-compatible)."""
         for i, existing in enumerate(self.entries):
             if existing.id == entry_id:
@@ -129,6 +177,15 @@ class PromiseLedger:
                 d = existing.to_dict()
                 d["status"] = new_status.value
                 d["updated_at"] = datetime.now(timezone.utc).isoformat()
+                # I2: record audit_log entry (only when action supplied; backward compat)
+                if action is not None:
+                    log = list(d.get("audit_log") or [])
+                    log.append({
+                        "action": action,
+                        "chapter": int(at_chapter) if at_chapter is not None else 0,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    })
+                    d["audit_log"] = log
                 self.entries[i] = ForeshadowEntry.from_dict(d)
                 return
         raise KeyError(f"foreshadow not found: {entry_id}")

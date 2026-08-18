@@ -299,6 +299,48 @@ class VolumeStateManager:
     def list_overdue_foreshadows(self, current_chapter: int, current_volume: int) -> list[ForeshadowEntry]:
         return self.get_promise_ledger().list_overdue(current_chapter, current_volume)
 
+    def mark_overdue_foreshadows(self, current_chapter: int, current_volume: int) -> int:
+        """I1: flip any overdue foreshadow that isn't PAID_OFF to OVERDUE.
+
+        Returns the count of entries flipped. Persists via _write_promise_ledger.
+        """
+        ledger = self.get_promise_ledger()
+        overdue = ledger.list_overdue(current_chapter, current_volume)
+        flipped = 0
+        for entry in overdue:
+            if entry.status == ForeshadowStatus.PAID_OFF:
+                continue
+            ledger.mark_overdue(entry.id)
+            flipped += 1
+        if flipped:
+            self._write_promise_ledger(ledger)
+        return flipped
+
+    # ----- cross-volume impact analysis -----
+
+    def get_cross_volume_foreshadowing(self, volume: int) -> list[ForeshadowEntry]:
+        """C4: return all foreshadows involving `volume` as either plant or payoff."""
+        return [e for e in self.get_promise_ledger().entries
+                if e.planted_volume == volume or e.expected_payoff_volume == volume]
+
+    def cascade_foreshadow_impact(self, volume: int) -> dict[str, list]:
+        """C4: when `volume` is revised, which other volumes' foreshadows are affected?
+
+        Returns: {"affected_volumes": [v2, v3...], "entry_ids": ["fs_001", ...]}
+        affected_volumes lists every volume appearing as plant or payoff in
+        foreshadows touching `volume`, excluding `volume` itself, sorted ascending.
+        """
+        affected: set[int] = set()
+        entry_ids: list[str] = []
+        for e in self.get_promise_ledger().entries:
+            if e.planted_volume == volume or e.expected_payoff_volume == volume:
+                affected.update([e.planted_volume, e.expected_payoff_volume])
+                entry_ids.append(e.id)
+        return {
+            "affected_volumes": sorted(v for v in affected if v != volume),
+            "entry_ids": entry_ids,
+        }
+
     def _from_dict(self, d: dict) -> VolumeRecord:
         return VolumeRecord(
             index=d["index"],
