@@ -81,6 +81,7 @@ ls .webnovel/observability/ 2>/dev/null
 | `/webnovel-deslop-check` | 写流程 | 仅扫描任意已有章节 |
 | `/webnovel-resume` | 无 | workflow 断点恢复（用 `run-ledger` 子命令）|
 | `/webnovel-style-profile` | 无 | 文风指纹 + 漂移检测（≥ 3 章时建基线）|
+- **Multi-volume init** (`webnovel-init` Step 1.6 + Step 5.5) — collect V1-VN skeleton with optional AI drafting; status state machine per spec `docs/superpowers/specs/2026-08-18-multi-volume-init-design.md`
 
 ## CHANGES 协议
 
