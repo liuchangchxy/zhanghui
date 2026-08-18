@@ -179,6 +179,34 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 
 约束：无论选哪条路径，**不得覆盖作者手改**——除非用户在该次会话中显式说"覆盖"。
 
+### Step 0: Pre-Write Gate Check（oh-story 模式）
+
+每次写章前, 跑 `evaluate_pre_write_gates`：
+
+```python
+from data_modules.chunked_write import evaluate_pre_write_gates
+from data_modules.volume_state import VolumeStateManager
+
+state = json.loads(open(".webnovel/state.json").read())
+mgr = VolumeStateManager(state)
+overdue = mgr.list_overdue_foreshadows(
+    current_chapter=<next_chapter>,
+    current_volume=<current_volume>,
+)
+issues = evaluate_pre_write_gates(
+    chapter=<next_chapter>,
+    current_volume=<current_volume>,
+    overdue_foreshadows=overdue,
+)
+if issues:
+    print("\n".join(issues))
+    raise SystemExit(1)  # BLOCKER: 不允许写
+```
+
+**BLOCKER 时**：要求用户先在 plan 阶段调整伏笔账本或回收 overdue 伏笔，方可继续。
+
+**逃生口**：`WEBNOVEL_DISABLE_CHUNKED_GATE=1` 临时跳过本检查。
+
 ### Step 1：写作任务书（context-agent 生成直写执行包）
 
 使用 Agent 调用 `webnovel-writer:context-agent`，参数：
