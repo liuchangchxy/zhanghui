@@ -100,3 +100,54 @@ def test_require_current_volume_artifacts_default_still_enforces(tmp_path):
     (tmp_path / "大纲").mkdir()
     with pytest.raises(MasterOutlineSyncError, match="planning artifacts are incomplete"):
         _require_current_volume_artifacts(tmp_path, volume=1)
+
+
+# ===== I6: --all-volumes-mode CLI flag propagates through sync_master_outline =====
+
+
+def test_sync_master_outline_all_volumes_mode_skips_artifact_check():
+    """I6: sync_master_outline(..., all_volumes_mode=True) tolerates missing
+    current-volume artifacts. Used by plan stage when artifacts haven't been
+    written yet but the user is mid --all-volumes plan.
+    """
+    from update_master_outline import sync_master_outline
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        outline_dir = project_root / "大纲"
+        outline_dir.mkdir(parents=True, exist_ok=True)
+
+        # 总纲 only — NO per-volume artifacts (would normally raise)
+        (outline_dir / "总纲.md").write_text(
+            "# 总纲\n\n## 卷划分\n\n"
+            "| 卷号 | 卷名 | 章节范围 | 核心冲突 | 卷末高潮 |\n"
+            "|------|------|----------|----------|----------|\n",
+            encoding="utf-8",
+        )
+        # Writeback JSON present
+        (outline_dir / "第1卷-总纲写回.json").write_text(
+            json.dumps({
+                "next_volume_anchor": {
+                    "volume": 2,
+                    "volume_name": "V2-plan-stage",
+                    "core_conflict": "project planning",
+                    "volume_end_climax": "first arc closes",
+                    "chapters_range": "第51-100章",
+                },
+            }, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        # Default mode: would raise MasterOutlineSyncError (missing artifacts).
+        with pytest.raises(MasterOutlineSyncError, match="planning artifacts are incomplete"):
+            sync_master_outline(str(project_root), volume=1)
+
+        # --all-volumes mode: must NOT raise on missing artifacts.
+        result = sync_master_outline(
+            str(project_root), volume=1, all_volumes_mode=True,
+        )
+        assert result["ok"] is True
+        assert result["volume_anchor_written"] is True
+
+        after = (outline_dir / "总纲.md").read_text(encoding="utf-8")
+        assert "V2-plan-stage" in after

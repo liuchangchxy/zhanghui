@@ -249,6 +249,7 @@ def sync_master_outline(
     volume: int,
     *,
     writeback_file: str | Path | None = None,
+    all_volumes_mode: bool = False,
 ) -> dict[str, Any]:
     """Sync the V+1 anchor row in 大纲/总纲.md from the volume writeback JSON.
 
@@ -261,12 +262,16 @@ def sync_master_outline(
 
     Hard constraint (spec §5.4): does NOT generate V+2+ detailed outlines
     (节拍表 / 时间线 / 详细大纲 / 章纲).
+
+    I6: `all_volumes_mode=True` short-circuits the
+    `_require_current_volume_artifacts` pre-check — used by --all-volumes
+    plan mode where artifacts may not exist yet for the current volume.
     """
     root = Path(project_root).expanduser().resolve()
     if volume < 1:
         raise MasterOutlineSyncError("volume must be >= 1")
 
-    _require_current_volume_artifacts(root, volume)
+    _require_current_volume_artifacts(root, volume, all_volumes_mode=all_volumes_mode)
 
     outline_dir = root / "大纲"
     master_path = outline_dir / "总纲.md"
@@ -300,6 +305,11 @@ def main() -> None:
     parser.add_argument("--project-root", required=True)
     parser.add_argument("--volume", type=int, required=True, help="当前已完成规划的卷号")
     parser.add_argument("--writeback-file", default="", help="显式结构化写回 JSON；默认 大纲/第N卷-总纲写回.json")
+    parser.add_argument(
+        "--all-volumes-mode", action="store_true",
+        help="I6: bypass _require_current_volume_artifacts pre-check "
+        "(用于 /webnovel-plan --all-volumes 当前卷尚未生成 artifacts 的场景)",
+    )
     parser.add_argument("--format", choices=["json", "text"], default="json")
     args = parser.parse_args()
 
@@ -308,6 +318,7 @@ def main() -> None:
             args.project_root,
             args.volume,
             writeback_file=args.writeback_file or None,
+            all_volumes_mode=args.all_volumes_mode,
         )
     except MasterOutlineSyncError as exc:
         if args.format == "json":
