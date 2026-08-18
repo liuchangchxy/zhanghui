@@ -36,7 +36,8 @@ def test_e2e_full_flow(tmp_path):
 
     # --all-volumes plan stage
     written = generate_volume_blueprints(tmp_path, all_volumes=True)
-    assert written == 3
+    # 3 confirmed volumes × 3 files per volume = 9 files
+    assert written == 9
     for vol in (1, 2, 3):
         assert (tmp_path / "大纲" / f"第{vol}卷-详细大纲.md").is_file()
         assert (tmp_path / "大纲" / f"第{vol}卷-15节拍.md").is_file()

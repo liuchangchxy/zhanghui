@@ -963,10 +963,20 @@ __pycache__/
 
 
 def _render_volume_blueprint(volume: dict, total_project_chapters: int) -> tuple[str, str, str]:
-    """Render 详细大纲 / 15节拍 / 时间线 三件套 for one volume."""
+    """Render 详细大纲 / 15节拍 / 时间线 三件套 for one volume.
+
+    I5: raises ValueError if ch_range is reversed (start > end) to prevent
+    silent garbage volume blueprints.
+    """
     idx = volume["index"]
     title = volume.get("title", f"V{idx}")
     ch_range = volume.get("chapter_range") or [0, 0]
+    # I5: validate chapter range before rendering
+    if len(ch_range) == 2 and ch_range[0] > ch_range[1]:
+        raise ValueError(
+            f"chapter_range is reversed for volume {idx!r}: "
+            f"start ({ch_range[0]}) > end ({ch_range[1]})"
+        )
     core_conflict = volume.get("core_conflict", "")
     climax = volume.get("climax", "")
     vol_chapters = max(1, ch_range[1] - ch_range[0] + 1)
@@ -1009,15 +1019,84 @@ def _render_volume_blueprint(volume: dict, total_project_chapters: int) -> tuple
     return detailed, beat_sheet, timeline
 
 
-def generate_volume_blueprints(project_root, all_volumes: bool = False) -> int:
+def _atomic_write(path: Path, content: str) -> None:
+    """C1: atomic write via tmp + os.replace, prevents partial writes.
+
+    Writes to path + ".tmp" first; on success os.replace swaps it in atomically.
+    On failure the tmp file is cleaned up and the exception re-raised.
+    Caller is responsible for the idempotent skip check; this helper only writes.
+    """
+    import os
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    try:
+        tmp.write_text(content, encoding="utf-8")
+        os.replace(tmp, path)
+    except Exception:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        raise
+
+
+def _has_cycle(edges: list[dict]) -> bool:
+    """C2: Tarjan-style DFS cycle detection on a simple integer-node digraph.
+
+    Edges: list of {"from": int, "to": int, ...}.
+    Returns True if any back-edge found (cycle present).
+    A linear chain has no cycle.
+    """
+    nodes: set[int] = set()
+    for e in edges:
+        nodes.add(int(e["from"]))
+        nodes.add(int(e["to"]))
+    if not nodes:
+        return False
+    adj: dict[int, list[int]] = {n: [] for n in nodes}
+    for e in edges:
+        adj[int(e["from"])].append(int(e["to"]))
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {n: WHITE for n in nodes}
+
+    def dfs(n: int) -> bool:
+        color[n] = GRAY
+        for m in adj[n]:
+            if color[m] == GRAY:
+                return True
+            if color[m] == WHITE and dfs(m):
+                return True
+        color[n] = BLACK
+        return False
+
+    for n in nodes:
+        if color[n] == WHITE and dfs(n):
+            return True
+    return False
+
+
+def generate_volume_blueprints(
+    project_root,
+    all_volumes: bool = False,
+    force: bool = False,
+) -> int:
     """按 confirmed volumes[] 生成 N 卷蓝图三件套.
+
+    C1: idempotent — files that already exist with non-empty content are skipped
+    (unless force=True). Atomic writes via tmp + os.replace prevent half-written
+    files on interruption.
+
+    C2: also writes project_info.cross_volume_beat_map = linear adjacency list
+    of confirmed volumes (from → to edge per consecutive pair) and validates
+    no cycle via DFS.
 
     Args:
         project_root: 项目根目录.
         all_volumes: True 一次性铺全部 confirmed 卷; False 不铺.
+        force: True 覆盖已有非空文件.
 
     Returns:
-        实际写入的卷数.
+        实际写入的文件数 (新增 + 覆盖).
     """
     if not all_volumes:
         return 0
@@ -1026,8 +1105,7 @@ def generate_volume_blueprints(project_root, all_volumes: bool = False) -> int:
         return 0
     import json
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    volumes = state.get("volumes", [])
-    confirmed = [v for v in volumes if v.get("status") == "confirmed"]
+    confirmed = [v for v in state.get("volumes", []) if v.get("status") == "confirmed"]
     if not confirmed:
         return 0
     total_project_chapters = state.get("project_info", {}).get("target_chapters", 600)
@@ -1037,10 +1115,37 @@ def generate_volume_blueprints(project_root, all_volumes: bool = False) -> int:
     for vol in confirmed:
         idx = vol["index"]
         detailed, beat_sheet, timeline = _render_volume_blueprint(vol, total_project_chapters)
-        (outline_dir / f"第{idx}卷-详细大纲.md").write_text(detailed, encoding="utf-8")
-        (outline_dir / f"第{idx}卷-15节拍.md").write_text(beat_sheet, encoding="utf-8")
-        (outline_dir / f"第{idx}卷-时间线.md").write_text(timeline, encoding="utf-8")
-        written += 1
+        for content, suffix in (
+            (detailed, "详细大纲.md"),
+            (beat_sheet, "15节拍.md"),
+            (timeline, "时间线.md"),
+        ):
+            path = outline_dir / f"第{idx}卷-{suffix}"
+            # Idempotent: skip existing non-empty unless force
+            if not force and path.is_file() and path.read_text(encoding="utf-8").strip():
+                continue
+            _atomic_write(path, content)
+            written += 1
+
+    # C2: cross_volume_beat_map — linear adjacency of confirmed volumes
+    sorted_confirmed = sorted(confirmed, key=lambda v: v["index"])
+    beat_map_entries: list[dict] = []
+    for i in range(len(sorted_confirmed) - 1):
+        from_v = sorted_confirmed[i]
+        to_v = sorted_confirmed[i + 1]
+        beat_map_entries.append({
+            "from": int(from_v["index"]),
+            "to": int(to_v["index"]),
+            "edge_id": f"v{int(from_v['index'])}_to_v{int(to_v['index'])}",
+        })
+    # Cycle check (linear chain can't cycle, but verify anyway as a safety net)
+    if _has_cycle(beat_map_entries):
+        raise ValueError(f"cross_volume_beat_map has cycle: {beat_map_entries}")
+
+    state.setdefault("project_info", {})["cross_volume_beat_map"] = beat_map_entries
+    state_path.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return written
 
 
@@ -1097,6 +1202,10 @@ def main() -> None:
         "--all-volumes", action="store_true",
         help="一次性铺 N 卷蓝图 (覆盖所有 confirmed volumes). 默认关闭保持现状兼容."
     )
+    parser.add_argument(
+        "--force", action="store_true",
+        help="C1: 与 --all-volumes 共用; 强制覆盖已存在的卷蓝图文件 (默认跳过).",
+    )
 
     args = parser.parse_args()
 
@@ -1141,8 +1250,10 @@ def main() -> None:
     )
 
     if getattr(args, 'all_volumes', False):
-        written = generate_volume_blueprints(args.project_dir, all_volumes=True)
-        print(f"--all-volumes: wrote {written} volume blueprint(s)")
+        written = generate_volume_blueprints(
+            args.project_dir, all_volumes=True, force=args.force,
+        )
+        print(f"--all-volumes: wrote {written} volume blueprint file(s)")
 
 
 if __name__ == "__main__":
