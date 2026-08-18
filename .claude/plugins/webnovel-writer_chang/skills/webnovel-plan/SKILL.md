@@ -28,7 +28,7 @@ argument-hint: "[卷号，如 1]"
 ## 环境准备
 
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
+export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT:-${PWD}}"
 export SKILL_ROOT="${CLAUDE_PLUGIN_ROOT}/skills/webnovel-plan"
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 export PROJECT_ROOT="$(python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
@@ -270,9 +270,9 @@ BLOCKER 处理：
 拆完章后，对每个新章调用：
 
 ```bash
-# PYTHONPATH 必须指向工具根（${CLAUDE_PROJECT_DIR}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
+# PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
 # Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
-PYTHONPATH="${CLAUDE_PROJECT_DIR}" python3 -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
 sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))

@@ -13,7 +13,7 @@ allowed-tools: Read Grep Write Edit Bash AskUserQuestion
 
 环境设置（bash 命令执行前）：
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
+export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT:-${PWD}}"
 
 if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/skills/webnovel-review" ]; then
   echo "ERROR: 未设置 CLAUDE_PLUGIN_ROOT 或缺少目录: ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-review" >&2
@@ -96,9 +96,9 @@ cat "$PROJECT_ROOT/.webnovel/state.json"
 Review 阶段额外输出"一致性"维度：
 
 ```bash
-# PYTHONPATH 必须指向工具根（${CLAUDE_PROJECT_DIR}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
+# PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
 # Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
-PYTHONPATH="${CLAUDE_PROJECT_DIR}" python3 -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
 sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))

@@ -108,7 +108,7 @@ allowed-tools: Read Write Edit Grep Bash Agent
 
 环境设置（bash 命令执行前）：
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
+export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT:-${PWD}}"
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 export SKILL_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is required}/skills/webnovel-write"
 
@@ -221,9 +221,9 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 写前必须通过一致性检查：
 
 ```bash
-# PYTHONPATH 必须指向工具根（${CLAUDE_PROJECT_DIR}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
+# PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
 # Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
-PYTHONPATH="${CLAUDE_PROJECT_DIR}" python3 -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
 sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
@@ -449,9 +449,9 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 写后 commit 时触发一致性 apply（更新 state + 派生视图）：
 
 ```bash
-# PYTHONPATH 必须指向工具根（${CLAUDE_PROJECT_DIR}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
+# PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
 # Exit 0 = applied。Exit 1 = BLOCKER。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
-PYTHONPATH="${CLAUDE_PROJECT_DIR}" python3 -c "
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
 sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
