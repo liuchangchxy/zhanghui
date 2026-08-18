@@ -299,41 +299,72 @@ def init_volume_beat(state: dict, volume: int, total_chapters: int) -> dict:
 
     Beat chapters are auto-distributed by percentage.
 
-    Behavior:
-    - If a volume_beat for the same volume already exists, return state
-      unchanged (idempotent for same volume).
-    - If a volume_beat exists for a different volume, raise ValueError
-      (multi-volume not yet supported in this iteration).
+    Behavior (sibling-key schema, 2026-08-19):
+    - Volume 1 uses legacy top-level 'volume_beat' field (dict with beats[])
+      so V1 callers (review_pipeline.py, dashboard/app.py) keep working
+      unchanged.
+    - Volume 2+ uses sibling 'volume_beats: dict[str, beat_sheet]' so
+      multiple volumes can coexist.
+    - Re-init for the same volume is a no-op (idempotent).
+    - Re-init for V1 when legacy is already present for a different volume
+      raises ValueError (legacy single-slot invariant preserved).
     """
     percentages = [0.01, 0.05, 0.10, 0.10, 0.20, 0.20, 0.22, 0.50, 0.50, 0.75, 0.75, 0.80, 0.80, 0.99, 1.00]
     if len(percentages) != 15:
         raise ValueError("internal: percentages must match 15 beats")
     sc = state.setdefault("story_craft", {})
-    existing = sc.get("volume_beat")
-    if existing is not None:
-        if existing.get("volume") == volume:
-            # Same volume already initialized — no-op.
-            return state
-        raise ValueError(
-            f"volume_beat already initialized for volume {existing.get('volume')}; "
-            f"multi-volume not yet supported (requested volume {volume})"
-        )
+
+    if volume == 1:
+        # Legacy path — V1 stays at top-level 'volume_beat'
+        existing = sc.get("volume_beat")
+        if existing is not None:
+            if existing.get("volume") == volume:
+                return state  # idempotent
+            raise ValueError(
+                f"volume_beat already initialized for volume {existing.get('volume')}; "
+                f"multi-volume not yet supported (requested volume {volume})"
+            )
+        beats = []
+        for name, pct in zip(VALID_BEATS, percentages):
+            ch = max(1, round(pct * total_chapters))
+            beats.append({"name": name, "chapter": ch, "filled": False, "notes": None})
+        sc["volume_beat"] = {
+            "volume": volume,
+            "total_chapters": total_chapters,
+            "beats": beats,
+        }
+        return state
+
+    # V2+ via sibling key 'volume_beats'
+    vb_sibling = sc.setdefault("volume_beats", {})
+    if str(volume) in vb_sibling:
+        return state  # idempotent
     beats = []
     for name, pct in zip(VALID_BEATS, percentages):
         ch = max(1, round(pct * total_chapters))
         beats.append({"name": name, "chapter": ch, "filled": False, "notes": None})
-    sc["volume_beat"] = {
+    vb_sibling[str(volume)] = {
         "volume": volume,
         "total_chapters": total_chapters,
-        "beats": beats
+        "beats": beats,
     }
     return state
 
 
 def fill_beat(state: dict, volume: int, beat_name: str, chapter: int, notes: str) -> dict:
-    if state.get("story_craft", {}).get("volume_beat", {}).get("volume") != volume:
-        raise ValueError(f"volume {volume} not initialized; run init-volume-beat first")
-    beats = state["story_craft"]["volume_beat"]["beats"]
+    sc = state.get("story_craft", {})
+    if volume == 1:
+        # Legacy path
+        vb = sc.get("volume_beat")
+        if vb is None or vb.get("volume") != volume:
+            raise ValueError(f"volume {volume} not initialized; run init-volume-beat first")
+        beats = vb["beats"]
+    else:
+        vb_sibling = sc.get("volume_beats", {})
+        vb = vb_sibling.get(str(volume))
+        if vb is None:
+            raise ValueError(f"volume {volume} not initialized; run init-volume-beat first")
+        beats = vb["beats"]
     for beat in beats:
         if beat["name"] == beat_name:
             beat["filled"] = True
@@ -343,31 +374,10 @@ def fill_beat(state: dict, volume: int, beat_name: str, chapter: int, notes: str
     raise ValueError(f"beat {beat_name} not found")
 
 
-def check_volume_beat(state: dict, volume: int, current_chapter: int | None = None) -> list:
-    """Return issues. BLOCKER for Midpoint/All Is Lost when current chapter >= beat's chapter.
-
-    Behavior:
-    - If volume_beat is not initialized at all, return a friendly BLOCKER
-      list (does not raise) so callers can display the issue.
-    - If volume_beat is initialized for a different volume, raise
-      ValueError (multi-volume not yet supported in this iteration).
-    - For Midpoint/All Is Lost, BLOCKER is only emitted when current_chapter
-      is provided AND current_chapter >= beat['chapter'] - tolerance (2).
-      If current_chapter is None, BLOCKER is always emitted (legacy behavior,
-      used by callers that have no chapter context).
-    - Non-critical beats always emit WARN when unfilled.
-    """
+def _check_beats(beats: list, volume: int, current_chapter: int | None) -> list:
+    """Pure logic on a beats list. Shared by V1 (legacy) and V2+ (sibling)."""
     tolerance = 2
-    vb = state.get("story_craft", {}).get("volume_beat")
-    if vb is None:
-        return [f"BLOCKER: story_craft.volume_beat not initialized for volume {volume} — run init-volume-beat first"]
-    if vb.get("volume") != volume:
-        raise ValueError(
-            f"volume_beat initialized for volume {vb.get('volume')}; "
-            f"multi-volume not yet supported (requested volume {volume})"
-        )
     issues = []
-    beats = vb["beats"]
     for beat in beats:
         is_critical = beat["name"] in ("Midpoint", "All Is Lost")
         if not beat["filled"]:
@@ -381,3 +391,28 @@ def check_volume_beat(state: dict, volume: int, current_chapter: int | None = No
             else:
                 issues.append(f"WARN: {beat['name']} not yet filled")
     return issues
+
+
+def check_volume_beat(state: dict, volume: int, current_chapter: int | None = None) -> list:
+    """Return issues. BLOCKER for Midpoint/All Is Lost when current chapter >= beat's chapter.
+
+    Behavior (sibling-key schema, 2026-08-19):
+    - V1 reads from legacy 'volume_beat'; V2+ reads from sibling 'volume_beats'.
+    - If the requested volume's beat sheet is not initialized, return a
+      friendly BLOCKER list (does not raise) so callers can display the issue.
+    - For Midpoint/All Is Lost, BLOCKER is only emitted when current_chapter
+      is provided AND current_chapter >= beat['chapter'] - tolerance (2).
+      If current_chapter is None, BLOCKER is always emitted (legacy behavior,
+      used by callers that have no chapter context).
+    - Non-critical beats always emit WARN when unfilled.
+    """
+    sc = state.get("story_craft", {})
+    if volume == 1:
+        vb = sc.get("volume_beat")
+        if vb is None or vb.get("volume") != volume:
+            return [f"BLOCKER: story_craft.volume_beat not initialized for volume {volume} — run init-volume-beat first"]
+    else:
+        vb = sc.get("volume_beats", {}).get(str(volume))
+        if vb is None:
+            return [f"BLOCKER: story_craft.volume_beats not initialized for volume {volume} — run init-volume-beat first"]
+    return _check_beats(vb["beats"], volume, current_chapter)

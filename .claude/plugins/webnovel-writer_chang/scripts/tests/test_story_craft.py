@@ -404,6 +404,10 @@ def test_fill_beat_raises_when_volume_mismatch():
 
 
 def test_check_volume_beat_raises_when_volume_mismatch():
+    """Sibling-key schema (2026-08-19): V2 query against V1-initialized state
+    must return a friendly BLOCKER (volume_beats not initialized for V2),
+    NOT raise — V1 and V2+ coexist independently."""
     state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
-    with __import__("pytest").raises(ValueError):
-        check_volume_beat(state, volume=2)
+    issues = check_volume_beat(state, volume=2)
+    assert any("not initialized" in i for i in issues)
+    assert any("BLOCKER" in i for i in issues)
