@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Optional
 
 
 class VolumeStatus(str, Enum):
@@ -22,9 +21,14 @@ class VolumeSource(str, Enum):
     AI = "ai"
 
 
-@dataclass
-class VolumeRecord:
-    index: int
+class LaterVolumesStatus(str, Enum):
+    DEFERRED = "deferred"
+    UNKNOWN = "unknown"
+    PLANNED = "planned"
+
+
+@dataclass(kw_only=True)
+class _VolumeFields:
     title: str = ""
     chapter_range: list[int] = field(default_factory=lambda: [0, 0])
     core_conflict: str = ""
@@ -32,6 +36,11 @@ class VolumeRecord:
     key_cool_points: list[str] = field(default_factory=list)
     characters_to_appear: list[str] = field(default_factory=list)
     foreshadowing: list[str] = field(default_factory=list)
+
+
+@dataclass
+class VolumeRecord(_VolumeFields):
+    index: int
     status: VolumeStatus = VolumeStatus.DRAFT
     source: VolumeSource = VolumeSource.HUMAN
     updated_at: str = ""
@@ -44,21 +53,15 @@ class VolumeRecord:
 
 
 @dataclass
-class CandidateVolume:
+class CandidateVolume(_VolumeFields):
     """In-memory draft from AI drafter. Never persisted."""
     index: int
-    title: str = ""
-    chapter_range: list[int] = field(default_factory=lambda: [0, 0])
-    core_conflict: str = ""
-    climax: str = ""
-    key_cool_points: list[str] = field(default_factory=list)
-    characters_to_appear: list[str] = field(default_factory=list)
-    foreshadowing: list[str] = field(default_factory=list)
+    status: VolumeStatus = VolumeStatus.DRAFT  # always draft per spec §5.2
     source: VolumeSource = VolumeSource.AI
 
 
 @dataclass
 class PlanningHorizon:
-    expected_total_volumes: Optional[int] = None
+    expected_total_volumes: int | None = None
     confirmed_through_volume: int = 0
-    later_volumes_status: str = "deferred"  # deferred | unknown | planned
+    later_volumes_status: LaterVolumesStatus = LaterVolumesStatus.DEFERRED
