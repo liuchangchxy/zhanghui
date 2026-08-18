@@ -368,6 +368,26 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" update-state 
 
 ```
 
+**`--all-volumes` 模式（可选）**:
+
+如果用户传 `--all-volumes`（或 `python3 scripts/init_project.py ... --all-volumes`），则一次性铺 N 卷蓝图：
+1. 读 `state.json` 的 `volumes[]`（包含 `expected_total_volumes` 与 confirmed 卷）
+2. 对每个 **confirmed** 卷（不限于 V+1）：
+   - 产 `第N卷-详细大纲.md` (15-beat + 章纲蓝图)
+   - 产 `第N卷-15节拍.md` (Save the Cat beat sheet)
+   - 产 `第N卷-时间线.md` (卷内时间线)
+3. 写跨卷伏笔账本 + 节拍映射到 `大纲-总纲.md`（见模板新增表头）
+4. 校验 index continuity + cross_volume_beat_map 无环路
+
+**默认（无 `--all-volumes`）行为完全不变**：只更新 V+1 锚点，不生成 V+2+ 详细蓝图（与 `test_plan_v_plus_one_anchor` 一致）。
+
+**调度命令**：
+```bash
+python3 scripts/init_project.py <project_dir> <title> \
+    --genre <genre> --target-chapters <N> --target-words <W> \
+    --all-volumes
+```
+
 ### Step 10：刷新 Story System 写作合同（本次规划已落到具体章节时必须执行）
 
 genre 从 `state.json` 初始化配置快照读取；写前主链真源是 `.story-system/` 合同树。必须先从详细大纲解析真实 `CHAPTER_GOAL`，禁止传 `{章纲目标}` / `第N章章纲目标` 这类占位文本。
