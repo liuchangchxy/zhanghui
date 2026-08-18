@@ -13,6 +13,7 @@ from data_modules.volume_state import (
     CandidateVolume,
     LaterVolumesStatus,
 )
+from data_modules.promise_ledger import ForeshadowEntry, ForeshadowStatus, PromiseLedger
 
 
 @pytest.fixture
@@ -237,3 +238,67 @@ def test_revise_volume_raises_on_missing(fresh_state):
     mgr = VolumeStateManager(fresh_state)
     with pytest.raises(ValueError, match="No record"):
         mgr.revise_volume(99, {"title": "X"})
+
+
+# ===== Task 3: VolumeStateManager owns promise_ledger =====
+
+
+def test_volume_state_owns_promise_ledger(fresh_state):
+    """VolumeStateManager must read/write promise_ledger via project_info."""
+    from data_modules.volume_state import VolumeStateManager
+    mgr = VolumeStateManager(fresh_state)
+    e = ForeshadowEntry(
+        id="fs_001", type="foreshadow", depth=3,
+        planted_chapter=12, planted_volume=1,
+        expected_payoff_chapter=145, expected_payoff_volume=3,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    )
+    mgr.upsert_promise_entry(e)
+    # Persisted to state.json
+    assert "promise_ledger" in fresh_state["project_info"]
+    assert fresh_state["project_info"]["promise_ledger"][0]["id"] == "fs_001"
+    # Round-trip: new manager reads from same state
+    mgr2 = VolumeStateManager(fresh_state)
+    ledger = mgr2.get_promise_ledger()
+    assert len(ledger.entries) == 1
+    assert ledger.entries[0].id == "fs_001"
+
+
+def test_volume_state_list_overdue_foreshadows(fresh_state):
+    """VolumeStateManager.list_overdue_foreshadows uses current chapter/volume."""
+    from data_modules.volume_state import VolumeStateManager
+    mgr = VolumeStateManager(fresh_state)
+    # Plant in V1, expected payoff V2 ch100
+    e = ForeshadowEntry(
+        id="fs_over", type="foreshadow", depth=1,
+        planted_chapter=10, planted_volume=1,
+        expected_payoff_chapter=100, expected_payoff_volume=2,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    )
+    mgr.upsert_promise_entry(e)
+    # No overdue at V1 ch50
+    assert mgr.list_overdue_foreshadows(current_chapter=50, current_volume=1) == []
+    # Overdue at V2 ch110 — payoff at V2 ch100 has been passed
+    overdue = mgr.list_overdue_foreshadows(current_chapter=110, current_volume=2)
+    assert len(overdue) == 1
+    assert overdue[0].id == "fs_over"
+
+
+def test_volume_state_payoff_writes_back(fresh_state):
+    """mgr.payoff_foreshadow must persist status=paid_off to state.json."""
+    from data_modules.volume_state import VolumeStateManager
+    mgr = VolumeStateManager(fresh_state)
+    mgr.upsert_promise_entry(ForeshadowEntry(
+        id="fs_p", type="foreshadow", depth=1,
+        planted_chapter=10, planted_volume=1,
+        expected_payoff_chapter=100, expected_payoff_volume=2,
+        status=ForeshadowStatus.PENDING,
+        created_at="2026-08-19T00:00:00+00:00",
+        updated_at="2026-08-19T00:00:00+00:00",
+    ))
+    mgr.payoff_foreshadow("fs_p", at_chapter=98)
+    assert fresh_state["project_info"]["promise_ledger"][0]["status"] == "paid_off"

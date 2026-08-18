@@ -10,6 +10,12 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from enum import Enum
 
+from data_modules.promise_ledger import (
+    ForeshadowEntry,
+    ForeshadowStatus,
+    PromiseLedger,
+)
+
 
 class VolumeStatus(str, Enum):
     CONFIRMED = "confirmed"
@@ -261,6 +267,37 @@ class VolumeStateManager:
         self.state["project_info"]["confirmed_through_volume"] = max(confirmed) if confirmed else 0
         if "later_volumes_status" not in self.state["project_info"]:
             self.state["project_info"]["later_volumes_status"] = LaterVolumesStatus.DEFERRED.value
+
+    # ----- promise ledger -----
+
+    def get_promise_ledger(self) -> PromiseLedger:
+        """Read promise_ledger from state.json.project_info."""
+        raw = self.state.get("project_info", {}).get("promise_ledger", [])
+        entries: list[ForeshadowEntry] = []
+        for d in raw:
+            entries.append(ForeshadowEntry.from_dict(d))
+        return PromiseLedger(entries=entries)
+
+    def _write_promise_ledger(self, ledger: PromiseLedger) -> None:
+        self.state.setdefault("project_info", {})["promise_ledger"] = ledger.to_list()
+
+    def upsert_promise_entry(self, entry: ForeshadowEntry) -> None:
+        ledger = self.get_promise_ledger()
+        ledger.upsert(entry)
+        self._write_promise_ledger(ledger)
+
+    def advance_foreshadow(self, entry_id: str, at_chapter: int) -> None:
+        ledger = self.get_promise_ledger()
+        ledger.advance(entry_id, at_chapter)
+        self._write_promise_ledger(ledger)
+
+    def payoff_foreshadow(self, entry_id: str, at_chapter: int) -> None:
+        ledger = self.get_promise_ledger()
+        ledger.payoff(entry_id, at_chapter)
+        self._write_promise_ledger(ledger)
+
+    def list_overdue_foreshadows(self, current_chapter: int, current_volume: int) -> list[ForeshadowEntry]:
+        return self.get_promise_ledger().list_overdue(current_chapter, current_volume)
 
     def _from_dict(self, d: dict) -> VolumeRecord:
         return VolumeRecord(
