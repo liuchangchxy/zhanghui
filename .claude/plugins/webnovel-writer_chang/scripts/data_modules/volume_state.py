@@ -7,6 +7,7 @@ docs/superpowers/specs/2026-08-18-multi-volume-init-design.md
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -167,24 +168,11 @@ class VolumeStateManager:
         existing_idx = self._find_dict_index(index)
         if existing_idx is None:
             raise ValueError(f"No record or draft for volume {index}")
-        cur = self.state["volumes"][existing_idx]["status"]
-        if cur != "deferred":
-            # already confirmed or some other terminal state — leave alone
-            return
-        self.state["volumes"][existing_idx]["status"] = "confirmed"
-        self.state["volumes"][existing_idx]["updated_at"] = _now_iso()
-        self._update_horizon()
+        self._set_status(index, VolumeStatus.CONFIRMED, {VolumeStatus.DEFERRED})
 
     def set_deferred(self, index: int) -> None:
-        existing_idx = self._find_dict_index(index)
-        if existing_idx is None:
-            raise ValueError(f"No record for volume {index}")
-        cur = self.state["volumes"][existing_idx]["status"]
-        if cur == "confirmed":  # confirmed → deferred allowed
-            self.state["volumes"][existing_idx]["status"] = "deferred"
-            self.state["volumes"][existing_idx]["updated_at"] = _now_iso()
-            self._update_horizon()
-        # already deferred or draft → no-op
+        # _set_status will raise if the record is missing
+        self._set_status(index, VolumeStatus.DEFERRED, {VolumeStatus.CONFIRMED})
 
     # ----- internal -----
 
@@ -202,11 +190,36 @@ class VolumeStateManager:
                     f"index continuity violated: first volume must be 1, got {new_index}"
                 )
             return
-        expected_max = existing_indexes[-1] + 1
-        if new_index > expected_max:
+        expected = set(range(1, existing_indexes[-1] + 1))
+        actual = set(existing_indexes)
+        if actual != expected:
+            missing = sorted(expected - actual)
             raise ValueError(
-                f"index continuity violated: expected next index {expected_max}, got {new_index}"
+                f"index continuity violated: missing indexes {missing} "
+                f"before inserting {new_index}"
             )
+        if new_index > existing_indexes[-1] + 1:
+            raise ValueError(
+                f"index continuity violated: expected next index "
+                f"{existing_indexes[-1] + 1}, got {new_index}"
+            )
+
+    def _set_status(
+        self,
+        index: int,
+        new_status: VolumeStatus,
+        allowed_from: set[VolumeStatus],
+    ) -> None:
+        """Transition a persisted record's status if currently in allowed_from; no-op otherwise."""
+        existing_idx = self._find_dict_index(index)
+        if existing_idx is None:
+            raise ValueError(f"No record for volume {index}")
+        cur = VolumeStatus(self.state["volumes"][existing_idx]["status"])
+        if cur not in allowed_from:
+            return
+        self.state["volumes"][existing_idx]["status"] = new_status.value
+        self.state["volumes"][existing_idx]["updated_at"] = _now_iso()
+        self._update_horizon()
 
     def _sort_by_index(self) -> None:
         self.state["volumes"].sort(key=lambda d: d["index"])
@@ -234,5 +247,4 @@ class VolumeStateManager:
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")

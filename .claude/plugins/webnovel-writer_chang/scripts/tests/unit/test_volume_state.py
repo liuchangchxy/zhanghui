@@ -119,11 +119,18 @@ def test_set_deferred_updates_confirmed_through_volume(fresh_state):
     ([1], 3),        # hole: missing 2
     ([1, 2], 4),     # hole: missing 3
     ([1, 2, 3], 5),  # hole: missing 4
+    ([1, 2, 4], 5),  # hole: missing 3 — must reject adding 5 even though 5 == 4+1
 ])
 def test_index_continuity_invariant(fresh_state, existing, new_index):
     mgr = VolumeStateManager(fresh_state)
+    # Seed existing state directly so we can also test the case where the hole
+    # already exists in state (e.g. legacy data) and the next insert must still
+    # be rejected. The strict contiguity check makes it impossible to build a
+    # hole via the public API, so we bypass it here.
     for idx in existing:
-        mgr.append_or_update(confirmed_v1(index=idx, title=f"V{idx}"))
+        fresh_state["volumes"].append(
+            confirmed_v1(index=idx, title=f"V{idx}").to_dict()
+        )
     rec = confirmed_v1(index=new_index, title="X")
     with pytest.raises(ValueError, match="index continuity"):
         mgr.append_or_update(rec)
