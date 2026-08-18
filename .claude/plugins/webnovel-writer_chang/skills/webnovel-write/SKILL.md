@@ -179,7 +179,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 
 约束：无论选哪条路径，**不得覆盖作者手改**——除非用户在该次会话中显式说"覆盖"。
 
-### Step 0: Pre-Write Gate Check（oh-story 模式）
+### Step 0.5: Pre-Write Gate Check（oh-story 模式）
 
 每次写章前, 跑 `evaluate_pre_write_gates`：
 
