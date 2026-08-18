@@ -212,6 +212,64 @@ Use the Agent tool to run `webnovel-writer:deconstruction-agent`
 
 > Step 2-6 只能使用用户确认过、并已变形为本书差异化表达的模式；不可借用尚未确认或仍携带原作设定的字段。
 
+### Step 1.6：多卷骨架采集（新增）
+
+> **条件触发**：仅当用户预期 ≥ 2 卷时进入；若用户明确说"单卷完结"，跳过本步。
+>
+> **必读参考**：`references/multi-volume-ux.md`（本步骤的设计依据；执行本步前先读完）。
+
+#### 1.6.1 询问总卷数
+
+```
+你预计全书大约几卷？
+
+A. 已知具体数（如 8 卷） → 让我知道
+B. 大概范围（如 5-10 卷） → 让我知道
+C. 不确定，先填第一卷  → 跳过本项
+D. 让 AI 建议
+```
+
+记录 `expected_total_volumes`（可空）。
+
+#### 1.6.2 逐卷采集循环
+
+每轮采集 `VolumeRecord`，必填字段：
+- `title`（卷名）
+- `chapter_range`（章节范围，格式 "1-80" 或 "约 60 章"）
+- `core_conflict`（核心冲突，一句话）
+- `climax`（卷末高潮/状态变化）
+
+可选字段：`key_cool_points` / `characters_to_appear` / `foreshadowing`。
+
+每卷结束时调用 `VolumeStateManager.append_or_update()`，**不要**自己写 state.json。
+
+#### 1.6.3 每卷结束时的 4 选 1
+
+```
+A) 继续填写 V_{k+1}
+B) 让 AI 起草 V_{k+1}（进入 Step 5.5）
+C) 暂不确定后续卷，结束采集（设置 later_volumes_status=deferred）
+D) 批量粘贴剩余卷（一次贴多行表格）
+```
+
+#### 1.6.4 批量粘贴模式
+
+支持 markdown 表格直接粘贴：
+
+```
+| 卷号 | 卷名 | 章节范围 | 核心冲突 | 卷末高潮 |
+| 1 | 起势 | 1-80 | 宗门考核 | 夺得首席 |
+| 2 | 深入 | 81-180 | 敌派入侵 | 师尊受伤 |
+```
+
+逐行解析为 `VolumeRecord`，与逐卷循环走相同的状态机。
+
+#### 硬约束
+
+- `volumes[i].index` 必须连续无空洞（由 `VolumeStateManager` 强制）
+- 不创建空的 V2-VN 记录；用户没填就是没有
+- 不预填占位行到总纲
+
 ### Step 2：角色骨架与关系冲突
 
 > Step 2-6 只能使用用户确认过、并已变形为本书差异化表达的模式。
@@ -280,6 +338,42 @@ Use the Agent tool to run `webnovel-writer:deconstruction-agent`
 
 备注：
 - 若用户要求"贴近当下市场"，可触发外部检索并标注时间戳。
+
+### Step 5.5：AI 卷骨架起草（新增）
+
+> **触发条件**：仅当用户在 Step 1.6.3 选 B 时进入。
+
+调用 `data_modules/ai_volume_drafter.py:draft_next_volume()`：
+- 输入：用户的一句话 + 已 confirmed 卷列表 + 题材 + 目标 index
+- 输出：`CandidateVolume`（status=draft, source=ai）
+- **绝对不直接写盘**——只放在 `VolumeStateManager._drafts` 里
+
+调用 LLM：沿用主 LLM 配置（与 `webnovel-write` 同源）。
+
+#### 用户裁决
+
+AI 返回后，必须询问用户：
+
+```
+AI 起草了 V_{k+1}：
+
+卷名：<X>
+核心冲突：<Y>
+卷末高潮：<Z>
+
+A) 接受（status: draft → confirmed）
+B) 修改后接受（让用户改字段后接受）
+C) 拒绝，自己填
+D) 完全跳过这一卷（设 deferred）
+```
+
+只有 A / B 走 `VolumeStateManager.confirm_volume(k+1)`。
+
+#### 禁止行为
+
+- 禁止 AI 自动确认（无用户决议则不写入 state.json）
+- 禁止从已确认卷推断未填字段
+- 禁止覆盖已 confirmed 卷的字段
 
 ### Step 6：一致性复述与最终确认
 

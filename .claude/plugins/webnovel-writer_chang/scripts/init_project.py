@@ -210,6 +210,69 @@ def _build_master_outline(target_chapters: int, *, chapters_per_volume: int = 50
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _md_escape(s: str) -> str:
+    """Escape characters that break markdown tables / headings."""
+    if not isinstance(s, str):
+        s = str(s)
+    return (
+        s.replace("\\", "\\\\")
+         .replace("|", "\\|")
+         .replace("\n", " ")
+         .replace("\r", " ")
+    )
+
+
+def _render_volume_skeleton_outline(
+    skeleton: list[dict], target_chapters: int,
+) -> str:
+    """Render a multi-volume 总纲 from a user-supplied skeleton list.
+
+    Uses the same `### 第N卷` heading style as `_build_master_outline` so
+    /webnovel-plan can read it uniformly. Falls back to existing chapter
+    range / 核心冲突 / 卷末高潮 fields populated from the skeleton entry.
+    """
+    lines: list[str] = [
+        "# 总纲",
+        "",
+        "> 本文件由 init_project.py 通过 volume_skeleton 自动生成。",
+        "",
+        "## 卷结构",
+        "",
+    ]
+    for v in skeleton:
+        idx = v.get("index", "?")
+        title = v.get("title", "")
+        title = _md_escape(title)
+        rng = v.get("chapter_range", [])
+        if len(rng) == 2:
+            range_str = f"（第{rng[0]}-{rng[1]}章）"
+        else:
+            range_str = ""
+        if title:
+            heading = f"### 第{idx}卷 {title}{range_str}"
+        else:
+            heading = f"### 第{idx}卷{range_str}"
+        lines.append(heading)
+        conflict = v.get("core_conflict", "") or "（待填写）"
+        climax = v.get("climax", "") or "（待填写）"
+        lines.append(f"- 核心冲突：{_md_escape(conflict)}")
+        lines.append("- 关键爽点：")
+        lines.append(f"- 卷末高潮：{_md_escape(climax)}")
+        lines.append("- 主要登场角色：")
+        lines.append("- 关键伏笔（埋/收）：")
+        status = v.get("status", "confirmed")
+        lines.append(f"- 状态：{_md_escape(status)}")
+        lines.append("")
+    lines.append(f"> 预计总章节数：{target_chapters}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _inject_volume_rows(template_text: str, target_chapters: int, *, chapters_per_volume: int = 50) -> str:
     """在总纲模板的卷表中只注入首卷行（后续卷由规划完成后写回）。"""
     lines = template_text.splitlines()
@@ -346,6 +409,8 @@ def init_project(
     cultivation_subtiers: str = "",
     reference_research_dir: str = "",
     reference_overwrite: bool = False,
+    volume_skeleton: list[dict] | None = None,
+    force: bool = False,
 ) -> None:
     project_path = Path(project_dir).expanduser().resolve()
     if ".claude" in project_path.parts:
@@ -354,6 +419,29 @@ def init_project(
     genre_resolution = resolve_genre_input(genre)
     canonical_genre = genre_resolution.canonical_genre or genre
     project_path.mkdir(parents=True, exist_ok=True)
+
+    # Guard against silent re-init overwrite (spec §4.2 invariant protection).
+    # If volumes[] already has confirmed entries, refuse to overwrite unless caller
+    # opts in via the `force` parameter.
+    if not force:
+        existing_state_path = project_path / ".webnovel" / "state.json"
+        if existing_state_path.exists():
+            try:
+                _existing_state: Dict[str, Any] = json.loads(
+                    existing_state_path.read_text(encoding="utf-8")
+                )
+            except json.JSONDecodeError:
+                _existing_state = {}
+            confirmed_existing = [
+                v for v in _existing_state.get("volumes", [])
+                if v.get("status") == "confirmed"
+            ]
+            if confirmed_existing:
+                raise ValueError(
+                    f"Refusing to re-init: project already has "
+                    f"{len(confirmed_existing)} confirmed volume(s). "
+                    f"Pass force=True to override (not yet supported)."
+                )
 
     # 目录结构（同时兼容“卷目录”与后续扩展）
     directories = [
@@ -430,6 +518,41 @@ def init_project(
 
     if protagonist_name:
         state["protagonist_state"]["name"] = protagonist_name
+
+    # Volume skeleton: write volumes[] to state.json per spec §4.
+    # Use VolumeStateManager to enforce invariants (index continuity, etc.).
+    # Fail-fast on malformed entries (missing `index` or invalid
+    # status/source enum values raise ValueError) — these are
+    # structural errors the caller should fix, not silently coerced.
+    if volume_skeleton:
+        from data_modules.volume_state import (
+            VolumeRecord, VolumeSource, VolumeStatus, VolumeStateManager,
+        )
+
+        # Validate the FULL skeleton for index continuity BEFORE writing.
+        # VolumeStateManager.append_or_update enforces one-at-a-time,
+        # so we pre-check by walking through and calling it.
+        mgr = VolumeStateManager(state)
+        for v in volume_skeleton:
+            rec = VolumeRecord(
+                index=int(v["index"]),
+                title=v.get("title", ""),
+                chapter_range=v.get("chapter_range", [0, 0]),
+                core_conflict=v.get("core_conflict", ""),
+                climax=v.get("climax", ""),
+                status=VolumeStatus(v.get("status", "confirmed")),  # raises ValueError on invalid
+                source=VolumeSource(v.get("source", "human")),       # raises ValueError on invalid
+            )
+            mgr.append_or_update(rec)
+        # mgr has already written to state["volumes"] via append_or_update
+        # update planning_horizon (VolumeStateManager._update_horizon was called per append)
+        # setdefault for later_volumes_status to preserve re-init state
+        state["project_info"].setdefault("later_volumes_status", "deferred")
+    else:
+        # No skeleton: still initialize empty volumes[] and defaults so plan skill can read
+        state.setdefault("volumes", [])
+        state["project_info"].setdefault("confirmed_through_volume", 0)
+        state["project_info"].setdefault("later_volumes_status", "deferred")
 
     gf_type_norm = (golden_finger_type or "").strip()
     if gf_type_norm in {"无", "无金手指", "none"}:
@@ -676,7 +799,13 @@ def init_project(
     _write_text_if_missing(project_path / "设定集" / "反派设计.md", antagonist_content)
 
     outline_content = output_outline.strip() if output_outline else ""
-    if outline_content:
+
+    # Multi-volume skeleton path takes priority when provided
+    if volume_skeleton:
+        outline_content = _render_volume_skeleton_outline(
+            volume_skeleton, int(target_chapters)
+        )
+    elif outline_content:
         outline_content = _inject_volume_rows(outline_content, int(target_chapters)).rstrip() + "\n"
     else:
         outline_content = _build_master_outline(int(target_chapters))
