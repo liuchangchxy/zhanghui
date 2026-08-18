@@ -243,6 +243,18 @@ def sync_master_outline(
     *,
     writeback_file: str | Path | None = None,
 ) -> dict[str, Any]:
+    """Sync the V+1 anchor row in 大纲/总纲.md from the volume writeback JSON.
+
+    V+1 anchor source (per spec §5.4):
+      - Primary: `大纲/第N卷-总纲写回.json` (the writeback JSON the agent produces)
+      - The agent reads `state.json` `volumes[]` to decide what to put in the
+        V+1 anchor row (confirmed → use fields; deferred/absent → leave empty).
+      - This function does NOT itself read `state.json` — that decision lives
+        in the agent flow documented in `skills/webnovel-plan/SKILL.md` Step 9.
+
+    Hard constraint (spec §5.4): does NOT generate V+2+ detailed outlines
+    (节拍表 / 时间线 / 详细大纲 / 章纲).
+    """
     root = Path(project_root).expanduser().resolve()
     if volume < 1:
         raise MasterOutlineSyncError("volume must be >= 1")

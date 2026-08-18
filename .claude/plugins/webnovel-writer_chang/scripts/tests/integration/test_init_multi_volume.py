@@ -149,3 +149,93 @@ def test_init_rejects_invalid_status():
                      "status": "INVALID_ENUM_VALUE", "source": "human"},
                 ],
             )
+
+
+# ===== Issue 1 (Critical): re-init must not silently overwrite confirmed volumes =====
+
+
+def test_init_rejects_reinit_when_confirmed_volumes_exist():
+    """Spec invariant: re-init on a project with confirmed volumes must refuse."""
+    import pytest
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_path = Path(tmpdir)
+        # First init: confirm V1
+        init_project(
+            project_dir=str(project_path),
+            title="First",
+            genre="玄幻",
+            target_chapters=100,
+            target_words=300000,
+            volume_skeleton=[
+                {"index": 1, "title": "V1", "chapter_range": [1, 100],
+                 "core_conflict": "A", "climax": "B",
+                 "status": "confirmed", "source": "human"},
+            ],
+        )
+        # Second init: must refuse
+        with pytest.raises(ValueError, match="Refusing to re-init"):
+            init_project(
+                project_dir=str(project_path),
+                title="Second",
+                genre="玄幻",
+                target_chapters=100,
+                target_words=300000,
+                volume_skeleton=[
+                    {"index": 1, "title": "V1-改", "chapter_range": [1, 100],
+                     "core_conflict": "X", "climax": "Y",
+                     "status": "confirmed", "source": "human"},
+                ],
+            )
+
+
+def test_init_reinit_with_force_overrides():
+    """force=True allows re-init even when confirmed volumes exist."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_path = Path(tmpdir)
+        init_project(
+            project_dir=str(project_path),
+            title="First",
+            genre="玄幻",
+            target_chapters=100,
+            target_words=300000,
+            volume_skeleton=[
+                {"index": 1, "title": "V1", "chapter_range": [1, 100],
+                 "core_conflict": "A", "climax": "B",
+                 "status": "confirmed", "source": "human"},
+            ],
+        )
+        # force=True should bypass guard
+        init_project(
+            project_dir=str(project_path),
+            title="Second",
+            genre="玄幻",
+            target_chapters=100,
+            target_words=300000,
+            force=True,
+        )
+
+
+# ===== Issue 11 (Important): markdown escape in _render_volume_skeleton_outline =====
+
+
+def test_init_renders_markdown_escaping_for_table_breaking_chars():
+    """Pipe character in user-supplied title must be escaped to avoid breaking tables."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_path = Path(tmpdir)
+        init_project(
+            project_dir=str(project_path),
+            title="Esc",
+            genre="玄幻",
+            target_chapters=100,
+            target_words=300000,
+            volume_skeleton=[
+                {"index": 1, "title": "V1|A", "chapter_range": [1, 100],
+                 "core_conflict": "C|D", "climax": "X|Y",
+                 "status": "confirmed", "source": "human"},
+            ],
+        )
+        outline = (project_path / "大纲" / "总纲.md").read_text(encoding="utf-8")
+        # Pipe characters must be escaped with backslash
+        assert "V1\\|A" in outline
+        assert "C\\|D" in outline
+        assert "X\\|Y" in outline

@@ -32,13 +32,16 @@ def draft_next_volume(
 def _build_prompt(
     concept: str, prior: list[VolumeRecord], genre: str, target_index: int,
 ) -> str:
+    # Sanitize concept to prevent prompt injection (newlines / field labels)
+    safe_concept = concept.replace("\n", " ").replace("\r", " ").strip()[:500]
+    safe_genre = genre.replace("\n", " ").strip()[:50]
     prior_text = "\n".join(
         f"- V{v.index} {v.title}: 冲突={v.core_conflict}, 高潮={v.climax}"
         for v in prior
     ) or "(无)"
     return (
-        f"题材：{genre}\n"
-        f"全书一句话：{concept}\n"
+        f"题材：{safe_genre}\n"
+        f"全书一句话：{safe_concept}\n"
         f"已确认前卷（必须承接且不重复伏笔）：\n{prior_text}\n\n"
         f"请起草第 {target_index} 卷的骨架：\n"
         f"卷名：\n"

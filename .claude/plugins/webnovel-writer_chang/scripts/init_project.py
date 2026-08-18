@@ -215,6 +215,18 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _md_escape(s: str) -> str:
+    """Escape characters that break markdown tables / headings."""
+    if not isinstance(s, str):
+        s = str(s)
+    return (
+        s.replace("\\", "\\\\")
+         .replace("|", "\\|")
+         .replace("\n", " ")
+         .replace("\r", " ")
+    )
+
+
 def _render_volume_skeleton_outline(
     skeleton: list[dict], target_chapters: int,
 ) -> str:
@@ -235,6 +247,7 @@ def _render_volume_skeleton_outline(
     for v in skeleton:
         idx = v.get("index", "?")
         title = v.get("title", "")
+        title = _md_escape(title)
         rng = v.get("chapter_range", [])
         if len(rng) == 2:
             range_str = f"（第{rng[0]}-{rng[1]}章）"
@@ -245,13 +258,15 @@ def _render_volume_skeleton_outline(
         else:
             heading = f"### 第{idx}卷{range_str}"
         lines.append(heading)
-        lines.append(f"- 核心冲突：{v.get('core_conflict', '') or '（待填写）'}")
+        conflict = v.get("core_conflict", "") or "（待填写）"
+        climax = v.get("climax", "") or "（待填写）"
+        lines.append(f"- 核心冲突：{_md_escape(conflict)}")
         lines.append("- 关键爽点：")
-        lines.append(f"- 卷末高潮：{v.get('climax', '') or '（待填写）'}")
+        lines.append(f"- 卷末高潮：{_md_escape(climax)}")
         lines.append("- 主要登场角色：")
         lines.append("- 关键伏笔（埋/收）：")
         status = v.get("status", "confirmed")
-        lines.append(f"- 状态：{status}")
+        lines.append(f"- 状态：{_md_escape(status)}")
         lines.append("")
     lines.append(f"> 预计总章节数：{target_chapters}")
     lines.append("")
@@ -395,6 +410,7 @@ def init_project(
     reference_research_dir: str = "",
     reference_overwrite: bool = False,
     volume_skeleton: list[dict] | None = None,
+    force: bool = False,
 ) -> None:
     project_path = Path(project_dir).expanduser().resolve()
     if ".claude" in project_path.parts:
@@ -403,6 +419,29 @@ def init_project(
     genre_resolution = resolve_genre_input(genre)
     canonical_genre = genre_resolution.canonical_genre or genre
     project_path.mkdir(parents=True, exist_ok=True)
+
+    # Guard against silent re-init overwrite (spec §4.2 invariant protection).
+    # If volumes[] already has confirmed entries, refuse to overwrite unless caller
+    # opts in via the `force` parameter.
+    if not force:
+        existing_state_path = project_path / ".webnovel" / "state.json"
+        if existing_state_path.exists():
+            try:
+                _existing_state: Dict[str, Any] = json.loads(
+                    existing_state_path.read_text(encoding="utf-8")
+                )
+            except json.JSONDecodeError:
+                _existing_state = {}
+            confirmed_existing = [
+                v for v in _existing_state.get("volumes", [])
+                if v.get("status") == "confirmed"
+            ]
+            if confirmed_existing:
+                raise ValueError(
+                    f"Refusing to re-init: project already has "
+                    f"{len(confirmed_existing)} confirmed volume(s). "
+                    f"Pass force=True to override (not yet supported)."
+                )
 
     # 目录结构（同时兼容“卷目录”与后续扩展）
     directories = [

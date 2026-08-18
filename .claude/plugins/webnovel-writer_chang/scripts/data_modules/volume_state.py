@@ -98,7 +98,6 @@ class VolumeStateManager:
     def get_planning_horizon(self) -> PlanningHorizon:
         pi = self.state["project_info"]
         lvs_raw = pi.get("later_volumes_status", "deferred")
-        # Defensive: convert string to enum if legacy data
         if isinstance(lvs_raw, LaterVolumesStatus):
             lvs = lvs_raw
         else:
@@ -106,9 +105,12 @@ class VolumeStateManager:
                 lvs = LaterVolumesStatus(lvs_raw)
             except ValueError:
                 lvs = LaterVolumesStatus.DEFERRED
+        # Recompute from volumes[] rather than trusting the cached field
+        confirmed = [d["index"] for d in self.state.get("volumes", []) if d.get("status") == "confirmed"]
+        confirmed_through = max(confirmed) if confirmed else 0
         return PlanningHorizon(
             expected_total_volumes=pi.get("expected_total_volumes"),
-            confirmed_through_volume=int(pi.get("confirmed_through_volume", 0)),
+            confirmed_through_volume=confirmed_through,
             later_volumes_status=lvs,
         )
 
@@ -118,8 +120,24 @@ class VolumeStateManager:
     # ----- write: human input -----
 
     def append_or_update(self, rec: VolumeRecord) -> None:
-        self._check_continuity(rec.index)
+        if rec.status == VolumeStatus.DRAFT:
+            raise ValueError(
+                "Cannot append_or_update with status=DRAFT — use append_draft() for "
+                "in-memory candidates and confirm_volume() to persist."
+            )
+        # Defensive: refuse AI source for any user-controlled state (confirmed/deferred)
         existing_idx = self._find_dict_index(rec.index)
+        if existing_idx is not None:
+            existing = self.state["volumes"][existing_idx]
+            if (
+                existing.get("status") == "confirmed"
+                and rec.source == VolumeSource.AI
+            ):
+                raise ValueError(
+                    f"AI cannot overwrite confirmed volume {rec.index} "
+                    f"via append_or_update; use confirm_volume() which has the check."
+                )
+        self._check_continuity(rec.index)
         d = rec.to_dict()
         d["updated_at"] = _now_iso()
         if existing_idx is not None:
@@ -147,8 +165,8 @@ class VolumeStateManager:
             existing_idx = self._find_dict_index(index)
             if existing_idx is not None:
                 existing_status = self.state["volumes"][existing_idx].get("status")
-                if existing_status == "confirmed":
-                    # AI must NOT overwrite confirmed; discard draft silently
+                if existing_status in ("confirmed", "deferred"):
+                    # AI must NOT overwrite any user-controlled state
                     return
             rec = VolumeRecord(
                 index=cand.index,
@@ -173,6 +191,20 @@ class VolumeStateManager:
     def set_deferred(self, index: int) -> None:
         # _set_status will raise if the record is missing
         self._set_status(index, VolumeStatus.DEFERRED, {VolumeStatus.CONFIRMED})
+
+    def revise_volume(self, index: int, fields: dict) -> None:
+        """Update specific fields of an existing record. Refuses AI overwrite of confirmed/deferred."""
+        existing_idx = self._find_dict_index(index)
+        if existing_idx is None:
+            raise ValueError(f"No record for volume {index}")
+        existing = self.state["volumes"][existing_idx]
+        # Defensive: refuse AI source for any user-controlled state
+        if fields.get("source") == VolumeSource.AI and existing.get("status") in ("confirmed", "deferred"):
+            raise ValueError(f"Cannot revise confirmed/deferred volume {index} with AI source")
+        for k, v in fields.items():
+            existing[k] = v
+        existing["updated_at"] = _now_iso()
+        # No horizon recompute since fields shouldn't include status
 
     # ----- internal -----
 
