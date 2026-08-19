@@ -30,7 +30,7 @@ PLUGIN_REL = ".claude/plugins/webnovel-writer_chang"
 
 VALID_MANIFEST = {
     "name": "webnovel-writer_chang",
-    "version": "6.3.0",
+    "version": "6.4.0",
     "description": "test fixture manifest",
     "skills": "./skills/",
     "commands": "./commands/",

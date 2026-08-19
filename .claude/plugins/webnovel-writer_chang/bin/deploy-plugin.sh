@@ -57,6 +57,8 @@ RUNTIME_FILES=(
     "scripts/story_craft.py"
     "scripts/update_master_outline.py"
     "scripts/review_pipeline.py"          # NEW
+    "scripts/_shared/safe_overwrite.py"   # NEW (2026-08-19 safe-rerun)
+    "scripts/check_plan_artifacts.py"     # NEW (2026-08-19 SKILL.md landing)
     "dashboard/app.py"                    # NEW
     "skills/webnovel-init/SKILL.md"
     "skills/webnovel-init/references/multi-volume-ux.md"
@@ -74,6 +76,8 @@ TEST_FILES=(
     "scripts/tests/unit/test_promise_ledger.py"           # NEW
     "scripts/tests/unit/test_chunked_write.py"            # NEW
     "scripts/tests/unit/test_story_craft_multivolume.py"  # NEW
+    "scripts/tests/test_safe_overwrite.py"               # NEW (2026-08-19)
+    "scripts/tests/test_check_plan_artifacts.py"         # NEW (2026-08-19)
     "scripts/tests/integration/test_init_multi_volume.py"
     "scripts/tests/integration/test_plan_v_plus_one_anchor.py"
     "scripts/tests/integration/test_plan_all_volumes.py"  # NEW

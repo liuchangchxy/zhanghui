@@ -52,11 +52,11 @@ def test_plugin_name_is_exact() -> None:
     )
 
 
-def test_plugin_version_is_6_3_0() -> None:
-    """plugin.json version 必须是 6.3.0——避免 marketplace.json 6.3.0 与 plugin.json 6.2.1 drift。"""
+def test_plugin_version_is_6_4_0() -> None:
+    """plugin.json version 必须是 6.4.0——避免 marketplace 与 plugin drift。"""
     import json
     data = json.loads((PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-    assert data["version"] == "6.3.0", f"plugin version 必须是 6.3.0，实际是 {data['version']!r}"
+    assert data["version"] == "6.4.0", f"plugin version 必须是 6.4.0，实际是 {data['version']!r}"
 
 
 def test_no_scripts_in_dev_dotclaude() -> None:
