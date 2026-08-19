@@ -373,6 +373,7 @@ next_vol = mgr.get_volume(${volume_id} + 1)
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" master-outline-sync \
   --volume {volume_id} \
   --writeback-file "大纲/第{volume_id}卷-总纲写回.json" \
+  --on-conflict=overwrite \
   --format text
 
 ```
@@ -382,7 +383,8 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" master-outlin
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" update-state -- \
   --volume-planned {volume_id} \
-  --chapters-range "{start}-{end}"
+  --chapters-range "{start}-{end}" \
+  --on-conflict=overwrite
 
 ```
 
