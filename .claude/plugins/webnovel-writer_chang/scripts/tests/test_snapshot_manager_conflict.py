@@ -35,6 +35,9 @@ def test_default_refuses_rmtree(fake_snapshot_project):
         text=True,
     )
     assert result.returncode != 0
+    assert "已存在" in result.stderr or "请传 --on-conflict" in result.stderr, (
+        f"默认错误信息应包含 '已存在' 或 '请传 --on-conflict'，实际: {result.stderr!r}"
+    )
     assert (
         fake_snapshot_project
         / ".webnovel"
@@ -94,3 +97,5 @@ def test_overwrite_replaces_snapshot(fake_snapshot_project):
     snap_dir = fake_snapshot_project / ".webnovel" / "snapshots" / "ch0001"
     assert not (snap_dir / "old.txt").exists()
     assert (snap_dir / "manifest.json").exists()
+    # 验证 dummy .md 真的被复制进了新快照（防止 copy 循环静默 skip）
+    assert (snap_dir / "大纲" / "总纲.md").read_text(encoding="utf-8") == "# dummy"

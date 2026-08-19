@@ -146,8 +146,8 @@ def cmd_freeze(args: argparse.Namespace) -> int:
             print(f"[snapshot] Conflict policy rejected: {exc}", file=sys.stderr)
             return EXIT_INFRA
         # resolve_conflict 的 skip 模式只输出提示，调用方必须显式短路。
+        # 注意：resolve_conflict 已打印过 SKIP 行，这里不要再打印。
         if on_conflict == "skip":
-            print(f"SKIP: {snap_dir} 已存在，未修改", file=sys.stderr)
             return EXIT_OK
         # 只有 overwrite 策略通过后才清空旧快照，避免 ghost files。
         import shutil
