@@ -1,5 +1,4 @@
 from pathlib import Path
-import pytest
 from scripts._shared.safe_overwrite import ConflictMode, resolve_conflict, _in_claude_code_context
 
 
@@ -20,6 +19,11 @@ def test_in_claude_code_context_without_env(monkeypatch):
     assert _in_claude_code_context() is False
 
 
-def test_resolve_conflict_no_exists_no_mode():
-    # exists=False → 不管 mode 是什么都直接通过
-    resolve_conflict(exists=False, path=Path("/tmp/x"), mode=None)
+def test_resolve_conflict_no_exists_no_mode(capsys):
+    # exists=False → 不管 mode 是什么都直接通过；不应输出 SKIP/OVERWRITE/APPEND 噪音
+    result = resolve_conflict(exists=False, path=Path("/tmp/x"), mode=None)
+    assert result is None
+    captured = capsys.readouterr()
+    assert "SKIP" not in captured.err
+    assert "OVERWRITE" not in captured.err
+    assert "APPEND" not in captured.err
