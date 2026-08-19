@@ -227,8 +227,8 @@ def test_freeze_clears_stale_files_from_prior_freeze(tmp_path: Path):
 
     # 删除原文（模拟"改设定后重新 freeze"）
     (tmp_path / "设定集" / "陈默.md").unlink()
-    # 第二次 freeze → 不应残留陈默.md
-    r2 = run_snapshot("freeze", "1", cwd=tmp_path)
+    # 第二次 freeze 显式覆盖 → 不应残留陈默.md
+    r2 = run_snapshot("freeze", "1", "--on-conflict", "overwrite", cwd=tmp_path)
     assert r2.returncode == 0
     assert not (snap / "设定集" / "陈默.md").exists(), "ghost file should be cleared"
     assert (snap / "大纲" / "总纲.md").is_file()
