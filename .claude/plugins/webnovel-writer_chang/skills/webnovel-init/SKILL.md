@@ -150,6 +150,18 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
   - 不存在 → 不阻断，但在 Step 6 提示用户可填写以固化风格底线
 - **创作宪法落库约定（Phase E）**：宪法模板在 init 末尾被自动 copy 到 `${PROJECT_ROOT}/.webnovel/writer-profile/写作宪法.md`（仅当目标文件不存在）。`/webnovel-write` 的 Step 0 优先从书项目副本读；若副本缺失则回退到 plugin 基线模板。
 
+#### 重跑守卫（Step 0 后置，2026-08-19 新增）
+
+init 不允许重 init 已 confirmed 项目；若用户明确要"沿用 + 部分改写"，先扫一遍 artifact 状态：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/check_plan_artifacts.py" \
+  --project-root "${PROJECT_ROOT}" --volume 1 \
+  --format json
+```
+
+输出非空 → **必须用 AskUserQuestion 三态询问用户**（沿用 / 部分改写 / 暂停初始化）。
+
 ### Step 1：故事核与商业定位
 
 收集项（必收）：
