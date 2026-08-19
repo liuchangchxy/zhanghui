@@ -69,6 +69,24 @@ python3 -X utf8 "${SCRIPTS_DIR}/reference_search.py" --skill plan --table 命名
 
 ### Step 1：加载项目数据并确认前置条件
 
+#### 重跑守卫（Step 1 前置，2026-08-19 新增）
+
+运行 plan 前必须扫描目标卷的现有 .md artifact，避免静默覆盖：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/check_plan_artifacts.py" \
+  --project-root "${PROJECT_ROOT}" --volume ${volume_id} \
+  --format json
+```
+
+输出非空 → **必须用 AskUserQuestion 三态询问用户**：
+
+- 重写 → 加 `--on-conflict=overwrite` 给后续 `master-outline-sync` / `update-state`
+- 部分改写 → 加 `--on-conflict=append`
+- 不改 → 加 `--on-conflict=skip`（默认行为，遇到 .md 存在时脚本会报错退出；此处显式传 skip 让它直接通过）
+
+未询问用户前，禁止进入 Step 4 / Step 5 / Step 6 / Step 7。
+
 ```bash
 # 项目配置/投影状态（兼容读取，不作为写后事实真源）
 cat "$PROJECT_ROOT/.webnovel/state.json"
