@@ -1,4 +1,8 @@
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
 from scripts._shared.safe_overwrite import ConflictMode, resolve_conflict, _in_claude_code_context
 
 
@@ -27,3 +31,36 @@ def test_resolve_conflict_no_exists_no_mode(capsys):
     assert "SKIP" not in captured.err
     assert "OVERWRITE" not in captured.err
     assert "APPEND" not in captured.err
+
+
+def test_resolve_conflict_exists_no_mode_raises():
+    with pytest.raises(FileExistsError, match="已存在"):
+        resolve_conflict(exists=True, path=Path("/tmp/x"), mode=None)
+
+
+def test_resolve_conflict_skip_does_not_modify(capsys):
+    resolve_conflict(exists=True, path=Path("/tmp/skip"), mode="skip")
+    captured = capsys.readouterr()
+    assert "SKIP" in captured.err
+
+
+def test_resolve_conflict_overwrite_allows_subsequent(capsys):
+    # resolve_conflict 不直接写文件，只返回；调用方负责覆盖
+    resolve_conflict(exists=True, path=Path("/tmp/ow"), mode="overwrite")
+    captured = capsys.readouterr()
+    assert "OVERWRITE" in captured.err
+
+
+def test_resolve_conflict_append_with_op_executes_op(tmp_path, capsys):
+    target = tmp_path / "ap.txt"
+    target.write_text("base\n")
+
+    def my_append(p: Path):
+        with p.open("a", encoding="utf-8") as f:
+            f.write("appended\n")
+
+    resolve_conflict(exists=True, path=target, mode="append", append_op=my_append)
+    content = target.read_text()
+    assert content == "base\nappended\n"
+    captured = capsys.readouterr()
+    assert "APPEND" in captured.err
