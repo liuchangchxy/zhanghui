@@ -1,5 +1,4 @@
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -46,7 +45,8 @@ def test_resolve_conflict_skip_does_not_modify(capsys):
 
 def test_resolve_conflict_overwrite_allows_subsequent(capsys):
     # resolve_conflict 不直接写文件，只返回；调用方负责覆盖
-    resolve_conflict(exists=True, path=Path("/tmp/ow"), mode="overwrite")
+    result = resolve_conflict(exists=True, path=Path("/tmp/ow"), mode="overwrite")
+    assert result is None  # 必须显式返回 None，让调用方可以接着覆盖
     captured = capsys.readouterr()
     assert "OVERWRITE" in captured.err
 
