@@ -24,6 +24,13 @@ def main() -> None:
     parser.add_argument("--fulfillment-result", required=True)
     parser.add_argument("--disambiguation-result", required=True)
     parser.add_argument("--extraction-result", required=True)
+    parser.add_argument(
+        "--on-conflict",
+        choices=["overwrite", "skip"],
+        default=None,
+        help="已存在 chapter commit 时如何处理: overwrite/skip；不传则报错。"
+        "append/ask 不支持 (chapter commit 是不可变的 point-in-time snapshot)。",
+    )
     args = parser.parse_args()
 
     service = ChapterCommitService(Path(args.project_root))
@@ -34,8 +41,8 @@ def main() -> None:
         disambiguation_result=_read_json(args.disambiguation_result),
         extraction_result=_read_json(args.extraction_result),
     )
-    service.persist_commit(payload)
-    payload = service.apply_projections(payload)
+    service.persist_commit(payload, on_conflict=args.on_conflict)
+    payload = service.apply_projections(payload, on_conflict=args.on_conflict)
     print(json.dumps(payload, ensure_ascii=False))
 
 
