@@ -18,3 +18,22 @@ def test_set_chapter_meta_accepts_xiwang_alias():
     state = {}
     set_chapter_meta(state, chapter=1, hook_type="悬念钩")
     assert state["chapter_meta"]["1"]["hook_type"] == "悬念钩"
+
+
+def test_allowed_fields_includes_outline_fields():
+    """plan 提的字段都能入库。"""
+    from scripts.story_craft import ALLOWED_CHAPTER_META_FIELDS
+    required = {
+        "CBN", "CPNs", "CEN",
+        "must_cover", "forbidden",
+        "strand", "coolpoint",
+        "time_anchor", "villain_tier",
+    }
+    missing = required - ALLOWED_CHAPTER_META_FIELDS
+    assert not missing, f"缺少字段: {missing}"
+
+
+def test_set_chapter_meta_accepts_cbn():
+    state = {}
+    set_chapter_meta(state, chapter=1, CBN="主角突破境界")
+    assert state["chapter_meta"]["1"]["CBN"] == "主角突破境界"

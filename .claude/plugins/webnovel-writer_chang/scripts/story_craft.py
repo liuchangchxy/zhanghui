@@ -246,10 +246,16 @@ VALID_HOOK_TYPES = {
 }
 
 ALLOWED_CHAPTER_META_FIELDS = {
+    # 原有 11 字段
     "beat_position", "hook_type",
     "scene_goal", "scene_conflict", "scene_setback", "scene_resolution",
     "sequel_reaction", "sequel_dilemma", "sequel_decision",
     "foreshadow_buried", "foreshadow_paid_off",
+    # 新增：结构化节点 + outline 字段
+    "CBN", "CPNs", "CEN",
+    "must_cover", "forbidden",
+    "strand", "coolpoint",
+    "time_anchor", "villain_tier",
 }
 
 
