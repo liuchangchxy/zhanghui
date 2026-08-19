@@ -120,11 +120,13 @@ def _normalize_anchor(payload: dict[str, Any], expected_volume: int) -> dict[str
     }
 
 
-def _update_volume_table(text: str, anchor: dict[str, str], on_conflict: str | None = None) -> tuple[str, bool]:
+def _update_volume_table(text: str, anchor: dict[str, str], on_conflict: str | None = None, *, target_path: Path | None = None) -> tuple[str, bool]:
     """Sync V+1 anchor row into 大纲/总纲.md's 卷划分 table.
 
     on_conflict: 传入 resolve_conflict；遇到已存在 row 时按 flag 决定
-    overwrite/append/skip/ask。None = 报错。
+    overwrite/skip/ask。None = 报错。append 在本函数不支持（只做 in-place
+    edit），会抛 ValueError。
+    target_path: 用于错误信息的目标文件路径；None 时降级为 <未指定路径>。
     """
     lines = text.splitlines()
     header_idx = next((i for i, line in enumerate(lines) if line.strip().startswith("| 卷号")), None)
@@ -149,11 +151,15 @@ def _update_volume_table(text: str, anchor: dict[str, str], on_conflict: str | N
             cells = _split_row(lines[idx])
             if cells and cells[0] == anchor["volume"]:
                 # 检测到已存在 row → 守卫
-                resolve_conflict(
-                    exists=True,
-                    path=None,  # 仅作展示用
-                    mode=on_conflict,
-                )
+                try:
+                    resolve_conflict(
+                        exists=True,
+                        path=target_path,
+                        mode=on_conflict,
+                    )
+                except (ValueError, RuntimeError) as exc:
+                    # append/ask 在本脚本无意义；统一转 MasterOutlineSyncError
+                    raise MasterOutlineSyncError(str(exc)) from exc
                 # SKIP：守卫通过但保持原样，不修改 row
                 if on_conflict == "skip":
                     return text, False
@@ -304,7 +310,7 @@ def sync_master_outline(
     structured_items = _structured_writeback_items(payload)
 
     before = master_path.read_text(encoding="utf-8")
-    after, volume_changed = _update_volume_table(before, anchor, on_conflict=on_conflict)
+    after, volume_changed = _update_volume_table(before, anchor, on_conflict=on_conflict, target_path=master_path)
     after, appended_count = _append_foreshadow_rows(after, structured_items)
     if after != before:
         master_path.write_text(after, encoding="utf-8")
