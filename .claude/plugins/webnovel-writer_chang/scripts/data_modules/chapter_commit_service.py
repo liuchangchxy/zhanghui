@@ -105,8 +105,9 @@ class ChapterCommitService:
         # 守卫：chapter commit 是不可变的 point-in-time snapshot，不支持 append/ask
         try:
             resolve_conflict(exists=path.exists(), path=path, mode=on_conflict)
-        except (ValueError, RuntimeError) as exc:
-            # append/ask 在本脚本无意义；统一转 ChapterCommitError
+        except (FileExistsError, ValueError, RuntimeError) as exc:
+            # default 模式 (FileExistsError) + append (ValueError) + ask (RuntimeError)
+            # 统一转 ChapterCommitError
             raise ChapterCommitError(f"Conflict policy rejected: {exc}") from exc
         # SKIP 短路守卫（per Lesson 1）：resolve_conflict 只打印 SKIP，必须显式返回
         if on_conflict == "skip":

@@ -1,79 +1,100 @@
-"""Integration tests for chapter_commit.py --on-conflict flag.
+"""Tests for ChapterCommitService.persist_commit --on-conflict 守卫。
 
-Per Lesson 1/2/3:
-  - SKIP short-circuit must happen after resolve_conflict returns
-  - Real path must be passed to resolve_conflict (not None)
-  - Only ['overwrite', 'skip'] allowed in choices (append/ask don't make sense
-    for immutable point-in-time chapter commits)
-
-Note: These tests focus on the guard behavior. They only check "default rejects"
-and "skip does not overwrite" because constructing valid workflow JSON (review
-result / fulfillment result / disambiguation result / extraction result) for a
-full overwrite happy-path is out of scope for the guard test.
+直接调 service（不通过 CLI）确保守卫真正被执行，避免上层 Pydantic 校验掩盖。
 """
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-PLUGIN_ROOT = Path("/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang")
+# 与 sibling 测试一致：把 scripts/ 加入 path（让 scripts.* 和 data_modules.* 都可解析）
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from data_modules.chapter_commit_service import ChapterCommitService, ChapterCommitError  # noqa: E402
+from scripts._shared.safe_overwrite import ConflictMode  # noqa: E402
+
+
+def _make_payload(service: ChapterCommitService, chapter: int = 1) -> dict:
+    """构造一个 minimal accepted payload。"""
+    return service.build_commit(
+        chapter=chapter,
+        review_result={"blocking_count": 0},
+        fulfillment_result={
+            "planned_nodes": ["发现陷阱"],
+            "covered_nodes": ["发现陷阱"],
+            "missed_nodes": [],
+            "extra_nodes": [],
+        },
+        disambiguation_result={"pending": []},
+        extraction_result={
+            "state_deltas": [],
+            "entity_deltas": [],
+            "accepted_events": [],
+        },
+    )
 
 
 @pytest.fixture
-def fake_chapter_project(tmp_path):
-    """构造一个最小可跑项目：.story-system/commits/ + 已存在的 commit file."""
-    project = tmp_path / "proj"
-    (project / ".story-system" / "commits").mkdir(parents=True)
-    # 已存在的 commit
-    (project / ".story-system" / "commits" / "chapter_001.commit.json").write_text(
+def service_with_existing_commit(tmp_path):
+    """预创建已存在的 chapter_001.commit.json 的 service。"""
+    commits_dir = tmp_path / ".story-system" / "commits"
+    commits_dir.mkdir(parents=True)
+    existing = commits_dir / "chapter_001.commit.json"
+    existing.write_text(
         json.dumps({"meta": {"chapter": 1, "status": "accepted"}, "old": True}),
         encoding="utf-8",
     )
-    return project
+    return ChapterCommitService(tmp_path), existing
 
 
-def test_default_rejects_overwrite(fake_chapter_project):
-    """默认（不传 --on-conflict）应报错且不覆盖 accepted commit."""
-    result = subprocess.run(
-        [sys.executable, "scripts/chapter_commit.py",
-         "--project-root", str(fake_chapter_project),
-         "--chapter", "1",
-         "--review-result", "/tmp/rr.json",
-         "--fulfillment-result", "/tmp/fr.json",
-         "--disambiguation-result", "/tmp/dr.json",
-         "--extraction-result", "/tmp/er.json"],
-        cwd=PLUGIN_ROOT, capture_output=True, text=True,
-    )
-    assert result.returncode != 0
-    content = (fake_chapter_project / ".story-system" / "commits" / "chapter_001.commit.json").read_text()
-    assert json.loads(content).get("old") is True  # 未被覆盖
+class TestPersistCommitConflictGuard:
+    def test_default_rejects_overwrite(self, service_with_existing_commit):
+        """默认（mode=None）+ commit 已存在 → 抛 ChapterCommitError，文件不变。"""
+        service, existing = service_with_existing_commit
+        payload = _make_payload(service, chapter=1)
+        with pytest.raises(ChapterCommitError, match="已存在"):
+            service.persist_commit(payload, on_conflict=None)
+        # 文件未被覆盖
+        assert json.loads(existing.read_text()).get("old") is True
 
+    def test_overwrite_replaces_existing(self, service_with_existing_commit):
+        """--on-conflict=overwrite + commit 已存在 → 文件被替换为新 payload。"""
+        service, existing = service_with_existing_commit
+        payload = _make_payload(service, chapter=1)
+        result = service.persist_commit(
+            payload, on_conflict=ConflictMode.OVERWRITE.value
+        )
+        assert result == existing
+        new_content = json.loads(existing.read_text())
+        assert "old" not in new_content
+        assert new_content["meta"]["status"] == "accepted"
 
-def test_skip_does_not_overwrite(fake_chapter_project):
-    """--on-conflict=skip 应保持旧 commit 不变.
+    def test_skip_keeps_existing(self, service_with_existing_commit):
+        """--on-conflict=skip + commit 已存在 → 文件不变，return path。"""
+        service, existing = service_with_existing_commit
+        payload = _make_payload(service, chapter=1)
+        result = service.persist_commit(
+            payload, on_conflict=ConflictMode.SKIP.value
+        )
+        assert result == existing
+        # 文件未变
+        assert json.loads(existing.read_text()).get("old") is True
 
-    验证 SKIP 守卫真的执行了（stderr 含 SKIP 字样），不只是 argparse 拒绝了
-    未知 flag 而意外保留文件。
-    """
-    result = subprocess.run(
-        [sys.executable, "scripts/chapter_commit.py",
-         "--project-root", str(fake_chapter_project),
-         "--chapter", "1",
-         "--review-result", "/tmp/rr.json",
-         "--fulfillment-result", "/tmp/fr.json",
-         "--disambiguation-result", "/tmp/dr.json",
-         "--extraction-result", "/tmp/er.json",
-         "--on-conflict", "skip"],
-        cwd=PLUGIN_ROOT, capture_output=True, text=True,
-    )
-    # argparse must accept --on-conflict=skip (rejecting "unrecognized arguments"
-    # means the flag itself is missing from main()).
-    assert "unrecognized arguments" not in result.stderr, (
-        f"--on-conflict flag missing from chapter_commit.py argparse: {result.stderr}"
-    )
-    # Even if the rest of the workflow fails (it will — dummy /tmp JSON files),
-    # the commit file should NOT be touched.
-    content = (fake_chapter_project / ".story-system" / "commits" / "chapter_001.commit.json").read_text()
-    assert json.loads(content).get("old") is True
+    def test_default_writes_when_no_existing(self, tmp_path):
+        """默认 + commit 不存在 → 直接写入（正常路径）。"""
+        service = ChapterCommitService(tmp_path)
+        payload = _make_payload(service, chapter=1)
+        result = service.persist_commit(payload)
+        assert result.exists()
+        content = json.loads(result.read_text())
+        assert content["meta"]["status"] == "accepted"
+
+    def test_append_mode_rejected_as_unsupported(self, service_with_existing_commit):
+        """--on-conflict=append 在本脚本不支持 → ChapterCommitError。"""
+        service, _ = service_with_existing_commit
+        payload = _make_payload(service, chapter=1)
+        with pytest.raises(ChapterCommitError, match="不支持 append"):
+            service.persist_commit(
+                payload, on_conflict=ConflictMode.APPEND.value
+            )
