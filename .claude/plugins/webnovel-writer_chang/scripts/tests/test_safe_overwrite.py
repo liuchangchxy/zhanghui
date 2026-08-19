@@ -64,3 +64,22 @@ def test_resolve_conflict_append_with_op_executes_op(tmp_path, capsys):
     assert content == "base\nappended\n"
     captured = capsys.readouterr()
     assert "APPEND" in captured.err
+
+
+def test_resolve_conflict_append_without_op_raises():
+    with pytest.raises(ValueError, match="不支持 append"):
+        resolve_conflict(exists=True, path=Path("/tmp/x"), mode="append", append_op=None)
+
+
+def test_resolve_conflict_ask_outside_claude_code_raises(monkeypatch):
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    with pytest.raises(RuntimeError, match="仅在 Claude Code"):
+        resolve_conflict(exists=True, path=Path("/tmp/x"), mode="ask")
+
+
+def test_resolve_conflict_ask_in_claude_code_exits(monkeypatch, tmp_path):
+    """ASK 模式在 Claude Code 上下文应 sys.exit(0)，把 JSON 输出留给主流程捕获。"""
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
+    with pytest.raises(SystemExit) as exc_info:
+        resolve_conflict(exists=True, path=Path("/tmp/x"), mode="ask")
+    assert exc_info.value.code == 0
