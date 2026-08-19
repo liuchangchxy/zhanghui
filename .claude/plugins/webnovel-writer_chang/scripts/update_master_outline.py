@@ -10,7 +10,10 @@ from typing import Any
 
 from runtime_compat import enable_windows_utf8_stdio
 
-from scripts._shared.safe_overwrite import resolve_conflict
+try:
+    from scripts._shared.safe_overwrite import resolve_conflict
+except ModuleNotFoundError:
+    from _shared.safe_overwrite import resolve_conflict
 
 
 REQUIRED_VOLUME_ARTIFACTS = (
@@ -157,7 +160,7 @@ def _update_volume_table(text: str, anchor: dict[str, str], on_conflict: str | N
                         path=target_path,
                         mode=on_conflict,
                     )
-                except (ValueError, RuntimeError) as exc:
+                except (FileExistsError, ValueError, RuntimeError) as exc:
                     # append/ask 在本脚本无意义；统一转 MasterOutlineSyncError
                     raise MasterOutlineSyncError(str(exc)) from exc
                 # SKIP：守卫通过但保持原样，不修改 row

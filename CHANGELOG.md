@@ -32,7 +32,7 @@
 ### 测试
 
 - 新增 30 个测试，覆盖 safe_overwrite 全部 ConflictMode 分支 + 3 个 P0 脚本的 conflict 路径 + 扩展字段白名单 + check_plan_artifacts 落地。
-- 现有 672 个测试保持通过，无新增回归。
+- 实际回归：修复 `update_master_outline.py` subprocess import fallback 后，655 个测试通过、4 个失败（3 个为本次修复的 regress 测试现已恢复 + 1 个 pre-existing `test_run_behavior_evals_fast_suite_passes_for_current_package`，与本次改动无关）。
 - 已知 pre-existing failure：`test_run_behavior_evals_fast_suite_passes_for_current_package`（不相关 contract drift，与本次改动无关）。
 
 ### 引用

@@ -112,7 +112,7 @@ claude
 - `overwrite` — 覆盖（重跑全流程场景）
 - `append` — 追加（增量同步场景）
 - `skip` — 跳过（幂等检查场景）
-- `ask` — 询问人类（交互场景，依赖 `CLAUDE_CODE` 环境变量识别环境）
+- `ask` — 询问人类（交互场景，依赖 `CLAUDE_PLUGIN_ROOT` 环境变量识别 Claude Code 上下文）
 
 实现：`scripts/_shared/safe_overwrite.py`。调用者样例：
 

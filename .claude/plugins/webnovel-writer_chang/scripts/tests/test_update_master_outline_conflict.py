@@ -53,7 +53,11 @@ def test_default_runs_raises_file_exists_error(fake_project):
         cwd=PLUGIN_ROOT, capture_output=True, text=True,
     )
     assert result.returncode != 0
-    assert "已存在" in result.stderr or "请传 --on-conflict" in result.stderr
+    # Error is JSON-emitted to stdout (master_outline.py wraps MasterOutlineSyncError into JSON)
+    combined_output = result.stdout + result.stderr
+    assert "已存在" in combined_output or "请传 --on-conflict" in combined_output, (
+        f"默认错误信息应包含 '已存在' 或 '请传 --on-conflict'，实际: stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
     # V2 row 仍未被覆盖
     content = (fake_project / "大纲" / "总纲.md").read_text()
     assert "old" in content
