@@ -34,8 +34,8 @@ def main() -> None:
     args = parser.parse_args()
 
     # CLI 层 default=overwrite：CLI 是用户显式动作；service 层 default=None 保持严格。
-    # 内部 apply_projections 会再调一次 persist_commit 写 projection_status，
-    # 所以此处必须显式传 flag，避免 service 层 default 触发误报。
+    # apply_projections 内部会调用 persist_commit 一次（chapter_commit_service.py:174），
+    # 所以这里不重复调，避免双写 + projection_status pending→done 中间态。
     service = ChapterCommitService(Path(args.project_root))
     payload = service.build_commit(
         chapter=args.chapter,
@@ -44,7 +44,6 @@ def main() -> None:
         disambiguation_result=_read_json(args.disambiguation_result),
         extraction_result=_read_json(args.extraction_result),
     )
-    service.persist_commit(payload, on_conflict=args.on_conflict)
     payload = service.apply_projections(payload, on_conflict=args.on_conflict)
     print(json.dumps(payload, ensure_ascii=False))
 

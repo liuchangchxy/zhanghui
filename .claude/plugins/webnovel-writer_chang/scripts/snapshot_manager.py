@@ -101,6 +101,8 @@ def discover_files(project_root: Path) -> list[Path]:
     - 只扫 SNAPSHOT_PATHS 列出的根（默认 设定集/ + 大纲/）
     - 只收 .md
     - 忽略隐藏文件（以 . 开头）
+    - **拒绝 symlink**：防止 `设定集 → /etc` 这种误配置把外部文件读进 snapshot
+      （数据外泄 / 磁盘爆满 / .git remote 误推送）
     """
     found: list[Path] = []
     for sub in SNAPSHOT_PATHS:
@@ -109,6 +111,8 @@ def discover_files(project_root: Path) -> list[Path]:
             continue
         for p in root.rglob("*.md"):
             if any(part.startswith(".") for part in p.relative_to(root).parts):
+                continue
+            if p.is_symlink():
                 continue
             found.append(p)
     return sorted(found)

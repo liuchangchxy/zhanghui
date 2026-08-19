@@ -18,6 +18,8 @@
 - 默认行为从"静默覆盖"改为"存在则报错"。
 - 调用者必须显式传 `--on-conflict=<mode>`；不传时若目标已存在则抛 `FileExistsError`。
 - 影响：`master-outline-sync` / `chapter-commit` / `update-state` / `snapshot_manager cmd_freeze`。
+- 同时 `data_modules/memory_contract_adapter.py`（batch replay 路径）现在显式 `on_conflict="overwrite"` —— **不需要外部调用方关心，但实现内部已自包含**。
+- `chapter_commit.py` 不再 double-write commit（移除冗余的 `persist_commit` 调用，仅由 `apply_projections` 内部统一写一次），避免 projection_status 中间态。
 
 ### 修复
 
@@ -28,6 +30,10 @@
 - 3 个 SKILL.md（plan/init/review）通过重跑守卫段落地：plan/init/review SKILL.md 在"重跑"场景下要求 SKILL 自己处理"已存在"产物，**脚本默认不再静默覆盖**。
 - 2 个 SKILL.md 调用者显式传 `--on-conflict=overwrite`（plan/write）——这两个场景语义是"重跑就是覆盖"，显式声明后人类读者一眼能看明白。
 - `dashboard/app.py` 经审计确认为只读（无写入路径需要升级），审计结果归档。
+- 对抗性审查关键修复：
+  - `snapshot_manager.discover_files` 拒绝 symlink（防止 `设定集 → /etc` 把外部文件读进 snapshot 引致数据外泄/磁盘爆满）。
+  - `chapter_commit.py` 移除冗余的 `service.persist_commit` 调用 —— 仅由 `apply_projections` 内部统一写一次 commit，避免 projection_status 中间态。
+  - `data_modules/memory_contract_adapter.py` 显式传 `on_conflict="overwrite"`（保持 batch replay 行为）。
 
 ### 测试
 

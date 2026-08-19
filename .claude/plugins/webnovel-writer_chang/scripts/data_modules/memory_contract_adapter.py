@@ -129,9 +129,11 @@ class MemoryContractAdapter:
             disambiguation_result=result.get("disambiguation_result", {}) or {},
             extraction_result=result.get("extraction_result", {}) or {},
         )
-        service.persist_commit(payload)
+        # memory_contract_adapter 是 batch replay 路径，必须显式 overwrite
+        # （service 默认 strict 会让现有 chapter commit 报错，CHANGELOG 已注 breaking change）
+        service.persist_commit(payload, on_conflict="overwrite")
         if payload["meta"]["status"] == "accepted":
-            payload = service.apply_projections(payload)
+            payload = service.apply_projections(payload, on_conflict="overwrite")
 
         summary_file = self.config.webnovel_dir / "summaries" / f"ch{chapter:04d}.md"
         return CommitResult(
