@@ -103,6 +103,27 @@ claude
 
 **书项目侧不需要任何 `.claude/` 配置。**
 
+## 当前能力
+
+### safe_overwrite（重跑守卫，2026-08-19）
+
+防止脚本静默覆盖已有产物。所有 P0 脚本（`update_master_outline` / `chapter_commit` / `snapshot_manager`）默认"目标已存在则报错"，调用者必须显式传 `--on-conflict=<mode>`：
+
+- `overwrite` — 覆盖（重跑全流程场景）
+- `append` — 追加（增量同步场景）
+- `skip` — 跳过（幂等检查场景）
+- `ask` — 询问人类（交互场景，依赖 `CLAUDE_PLUGIN_ROOT` 环境变量识别 Claude Code 上下文）
+
+实现：`scripts/_shared/safe_overwrite.py`。调用者样例：
+
+```bash
+python3 scripts/update_master_outline.py --project-root /path/to/proj --on-conflict=overwrite
+```
+
+不传 flag 且目标已存在 → 抛 `FileExistsError`，不修改文件。
+
+详见 [`CHANGELOG.md`](CHANGELOG.md) 2026-08-19 条目。
+
 ## 常见问题
 
 ### SessionStart 警告 "plugin cache is not a symlink"
@@ -124,4 +145,4 @@ rm -rf ~/.cache/webnovel-writer-chang/
 
 ## 版本
 
-当前 plugin version: 6.3.0（自我包含重构首发版）
+当前 plugin version: 6.4.0（safe-rerun 重构：safe_overwrite 守卫层落地）

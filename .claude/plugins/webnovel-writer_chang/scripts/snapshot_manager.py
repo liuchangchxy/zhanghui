@@ -21,6 +21,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts._shared.safe_overwrite import resolve_conflict
+except ModuleNotFoundError:  # direct script execution from outside plugin root
+    from _shared.safe_overwrite import resolve_conflict
+
 # 冻结范围：设定集 + 大纲。后续章节的正文/SQLite 不冻结（那是产物，不是输入）。
 SNAPSHOT_PATHS = ("设定集", "大纲")
 
@@ -96,6 +101,8 @@ def discover_files(project_root: Path) -> list[Path]:
     - 只扫 SNAPSHOT_PATHS 列出的根（默认 设定集/ + 大纲/）
     - 只收 .md
     - 忽略隐藏文件（以 . 开头）
+    - **拒绝 symlink**：防止 `设定集 → /etc` 这种误配置把外部文件读进 snapshot
+      （数据外泄 / 磁盘爆满 / .git remote 误推送）
     """
     found: list[Path] = []
     for sub in SNAPSHOT_PATHS:
@@ -104,6 +111,8 @@ def discover_files(project_root: Path) -> list[Path]:
             continue
         for p in root.rglob("*.md"):
             if any(part.startswith(".") for part in p.relative_to(root).parts):
+                continue
+            if p.is_symlink():
                 continue
             found.append(p)
     return sorted(found)
@@ -131,8 +140,20 @@ def cmd_freeze(args: argparse.Namespace) -> int:
 
     chapter = args.chapter
     snap_dir = _chapter_dir(project_root, chapter)
-    # Clear stale dir to avoid ghost files from prior freezes
+    on_conflict = getattr(args, "on_conflict", None)
     if snap_dir.exists():
+        try:
+            resolve_conflict(
+                exists=snap_dir.exists(), path=snap_dir, mode=on_conflict
+            )
+        except (FileExistsError, ValueError, RuntimeError) as exc:
+            print(f"[snapshot] Conflict policy rejected: {exc}", file=sys.stderr)
+            return EXIT_INFRA
+        # resolve_conflict 的 skip 模式只输出提示，调用方必须显式短路。
+        # 注意：resolve_conflict 已打印过 SKIP 行，这里不要再打印。
+        if on_conflict == "skip":
+            return EXIT_OK
+        # 只有 overwrite 策略通过后才清空旧快照，避免 ghost files。
         import shutil
         shutil.rmtree(snap_dir)
 
@@ -296,6 +317,15 @@ def main(argv: list[str] | None = None) -> int:
         "freeze", help="冻结 N 章的 设定集+大纲", parents=[common]
     )
     p_freeze.add_argument("chapter", type=int, help="章节号")
+    p_freeze.add_argument(
+        "--on-conflict",
+        choices=["overwrite", "skip"],
+        default=None,
+        help=(
+            "已存在 snapshot dir 时如何处理: overwrite/skip；不传则报错。"
+            "append/ask 不支持 (snapshot 是 point-in-time 副本)。"
+        ),
+    )
     p_freeze.set_defaults(func=cmd_freeze)
 
     p_verify = sub.add_parser(

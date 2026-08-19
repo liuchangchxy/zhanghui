@@ -7,6 +7,8 @@ from typing import Any, Dict
 
 from chapter_outline_loader import volume_num_for_chapter_from_state
 
+from _shared.safe_overwrite import resolve_conflict
+
 from .chapter_commit_schema import (
     DisambiguationResult,
     ExtractionResult,
@@ -24,6 +26,10 @@ from .override_ledger_service import (
     ensure_override_ledger_columns,
     persist_amend_proposals,
 )
+
+
+class ChapterCommitError(RuntimeError):
+    """Raised when chapter commit operations fail with caller-actionable errors."""
 
 
 class ChapterCommitService:
@@ -88,10 +94,24 @@ class ChapterCommitService:
             },
         }
 
-    def persist_commit(self, payload: Dict[str, Any]) -> Path:
+    def persist_commit(
+        self,
+        payload: Dict[str, Any],
+        on_conflict: str | None = None,
+    ) -> Path:
         target = self.project_root / ".story-system" / "commits"
         target.mkdir(parents=True, exist_ok=True)
         path = target / f"chapter_{int(payload['meta']['chapter']):03d}.commit.json"
+        # 守卫：chapter commit 是不可变的 point-in-time snapshot，不支持 append/ask
+        try:
+            resolve_conflict(exists=path.exists(), path=path, mode=on_conflict)
+        except (FileExistsError, ValueError, RuntimeError) as exc:
+            # default 模式 (FileExistsError) + append (ValueError) + ask (RuntimeError)
+            # 统一转 ChapterCommitError
+            raise ChapterCommitError(f"Conflict policy rejected: {exc}") from exc
+        # SKIP 短路守卫（per Lesson 1）：resolve_conflict 只打印 SKIP，必须显式返回
+        if on_conflict == "skip":
+            return path
         write_json(path, payload)
         return path
 
@@ -120,7 +140,11 @@ class ChapterCommitService:
             return f"failed:{reason[6:] or 'writer_error'}"
         return "skipped"
 
-    def apply_projection_writers(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def apply_projection_writers(
+        self,
+        payload: Dict[str, Any],
+        on_conflict: str | None = None,
+    ) -> Dict[str, Any]:
         status = str((payload.get("meta") or {}).get("status") or "")
         if status not in {"accepted", "rejected"}:
             return payload
@@ -147,7 +171,7 @@ class ChapterCommitService:
             except Exception as exc:
                 payload["projection_status"][name] = f"failed:{exc}"
                 writer_results[name] = {"status": "failed", "error": str(exc)}
-        commit_path = self.persist_commit(payload)
+        commit_path = self.persist_commit(payload, on_conflict=on_conflict)
         try:
             from .projection_log import append_projection_run
 
@@ -161,7 +185,11 @@ class ChapterCommitService:
             pass
         return payload
 
-    def apply_projections(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def apply_projections(
+        self,
+        payload: Dict[str, Any],
+        on_conflict: str | None = None,
+    ) -> Dict[str, Any]:
         status = str((payload.get("meta") or {}).get("status") or "")
         if status not in {"accepted", "rejected"}:
             return payload
@@ -187,4 +215,4 @@ class ChapterCommitService:
                     persist_amend_proposals(conn, chapter, proposals)
                     conn.commit()
 
-        return self.apply_projection_writers(payload)
+        return self.apply_projection_writers(payload, on_conflict=on_conflict)

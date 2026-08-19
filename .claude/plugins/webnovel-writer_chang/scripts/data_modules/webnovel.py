@@ -517,6 +517,17 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
             issues.append("WARN: thematic_echoes 为空")
         if not state.get("story_craft", {}).get("character_arc"):
             issues.append("WARN: character_arc 未设置")
+        # 7+. .md 文件存在性检查（P0 修复）
+        from pathlib import Path
+        outline_dir = root / "大纲"
+        expected_md = [
+            outline_dir / f"第{args.volume}卷-节拍表.md",
+            outline_dir / f"第{args.volume}卷-时间线.md",
+            outline_dir / f"第{args.volume}卷-详细大纲.md",
+        ]
+        for md in expected_md:
+            if not md.is_file():
+                issues.append(f"BLOCKER: {md.relative_to(root)} 不存在")
 
         for issue in issues:
             print(issue)

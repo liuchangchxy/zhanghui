@@ -149,6 +149,22 @@ sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 
 ## Step 4: 生成审查报告
 
+#### 重跑守卫（Step 4 前置，2026-08-19 新增）
+
+写审查报告前必须检查现有报告路径：
+
+```bash
+test -f "${PROJECT_ROOT}/审查报告/第${start}-${end}章审查报告.md" && echo "EXISTS" || echo "NEW"
+```
+
+EXISTS → **必须用 AskUserQuestion 三态询问用户**（覆盖 / 改名追加 / 跳过本次审查）。
+
+- 覆盖 → 继续生成报告
+- 改名追加 → 生成 `审查报告/第${start}-${end}章审查报告-${ts}.md`
+- 跳过 → 提前结束流程，不生成报告
+
+未询问用户前，禁止覆盖已有审查报告。
+
 保存到：`审查报告/第{start}-{end}章审查报告.md`
 
 **报告结构（精简版）**:

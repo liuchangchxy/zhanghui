@@ -559,7 +559,8 @@ Step 5 失败隔离规则：
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" chapter-commit \
   --chapter {chapter_num} \
   --chapter-file "正文/第{chapter_padded}章-{title_safe}.md" \
-  --review-score "${REVIEW_SCORE}"
+  --review-score "${REVIEW_SCORE}" \
+  --on-conflict=overwrite
 
 ```
 

@@ -10,6 +10,11 @@ from typing import Any
 
 from runtime_compat import enable_windows_utf8_stdio
 
+try:
+    from scripts._shared.safe_overwrite import resolve_conflict
+except ModuleNotFoundError:
+    from _shared.safe_overwrite import resolve_conflict
+
 
 REQUIRED_VOLUME_ARTIFACTS = (
     "第{volume}卷-节拍表.md",
@@ -118,7 +123,14 @@ def _normalize_anchor(payload: dict[str, Any], expected_volume: int) -> dict[str
     }
 
 
-def _update_volume_table(text: str, anchor: dict[str, str]) -> tuple[str, bool]:
+def _update_volume_table(text: str, anchor: dict[str, str], on_conflict: str | None = None, *, target_path: Path | None = None) -> tuple[str, bool]:
+    """Sync V+1 anchor row into 大纲/总纲.md's 卷划分 table.
+
+    on_conflict: 传入 resolve_conflict；遇到已存在 row 时按 flag 决定
+    overwrite/skip/ask。None = 报错。append 在本函数不支持（只做 in-place
+    edit），会抛 ValueError。
+    target_path: 用于错误信息的目标文件路径；None 时降级为 <未指定路径>。
+    """
     lines = text.splitlines()
     header_idx = next((i for i, line in enumerate(lines) if line.strip().startswith("| 卷号")), None)
     new_row = _render_row(
@@ -130,6 +142,43 @@ def _update_volume_table(text: str, anchor: dict[str, str]) -> tuple[str, bool]:
             anchor["volume_end_climax"],
         ]
     )
+
+    # 如果表存在 + 检测到已有 row → 守卫
+    if header_idx is not None:
+        row_start = header_idx + 2
+        row_end = row_start
+        while row_end < len(lines) and lines[row_end].strip().startswith("|"):
+            row_end += 1
+
+        for idx in range(row_start, row_end):
+            cells = _split_row(lines[idx])
+            if cells and cells[0] == anchor["volume"]:
+                # 检测到已存在 row → 守卫
+                try:
+                    resolve_conflict(
+                        exists=True,
+                        path=target_path,
+                        mode=on_conflict,
+                    )
+                except (FileExistsError, ValueError, RuntimeError) as exc:
+                    # append/ask 在本脚本无意义；统一转 MasterOutlineSyncError
+                    raise MasterOutlineSyncError(str(exc)) from exc
+                # SKIP：守卫通过但保持原样，不修改 row
+                if on_conflict == "skip":
+                    return text, False
+                # 守卫通过 → 执行覆盖
+                while len(cells) < 5:
+                    cells.append("")
+                cells[1] = anchor["volume_name"]
+                if anchor["chapters_range"]:
+                    cells[2] = anchor["chapters_range"]
+                cells[3] = anchor["core_conflict"]
+                cells[4] = anchor["volume_end_climax"]
+                rendered = _render_row(cells[:5])
+                changed = rendered != lines[idx]
+                lines[idx] = rendered
+                return "\n".join(lines).rstrip() + "\n", changed
+
     if header_idx is None:
         addition = [
             "",
@@ -139,27 +188,6 @@ def _update_volume_table(text: str, anchor: dict[str, str]) -> tuple[str, bool]:
             new_row,
         ]
         return "\n".join(lines + addition).rstrip() + "\n", True
-
-    row_start = header_idx + 2
-    row_end = row_start
-    while row_end < len(lines) and lines[row_end].strip().startswith("|"):
-        row_end += 1
-
-    changed = False
-    for idx in range(row_start, row_end):
-        cells = _split_row(lines[idx])
-        if cells and cells[0] == anchor["volume"]:
-            while len(cells) < 5:
-                cells.append("")
-            cells[1] = anchor["volume_name"]
-            if anchor["chapters_range"]:
-                cells[2] = anchor["chapters_range"]
-            cells[3] = anchor["core_conflict"]
-            cells[4] = anchor["volume_end_climax"]
-            rendered = _render_row(cells[:5])
-            changed = rendered != lines[idx]
-            lines[idx] = rendered
-            return "\n".join(lines).rstrip() + "\n", changed
 
     lines.insert(row_end, new_row)
     return "\n".join(lines).rstrip() + "\n", True
@@ -250,6 +278,7 @@ def sync_master_outline(
     *,
     writeback_file: str | Path | None = None,
     all_volumes_mode: bool = False,
+    on_conflict: str | None = None,
 ) -> dict[str, Any]:
     """Sync the V+1 anchor row in 大纲/总纲.md from the volume writeback JSON.
 
@@ -284,7 +313,7 @@ def sync_master_outline(
     structured_items = _structured_writeback_items(payload)
 
     before = master_path.read_text(encoding="utf-8")
-    after, volume_changed = _update_volume_table(before, anchor)
+    after, volume_changed = _update_volume_table(before, anchor, on_conflict=on_conflict, target_path=master_path)
     after, appended_count = _append_foreshadow_rows(after, structured_items)
     if after != before:
         master_path.write_text(after, encoding="utf-8")
@@ -310,6 +339,12 @@ def main() -> None:
         help="I6: bypass _require_current_volume_artifacts pre-check "
         "(用于 /webnovel-plan --all-volumes 当前卷尚未生成 artifacts 的场景)",
     )
+    parser.add_argument(
+        "--on-conflict",
+        choices=["overwrite", "append", "skip", "ask"],
+        default=None,
+        help="已存在 V+1 row 时如何处理: overwrite/append/skip/ask；不传则报错。",
+    )
     parser.add_argument("--format", choices=["json", "text"], default="json")
     args = parser.parse_args()
 
@@ -319,6 +354,7 @@ def main() -> None:
             args.volume,
             writeback_file=args.writeback_file or None,
             all_volumes_mode=args.all_volumes_mode,
+            on_conflict=args.on_conflict,
         )
     except MasterOutlineSyncError as exc:
         if args.format == "json":

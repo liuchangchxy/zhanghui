@@ -234,13 +234,28 @@ def add_thematic_echo(state: dict, premise: str, chapter: int, manifestation: st
     return state
 
 
-VALID_HOOK_TYPES = {"悬念式", "反转式", "情绪炸弹式", "信息投放式", "留白式", "反讽式"}
+VALID_HOOK_TYPES = {
+    "悬念式", "悬念钩",
+    "反转式", "反转钩",
+    "情绪炸弹式", "情绪钩",
+    "信息投放式",
+    "留白式",
+    "反讽式",
+    "爽点钩",
+    "危机钩",
+}
 
 ALLOWED_CHAPTER_META_FIELDS = {
+    # 原有 11 字段
     "beat_position", "hook_type",
     "scene_goal", "scene_conflict", "scene_setback", "scene_resolution",
     "sequel_reaction", "sequel_dilemma", "sequel_decision",
     "foreshadow_buried", "foreshadow_paid_off",
+    # 新增：结构化节点 + outline 字段
+    "CBN", "CPNs", "CEN",
+    "must_cover", "forbidden",
+    "strand", "coolpoint",
+    "time_anchor", "villain_tier",
 }
 
 
