@@ -16,7 +16,7 @@ from .chapter_commit_schema import (
 )
 from .durable_projection import read_commit_file
 from .event_projection_router import EventProjectionRouter
-from .commit_artifacts import extraction_list, extraction_text
+from .commit_artifacts import extraction_dict, extraction_list, extraction_text
 from .event_log_store import EventLogStore
 from .projection_rebuild_context import _controlled_rebuild
 
@@ -307,8 +307,9 @@ def _validate_outputs(root: Path, commits: list[dict[str, Any]]) -> None:
 
     index_writer = IndexProjectionWriter(root)
     expected_chapters: set[int] = set()
-    expected_scenes: set[tuple[int, int]] = set()
-    expected_appearances: set[tuple[str, int]] = set()
+    expected_chapters_full: dict[int, tuple[str, str, int, str, str]] = {}
+    expected_scenes: set[tuple[int, int, int, int, str, str, str]] = set()
+    expected_appearances: set[tuple[str, int, str, float]] = set()
     expected_state_changes: set[tuple[str, str, str, str, str, int]] = set()
     for item in commits:
         chapter = item["chapter"]
@@ -316,16 +317,47 @@ def _validate_outputs(root: Path, commits: list[dict[str, Any]]) -> None:
         if payload["meta"]["status"] != "accepted":
             continue
         expected_chapters.add(chapter)
+        meta = extraction_dict(payload, "chapter_meta")
+        title = str(meta.get("title") or payload.get("chapter_title") or index_writer._title_from_chapter_file(chapter) or "").strip()
+        location = str(meta.get("location") or payload.get("location") or "").strip()
+        summary = str(extraction_text(payload, "summary_text") or meta.get("summary") or "").strip()
+        word_count = index_writer._safe_int(meta.get("word_count") or payload.get("word_count"))
+        if word_count <= 0:
+            word_count = index_writer._chapter_word_count(chapter)
+        characters = meta.get("characters") or index_writer._collect_character_ids(payload)
+        if not isinstance(characters, list):
+            characters = []
+        expected_chapters_full[chapter] = (
+            title, location, word_count,
+            json.dumps([str(c) for c in characters if str(c).strip()], ensure_ascii=False), summary,
+        )
         for idx, scene in enumerate(extraction_list(payload, "scenes"), start=1):
             if isinstance(scene, dict):
                 scene_index = index_writer._safe_int(scene.get("scene_index") or scene.get("index") or idx)
-                expected_scenes.add((chapter, scene_index))
+                scene_chars = scene.get("characters") or scene.get("character_ids") or []
+                if not isinstance(scene_chars, list):
+                    scene_chars = []
+                expected_scenes.add((
+                    chapter, scene_index, index_writer._safe_int(scene.get("start_line")),
+                    index_writer._safe_int(scene.get("end_line")), str(scene.get("location") or "").strip(),
+                    str(scene.get("summary") or scene.get("content") or "").strip(),
+                    json.dumps([str(c) for c in scene_chars if str(c).strip()], ensure_ascii=False),
+                ))
         for entity in extraction_list(payload, "entities_appeared"):
             if not isinstance(entity, dict):
                 continue
             entity_id = str(entity.get("id") or entity.get("entity_id") or "").strip()
             if entity_id and entity_id != "NEW":
-                expected_appearances.add((entity_id, chapter))
+                mentions = entity.get("mentions") or []
+                if isinstance(mentions, str):
+                    mentions = [mentions]
+                if not isinstance(mentions, list):
+                    mentions = []
+                expected_appearances.add((
+                    entity_id, chapter,
+                    json.dumps([str(m) for m in mentions if str(m).strip()], ensure_ascii=False),
+                    index_writer._safe_float(entity.get("confidence"), 1.0),
+                ))
         for change in index_writer._collect_state_changes(payload):
             entity_id = str(change.get("entity_id") or "").strip()
             field = str(change.get("field") or "").strip()
@@ -338,9 +370,19 @@ def _validate_outputs(root: Path, commits: list[dict[str, Any]]) -> None:
                 str(change.get("reason") or "").strip(), change_chapter,
             ))
     with sqlite3.connect(db_path) as conn:
-        actual_chapters = {row[0] for row in conn.execute("SELECT chapter FROM chapters")}
-        actual_scenes = {(row[0], row[1]) for row in conn.execute("SELECT chapter, scene_index FROM scenes")}
-        actual_appearances = {(row[0], row[1]) for row in conn.execute("SELECT entity_id, chapter FROM appearances")}
+        actual_chapters_full = {
+            row[0]: (row[1] or "", row[2] or "", row[3] or 0, row[4] or "[]", row[5] or "")
+            for row in conn.execute("SELECT chapter, title, location, word_count, characters, summary FROM chapters")
+        }
+        actual_chapters = set(actual_chapters_full)
+        actual_scenes = {
+            (row[0], row[1], row[2] or 0, row[3] or 0, row[4] or "", row[5] or "", row[6] or "[]")
+            for row in conn.execute("SELECT chapter, scene_index, start_line, end_line, location, summary, characters FROM scenes")
+        }
+        actual_appearances = {
+            (row[0], row[1], row[2] or "[]", row[3] if row[3] is not None else 1.0)
+            for row in conn.execute("SELECT entity_id, chapter, mentions, confidence FROM appearances")
+        }
         actual_state_changes = {
             (row[0], row[1], row[2] or "", row[3] or "", row[4] or "", row[5])
             for row in conn.execute("SELECT entity_id, field, old_value, new_value, reason, chapter FROM state_changes")
@@ -348,6 +390,9 @@ def _validate_outputs(root: Path, commits: list[dict[str, Any]]) -> None:
         state_change_row_count = conn.execute("SELECT COUNT(*) FROM state_changes").fetchone()[0]
     if state_change_row_count != len(actual_state_changes):
         raise ProjectionRebuildError("state_changes contains duplicate projection rows", projection="index")
+    for chapter, expected_fields in expected_chapters_full.items():
+        if actual_chapters_full.get(chapter) != expected_fields:
+            raise ProjectionRebuildError("chapter index fields differ from canonical commit", chapter=chapter, projection="index")
     for name, actual, expected in (
         ("chapters", actual_chapters, expected_chapters),
         ("scenes", actual_scenes, expected_scenes),
@@ -359,7 +404,8 @@ def _validate_outputs(root: Path, commits: list[dict[str, Any]]) -> None:
             sample = next(iter(difference), None)
             chapter_for_row = (
                 sample if name == "chapters" and isinstance(sample, int)
-                else sample[0] if isinstance(sample, tuple) and name in {"scenes", "appearances"}
+                else sample[0] if isinstance(sample, tuple) and name == "scenes"
+                else sample[1] if isinstance(sample, tuple) and name == "appearances"
                 else sample[5] if isinstance(sample, tuple) and name == "state_changes"
                 else None
             )

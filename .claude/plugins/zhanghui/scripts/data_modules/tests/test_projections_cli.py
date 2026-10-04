@@ -377,3 +377,22 @@ def test_full_rebuild_validates_scenes_appearances_and_state_change_index(tmp_pa
     assert report["error"]["projection"] == "index"
     assert report["error"]["chapter"] == 4
     assert "scenes index rows differ" in report["error"]["message"]
+
+
+def test_full_rebuild_validates_index_field_values(tmp_path, monkeypatch):
+    _make_index_rich_commit(tmp_path)
+    from data_modules.index_manager import IndexManager
+    original = IndexManager.record_appearance
+
+    def corrupt_mentions(self, entity_id, chapter, mentions, confidence=1.0, skip_if_exists=False):
+        original(self, entity_id, chapter, mentions, confidence, skip_if_exists)
+        with self._get_conn() as conn:
+            conn.execute("UPDATE appearances SET mentions='[]' WHERE entity_id=? AND chapter=?", (entity_id, chapter))
+
+    monkeypatch.setattr(IndexManager, "record_appearance", corrupt_mentions)
+    report = rebuild_projections(tmp_path)
+
+    assert report["ok"] is False
+    assert report["error"]["projection"] == "index"
+    assert report["error"]["chapter"] == 4
+    assert "appearances index rows differ" in report["error"]["message"]
