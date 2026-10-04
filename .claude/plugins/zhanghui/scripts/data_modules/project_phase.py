@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover
     from scripts.chapter_paths import find_chapter_file, volume_num_for_chapter
 
 from .projection_log import latest_projection_run, projection_status_from_run
+from .artifact_validator import REQUIRED_PROJECTION_WRITERS
 
 
 PHASE_NO_PROJECT = "no_project"
@@ -196,6 +197,14 @@ def _scan_commits(project_root: Path) -> list[ChapterCommitInfo]:
         if logged_projection_status:
             projection_status = logged_projection_status
             projection_source = "projection_log"
+        elif not projection_status:
+            # New canonical commits intentionally contain no mutable projection
+            # status. No run record means projection is pending and replayable.
+            projection_source = "pending"
+            projection_status = {
+                writer: ("pending" if writer == "state" or status == "accepted" else "skipped")
+                for writer in REQUIRED_PROJECTION_WRITERS
+            }
         commits.append(
             ChapterCommitInfo(
                 chapter=chapter,

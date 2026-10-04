@@ -17,6 +17,13 @@ from .chapter_commit_schema import (
 )
 from .commit_artifacts import extraction_list
 from .config import DataModulesConfig
+from .durable_projection import (
+    DurableCommitError,
+    canonical_commit_json,
+    commit_path as durable_commit_path,
+    read_commit_file,
+    require_durable_commit_match,
+)
 from .event_log_store import EventLogStore
 from .event_projection_router import EventProjectionRouter
 from .story_contracts import write_json
@@ -85,13 +92,6 @@ class ChapterCommitService:
             "fulfillment_result": fulfillment.model_dump(),
             "disambiguation_result": disambiguation.model_dump(),
             "extraction_result": extraction_payload,
-            "projection_status": {
-                "state": "pending",
-                "index": "pending",
-                "summary": "pending",
-                "memory": "pending",
-                "vector": "pending",
-            },
         }
 
     def persist_commit(
@@ -99,9 +99,32 @@ class ChapterCommitService:
         payload: Dict[str, Any],
         on_conflict: str | None = None,
     ) -> Path:
+        # Projection execution is mutable operational state. It is never part
+        # of the canonical chapter transaction record.
+        payload = dict(payload)
+        payload.pop("projection_status", None)
         target = self.project_root / ".story-system" / "commits"
         target.mkdir(parents=True, exist_ok=True)
         path = target / f"chapter_{int(payload['meta']['chapter']):03d}.commit.json"
+        if path.exists() and on_conflict == "overwrite":
+            raise ChapterCommitError(
+                f"Conflict policy rejected: overwrite is forbidden for canonical chapter commits: {path}"
+            )
+        if not path.exists():
+            higher = self._higher_commit_chapters(int(payload["meta"]["chapter"]))
+            if higher:
+                chapter = int(payload["meta"]["chapter"])
+                raise ChapterCommitError(
+                    f"Chapter commits must be created in increasing chapter order; "
+                    f"chapter {chapter} follows existing chapter {max(higher)}"
+                )
+            projected = self._projected_current_chapter()
+            chapter = int(payload["meta"]["chapter"])
+            if chapter < projected:
+                raise ChapterCommitError(
+                    f"Chapter commits must follow projected state in increasing order; "
+                    f"chapter {chapter} < projected chapter {projected}"
+                )
         # 守卫：chapter commit 是不可变的 point-in-time snapshot，不支持 append/ask
         try:
             resolve_conflict(exists=path.exists(), path=path, mode=on_conflict)
@@ -110,7 +133,7 @@ class ChapterCommitService:
             # 统一转 ChapterCommitError
             raise ChapterCommitError(f"Conflict policy rejected: {exc}") from exc
         # SKIP 短路守卫（per Lesson 1）：resolve_conflict 只打印 SKIP，必须显式返回
-        if on_conflict == "skip":
+        if on_conflict == "skip" and path.exists():
             return path
         write_json(path, payload)
         return path
@@ -143,11 +166,16 @@ class ChapterCommitService:
     def apply_projection_writers(
         self,
         payload: Dict[str, Any],
-        on_conflict: str | None = None,
     ) -> Dict[str, Any]:
         status = str((payload.get("meta") or {}).get("status") or "")
         if status not in {"accepted", "rejected"}:
             return payload
+
+        commit_path = self._commit_path(payload)
+        try:
+            require_durable_commit_match(self.project_root, payload)
+        except DurableCommitError as exc:
+            raise ChapterCommitError(str(exc)) from exc
 
         payload.setdefault("projection_status", {})
         if not isinstance(payload["projection_status"], dict):
@@ -156,6 +184,38 @@ class ChapterCommitService:
         writers = self._projection_writers()
         required_writers = set(EventProjectionRouter().required_writers(payload))
         writer_results: dict[str, dict[str, Any]] = {}
+
+        if status == "accepted":
+            try:
+                chapter = int((payload.get("meta") or {}).get("chapter") or 0)
+                EventLogStore(self.project_root).write_events(
+                    chapter, extraction_list(payload, "accepted_events")
+                )
+                writer_results["events"] = {"status": "done", "result": {"applied": True}}
+                payload["projection_status"]["events"] = "done"
+            except Exception as exc:
+                writer_results["events"] = {"status": "failed", "error": str(exc)}
+                payload["projection_status"]["events"] = f"failed:{exc}"
+        else:
+            writer_results["events"] = {"status": "skipped", "reason": "commit_rejected"}
+            payload["projection_status"]["events"] = "skipped"
+
+        if status == "accepted":
+            try:
+                chapter = int((payload.get("meta") or {}).get("chapter") or 0)
+                accepted_events = extraction_list(payload, "accepted_events")
+                proposals = AmendProposalTrigger().check(chapter, accepted_events)
+                if proposals:
+                    manager = IndexManager(DataModulesConfig.from_project_root(self.project_root))
+                    with manager._get_conn() as conn:
+                        ensure_override_ledger_columns(conn)
+                        persist_amend_proposals(conn, chapter, proposals)
+                        conn.commit()
+                writer_results["amend_proposals"] = {"status": "done", "count": len(proposals)}
+                payload["projection_status"]["amend_proposals"] = "done"
+            except Exception as exc:
+                writer_results["amend_proposals"] = {"status": "failed", "error": str(exc)}
+                payload["projection_status"]["amend_proposals"] = f"failed:{exc}"
         for name, writer in writers.items():
             if name not in required_writers:
                 payload["projection_status"][name] = "skipped"
@@ -171,7 +231,6 @@ class ChapterCommitService:
             except Exception as exc:
                 payload["projection_status"][name] = f"failed:{exc}"
                 writer_results[name] = {"status": "failed", "error": str(exc)}
-        commit_path = self.persist_commit(payload, on_conflict=on_conflict)
         try:
             from .projection_log import append_projection_run
 
@@ -196,23 +255,57 @@ class ChapterCommitService:
 
         if status == "accepted":
             chapter = int((payload.get("meta") or {}).get("chapter") or 0)
-            event_store = EventLogStore(self.project_root)
             accepted_events = extraction_list(payload, "accepted_events")
             extraction = payload.setdefault("extraction_result", {})
             if not isinstance(extraction, dict):
                 extraction = {}
                 payload["extraction_result"] = extraction
-            extraction["accepted_events"] = event_store.normalize_events(
+            extraction["accepted_events"] = EventLogStore(self.project_root).normalize_events(
                 chapter, accepted_events
             )
-            event_store.write_events(chapter, extraction["accepted_events"])
+        payload.pop("projection_status", None)
+        commit_path = self.persist_commit(payload, on_conflict=on_conflict)
+        if on_conflict == "skip":
+            payload = self._read_commit(commit_path)
+        return self.apply_projection_writers(payload)
 
-            proposals = AmendProposalTrigger().check(chapter, extraction["accepted_events"])
-            if proposals:
-                manager = IndexManager(DataModulesConfig.from_project_root(self.project_root))
-                with manager._get_conn() as conn:
-                    ensure_override_ledger_columns(conn)
-                    persist_amend_proposals(conn, chapter, proposals)
-                    conn.commit()
+    def _commit_path(self, payload: Dict[str, Any]) -> Path:
+        chapter = int((payload.get("meta") or {}).get("chapter") or 0)
+        return durable_commit_path(self.project_root, chapter)
 
-        return self.apply_projection_writers(payload, on_conflict=on_conflict)
+    def _higher_commit_chapters(self, chapter: int) -> list[int]:
+        commits_dir = self.project_root / ".story-system" / "commits"
+        result = []
+        if not commits_dir.is_dir():
+            return result
+        for path in commits_dir.glob("chapter_*.commit.json"):
+            try:
+                existing = int(path.stem.split("_")[1].split(".")[0])
+            except (IndexError, ValueError):
+                continue
+            if existing > chapter:
+                result.append(existing)
+        return result
+
+    def _projected_current_chapter(self) -> int:
+        import json
+
+        state_path = self.project_root / ".webnovel" / "state.json"
+        if not state_path.is_file():
+            return 0
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            return max(0, int(((state.get("progress") or {}).get("current_chapter") or 0)))
+        except (OSError, ValueError, TypeError, AttributeError, json.JSONDecodeError):
+            return 0
+
+    @staticmethod
+    def _canonical_json(payload: Dict[str, Any]) -> str:
+        return canonical_commit_json(payload)
+
+    @staticmethod
+    def _read_commit(path: Path) -> Dict[str, Any]:
+        try:
+            return read_commit_file(path)
+        except DurableCommitError as exc:
+            raise ChapterCommitError(str(exc)) from exc

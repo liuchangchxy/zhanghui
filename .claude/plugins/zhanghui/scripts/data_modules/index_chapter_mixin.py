@@ -10,10 +10,13 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from .story_system_mode import require_legacy_canon_write_allowed
+
 
 class IndexChapterMixin:
     def add_chapter(self, meta: ChapterMeta):
         """添加/更新章节元数据"""
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -66,6 +69,7 @@ class IndexChapterMixin:
 
     def add_scenes(self, chapter: int, scenes: List[SceneMeta]):
         """添加章节场景"""
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
@@ -149,6 +153,7 @@ class IndexChapterMixin:
             confidence: 置信度
             skip_if_exists: 如果为True，当记录已存在时跳过（避免覆盖已有mentions）
         """
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
@@ -249,6 +254,8 @@ class IndexChapterMixin:
         """
         from .index_manager import ChapterMeta, SceneMeta
 
+        require_legacy_canon_write_allowed(self.config.project_root)
+
         stats = {"chapters": 0, "scenes": 0, "appearances": 0}
 
         # 提取出场角色
@@ -299,4 +306,3 @@ class IndexChapterMixin:
         return stats
 
     # ==================== 辅助方法 ====================
-

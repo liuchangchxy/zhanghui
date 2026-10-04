@@ -45,6 +45,7 @@ from contextlib import contextmanager
 from datetime import datetime
 
 from .config import get_config
+from .story_system_mode import require_legacy_canon_write_allowed
 from .index_chapter_mixin import IndexChapterMixin
 from .index_entity_mixin import IndexEntityMixin
 from .index_debt_mixin import IndexDebtMixin
@@ -659,6 +660,7 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
 
     def apply_entity_delta(self, delta: Dict[str, Any]) -> bool:
         """将 commit/entity 提取产物映射为实体或关系索引更新。"""
+        require_legacy_canon_write_allowed(self.config.project_root)
         if not isinstance(delta, dict):
             return False
 

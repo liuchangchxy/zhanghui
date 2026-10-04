@@ -314,9 +314,7 @@ class ArchiveManager:
                     entity_id = item["character"].get("id")
                     if entity_id:
                         # 更新实体的 current_json 添加 archived 标记
-                        self._index_manager.update_entity_field(
-                            entity_id, "status", "archived"
-                        )
+                        self._index_manager.set_entity_archive_status(entity_id, True)
                 except Exception as e:
                     print(f"⚠️ 实体状态更新失败（不影响归档）: {e}")
 
@@ -497,7 +495,7 @@ class ArchiveManager:
         char_id = restored_character.get("id", restored_character.get("name", "unknown"))
         try:
             # 更新实体状态为 active
-            self._index_manager.update_entity_field(char_id, "status", "active")
+            self._index_manager.set_entity_archive_status(char_id, False)
         except Exception as e:
             print(f"❌ 实体状态恢复失败，归档已保留: {e}")
             return False

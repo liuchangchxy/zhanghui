@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -15,7 +16,7 @@ def _ensure_scripts_on_path() -> None:
 _ensure_scripts_on_path()
 
 from data_modules.chapter_commit_service import ChapterCommitService  # noqa: E402
-from data_modules.projection_log import read_projection_runs  # noqa: E402
+from data_modules.projection_log import commit_hash, read_projection_runs  # noqa: E402
 from data_modules.projections import replay_projections, retry_projection  # noqa: E402
 
 
@@ -71,7 +72,7 @@ def test_retry_projection_replays_existing_commit(tmp_path):
     assert read_projection_runs(tmp_path, chapter=3)
 
 
-def test_retry_projection_does_not_rewrite_commit_side_effects(tmp_path):
+def test_retry_projection_rebuilds_event_read_models_from_commit(tmp_path):
     _make_accepted_commit_with_event(tmp_path, chapter=3)
     event_path = tmp_path / ".story-system" / "events" / "chapter_003.events.json"
     assert not event_path.exists()
@@ -80,8 +81,87 @@ def test_retry_projection_does_not_rewrite_commit_side_effects(tmp_path):
 
     assert report["ok"] is True
     assert report["projection_status"]["memory"] in {"done", "skipped"}
-    assert not event_path.exists()
+    assert event_path.is_file()
+    events = json.loads(event_path.read_text(encoding="utf-8"))
+    assert [event["event_id"] for event in events] == ["evt-open-loop"]
+    with sqlite3.connect(tmp_path / ".webnovel" / "index.db") as conn:
+        rows = conn.execute(
+            "SELECT event_id, chapter FROM story_events WHERE chapter = 3"
+        ).fetchall()
+    assert rows == [("evt-open-loop", 3)]
     assert read_projection_runs(tmp_path, chapter=3)
+
+
+def test_retry_projection_replay_keeps_event_read_models_aligned_and_unique(tmp_path):
+    _make_accepted_commit_with_event(tmp_path, chapter=3)
+
+    first = retry_projection(tmp_path, chapter=3)
+    second = retry_projection(tmp_path, chapter=3)
+
+    assert first["ok"] is True
+    assert second["ok"] is True
+    with sqlite3.connect(tmp_path / ".webnovel" / "index.db") as conn:
+        rows = conn.execute(
+            "SELECT event_id, chapter FROM story_events WHERE chapter = 3"
+        ).fetchall()
+    assert rows == [("evt-open-loop", 3)]
+
+
+def test_retry_legacy_commit_with_projection_status_preserves_its_bytes(tmp_path):
+    _make_rejected_commit(tmp_path, chapter=3)
+    commit_path = tmp_path / ".story-system" / "commits" / "chapter_003.commit.json"
+    legacy = json.loads(commit_path.read_text(encoding="utf-8"))
+    legacy["projection_status"] = {"state": "pending", "index": "pending"}
+    commit_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+    before = commit_path.read_bytes()
+
+    report = retry_projection(tmp_path, chapter=3)
+
+    assert report["ok"] is True
+    assert commit_path.read_bytes() == before
+
+
+def test_retry_repairs_divergent_event_file_and_sqlite_from_commit(tmp_path):
+    _make_accepted_commit_with_event(tmp_path, chapter=3)
+    event_path = tmp_path / ".story-system" / "events" / "chapter_003.events.json"
+    event_path.parent.mkdir(parents=True, exist_ok=True)
+    event_path.write_text(json.dumps([{"event_id": "wrong", "chapter": 3}]), encoding="utf-8")
+    with sqlite3.connect(tmp_path / ".webnovel" / "index.db") as conn:
+        conn.execute("CREATE TABLE story_events(event_id TEXT, chapter INTEGER, event_type TEXT, subject TEXT, payload_json TEXT)")
+        conn.execute("INSERT INTO story_events VALUES ('wrong', 3, 'x', 'x', '{}')")
+
+    report = retry_projection(tmp_path, chapter=3)
+
+    assert report["ok"] is True
+    assert json.loads(event_path.read_text(encoding="utf-8"))[0]["event_id"] == "evt-open-loop"
+    with sqlite3.connect(tmp_path / ".webnovel" / "index.db") as conn:
+        assert conn.execute("SELECT event_id FROM story_events WHERE chapter=3").fetchall() == [("evt-open-loop",)]
+
+
+def test_retry_after_event_mirror_failure_repairs_and_preserves_commit(tmp_path, monkeypatch):
+    _make_accepted_commit_with_event(tmp_path, chapter=3)
+    commit_path = tmp_path / ".story-system" / "commits" / "chapter_003.commit.json"
+    before = json.loads(commit_path.read_text(encoding="utf-8"))
+    original = __import__("data_modules.event_log_store", fromlist=["EventLogStore"]).EventLogStore._write_sqlite_mirror
+    failures = {"remaining": 1}
+
+    def fail_once(self, chapter, events):
+        if failures["remaining"]:
+            failures["remaining"] -= 1
+            raise OSError("sqlite unavailable")
+        return original(self, chapter, events)
+
+    monkeypatch.setattr(
+        "data_modules.event_log_store.EventLogStore._write_sqlite_mirror", fail_once
+    )
+    first = retry_projection(tmp_path, chapter=3)
+    assert first["ok"] is False
+    assert json.loads((tmp_path / ".story-system" / "events" / "chapter_003.events.json").read_text())[0]["event_id"] == "evt-open-loop"
+
+    second = retry_projection(tmp_path, chapter=3)
+    after = json.loads(commit_path.read_text(encoding="utf-8"))
+    assert second["ok"] is True
+    assert commit_hash(before) == commit_hash(after)
 
 
 def test_retry_projection_reports_missing_commit(tmp_path):

@@ -10,6 +10,7 @@ from typing import Any
 import filelock
 
 from .commit_artifacts import extraction_dict, extraction_list, extraction_text
+from .durable_projection import require_durable_commit_match
 from .story_contracts import read_json_if_exists
 
 try:
@@ -53,6 +54,7 @@ class StateProjectionWriter:
         self.lock_path = self.state_path.with_suffix(self.state_path.suffix + ".lock")
 
     def apply(self, commit_payload: dict) -> dict:
+        require_durable_commit_match(self.project_root, commit_payload)
         chapter = int(commit_payload.get("meta", {}).get("chapter") or 0)
         status = commit_payload["meta"]["status"]
 
@@ -71,6 +73,13 @@ class StateProjectionWriter:
             entity_state = state.setdefault("entity_state", {})
             progress = state.setdefault("progress", {})
             chapter_status = progress.setdefault("chapter_status", {})
+
+            current_chapter = self._safe_int(progress.get("current_chapter"))
+            if chapter < current_chapter:
+                raise RuntimeError(
+                    f"Out-of-order state projection refused: chapter {chapter} < "
+                    f"projected chapter {current_chapter}; replay must be rebuilt in order"
+                )
 
             protagonist_ids = self._collect_protagonist_ids(commit_payload, state)
 

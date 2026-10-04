@@ -120,25 +120,34 @@ def test_collect_chunks_keeps_event_id_stable_when_order_changes():
     assert first_ids == second_ids
 
 
-def test_rejected_commit_returns_not_applied():
-    writer = VectorProjectionWriter.__new__(VectorProjectionWriter)
-    writer.project_root = None
-    result = writer.apply({"meta": {"status": "rejected", "chapter": 1}})
+def test_rejected_commit_returns_not_applied(tmp_path):
+    import json
+
+    writer = VectorProjectionWriter(tmp_path)
+    payload = {"meta": {"status": "rejected", "chapter": 1}, "extraction_result": {}}
+    commit_path = tmp_path / ".story-system" / "commits" / "chapter_001.commit.json"
+    commit_path.parent.mkdir(parents=True)
+    commit_path.write_text(json.dumps(payload), encoding="utf-8")
+    result = writer.apply(payload)
     assert result["applied"] is False
 
 
 def test_store_zero_for_required_chunks_is_error(monkeypatch, tmp_path):
+    import json
+
     writer = VectorProjectionWriter(tmp_path)
     monkeypatch.setattr(writer, "_store_chunks", lambda chunks: 0)
 
-    result = writer.apply(
-        {
-            "meta": {"status": "accepted", "chapter": 47},
-            "summary_text": "韩立在坊市发现丹方线索。",
-            "accepted_events": [],
-            "entity_deltas": [],
-        }
-    )
+    payload = {
+        "meta": {"status": "accepted", "chapter": 47},
+        "summary_text": "韩立在坊市发现丹方线索。",
+        "accepted_events": [],
+        "entity_deltas": [],
+    }
+    commit_path = tmp_path / ".story-system" / "commits" / "chapter_047.commit.json"
+    commit_path.parent.mkdir(parents=True)
+    commit_path.write_text(json.dumps(payload), encoding="utf-8")
+    result = writer.apply(payload)
 
     assert result["applied"] is False
     assert result["reason"] == "error:store_failed"

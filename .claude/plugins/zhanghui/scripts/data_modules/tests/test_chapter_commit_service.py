@@ -417,3 +417,98 @@ def test_apply_projections_writes_events_and_amend_proposals(tmp_path):
     assert row["field"] == "world_rule"
     assert row["override_value"] == "短时失控突破"
     assert row["status"] == "pending"
+
+
+def test_commit_is_durable_before_any_projection_side_effect(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    payload = service.build_commit(
+        chapter=11,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+    )
+    original = service.persist_commit
+    order = []
+
+    def record_persist(*args, **kwargs):
+        result = original(*args, **kwargs)
+        order.append(("commit", result.is_file()))
+        return result
+
+    class SpyWriter:
+        def apply(self, commit_payload):
+            commit_path = tmp_path / ".story-system" / "commits" / "chapter_011.commit.json"
+            order.append(("projection", commit_path.is_file()))
+            return {"applied": True, "writer": "state"}
+
+    monkeypatch.setattr(service, "persist_commit", record_persist)
+    monkeypatch.setattr(service, "_projection_writers", lambda: {"state": SpyWriter()})
+
+    projected = service.apply_projections(payload)
+
+    assert order == [("commit", True), ("projection", True)]
+    saved = __import__("json").loads(
+        (tmp_path / ".story-system" / "commits" / "chapter_011.commit.json").read_text(encoding="utf-8")
+    )
+    assert "projection_status" not in saved
+    assert projected["projection_status"]["state"] == "done"
+
+
+def test_failed_commit_persistence_runs_no_projection(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    payload = service.build_commit(
+        chapter=12,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+    )
+
+    def fail_persist(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(service, "persist_commit", fail_persist)
+
+    with pytest.raises(OSError, match="disk full"):
+        service.apply_projections(payload)
+
+    assert not (tmp_path / ".story-system" / "events" / "chapter_012.events.json").exists()
+    assert not (tmp_path / ".webnovel" / "index.db").exists()
+    assert not (tmp_path / ".webnovel" / "projection_log.jsonl").exists()
+
+
+def test_projection_failure_does_not_mutate_durable_commit(tmp_path, monkeypatch):
+    import json
+    from data_modules.projection_log import commit_hash
+
+    service = ChapterCommitService(tmp_path)
+    payload = service.build_commit(
+        chapter=13,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+    )
+
+    class FailingWriter:
+        def apply(self, _payload):
+            raise RuntimeError("projection unavailable")
+
+    original_factory = service._projection_writers
+    monkeypatch.setattr(service, "_projection_writers", lambda: {"state": FailingWriter()})
+    projected = service.apply_projections(payload)
+    commit_path = tmp_path / ".story-system" / "commits" / "chapter_013.commit.json"
+
+    assert projected["meta"]["status"] == "accepted"
+    assert projected["projection_status"]["state"].startswith("failed:")
+    saved = json.loads(commit_path.read_text(encoding="utf-8"))
+    assert saved["meta"]["status"] == "accepted"
+    assert "projection_status" not in saved
+    original_hash = commit_hash(saved)
+
+    monkeypatch.setattr(service, "_projection_writers", original_factory)
+    retried = service.apply_projection_writers(saved)
+    durable_after_retry = json.loads(commit_path.read_text(encoding="utf-8"))
+    assert retried["projection_status"]["state"] == "done"
+    assert commit_hash(durable_after_retry) == original_hash

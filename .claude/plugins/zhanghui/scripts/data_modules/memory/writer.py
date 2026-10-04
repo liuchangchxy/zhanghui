@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 
 from ..commit_artifacts import extraction_list
 from ..config import DataModulesConfig, get_config
+from ..durable_projection import require_durable_commit_match
 from ..urgency_utils import coerce_urgency
 from .schema import MemoryItem
 from .store import ScratchpadManager
@@ -271,6 +272,7 @@ class MemoryWriter:
             self._upsert(item, stats)
 
     def apply_commit_projection(self, commit_payload: Dict[str, Any]) -> Dict[str, Any]:
+        require_durable_commit_match(self.config.project_root, commit_payload)
         chapter = int((commit_payload.get("meta") or {}).get("chapter") or 0)
         entity_deltas = list(extraction_list(commit_payload, "entity_deltas"))
         accepted_events = list(extraction_list(commit_payload, "accepted_events"))
@@ -375,4 +377,3 @@ class MemoryWriter:
             "memory_facts": memory_facts,
         }
         return self.update_from_chapter_result(chapter, result)
-

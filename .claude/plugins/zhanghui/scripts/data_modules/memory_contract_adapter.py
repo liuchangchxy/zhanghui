@@ -24,6 +24,7 @@ from .memory_contract import (
     TimelineEvent,
 )
 from .story_runtime_sources import load_runtime_sources
+from .story_system_mode import is_story_system_project
 from .urgency_utils import coerce_urgency
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,11 @@ class MemoryContractAdapter:
     # ------------------------------------------------------------------
 
     def commit_chapter(self, chapter: int, result: dict) -> CommitResult:
+        if is_story_system_project(self.config.project_root) and not self._should_use_commit_mainline(result):
+            raise RuntimeError(
+                "project is in Story System canonical mode; legacy chapter fact writes are disabled; "
+                "provide chapter commit artifacts or migrate/rebuild the project"
+            )
         if self._should_use_commit_mainline(result):
             return self._commit_chapter_mainline(chapter, result)
 
@@ -129,11 +135,9 @@ class MemoryContractAdapter:
             disambiguation_result=result.get("disambiguation_result", {}) or {},
             extraction_result=result.get("extraction_result", {}) or {},
         )
-        # memory_contract_adapter 是 batch replay 路径，必须显式 overwrite
-        # （service 默认 strict 会让现有 chapter commit 报错，CHANGELOG 已注 breaking change）
-        service.persist_commit(payload, on_conflict="overwrite")
-        if payload["meta"]["status"] == "accepted":
-            payload = service.apply_projections(payload, on_conflict="overwrite")
+        # Ordinary adapter calls are strict too; replacements must be an
+        # explicit CLI operation with an intentional conflict override.
+        payload = service.apply_projections(payload)
 
         summary_file = self.config.webnovel_dir / "summaries" / f"ch{chapter:04d}.md"
         return CommitResult(

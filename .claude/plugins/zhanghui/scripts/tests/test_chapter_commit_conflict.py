@@ -58,17 +58,27 @@ class TestPersistCommitConflictGuard:
         # 文件未被覆盖
         assert json.loads(existing.read_text()).get("old") is True
 
-    def test_overwrite_replaces_existing(self, service_with_existing_commit):
-        """--on-conflict=overwrite + commit 已存在 → 文件被替换为新 payload。"""
+    def test_apply_projections_does_not_overwrite_existing_commit_by_default(self, service_with_existing_commit, monkeypatch):
         service, existing = service_with_existing_commit
         payload = _make_payload(service, chapter=1)
-        result = service.persist_commit(
-            payload, on_conflict=ConflictMode.OVERWRITE.value
+        monkeypatch.setattr(
+            service,
+            "_projection_writers",
+            lambda: pytest.fail("projection ran before commit conflict was rejected"),
         )
-        assert result == existing
-        new_content = json.loads(existing.read_text())
-        assert "old" not in new_content
-        assert new_content["meta"]["status"] == "accepted"
+
+        with pytest.raises(ChapterCommitError, match="已存在"):
+            service.apply_projections(payload)
+
+        assert json.loads(existing.read_text()).get("old") is True
+
+    def test_overwrite_rejects_existing_canonical_commit(self, service_with_existing_commit):
+        """Canonical chapter history cannot be replaced by an overwrite."""
+        service, existing = service_with_existing_commit
+        payload = _make_payload(service, chapter=1)
+        with pytest.raises(ChapterCommitError, match="overwrite is forbidden"):
+            service.persist_commit(payload, on_conflict=ConflictMode.OVERWRITE.value)
+        assert json.loads(existing.read_text()).get("old") is True
 
     def test_skip_keeps_existing(self, service_with_existing_commit):
         """--on-conflict=skip + commit 已存在 → 文件不变，return path。"""
@@ -80,6 +90,51 @@ class TestPersistCommitConflictGuard:
         assert result == existing
         # 文件未变
         assert json.loads(existing.read_text()).get("old") is True
+
+    def test_skip_projection_uses_existing_durable_commit(self, service_with_existing_commit, monkeypatch):
+        service, existing = service_with_existing_commit
+        durable = _make_payload(service, chapter=1)
+        durable["custom_fact"] = "disk"
+        existing.write_text(json.dumps(durable), encoding="utf-8")
+        proposed = _make_payload(service, chapter=1)
+        proposed["custom_fact"] = "caller"
+        seen = []
+
+        class Writer:
+            def apply(self, payload):
+                seen.append(payload["custom_fact"])
+                return {"applied": True}
+
+        monkeypatch.setattr(service, "_projection_writers", lambda: {"state": Writer()})
+        service.apply_projections(proposed, on_conflict="skip")
+        assert seen == ["disk"]
+
+    def test_skip_without_existing_commit_creates_new_commit(self, tmp_path):
+        service = ChapterCommitService(tmp_path)
+        path = service.persist_commit(_make_payload(service), on_conflict="skip")
+        assert path.is_file()
+
+    def test_rejected_commit_conflict_also_forbids_overwrite(self, service_with_existing_commit):
+        service, existing = service_with_existing_commit
+        payload = _make_payload(service, chapter=1)
+        payload["meta"]["status"] = "rejected"
+        with pytest.raises(ChapterCommitError, match="overwrite is forbidden"):
+            service.persist_commit(payload, on_conflict="overwrite")
+        assert json.loads(existing.read_text())["meta"]["status"] == "accepted"
+
+    def test_new_commit_cannot_be_created_behind_higher_chapter(self, tmp_path):
+        service = ChapterCommitService(tmp_path)
+        service.persist_commit(_make_payload(service, chapter=12))
+        with pytest.raises(ChapterCommitError, match="increasing chapter order"):
+            service.persist_commit(_make_payload(service, chapter=11))
+
+    def test_new_commit_cannot_be_created_behind_projected_state(self, tmp_path):
+        state_path = tmp_path / ".webnovel" / "state.json"
+        state_path.parent.mkdir(parents=True)
+        state_path.write_text(json.dumps({"progress": {"current_chapter": 12}}), encoding="utf-8")
+
+        with pytest.raises(ChapterCommitError, match="projected state in increasing order"):
+            ChapterCommitService(tmp_path).persist_commit(_make_payload(ChapterCommitService(tmp_path), chapter=11))
 
     def test_default_writes_when_no_existing(self, tmp_path):
         """默认 + commit 不存在 → 直接写入（正常路径）。"""

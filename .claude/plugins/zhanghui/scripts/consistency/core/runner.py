@@ -5,9 +5,14 @@ Path in references: references/01-ai-webnovel-repos/upstream/02-skills/oh-story-
 """
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 from .patch_base import Patch, CheckContext, ApplyContext, Blocker
+try:
+    from data_modules.story_system_mode import is_story_system_project
+except ImportError:  # pragma: no cover - standalone script import layout
+    from scripts.data_modules.story_system_mode import is_story_system_project
 
 
 def _import_atomic_write_json():
@@ -28,6 +33,17 @@ def _import_atomic_write_json():
 
 
 class ConsistencyRunner:
+    # These state.json fields are projections owned by accepted chapter commits.
+    # Consistency maintenance may update Intent/craft metadata and infrastructure,
+    # but it must not become another writer of chapter-derived story state.
+    COMMIT_OWNED_STATE_KEYS = (
+        "entity_state",
+        "protagonist_state",
+        "progress",
+        "strand_tracker",
+        "plot_threads",
+    )
+
     def __init__(self, project_root: Path, patches: list[Patch] | None = None):
         self.project_root = project_root
         self.patches = patches
@@ -99,11 +115,36 @@ class ConsistencyRunner:
         return all_blockers
 
     def apply_all(self, chapter: int) -> None:
-        """Apply all patches' state mutations and persist."""
+        """Apply patches; Story System projects only filesystem-derived views."""
         if self.patches is None:
             self.patches = self._default_patches()
 
         state = self._load_state()
+        if self._is_story_system_project():
+            # Patches may infer chapter outcomes (for example, advancing a
+            # volume anchor). In Story System mode none of their state mutations
+            # may become durable outside a chapter commit. P7's explicit view
+            # writer remains a rebuildable filesystem projection.
+            for patch in self.patches:
+                if patch.name != "derived_views":
+                    continue
+                try:
+                    patch.apply(ApplyContext(
+                        project_root=self.project_root,
+                        chapter_num=chapter,
+                        state=state,
+                    ))
+                except Exception:
+                    # Keep consistency apply's legacy fault isolation without
+                    # persisting patch-owned state in canonical mode.
+                    continue
+            return
+
+        commit_owned = {
+            key: deepcopy(state[key])
+            for key in self.COMMIT_OWNED_STATE_KEYS
+            if key in state
+        }
         # Pop stale fields before applying (Fix F: prevent next check from immediately failing)
         state.pop("_expected_revision", None)
         state.pop("_load_error", None)
@@ -123,7 +164,16 @@ class ConsistencyRunner:
         # Stamp wall-clock timestamp at the end (P5 leaves the field for caller to fill)
         from datetime import datetime, timezone
         state.setdefault("state", {})["_last_modified_at"] = datetime.now(timezone.utc).isoformat()
+        for key in self.COMMIT_OWNED_STATE_KEYS:
+            if key in commit_owned:
+                state[key] = commit_owned[key]
+            else:
+                state.pop(key, None)
         self._save_state(state)
+
+    def _is_story_system_project(self) -> bool:
+        """Use initialized Story System contracts, not presence of a commit."""
+        return is_story_system_project(self.project_root)
 
     def _load_state(self) -> dict:
         state_path = self.project_root / ".webnovel" / "state.json"

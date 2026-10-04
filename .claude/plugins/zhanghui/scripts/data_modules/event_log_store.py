@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+from copy import deepcopy
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
 
 from .chapter_commit_schema import normalize_accepted_events
+from .durable_projection import DurableCommitError, read_durable_commit, require_durable_commit_match
 from .story_contracts import StoryContractPaths, read_json_if_exists, write_json
 
 
@@ -31,11 +33,33 @@ class EventLogStore:
         finally:
             conn.close()
 
-    def write_events(self, chapter: int, events: Any) -> Path:
-        normalized = self.normalize_events(chapter, events)
+    def write_events(self, commit_or_chapter: Dict[str, Any] | int, events: Any = None) -> Path:
+        if isinstance(commit_or_chapter, dict):
+            payload = commit_or_chapter
+            commit = require_durable_commit_match(self.project_root, payload)
+            chapter = int((payload.get("meta") or {}).get("chapter") or 0)
+            raw_events = ((payload.get("extraction_result") or {}).get("accepted_events") or [])
+            normalized = self.normalize_events(chapter, raw_events)
+        else:
+            chapter = int(commit_or_chapter)
+            # Normalize before checking provenance so malformed event input keeps
+            # its useful schema error and cannot trigger any write.
+            normalized = self.normalize_events(chapter, events)
+            commit = read_durable_commit(self.project_root, chapter)
+            payload = deepcopy(commit)
+            extraction = payload.setdefault("extraction_result", {})
+            if not isinstance(extraction, dict):
+                raise DurableCommitError("Durable chapter commit extraction_result is not an object")
+            extraction["accepted_events"] = normalized
+            require_durable_commit_match(self.project_root, payload)
+
+        if str((commit.get("meta") or {}).get("status") or "") != "accepted":
+            raise DurableCommitError(
+                f"Event projection requires a matching accepted chapter commit: {self.paths.commit_json(chapter)}"
+            )
         path = self.paths.event_json(chapter)
         write_json(path, normalized)
-        self._write_sqlite_mirror(normalized)
+        self._write_sqlite_mirror(chapter, normalized)
         return path
 
     def read_events(self, chapter: int) -> List[Dict[str, Any]]:
@@ -106,7 +130,7 @@ class EventLogStore:
     def normalize_events(self, chapter: int, events: Any) -> List[Dict[str, Any]]:
         return normalize_accepted_events(chapter, events)
 
-    def _write_sqlite_mirror(self, events: List[Dict[str, Any]]) -> None:
+    def _write_sqlite_mirror(self, chapter: int, events: List[Dict[str, Any]]) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
@@ -127,9 +151,10 @@ class EventLogStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_story_events_type ON story_events(event_type)"
             )
+            conn.execute("DELETE FROM story_events WHERE chapter = ?", (chapter,))
             conn.executemany(
                 """
-                INSERT OR IGNORE INTO story_events(event_id, chapter, event_type, subject, payload_json)
+                INSERT OR REPLACE INTO story_events(event_id, chapter, event_type, subject, payload_json)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 [

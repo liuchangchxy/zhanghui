@@ -3,6 +3,9 @@
 
 import json
 import sqlite3
+from pathlib import Path
+
+import pytest
 
 from data_modules.chapter_commit_service import ChapterCommitService
 from data_modules.config import DataModulesConfig
@@ -33,6 +36,214 @@ def _commit_payload(*, chapter=3, status="accepted", **extraction):
     }
 
 
+def _persist_payload(project_root, payload):
+    commit_path = project_root / ".story-system" / "commits" / (
+        f"chapter_{int(payload['meta']['chapter']):03d}.commit.json"
+    )
+    commit_path.parent.mkdir(parents=True, exist_ok=True)
+    commit_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return commit_path
+
+
+def _initialize_story_system(project_root):
+    story_root = project_root / ".story-system"
+    story_root.mkdir(parents=True, exist_ok=True)
+    (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+
+
+def _apply_with_durable_payload(writer, project_root, payload):
+    _persist_payload(project_root, payload)
+    return writer.apply(payload)
+
+
+@pytest.fixture(autouse=True)
+def stage_test_payloads_as_durable_commits(monkeypatch, tmp_path, request):
+    """Most tests here cover projection output; attack tests must retain no-commit input."""
+    attack_tests = {
+        "test_state_projection_rejects_fake_payload_before_state_write",
+        "test_index_projection_rejects_fake_payload_before_index_write",
+        "test_projection_writers_reject_mismatched_payload_before_side_effects",
+        "test_summary_memory_and_vector_writers_reject_payload_without_commit",
+    }
+    if request.node.name in attack_tests:
+        return
+
+    for writer_class in (
+        IndexProjectionWriter,
+        MemoryProjectionWriter,
+        StateProjectionWriter,
+        SummaryProjectionWriter,
+        VectorProjectionWriter,
+    ):
+        original_apply = writer_class.apply
+
+        def apply_after_staging(writer, payload, original_apply=original_apply):
+            path = tmp_path / ".story-system" / "commits" / (
+                f"chapter_{int(payload['meta']['chapter']):03d}.commit.json"
+            )
+            if not path.exists():
+                _persist_payload(tmp_path, payload)
+            return original_apply(writer, payload)
+
+        monkeypatch.setattr(writer_class, "apply", apply_after_staging)
+
+
+def test_state_projection_rejects_fake_payload_before_state_write(tmp_path):
+    _initialize_story_system(tmp_path)
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text('{"sentinel":true}', encoding="utf-8")
+    before = state_path.read_bytes()
+    with pytest.raises(RuntimeError, match="Durable chapter commit is missing"):
+        StateProjectionWriter(tmp_path).apply(
+            _commit_payload(state_deltas=[{"entity_id": "hero", "field": "realm", "new": "B"}])
+        )
+
+    assert state_path.read_bytes() == before
+
+
+def test_index_projection_rejects_fake_payload_before_index_write(tmp_path):
+    _initialize_story_system(tmp_path)
+    config = DataModulesConfig.from_project_root(tmp_path)
+    config.ensure_dirs()
+    index = IndexManager(config)
+    with pytest.raises(RuntimeError, match="Durable chapter commit is missing"):
+        IndexProjectionWriter(tmp_path).apply(
+            _commit_payload(entity_deltas=[{
+                "entity_id": "hero", "canonical_name": "主角", "type": "角色",
+                "current": {"realm": "B"}, "chapter": 3,
+            }])
+        )
+
+    assert index.get_entity("hero") is None
+    assert index.get_chapter(3) is None
+
+
+def test_projection_rejects_corrupt_durable_commit_before_state_write(tmp_path):
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text('{"sentinel":true}', encoding="utf-8")
+    before = state_path.read_bytes()
+    commit_path = tmp_path / ".story-system" / "commits" / "chapter_003.commit.json"
+    commit_path.parent.mkdir(parents=True)
+    commit_path.write_text("{truncated", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="cannot be read"):
+        StateProjectionWriter(tmp_path).apply(_commit_payload())
+
+    assert state_path.read_bytes() == before
+
+
+def test_projection_writers_reject_mismatched_payload_before_side_effects(tmp_path, monkeypatch):
+    _initialize_story_system(tmp_path)
+    config = DataModulesConfig.from_project_root(tmp_path)
+    config.ensure_dirs()
+    index = IndexManager(config)
+    state_path = config.state_file
+    state_path.write_text('{"sentinel":true}', encoding="utf-8")
+    before_state = state_path.read_bytes()
+    durable = _commit_payload(
+        summary_text="canonical summary",
+        entity_deltas=[{"entity_id": "hero", "canonical_name": "主角", "type": "角色", "current": {"realm": "A"}}],
+        accepted_events=[{"event_id": "evt-a", "event_type": "open_loop_created", "subject": "A", "payload": {"content": "A"}}],
+    )
+    _persist_payload(tmp_path, durable)
+    mismatched = json.loads(json.dumps(durable))
+    mismatched["extraction_result"]["state_deltas"] = [
+        {"entity_id": "hero", "field": "realm", "new": "B"}
+    ]
+
+    class ForbiddenMemoryWrite:
+        @staticmethod
+        def apply_commit_projection(*args, **kwargs):
+            raise AssertionError("memory side effect happened before provenance validation")
+
+    vector_calls = []
+    monkeypatch.setattr("data_modules.memory_projection_writer.MemoryWriter", ForbiddenMemoryWrite)
+    monkeypatch.setattr(VectorProjectionWriter, "_store_chunks", lambda self, chunks: vector_calls.append(chunks))
+
+    for writer in (
+        StateProjectionWriter(tmp_path),
+        IndexProjectionWriter(tmp_path),
+        SummaryProjectionWriter(tmp_path),
+        MemoryProjectionWriter(tmp_path),
+        VectorProjectionWriter(tmp_path),
+    ):
+        with pytest.raises(RuntimeError, match="does not match durable chapter commit"):
+            writer.apply(mismatched)
+
+    assert state_path.read_bytes() == before_state
+    assert index.get_entity("hero") is None
+    assert not (tmp_path / ".webnovel" / "summaries" / "ch0003.md").exists()
+    assert vector_calls == []
+
+
+def test_summary_memory_and_vector_writers_reject_payload_without_commit(tmp_path, monkeypatch):
+    _initialize_story_system(tmp_path)
+    payload = _commit_payload(
+        summary_text="not durable",
+        accepted_events=[{"event_type": "open_loop_created", "subject": "fake", "payload": {"content": "fake"}}],
+    )
+    memory_calls = []
+    vector_calls = []
+
+    class MemorySideEffect:
+        def __init__(self, config):
+            pass
+
+        def apply_commit_projection(self, commit_payload):
+            memory_calls.append(commit_payload)
+            return {"items_added": 1}
+
+    monkeypatch.setattr("data_modules.memory_projection_writer.MemoryWriter", MemorySideEffect)
+    monkeypatch.setattr(VectorProjectionWriter, "_store_chunks", lambda self, chunks: vector_calls.append(chunks))
+
+    for writer in (
+        SummaryProjectionWriter(tmp_path),
+        MemoryProjectionWriter(tmp_path),
+        VectorProjectionWriter(tmp_path),
+    ):
+        with pytest.raises(RuntimeError, match="Durable chapter commit is missing"):
+            writer.apply(payload)
+
+    assert not (tmp_path / ".webnovel" / "summaries" / "ch0003.md").exists()
+    assert memory_calls == []
+    assert vector_calls == []
+
+    from data_modules.memory.writer import MemoryWriter
+    from data_modules.summary_projection_writer import append_summary_projection
+
+    with pytest.raises(RuntimeError, match="Durable chapter commit is missing"):
+        MemoryWriter(DataModulesConfig.from_project_root(tmp_path)).apply_commit_projection(payload)
+    with pytest.raises(RuntimeError, match="Durable chapter commit is missing"):
+        append_summary_projection(tmp_path, payload)
+
+
+def test_projection_writers_accept_matching_durable_payload_and_ignore_projection_status(tmp_path):
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text("{}", encoding="utf-8")
+    payload = _commit_payload(
+        state_deltas=[{"entity_id": "hero", "field": "realm", "new": "B"}],
+        entity_deltas=[{"entity_id": "hero", "canonical_name": "主角", "type": "角色", "current": {"realm": "B"}}],
+        summary_text="matching durable summary",
+    )
+    payload_with_legacy_status = json.loads(json.dumps(payload))
+    payload_with_legacy_status["projection_status"] = {"state": "failed:old"}
+    commit_path = _persist_payload(tmp_path, payload_with_legacy_status)
+    before_commit = commit_path.read_bytes()
+
+    result = StateProjectionWriter(tmp_path).apply(payload)
+    summary = SummaryProjectionWriter(tmp_path).apply(payload)
+    index_result = IndexProjectionWriter(tmp_path).apply(payload)
+
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert result["applied"] is True
+    assert state["entity_state"]["hero"]["realm"] == "B"
+    assert summary["applied"] is True
+    assert index_result["applied"] is True
+    assert IndexManager(DataModulesConfig.from_project_root(tmp_path)).get_entity("hero")["current_json"]["realm"] == "B"
+    assert commit_path.read_bytes() == before_commit
 def test_state_projection_writer_handles_rejected_commit(tmp_path):
     (tmp_path / ".webnovel").mkdir(parents=True, exist_ok=True)
     (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
@@ -56,6 +267,30 @@ def test_state_projection_writer_applies_accepted_commit(tmp_path):
     assert payload["progress"]["chapter_status"]["3"] == "chapter_committed"
     assert payload["progress"]["current_chapter"] == 3
     assert payload["progress"]["last_updated"]
+
+
+def test_state_projection_writer_rejects_out_of_order_retry(tmp_path):
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(json.dumps({"progress": {"current_chapter": 12}}), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="Out-of-order state projection refused"):
+        StateProjectionWriter(tmp_path).apply(_commit_payload(chapter=11))
+
+    saved = json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved["progress"]["current_chapter"] == 12
+
+
+def test_legacy_chapter_index_writer_rejects_story_system_project(tmp_path):
+    from data_modules.config import DataModulesConfig
+
+    story_root = tmp_path / ".story-system"
+    story_root.mkdir()
+    (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+    manager = IndexManager(DataModulesConfig.from_project_root(tmp_path))
+
+    with pytest.raises(RuntimeError, match="chapter facts must originate from durable CHAPTER_COMMIT projections"):
+        manager.process_chapter_data(1, "标题", "地点", 100, [], [])
 
 
 def test_accepted_chapter_commits_advance_progress_and_word_count(tmp_path):
@@ -160,24 +395,26 @@ def test_state_projection_writer_updates_strand_tracker(tmp_path):
     assert len(tracker["history"]) == 2
 
 
-def test_state_projection_writer_reapplying_chapter_replaces_strand(tmp_path):
+def test_state_projection_writer_rejects_changed_payload_for_same_chapter(tmp_path):
     (tmp_path / ".webnovel").mkdir(parents=True, exist_ok=True)
     (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
     writer = StateProjectionWriter(tmp_path)
 
-    writer.apply(
-        _commit_payload(chapter=3, dominant_strand="quest")
-    )
-    writer.apply(
-        _commit_payload(chapter=3, dominant_strand="fire")
-    )
+    original = _commit_payload(chapter=3, dominant_strand="quest")
+    _apply_with_durable_payload(writer, tmp_path, original)
+    commit_path = tmp_path / ".story-system" / "commits" / "chapter_003.commit.json"
+    before_commit = commit_path.read_bytes()
+
+    with pytest.raises(RuntimeError, match="does not match durable chapter commit"):
+        writer.apply(_commit_payload(chapter=3, dominant_strand="fire"))
 
     payload = json.loads((tmp_path / ".webnovel" / "state.json").read_text(encoding="utf-8"))
     tracker = payload["strand_tracker"]
-    assert tracker["current_dominant"] == "fire"
-    assert tracker["last_quest_chapter"] == 0
-    assert tracker["last_fire_chapter"] == 3
-    assert tracker["history"] == [{"chapter": 3, "dominant": "fire"}]
+    assert tracker["current_dominant"] == "quest"
+    assert tracker["last_quest_chapter"] == 3
+    assert tracker["last_fire_chapter"] == 0
+    assert tracker["history"] == [{"chapter": 3, "dominant": "quest"}]
+    assert commit_path.read_bytes() == before_commit
 
 
 def test_accepted_commit_updates_state_json_end_to_end(tmp_path):

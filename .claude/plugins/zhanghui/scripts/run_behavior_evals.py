@@ -167,9 +167,11 @@ def _eval_artifact_ownership(root: Path, case: dict[str, Any]) -> dict[str, Any]
         if "主流程" not in text or ".webnovel/tmp/review_results.json" not in text:
             missing.append(f"{owner}: 缺 reviewer→主流程落盘 review_results.json 的所有权说明")
     for item in (
-        "唯一写入者",
+        "Data Agent 只生成临时提取产物",
+        "chapter-commit",
+        "projection writers",
         "主流程只检查文件存在与 schema",
-        "不直接写 state/index/summaries/memory/vectors/projection",
+        "不写这些持久化产物",
     ):
         if item not in write_text:
             missing.append(f"webnovel-write 缺写入所有权红线：{item}")

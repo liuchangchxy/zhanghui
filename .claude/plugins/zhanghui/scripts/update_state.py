@@ -63,6 +63,7 @@ from data_modules.state_validator import (
     normalize_foreshadowing_status,
     normalize_state_runtime_sections,
 )
+from data_modules.story_system_mode import is_story_system_project
 
 # Windows 编码兼容性修复
 if sys.platform == "win32":
@@ -664,6 +665,23 @@ def main():
 
     # 解析 state.json 路径（支持从仓库根目录运行）
     state_file_path = resolve_state_file(args.state_file, explicit_project_root=args.project_root)
+    canon_mutation_requested = any((
+        args.protagonist_power,
+        args.protagonist_location,
+        args.golden_finger,
+        args.relationship,
+        args.add_foreshadowing,
+        args.resolve_foreshadowing,
+        args.progress,
+        args.strand_dominant,
+    ))
+    project_root = state_file_path.parent.parent
+    if canon_mutation_requested and is_story_system_project(project_root):
+        print(
+            "❌ 项目已进入 Story System canonical mode；章节事实必须通过 chapter-commit 写入。"
+            "规划、审查记录等非章节事实更新仍可单独执行。"
+        )
+        raise SystemExit(2)
 
     # 创建更新器
     updater = StateUpdater(str(state_file_path), args.dry_run)

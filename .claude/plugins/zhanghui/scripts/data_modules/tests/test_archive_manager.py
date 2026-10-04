@@ -107,7 +107,7 @@ def test_restore_character_keeps_archive_when_sqlite_restore_fails(archive_env, 
     def fail_restore(*args, **kwargs):
         raise RuntimeError("sqlite down")
 
-    monkeypatch.setattr(manager._index_manager, "update_entity_field", fail_restore)
+    monkeypatch.setattr(manager._index_manager, "set_entity_archive_status", fail_restore)
 
     assert manager.restore_character("李雪") is False
     assert manager.characters_archive.read_text(encoding="utf-8") == before
@@ -127,12 +127,11 @@ def test_restore_character_deletes_archive_after_sqlite_restore_succeeds(archive
     manager.characters_archive.write_text(json.dumps(archived, ensure_ascii=False), encoding="utf-8")
     calls = []
 
-    def restore_status(entity_id, field, value):
-        calls.append((entity_id, field, value))
+    def restore_status(entity_id, archived):
+        calls.append((entity_id, archived))
 
-    monkeypatch.setattr(manager._index_manager, "update_entity_field", restore_status)
+    monkeypatch.setattr(manager._index_manager, "set_entity_archive_status", restore_status)
 
     assert manager.restore_character("李雪") is True
-    assert calls == [("li_xue", "status", "active")]
+    assert calls == [("li_xue", False)]
     assert json.loads(manager.characters_archive.read_text(encoding="utf-8")) == []
-
