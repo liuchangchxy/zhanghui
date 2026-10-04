@@ -12,8 +12,9 @@ from ..commit_artifacts import extraction_list
 from ..config import DataModulesConfig, get_config
 from ..durable_projection import require_durable_commit_match
 from ..urgency_utils import coerce_urgency
-from .schema import MemoryItem
+from .schema import COMMIT_PROJECTION_EVIDENCE_PREFIXES, CATEGORY_TO_BUCKET, MemoryItem
 from .store import ScratchpadManager
+from ..projection_rebuild_context import is_controlled_rebuild
 
 
 class MemoryWriter:
@@ -27,6 +28,18 @@ class MemoryWriter:
         return f"mem-{category}-{digest}"
 
     def _upsert(self, item: MemoryItem, stats: Dict[str, Any]) -> None:
+        if is_controlled_rebuild(self.config.project_root):
+            data = self.store.load()
+            bucket = CATEGORY_TO_BUCKET[item.category]
+            for existing in getattr(data, bucket):
+                if existing.id != item.id:
+                    continue
+                manual_evidence = [
+                    evidence for evidence in existing.evidence
+                    if not str(evidence).startswith(COMMIT_PROJECTION_EVIDENCE_PREFIXES)
+                ]
+                item.evidence = list(dict.fromkeys([*item.evidence, *manual_evidence]))
+                break
         result = self.store.upsert_item(item)
         stats["items_added"] += int(result.get("added", 0))
         stats["items_updated"] += int(result.get("updated", 0))

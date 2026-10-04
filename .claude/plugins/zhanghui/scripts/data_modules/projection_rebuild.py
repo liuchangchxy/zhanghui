@@ -22,13 +22,6 @@ from .projection_rebuild_context import _controlled_rebuild
 
 
 _COMMIT_NAME = re.compile(r"^chapter_(\d+)\.commit\.json$")
-_MEMORY_EVIDENCE_PREFIXES = (
-    "state_change:", "entity_new:", "relationship:", "chapter_meta:hook:",
-    "memory_facts:timeline:", "memory_facts:world_rule:",
-    "memory_facts:open_loop:", "memory_facts:reader_promise:",
-)
-
-
 class ProjectionRebuildError(RuntimeError):
     def __init__(self, message: str, *, chapter: int | None = None, projection: str = "canon"):
         super().__init__(message)
@@ -186,7 +179,7 @@ def _reset_summaries(root: Path) -> None:
 
 def _reset_memory(root: Path) -> None:
     from .config import DataModulesConfig
-    from .memory.schema import BUCKET_TO_CATEGORY
+    from .memory.schema import BUCKET_TO_CATEGORY, COMMIT_PROJECTION_EVIDENCE_PREFIXES
     from .memory.store import ScratchpadManager
 
     store = ScratchpadManager(DataModulesConfig.from_project_root(root))
@@ -194,10 +187,17 @@ def _reset_memory(root: Path) -> None:
         data = store.load()
         for bucket in BUCKET_TO_CATEGORY:
             rows = getattr(data, bucket)
-            setattr(data, bucket, [
-                row for row in rows
-                if not any(str(evidence).startswith(_MEMORY_EVIDENCE_PREFIXES) for evidence in row.evidence)
-            ])
+            retained = []
+            for row in rows:
+                evidence = [
+                    value for value in row.evidence
+                    if not str(value).startswith(COMMIT_PROJECTION_EVIDENCE_PREFIXES)
+                ]
+                if not evidence and row.evidence:
+                    continue
+                row.evidence = evidence
+                retained.append(row)
+            setattr(data, bucket, retained)
         store.save(data, _use_lock=False)
 
 
@@ -303,12 +303,70 @@ def _validate_outputs(root: Path, commits: list[dict[str, Any]]) -> None:
         if not summary and summary_path.exists():
             raise ProjectionRebuildError("unexpected summary projection without canonical summary", chapter=chapter, projection="summary")
 
-        with sqlite3.connect(db_path) as conn:
-            exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chapters'").fetchone()
-            if exists:
-                indexed = conn.execute("SELECT 1 FROM chapters WHERE chapter=?", (chapter,)).fetchone()
-                if bool(indexed) != accepted:
-                    raise ProjectionRebuildError("chapter index membership differs from commit status", chapter=chapter, projection="index")
+    from .index_projection_writer import IndexProjectionWriter
+
+    index_writer = IndexProjectionWriter(root)
+    expected_chapters: set[int] = set()
+    expected_scenes: set[tuple[int, int]] = set()
+    expected_appearances: set[tuple[str, int]] = set()
+    expected_state_changes: set[tuple[str, str, str, str, str, int]] = set()
+    for item in commits:
+        chapter = item["chapter"]
+        payload = item["payload"]
+        if payload["meta"]["status"] != "accepted":
+            continue
+        expected_chapters.add(chapter)
+        for idx, scene in enumerate(extraction_list(payload, "scenes"), start=1):
+            if isinstance(scene, dict):
+                scene_index = index_writer._safe_int(scene.get("scene_index") or scene.get("index") or idx)
+                expected_scenes.add((chapter, scene_index))
+        for entity in extraction_list(payload, "entities_appeared"):
+            if not isinstance(entity, dict):
+                continue
+            entity_id = str(entity.get("id") or entity.get("entity_id") or "").strip()
+            if entity_id and entity_id != "NEW":
+                expected_appearances.add((entity_id, chapter))
+        for change in index_writer._collect_state_changes(payload):
+            entity_id = str(change.get("entity_id") or "").strip()
+            field = str(change.get("field") or "").strip()
+            change_chapter = index_writer._safe_int(change.get("chapter") or chapter)
+            if not entity_id or not field or change_chapter <= 0:
+                continue
+            expected_state_changes.add((
+                entity_id, field, index_writer._stringify(change.get("old")),
+                index_writer._stringify(change.get("new")),
+                str(change.get("reason") or "").strip(), change_chapter,
+            ))
+    with sqlite3.connect(db_path) as conn:
+        actual_chapters = {row[0] for row in conn.execute("SELECT chapter FROM chapters")}
+        actual_scenes = {(row[0], row[1]) for row in conn.execute("SELECT chapter, scene_index FROM scenes")}
+        actual_appearances = {(row[0], row[1]) for row in conn.execute("SELECT entity_id, chapter FROM appearances")}
+        actual_state_changes = {
+            (row[0], row[1], row[2] or "", row[3] or "", row[4] or "", row[5])
+            for row in conn.execute("SELECT entity_id, field, old_value, new_value, reason, chapter FROM state_changes")
+        }
+        state_change_row_count = conn.execute("SELECT COUNT(*) FROM state_changes").fetchone()[0]
+    if state_change_row_count != len(actual_state_changes):
+        raise ProjectionRebuildError("state_changes contains duplicate projection rows", projection="index")
+    for name, actual, expected in (
+        ("chapters", actual_chapters, expected_chapters),
+        ("scenes", actual_scenes, expected_scenes),
+        ("appearances", actual_appearances, expected_appearances),
+        ("state_changes", actual_state_changes, expected_state_changes),
+    ):
+        if actual != expected:
+            difference = actual.symmetric_difference(expected)
+            sample = next(iter(difference), None)
+            chapter_for_row = (
+                sample if name == "chapters" and isinstance(sample, int)
+                else sample[0] if isinstance(sample, tuple) and name in {"scenes", "appearances"}
+                else sample[5] if isinstance(sample, tuple) and name == "state_changes"
+                else None
+            )
+            raise ProjectionRebuildError(
+                f"{name} index rows differ from canonical commits (expected {len(expected)}, found {len(actual)})",
+                chapter=chapter_for_row, projection="index",
+            )
 
     state_path = root / ".webnovel" / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else {}

@@ -65,6 +65,46 @@ def _make_accepted_commit_with_event(project_root: Path, chapter: int) -> None:
     service.persist_commit(payload)
 
 
+def _make_accepted_loop_commit(project_root: Path, chapter: int, event_type: str) -> None:
+    service = ChapterCommitService(project_root)
+    payload = build_commit_with_reconciliation(service,
+        chapter=chapter,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={
+            "state_deltas": [], "entity_deltas": [],
+            "accepted_events": [{
+                "event_id": f"evt-loop-{chapter}", "event_type": event_type,
+                "chapter": chapter, "subject": "谜团",
+                "payload": {"description": "同一条谜团"},
+            }],
+        },
+    )
+    service.persist_commit(payload)
+
+
+def _make_index_rich_commit(project_root: Path, chapter: int = 4) -> None:
+    service = ChapterCommitService(project_root)
+    payload = build_commit_with_reconciliation(service,
+        chapter=chapter,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={
+            "accepted_events": [],
+            "state_deltas": [{"entity_id": "hero", "field": "realm", "old": "练气", "new": "筑基"}],
+            "entity_deltas": [{
+                "entity_id": "hero", "canonical_name": "主角", "type": "角色",
+                "tier": "主角", "is_protagonist": True, "current": {"realm": "筑基"},
+            }],
+            "entities_appeared": [{"id": "hero", "mentions": ["陆鸣"]}],
+            "scenes": [{"scene_index": 1, "start_line": 1, "end_line": 8, "summary": "石门开启", "characters": ["hero"]}],
+        },
+    )
+    service.persist_commit(payload)
+
+
 def test_retry_projection_replays_existing_commit(tmp_path):
     _make_rejected_commit(tmp_path, chapter=3)
 
@@ -234,11 +274,20 @@ def test_full_rebuild_is_repeatable_and_preserves_operational_index_data(tmp_pat
     from data_modules.index_manager import IndexManager
     from data_modules.memory.schema import MemoryItem
     from data_modules.memory.store import ScratchpadManager
+    from data_modules.memory.writer import MemoryWriter
     IndexManager(DataModulesConfig.from_project_root(tmp_path))
     memory_store = ScratchpadManager(DataModulesConfig.from_project_root(tmp_path))
     memory_store.upsert_item(MemoryItem(
         id="manual-keep", layer="semantic", category="story_fact", subject="planning",
         field="intent", value="keep", evidence=["manual:planning"],
+    ))
+    mixed_id = MemoryWriter(DataModulesConfig.from_project_root(tmp_path))._item_id(
+        "open_loop", "神秘玉佩为何发热", "status", 2
+    )
+    memory_store.upsert_item(MemoryItem(
+        id=mixed_id, layer="semantic", category="open_loop", subject="神秘玉佩为何发热",
+        field="status", value="active", source_chapter=2,
+        evidence=["memory_facts:open_loop:2", "manual:review-note"],
     ))
     with sqlite3.connect(tmp_path / ".webnovel" / "index.db") as conn:
         conn.execute("INSERT INTO review_metrics(start_chapter,end_chapter,notes) VALUES (1,2,'keep')")
@@ -256,7 +305,9 @@ def test_full_rebuild_is_repeatable_and_preserves_operational_index_data(tmp_pat
     assert state["progress"]["chapter_status"] == {"2": "chapter_committed"}
     memory_items = ScratchpadManager(DataModulesConfig.from_project_root(tmp_path)).dump()["story_facts"]
     assert [item["id"] for item in memory_items].count("manual-keep") == 1
-    assert len([item for item in ScratchpadManager(DataModulesConfig.from_project_root(tmp_path)).dump()["open_loops"] if item["source_chapter"] == 2]) == 1
+    open_loop_items = [item for item in ScratchpadManager(DataModulesConfig.from_project_root(tmp_path)).dump()["open_loops"] if item["source_chapter"] == 2]
+    assert len(open_loop_items) == 1
+    assert "manual:review-note" in open_loop_items[0]["evidence"]
     event_path = tmp_path / ".story-system" / "events" / "chapter_002.events.json"
     assert [event["event_id"] for event in json.loads(event_path.read_text())] == ["evt-open-loop"]
     with sqlite3.connect(tmp_path / ".webnovel" / "index.db") as conn:
@@ -295,3 +346,34 @@ def test_full_rebuild_refuses_empty_or_noncanonical_commit_sets_before_reset(tmp
 
     assert malformed["ok"] is False
     assert malformed["error"]["chapter"] == 1
+
+
+def test_full_rebuild_preserves_incremental_foreshadowing_semantics(tmp_path):
+    _make_accepted_loop_commit(tmp_path, 1, "open_loop_created")
+    _make_accepted_loop_commit(tmp_path, 2, "open_loop_closed")
+    _make_accepted_loop_commit(tmp_path, 3, "open_loop_created")
+    for chapter in (1, 2, 3):
+        assert retry_projection(tmp_path, chapter=chapter)["ok"] is True
+    state_path = tmp_path / ".webnovel" / "state.json"
+    before = json.loads(state_path.read_text(encoding="utf-8"))["plot_threads"]["foreshadowing"]
+
+    report = rebuild_projections(tmp_path)
+
+    after = json.loads(state_path.read_text(encoding="utf-8"))["plot_threads"]["foreshadowing"]
+    assert report["ok"] is True
+    assert after == before
+
+
+def test_full_rebuild_validates_scenes_appearances_and_state_change_index(tmp_path, monkeypatch):
+    _make_index_rich_commit(tmp_path)
+
+    def omit_scenes(self, manager, payload):
+        return 0
+
+    monkeypatch.setattr("data_modules.index_projection_writer.IndexProjectionWriter._apply_scenes", omit_scenes)
+    report = rebuild_projections(tmp_path)
+
+    assert report["ok"] is False
+    assert report["error"]["projection"] == "index"
+    assert report["error"]["chapter"] == 4
+    assert "scenes index rows differ" in report["error"]["message"]

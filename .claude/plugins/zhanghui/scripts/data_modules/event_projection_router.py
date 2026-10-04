@@ -11,7 +11,7 @@ class EventProjectionRouter:
     # Single topology source for incremental projection and full rebuild.
     PROJECTION_MANIFEST = {
         "events": {"writer": "EventLogStore", "reset": "events", "order": 10, "reproducibility": "strict"},
-        "state": {"writer": "StateProjectionWriter", "reset": "state", "order": 20, "reproducibility": "strict"},
+        "state": {"writer": "StateProjectionWriter", "reset": "state", "order": 20, "reproducibility": "semantic"},
         "index": {"writer": "IndexProjectionWriter", "reset": "index", "order": 30, "reproducibility": "strict"},
         "summary": {"writer": "SummaryProjectionWriter", "reset": "summary", "order": 40, "reproducibility": "strict"},
         "memory": {"writer": "MemoryProjectionWriter", "reset": "memory", "order": 50, "reproducibility": "semantic"},

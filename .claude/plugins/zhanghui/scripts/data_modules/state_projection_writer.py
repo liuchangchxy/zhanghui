@@ -309,20 +309,6 @@ class StateProjectionWriter:
             )
             if event_type == "open_loop_created":
                 if row is not None:
-                    if is_controlled_rebuild(self.project_root):
-                        row["status"] = "active"
-                        row["planted_chapter"] = chapter
-                        row.pop("resolved_chapter", None)
-                        target = self._safe_int(payload.get("target_chapter") or payload.get("due_chapter"))
-                        if target > 0:
-                            row["target_chapter"] = target
-                        else:
-                            row.pop("target_chapter", None)
-                        tier = str(payload.get("tier") or "").strip()
-                        if tier:
-                            row["tier"] = tier
-                        else:
-                            row.pop("tier", None)
                     row.setdefault("planted_chapter", chapter)
                     continue
                 new_row: dict[str, Any] = {

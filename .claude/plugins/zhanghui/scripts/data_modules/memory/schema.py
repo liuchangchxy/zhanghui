@@ -12,6 +12,11 @@ from typing import Any, Dict, List
 
 VALID_LAYERS = {"semantic", "episodic"}
 VALID_STATUSES = {"active", "outdated", "contradicted", "tentative"}
+COMMIT_PROJECTION_EVIDENCE_PREFIXES = (
+    "state_change:", "entity_new:", "relationship:", "chapter_meta:hook:",
+    "memory_facts:timeline:", "memory_facts:world_rule:",
+    "memory_facts:open_loop:", "memory_facts:reader_promise:",
+)
 
 CATEGORY_TO_BUCKET: Dict[str, str] = {
     "character_state": "character_state",
@@ -157,4 +162,3 @@ class ScratchpadData:
         meta["total_items"] = self.count_items()
         result["meta"] = meta
         return result
-
