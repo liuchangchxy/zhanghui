@@ -28,7 +28,9 @@
 ## 3. references/ 与项目代码的分界
 
 - `references/` — ⛔ **只读快照**，来源原始代码，**永远不改**
-- `.Codex/plugins/zhanghui/` — ✅ 我们自己的代码，**唯一可写的地方**
+- `.claude/plugins/zhanghui/` — ✅ Zhanghui 当前 canonical source path；自有插件代码在这里维护。
+- `.Codex/plugins/zhanghui/` — ⛔ 过期路径，**不要创建第二份实现**。本仓库不把插件源码复制或双写到此路径。
+- `.claude/plugins/zhanghui/6.4.0/` — 已跟踪的版本化插件快照；架构源代码改动应落在上方 canonical source tree，不为同一功能维护平行实现。
 - `study/` — ✅ 提取层和决策日志，记录"我们从参考学到了什么"
 
 引用参考时必须有 cite：

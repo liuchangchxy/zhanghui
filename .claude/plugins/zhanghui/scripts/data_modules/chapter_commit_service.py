@@ -33,6 +33,7 @@ from .override_ledger_service import (
     ensure_override_ledger_columns,
     persist_amend_proposals,
 )
+from .reconciliation import verify_observed_payload
 
 
 class ChapterCommitError(RuntimeError):
@@ -50,21 +51,32 @@ class ChapterCommitService:
         fulfillment_result: Dict[str, Any],
         disambiguation_result: Dict[str, Any],
         extraction_result: Dict[str, Any],
+        reconciliation_result: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         review = ReviewResult.model_validate(review_result)
         fulfillment = FulfillmentResult.model_validate(fulfillment_result)
         disambiguation = DisambiguationResult.model_validate(disambiguation_result)
         extraction = ExtractionResult.model_validate(extraction_result)
+        if reconciliation_result is None:
+            raise ChapterCommitError("reconciliation_result is required before chapter commit")
+        try:
+            accepted_payload = verify_observed_payload(
+                reconciliation_result, extraction.model_dump()
+            )
+        except ValueError as exc:
+            raise ChapterCommitError(str(exc)) from exc
         rejected = bool(review.blocking_count) or bool(
             fulfillment.missed_nodes
         ) or bool(disambiguation.pending)
         status = "rejected" if rejected else "accepted"
         volume = volume_num_for_chapter_from_state(self.project_root, chapter) or 1
         accepted_events = EventLogStore(self.project_root).normalize_events(
-            chapter, extraction.accepted_events
+            chapter, accepted_payload["accepted_events"]
         )
         extraction_payload = extraction.model_dump()
         extraction_payload["accepted_events"] = accepted_events
+        extraction_payload["state_deltas"] = accepted_payload["state_deltas"]
+        extraction_payload["entity_deltas"] = accepted_payload["entity_deltas"]
         return {
             "meta": {
                 "schema_version": "story-system/v1",
@@ -81,6 +93,8 @@ class ChapterCommitService:
                 "write_fact_role": "chapter_commit",
                 "projection_role": "derived_read_models",
                 "legacy_state_role": "projection_only",
+                "reconciliation_schema": reconciliation_result["schema_version"],
+                "reconciliation_observed_sha256": reconciliation_result["observed_sha256"],
             },
             "outline_snapshot": {
                 "planned_nodes": fulfillment.planned_nodes,

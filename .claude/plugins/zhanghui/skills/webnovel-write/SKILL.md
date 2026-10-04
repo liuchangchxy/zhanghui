@@ -303,6 +303,8 @@ sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 Step 2A 生成章节正文后，**必须在正文末尾追加一个 `<chapter_changes>...</chapter_changes>` 块**，
 包含本章对设定集/人物/物品/伏笔的所有结构化变更。
 
+CHANGES 是 Writer 对变化的提案，不是已发生事实或 Canon。Step 2A 的块只是草稿；任何后续正文改写/润色完成后，必须按最终正文重生成整个 CHANGES 块。不得把旧块直接沿用到最终正文。
+
 字段定义见 `.claude/references/changes-protocol.md`。
 示例见 `.claude/references/changes-examples.md`。
 
@@ -397,7 +399,9 @@ cat "${SKILL_ROOT}/references/writing/typesetting.md"
 - 润色后正文（覆盖章节文件）
 - 变更摘要（至少含：修复项、保留项、deviation、`anti_ai_force_check`）
 
-### Step 4.5：CHANGES 协议门禁
+### Step 4.5：刷新 ProposedChanges 并校验协议
+
+Step 4 润色及所有 rewrite 完成后，依据此时的最终正文重新生成完整 `<chapter_changes>` 块，然后运行本节 changes_gate。它只校验 ProposedChanges 的 schema、协议和原有账本完整性；它不裁决事实，不与 Data Agent extraction 做语义对账。
 
 执行命令：
 
@@ -500,7 +504,7 @@ sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 "
 ```
 
-### Step 5：Data Agent + chapter-commit 提交（事实回写主链）
+### Step 5：Data Agent + reconciliation + chapter-commit 提交（事实回写主链）
 
 使用 Agent 调用 `webnovel-writer:data-agent`，参数：
 - `chapter`
@@ -515,7 +519,19 @@ sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 Use the Agent tool to run `webnovel-writer:data-agent`
 ```
 
-Data Agent 只生成临时提取产物，不直接写入事实或状态投影。提取产物由 `chapter-commit` 校验、提交，并驱动后续投影。Data Agent 默认子步骤：
+Data Agent 只观察最终正文；读取时必须排除 `<chapter_changes>` 声明，不得为了与 Writer 声明一致而改 extraction。它只生成临时提取产物，不直接写入事实或状态投影。完成提取后执行 reconciliation：
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/reconcile_changes.py" \
+  --chapter-file "${PROJECT_ROOT}/正文/第{chapter_padded}章-{title_safe}.md" \
+  --extraction-result "${PROJECT_ROOT}/.webnovel/tmp/extraction_result.json" \
+  --db "${PROJECT_ROOT}/.webnovel/index.db" \
+  --output "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json"
+```
+
+`status=conflict` 阻断 commit；任何 CHANGES/extraction schema 错误或 changes_gate 未通过时不得生成 reconciliation。`proposed_not_observed` 不进入 Canon，默认作为 advisory；`unproposed_observed` 保留为正文观察并可进入 accepted payload。Chapter-commit 必须同时接收 `.webnovel/tmp/reconciliation_result.json` 和同一最终正文文件；哈希不匹配、结果缺失或未通过均 fail-fast。
+
+提取产物与 reconciliation 结果由 `chapter-commit` 校验、提交，并驱动后续投影。Data Agent 默认子步骤：
 - A. 加载上下文
 - B. AI 实体提取
 - C. 实体消歧
@@ -554,8 +570,12 @@ Story System canonical mode 下，禁止用 `StateManager.process_chapter_result
 ```bash
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" chapter-commit \
   --chapter {chapter_num} \
-  --chapter-file "正文/第{chapter_padded}章-{title_safe}.md" \
-  --review-score "${REVIEW_SCORE}"
+  --review-result "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+  --fulfillment-result "${PROJECT_ROOT}/.webnovel/tmp/fulfillment_result.json" \
+  --disambiguation-result "${PROJECT_ROOT}/.webnovel/tmp/disambiguation_result.json" \
+  --extraction-result "${PROJECT_ROOT}/.webnovel/tmp/extraction_result.json" \
+  --chapter-file "${PROJECT_ROOT}/正文/第{chapter_padded}章-{title_safe}.md" \
+  --reconciliation-result "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json" \
 
 ```
 

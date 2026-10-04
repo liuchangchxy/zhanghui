@@ -1,0 +1,104 @@
+import sys
+
+import pytest
+
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
+
+from data_modules.reconciliation import reconcile_changes
+
+
+def change(state="realm: Foundation Establishment"):
+    return {
+        "character_state_changes": [
+            {"character_id": " Lin-Xuan ", "new_state": state}
+        ],
+        "new_plot_points": [],
+        "foreshadowing_actions": [],
+        "location_state_changes": [],
+        "faction_state_changes": [],
+        "time_progression": None,
+        "item_transfers": [],
+        "unresolved_questions": [],
+    }
+
+
+def observation(new="筑基"):
+    return {
+        "accepted_events": [],
+        "state_deltas": [
+            {"entity_id": "lin-xuan", "field": "修为", "old": "炼气", "new": new}
+        ],
+        "entity_deltas": [],
+    }
+
+
+def test_matching_declaration_and_observation_is_accepted_with_provenance():
+    result = reconcile_changes(change(), observation(), chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert len(result["matched"]) == 1
+    assert result["accepted_payload"]["state_deltas"] == observation()["state_deltas"]
+    assert result["accepted_sources"][0]["observed"]["index"] == 0
+
+
+def test_proposal_without_observation_is_not_accepted():
+    result = reconcile_changes(change(), {"accepted_events": [], "state_deltas": [], "entity_deltas": []}, chapter_text="final")
+
+    assert result["proposed_not_observed"]
+    assert not result["accepted_payload"]["state_deltas"]
+
+
+def test_observation_without_proposal_is_accepted_as_advisory():
+    observed = observation()
+    result = reconcile_changes(change(state="情绪振奋"), observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert result["unproposed_observed"]
+    assert result["accepted_payload"]["state_deltas"] == observed["state_deltas"]
+
+
+def test_structured_conflict_blocks_reconciliation():
+    result = reconcile_changes(change(), observation("金丹"), chapter_text="final")
+
+    assert result["status"] == "conflict"
+    assert result["conflicts"]
+
+
+def test_invalid_changes_shape_is_rejected_before_reconciliation():
+    with pytest.raises(ValueError, match="missing required"):
+        reconcile_changes({}, observation(), chapter_text="final")
+
+
+def test_invalid_observation_schema_is_rejected_before_reconciliation():
+    with pytest.raises(ValueError, match="accepted_events"):
+        reconcile_changes(change(), {"state_deltas": [], "entity_deltas": []}, chapter_text="final")
+
+
+def test_changes_gate_failure_prevents_cli_from_writing_reconciliation(tmp_path):
+    import json
+    import subprocess
+    from pathlib import Path
+
+    scripts = Path(__file__).resolve().parents[2]
+    chapter = tmp_path / "chapter.md"
+    chapter.write_text("<chapter_changes>{}</chapter_changes>", encoding="utf-8")
+    extraction = tmp_path / "extraction.json"
+    extraction.write_text(json.dumps(observation()), encoding="utf-8")
+    output = tmp_path / "reconciliation.json"
+    output.write_text("stale previous result", encoding="utf-8")
+    run = subprocess.run(
+        [sys.executable, str(scripts / "reconcile_changes.py"), "--chapter-file", str(chapter),
+         "--extraction-result", str(extraction), "--output", str(output), "--db", str(tmp_path / "index.db")],
+        capture_output=True, text=True,
+    )
+    assert run.returncode != 0
+    assert "changes_gate failed" in run.stderr
+    assert not output.exists()
+
+
+def test_final_chapter_hash_binds_reconciliation_to_polished_text():
+    from data_modules.reconciliation import verify_reconciliation_freshness
+
+    result = reconcile_changes(change(), observation(), chapter_text="polished-final")
+    with pytest.raises(ValueError, match="stale"):
+        verify_reconciliation_freshness(result, chapter_text="rewritten-after-reconciliation")

@@ -431,6 +431,16 @@ class TestCommitChapter:
         cfg = _make_project(tmp_path)
         adapter = MemoryContractAdapter(cfg)
 
+        from data_modules.reconciliation import reconcile_changes
+        extraction = {
+            "state_deltas": [], "entity_deltas": [], "accepted_events": [],
+            "summary_text": "本章摘要",
+        }
+        changes = {
+            "character_state_changes": [], "new_plot_points": [], "foreshadowing_actions": [],
+            "location_state_changes": [], "faction_state_changes": [], "time_progression": None,
+            "item_transfers": [], "unresolved_questions": [],
+        }
         result = adapter.commit_chapter(
             3,
             {
@@ -442,12 +452,8 @@ class TestCommitChapter:
                     "extra_nodes": [],
                 },
                 "disambiguation_result": {"pending": []},
-                "extraction_result": {
-                    "state_deltas": [],
-                    "entity_deltas": [],
-                    "accepted_events": [],
-                    "summary_text": "本章摘要",
-                },
+                "extraction_result": extraction,
+                "reconciliation_result": reconcile_changes(changes, extraction, chapter_text="test-final-chapter"),
             },
         )
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """CHANGES 协议门禁校验。
 
-在 webnovel-write skill 的 Step 2A 之后被调用：
+在 webnovel-write skill 的最终正文稳定、ProposedChanges 刷新后被调用：
     python3 changes_gate.py --chapter-file CH.md --db index.db --json
+
+职责：校验 CHANGES 容器、协议/schema、枚举和既有账本完整性。它不比较 Data Agent 的 ObservedChanges；语义对齐由 reconcile_changes.py 完成。
 
 返回 JSON：{"passed": bool, "failures": [{"rule_id", "severity", "message", "location"}]}
 """
@@ -1170,9 +1172,15 @@ def main() -> int:
         result.failures.append(Failure(
             rule_id="R0", severity="blocking", message=err, location="chapter_file",
         ))
+    elif not isinstance(parsed, dict):
+        result.failures.append(Failure(
+            rule_id="R0", severity="blocking",
+            message="CHANGES 顶层必须是 JSON 对象", location="chapter_changes",
+        ))
+        parsed = None
 
     # --- 跑规则 ---
-    if parsed:
+    if parsed is not None:
         check_failures: list[Failure] = []
         check_failures.extend(check_r01_protocol(parsed))
         check_failures.extend(check_r02_enums(parsed))

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 
+from data_modules.tests.commit_helpers import build_commit_with_reconciliation
 from data_modules.chapter_commit_service import ChapterCommitService
 from data_modules.config import DataModulesConfig
 from data_modules.index_manager import IndexManager
@@ -13,7 +15,7 @@ from data_modules.index_manager import IndexManager
 
 def test_commit_service_rejects_when_missed_nodes_exist(tmp_path):
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=3,
         review_result={"blocking_count": 0},
         fulfillment_result={
@@ -30,7 +32,7 @@ def test_commit_service_rejects_when_missed_nodes_exist(tmp_path):
 
 def test_commit_service_accepts_when_all_checks_pass(tmp_path):
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=3,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": ["发现陷阱"], "covered_nodes": ["发现陷阱"], "missed_nodes": [], "extra_nodes": []},
@@ -48,9 +50,35 @@ def test_commit_service_accepts_when_all_checks_pass(tmp_path):
     assert "entity_deltas" not in payload
 
 
+def test_commit_service_rejects_missing_reconciliation(tmp_path):
+    service = ChapterCommitService(tmp_path)
+    with pytest.raises(Exception, match="reconciliation_result is required"):
+        service.build_commit(
+            chapter=3,
+            review_result={"blocking_count": 0},
+            fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+            disambiguation_result={"pending": []},
+            extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+        )
+
+
+def test_commit_service_rejects_conflicted_reconciliation(tmp_path):
+    service = ChapterCommitService(tmp_path)
+    extraction = {"state_deltas": [], "entity_deltas": [], "accepted_events": []}
+    with pytest.raises(Exception, match="did not pass"):
+        service.build_commit(
+            chapter=3,
+            review_result={"blocking_count": 0},
+            fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+            disambiguation_result={"pending": []},
+            extraction_result=extraction,
+            reconciliation_result={"schema_version": "story-reconciliation/v1", "status": "conflict", "conflicts": [], "observed_sha256": "x", "accepted_payload": {}},
+        )
+
+
 def test_commit_service_includes_volume_ref_and_write_fact_provenance(tmp_path):
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=3,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": ["发现陷阱"], "covered_nodes": ["发现陷阱"], "missed_nodes": [], "extra_nodes": []},
@@ -75,7 +103,7 @@ def test_commit_service_rejects_malformed_gate_artifacts(tmp_path):
     valid_extraction = {"state_deltas": [], "entity_deltas": [], "accepted_events": []}
 
     with pytest.raises(ValueError, match="blocking_count"):
-        service.build_commit(
+        build_commit_with_reconciliation(service,
             chapter=3,
             review_result={},
             fulfillment_result=valid_fulfillment,
@@ -84,7 +112,7 @@ def test_commit_service_rejects_malformed_gate_artifacts(tmp_path):
         )
 
     with pytest.raises(ValueError, match="fulfillment_result"):
-        service.build_commit(
+        build_commit_with_reconciliation(service,
             chapter=3,
             review_result={"blocking_count": 0},
             fulfillment_result={"fulfillment": {"missed_nodes": ["遗漏节点"]}},
@@ -93,7 +121,7 @@ def test_commit_service_rejects_malformed_gate_artifacts(tmp_path):
         )
 
     with pytest.raises(ValueError, match="disambiguation_result"):
-        service.build_commit(
+        build_commit_with_reconciliation(service,
             chapter=3,
             review_result={"blocking_count": 0},
             fulfillment_result=valid_fulfillment,
@@ -106,7 +134,7 @@ def test_commit_service_rejects_nested_extraction_result_shape(tmp_path):
     service = ChapterCommitService(tmp_path)
 
     with pytest.raises(ValueError, match="top-level"):
-        service.build_commit(
+        build_commit_with_reconciliation(service,
             chapter=76,
             review_result={"blocking_count": 0},
             fulfillment_result={
@@ -130,7 +158,7 @@ def test_commit_service_rejects_extraction_wrapper_even_with_empty_core_fields(t
     service = ChapterCommitService(tmp_path)
 
     with pytest.raises(ValueError, match="nested under extraction"):
-        service.build_commit(
+        build_commit_with_reconciliation(service,
             chapter=76,
             review_result={"blocking_count": 0},
             fulfillment_result={
@@ -156,7 +184,7 @@ def test_commit_service_rejects_extraction_result_missing_core_fields(tmp_path):
     service = ChapterCommitService(tmp_path)
 
     with pytest.raises(ValueError, match="accepted_events"):
-        service.build_commit(
+        build_commit_with_reconciliation(service,
             chapter=3,
             review_result={"blocking_count": 0},
             fulfillment_result={
@@ -174,7 +202,7 @@ def test_commit_service_rejects_non_object_extraction_items(tmp_path):
     service = ChapterCommitService(tmp_path)
 
     with pytest.raises(ValueError, match=r"state_deltas\[0\]"):
-        service.build_commit(
+        build_commit_with_reconciliation(service,
             chapter=3,
             review_result={"blocking_count": 0},
             fulfillment_result={
@@ -196,7 +224,7 @@ def test_commit_service_rejects_non_object_accepted_event_items(tmp_path):
     service = ChapterCommitService(tmp_path)
 
     with pytest.raises(ValueError, match=r"accepted_events\[0\]"):
-        service.build_commit(
+        build_commit_with_reconciliation(service,
             chapter=3,
             review_result={"blocking_count": 0},
             fulfillment_result={
@@ -217,7 +245,7 @@ def test_commit_service_rejects_non_object_accepted_event_items(tmp_path):
 def test_commit_service_normalizes_accepted_events_before_projection(tmp_path):
     service = ChapterCommitService(tmp_path)
 
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=76,
         review_result={"blocking_count": 0},
         fulfillment_result={
@@ -304,7 +332,7 @@ def test_apply_projections_updates_state_for_rejected_commit(tmp_path):
     (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
 
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=7,
         review_result={"blocking_count": 1},
         fulfillment_result={
@@ -336,6 +364,17 @@ def test_chapter_commit_cli_builds_and_persists_commit(tmp_path, monkeypatch):
     )
     disambiguation_path.write_text('{"pending": []}', encoding="utf-8")
     extraction_path.write_text('{"state_deltas": [], "entity_deltas": [], "accepted_events": []}', encoding="utf-8")
+    chapter_path = tmp_path / "chapter.md"
+    chapter_text = '''<chapter_changes>{"character_state_changes": [], "new_plot_points": [], "foreshadowing_actions": [], "location_state_changes": [], "faction_state_changes": [], "time_progression": null, "item_transfers": [], "unresolved_questions": []}</chapter_changes>'''
+    chapter_path.write_text(chapter_text, encoding="utf-8")
+    from data_modules.reconciliation import reconcile_changes
+    proposed = {
+        "character_state_changes": [], "new_plot_points": [], "foreshadowing_actions": [],
+        "location_state_changes": [], "faction_state_changes": [], "time_progression": None,
+        "item_transfers": [], "unresolved_questions": [],
+    }
+    reconciliation_path = tmp_path / "reconciliation.json"
+    reconciliation_path.write_text(json.dumps(reconcile_changes(proposed, json.loads(extraction_path.read_text()), chapter_text=chapter_text)), encoding="utf-8")
 
     scripts_dir = Path(__file__).resolve().parents[2]
     if str(scripts_dir) not in sys.path:
@@ -360,6 +399,10 @@ def test_chapter_commit_cli_builds_and_persists_commit(tmp_path, monkeypatch):
             str(disambiguation_path),
             "--extraction-result",
             str(extraction_path),
+            "--reconciliation-result",
+            str(reconciliation_path),
+            "--chapter-file",
+            str(chapter_path),
         ],
     )
     main()
@@ -369,7 +412,7 @@ def test_chapter_commit_cli_builds_and_persists_commit(tmp_path, monkeypatch):
 
 def test_apply_projections_writes_events_and_amend_proposals(tmp_path):
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=3,
         review_result={"blocking_count": 0},
         fulfillment_result={
@@ -421,7 +464,7 @@ def test_apply_projections_writes_events_and_amend_proposals(tmp_path):
 
 def test_commit_is_durable_before_any_projection_side_effect(tmp_path, monkeypatch):
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=11,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
@@ -457,7 +500,7 @@ def test_commit_is_durable_before_any_projection_side_effect(tmp_path, monkeypat
 
 def test_failed_commit_persistence_runs_no_projection(tmp_path, monkeypatch):
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=12,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
@@ -483,7 +526,7 @@ def test_projection_failure_does_not_mutate_durable_commit(tmp_path, monkeypatch
     from data_modules.projection_log import commit_hash
 
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=13,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},

@@ -14,10 +14,19 @@ This document establishes the ownership rules for chapter facts and derived data
 
 The commit file is the transaction boundary and source for replay. The per-chapter event JSON and SQLite `story_events` table mirror its accepted events. Compatibility state, indexes, summaries, memory, vector data, and views are projections. A missing projection run means `pending`, not that the commit is absent or invalid.
 
+## Phase 2: declaration, observation, reconciliation
+
+- `ProposedChanges` is the Writer's final `<chapter_changes>` declaration. It records author intent and is not a fact source for Canon.
+- `ObservedChanges` is the Data Agent's extraction from final prose only. It must exclude the CHANGES block and cannot be influenced by its contents.
+- After the final prose is stable, the Writer refreshes CHANGES; the gate validates its protocol and existing integrity rules. The extraction then runs independently, followed by deterministic reconciliation.
+- `.webnovel/tmp/reconciliation_result.json` records normalized matches, `proposed_not_observed`, `unproposed_observed`, explicit conflicts, accepted payload, source indexes, and hashes binding the result to the final chapter and extraction.
+- Observed facts with no proposal remain eligible for acceptance and are marked `unproposed_observed`. Declarations with no observed support are never copied into Canon. Deterministic contradictory values for the same normalized entity and field are hard conflicts and block commit. Unstructured narrative claims are not guessed into matches.
+- `ChapterCommitService` requires a passed reconciliation artifact and copies the accepted event/state/entity payload from it. Only the validated durable `CHAPTER_COMMIT` persists those facts; reconciliation itself never writes Canon or projections.
+
 ## Ownership
 
 - The writer produces chapter prose. The Data Agent extracts proposed artifacts into temporary files; it does not write canonical facts or projections.
-- `chapter-commit` validates the review, fulfillment, disambiguation, and extraction artifacts, then persists the chapter transaction before invoking any projection writer.
+- `chapter-commit` validates the review, fulfillment, disambiguation, extraction, and passed reconciliation artifacts, then persists the chapter transaction before invoking any projection writer.
 - Projection writers may run only against a durable matching commit. Retry reads that commit and regenerates projections; it does not repeat extraction or drafting.
 - Context and query components read commits, contracts, and projections. They do not write Canon.
 - Consistency checks are read-only. In Story System projects, `consistency apply` may regenerate filesystem-only derived views but does not persist patch mutations to `state.json`; patch updates can be inferred from chapter execution and are not safe as a second state writer. Legacy projects retain the previous apply behavior.

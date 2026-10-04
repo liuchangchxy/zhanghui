@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from data_modules.tests.commit_helpers import build_commit_with_reconciliation
 from data_modules.state_manager import StateManager, EntityState
 from data_modules.index_manager import IndexManager, EntityMeta
 from project_locator import write_current_project_pointer
@@ -118,7 +119,7 @@ def test_legacy_chapter_writer_is_blocked_after_story_commit_exists(temp_project
     from data_modules.chapter_commit_service import ChapterCommitService
 
     service = ChapterCommitService(temp_project.project_root)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=1,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},

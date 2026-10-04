@@ -15,6 +15,7 @@ def _ensure_scripts_on_path() -> None:
 
 _ensure_scripts_on_path()
 
+from data_modules.tests.commit_helpers import build_commit_with_reconciliation
 from data_modules.chapter_commit_service import ChapterCommitService  # noqa: E402
 from data_modules.projection_log import commit_hash, read_projection_runs  # noqa: E402
 from data_modules.projections import replay_projections, retry_projection  # noqa: E402
@@ -24,7 +25,7 @@ def _make_rejected_commit(project_root: Path, chapter: int) -> None:
     (project_root / ".webnovel").mkdir(parents=True, exist_ok=True)
     (project_root / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
     service = ChapterCommitService(project_root)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=chapter,
         review_result={"blocking_count": 1},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
@@ -38,7 +39,7 @@ def _make_accepted_commit_with_event(project_root: Path, chapter: int) -> None:
     (project_root / ".webnovel").mkdir(parents=True, exist_ok=True)
     (project_root / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
     service = ChapterCommitService(project_root)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=chapter,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},

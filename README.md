@@ -12,7 +12,7 @@
 
 | 痛点 | 章回的做法 |
 |---|---|
-| **长篇一致性崩坏** | 正文写完由 `data-agent` 抽取事实 → CHANGES 协议 8 字段 → `changes_gate.py` 做 R1–R8 校验 → 写入 SQLite 数据链。设定、时间线、伏笔、角色状态全程可查、可验、可回滚 |
+| **长篇一致性崩坏** | 正文稳定后刷新 Writer 的 CHANGES 声明；Data Agent 独立观察最终正文；reconciliation 对账后，仅获批的观察事实进入 `CHAPTER_COMMIT`，再更新可查的派生视图 |
 | **AI 味重** | 双引擎 anti-slop 扫描（`text_humanizer.py` 查 AI 词与弱化副词 + `check-ai-patterns.js` 查破折号、预告腔等实战漏网句式），外加跨章文风指纹漂移检测 |
 | **流程繁琐** | 14 个斜杠命令覆盖「调研 → 初始化 → 规划 → 写作 → 审查 → 局部重写 → 诊断」全链路；信任方向时可用 `/fast-write` 快车道跳过 reviewer，省 60–80% token |
 

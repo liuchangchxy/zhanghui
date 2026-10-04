@@ -12,12 +12,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from data_modules.chapter_commit_service import ChapterCommitService, ChapterCommitError  # noqa: E402
+from data_modules.tests.commit_helpers import build_commit_with_reconciliation  # noqa: E402
 from scripts._shared.safe_overwrite import ConflictMode  # noqa: E402
 
 
 def _make_payload(service: ChapterCommitService, chapter: int = 1) -> dict:
     """构造一个 minimal accepted payload。"""
-    return service.build_commit(
+    return build_commit_with_reconciliation(service,
         chapter=chapter,
         review_result={"blocking_count": 0},
         fulfillment_result={

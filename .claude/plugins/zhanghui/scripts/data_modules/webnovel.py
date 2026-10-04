@@ -863,6 +863,8 @@ def main() -> None:
     p_commit.add_argument("--fulfillment-result", default="", help="fulfillment_result JSON 文件")
     p_commit.add_argument("--disambiguation-result", default="", help="disambiguation_result JSON 文件")
     p_commit.add_argument("--extraction-result", default="", help="extraction_result JSON 文件")
+    p_commit.add_argument("--reconciliation-result", default="", help="reconciliation_result JSON 文件")
+    p_commit.add_argument("--chapter-file", default="", help="生成 reconciliation 时的最终正文文件")
 
     p_memory_contract = sub.add_parser("memory-contract", help="转发到 memory_cli.py")
     p_memory_contract.add_argument("args", nargs=argparse.REMAINDER)
@@ -974,6 +976,10 @@ def main() -> None:
             return_args.extend(["--disambiguation-result", str(args.disambiguation_result)])
         if args.extraction_result:
             return_args.extend(["--extraction-result", str(args.extraction_result)])
+        if args.reconciliation_result:
+            return_args.extend(["--reconciliation-result", str(args.reconciliation_result)])
+        if args.chapter_file:
+            return_args.extend(["--chapter-file", str(args.chapter_file)])
         raise SystemExit(_run_script("chapter_commit.py", return_args))
     if tool == "memory-contract":
         raise SystemExit(_run_script("memory_cli.py", [*forward_args, *rest]))

@@ -24,6 +24,8 @@ def main() -> None:
     parser.add_argument("--fulfillment-result", required=True)
     parser.add_argument("--disambiguation-result", required=True)
     parser.add_argument("--extraction-result", required=True)
+    parser.add_argument("--reconciliation-result", required=True)
+    parser.add_argument("--chapter-file", required=True, help="Final chapter file bound to reconciliation")
     parser.add_argument(
         "--on-conflict",
         choices=["overwrite", "skip"],
@@ -35,12 +37,28 @@ def main() -> None:
 
     # The durable chapter transaction is stored before any projection writer runs.
     service = ChapterCommitService(Path(args.project_root))
+    from changes_gate import parse_changes
+    from data_modules.reconciliation import reconcile_changes, verify_reconciliation_freshness
+    reconciliation_result = _read_json(args.reconciliation_result)
+    chapter_text = Path(args.chapter_file).read_text(encoding="utf-8")
+    verify_reconciliation_freshness(reconciliation_result, chapter_text=chapter_text)
+    proposed_changes, parse_error = parse_changes(chapter_text)
+    if parse_error:
+        raise ValueError(f"CHANGES invalid at commit time: {parse_error}")
+    expected_reconciliation = reconcile_changes(
+        proposed_changes,
+        _read_json(args.extraction_result),
+        chapter_text=chapter_text,
+    )
+    if reconciliation_result != expected_reconciliation:
+        raise ValueError("reconciliation_result does not match final CHANGES and extraction artifacts")
     payload = service.build_commit(
         chapter=args.chapter,
         review_result=_read_json(args.review_result),
         fulfillment_result=_read_json(args.fulfillment_result),
         disambiguation_result=_read_json(args.disambiguation_result),
         extraction_result=_read_json(args.extraction_result),
+        reconciliation_result=reconciliation_result,
     )
     payload = service.apply_projections(payload, on_conflict=args.on_conflict)
     print(json.dumps(payload, ensure_ascii=False))
