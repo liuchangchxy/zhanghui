@@ -3,7 +3,7 @@
 > **状态**：实施稿（覆盖 v0.1 初步稿，调研完成后重写）
 > **日期**：2026-08-12
 > **作者**：与 Claude 对话产出
-> **代码归属**：`/Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/`
+> **代码归属**：`/Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/`
 
 ---
 
@@ -411,11 +411,11 @@ class BaseAdapter(ABC):
 
 ## 附录 A：参考
 
-- 现有 webnovel-fast-write skill：`/Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-fast-write/SKILL.md`
-- 现有 webnovel-writer 插件：`/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/`
-- 现有 deconstruction-agent：`/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/agents/deconstruction-agent.md`
-- 设计规范（参考前例）：`/Users/chang/Desktop/ai写小说工具开发/docs/superpowers/specs/2026-08-08-webnovel-writer-fork-design.md`
-- 实施计划（参考前例）：`/Users/chang/Desktop/ai写小说工具开发/docs/superpowers/plans/2026-08-08-webnovel-writer-fork-impl.md`
+- 现有 webnovel-fast-write skill：`/Users/chang/Desktop/zhanghui/.claude/skills/webnovel-fast-write/SKILL.md`
+- 现有 webnovel-writer 插件：`/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/`
+- 现有 deconstruction-agent：`/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/agents/deconstruction-agent.md`
+- 设计规范（参考前例）：`/Users/chang/Desktop/zhanghui/docs/superpowers/specs/2026-08-08-webnovel-writer-fork-design.md`
+- 实施计划（参考前例）：`/Users/chang/Desktop/zhanghui/docs/superpowers/plans/2026-08-08-webnovel-writer-fork-impl.md`
 
 ## 附录 B：上游项目链接
 

@@ -37,7 +37,7 @@ No new skill registration (skills/ dir auto-discovered by manifest).
 
 - [ ] **Step 1: Create the file**
 
-Create `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/commands/deconstruct.md`:
+Create `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/commands/deconstruct.md`:
 
 ```markdown
 ---
@@ -49,13 +49,13 @@ Use the Skill tool to invoke the `webnovel-deconstruct` skill
 - [ ] **Step 2: Sync to marketplace copy**
 
 ```bash
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/commands/deconstruct.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/commands/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/commands/deconstruct.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/commands/"
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/commands/deconstruct.md
 git commit -m "feat(deconstruct): add /webnovel-deconstruct slash command wrapper"
 ```
@@ -93,7 +93,7 @@ Expected: FAIL — `deconstruction-agent.md` description currently says "/webnov
 
 - [ ] **Step 3: Modify agent frontmatter**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md`. Find the `description:` line in frontmatter (top of file). Change from:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md`. Find the `description:` line in frontmatter (top of file). Change from:
 
 ```
 description: /webnovel-init 的参考书拆解子代理。
@@ -119,9 +119,9 @@ Expected: PASS.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/"
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md .claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(agent): unlock deconstruction-agent description for multi-caller
 
@@ -306,10 +306,10 @@ Expected: 5 PASSED.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/marked_references.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/"
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_marked_references.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/marked_references.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_marked_references.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/"
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/marked_references.py .claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_marked_references.py
 git commit -m "feat(scan): marked_references.py helper — read/write/validate manifest
 
@@ -334,7 +334,7 @@ skill (--from-scan reads)."
 
 - [ ] **Step 1: Create the skill file**
 
-Create `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-deconstruct/SKILL.md`:
+Create `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-deconstruct/SKILL.md`:
 
 ```markdown
 ---
@@ -427,9 +427,9 @@ CLI 形式（命令壳 `commands/deconstruct.md` 已经在）：
 - [ ] **Step 2: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-deconstruct/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-deconstruct/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/"
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-deconstruct/SKILL.md
 git commit -m "feat(skill): webnovel-deconstruct SKILL.md — independent deconstruction entry
 
@@ -474,7 +474,7 @@ Expected: FAIL — chart-scan SKILL.md has no mention of marked-references or de
 
 - [ ] **Step 3: Add marked-references section to chart-scan SKILL.md**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md`. Find the end of the file (after the platform coverage table at the end). Append a new section:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md`. Find the end of the file (after the platform coverage table at the end). Append a new section:
 
 ```markdown
 
@@ -514,10 +514,10 @@ Expected: PASS.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md"
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/"
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md .claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(scan): chart-scan marked-references.json handoff to /webnovel-deconstruct
 
@@ -536,7 +536,7 @@ user must explicitly mark. marked-references.json schema documented."
 
 - [ ] **Step 1: Read current `output.py`**
 
-Read `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py` to understand its style and existing helpers.
+Read `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py` to understand its style and existing helpers.
 
 - [ ] **Step 2: Add `write_marked_references()` helper**
 
@@ -586,9 +586,9 @@ Expected: All P0-Full + P1+P2 tests pass.
 - [ ] **Step 4: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py"
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py
 git commit -m "feat(scan): write_marked_references() helper in chart-scan output.py
 
@@ -632,7 +632,7 @@ Expected: FAIL — current plan SKILL.md (P0-Full) only mentions `idea_bank.json
 
 - [ ] **Step 3: Update plan SKILL.md consumption section**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md`. Find the existing "### 按需读取 reference_research 拆书产物" section (around line 100). Replace its body with:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md`. Find the existing "### 按需读取 reference_research 拆书产物" section (around line 100). Replace its body with:
 
 ```markdown
 读完 `idea_bank.json` 后，按以下规则加载所有可用拆书产物：
@@ -669,10 +669,10 @@ Expected: PASS.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-plan/SKILL.md"
-cp "/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-plan/SKILL.md"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/"
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md .claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(plan): auto-discover .webnovel/reference_research/*/ trees
 
@@ -780,7 +780,7 @@ Expected: File written and loaded successfully, 2 references.
 - [ ] **Step 4: Verify plan SKILL.md text mentions auto-discovery**
 
 ```bash
-grep -A 2 "reference_research/\*" /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md | head -5
+grep -A 2 "reference_research/\*" /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md | head -5
 ```
 
 Expected: At least one line mentioning `reference_research/*` glob pattern.

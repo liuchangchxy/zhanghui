@@ -66,7 +66,7 @@
 
 ## 工作约定
 
-- **工作目录**：`${ROOT}` = `/Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/`
+- **工作目录**：`${ROOT}` = `/Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/`
 - **Python**：3.11+（pyproject.toml 强制声明）
 - **测试**：pytest，在 `${ROOT}` 下执行 `pytest tests/ -v`
 - **提交**：每完成一个 task 一次 commit；commit message 用 `<type>: <subject>` 前缀（`feat:` / `test:` / `docs:` / `chore:`）
@@ -87,13 +87,13 @@
 - [ ] **Step 1: 创建目录骨架**
 
 ```bash
-mkdir -p /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/{scripts/adapters,tests,references,vendor}
+mkdir -p /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/{scripts/adapters,tests,references,vendor}
 ```
 
 - [ ] **Step 2: 写 pyproject.toml**
 
 ```toml
-# /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/pyproject.toml
+# /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/pyproject.toml
 [project]
 name = "webnovel-chart-scan"
 version = "0.1.0"
@@ -153,7 +153,7 @@ def fixtures_dir() -> Path:
 - [ ] **Step 4: 验证骨架可导入**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan
 python -c "import scripts; print('ok')"
 ```
 
@@ -270,7 +270,7 @@ def test_scan_result_holds_books_and_errors():
 - [ ] **Step 2: 跑测试确认失败**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan
 pytest tests/test_schema.py -v
 ```
 
@@ -654,11 +654,11 @@ git commit -m "feat: adapter BaseAdapter ABC with Strategy enum"
 - [ ] **Step 1: 抓真实样本存 fixture**
 
 ```bash
-mkdir -p /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/tests/fixtures
+mkdir -p /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/tests/fixtures
 curl -s -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
   "https://www.zongheng.com/api/rank/details?rankType=4&pageSize=10&pageNum=1" \
-  -o /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/tests/fixtures/zongheng_rank_details.json
-head -50 /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/tests/fixtures/zongheng_rank_details.json
+  -o /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/tests/fixtures/zongheng_rank_details.json
+head -50 /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/tests/fixtures/zongheng_rank_details.json
 ```
 
 Expected: JSON 输出含 `data.bookList` 数组，每项有 `bookName / authorName / cateFineName / orderNo` 等字段。**记录真实字段名**——后续代码用真实字段名。
@@ -812,8 +812,8 @@ git commit -m "feat: zongheng adapter (DIRECT_API via httpx)"
 ```bash
 curl -s -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
   "https://www.ciweimao.com/category/%E5%B7%A8%E9%AD%94%E5%B0%91%E5%A5%B3%E7%9A%84%E5%8F%B2%E5%8F%99%E4%BA%8B" \
-  -o /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/tests/fixtures/ciweimao_category_xuanhuan.html
-wc -l /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/tests/fixtures/ciweimao_category_xuanhuan.html
+  -o /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/tests/fixtures/ciweimao_category_xuanhuan.html
+wc -l /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/tests/fixtures/ciweimao_category_xuanhuan.html
 ```
 
 Expected: HTML 文件，几十到几百行。如果失败（非 200），记录错误，跳到 Step 6 用合成 fixture。
@@ -965,7 +965,7 @@ git commit -m "feat: ciweimao adapter (WEBFETCH + BeautifulSoup)"
 - [ ] **Step 1: clone 上游**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/vendor
+cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/vendor
 git clone --depth 1 https://github.com/saudadez21/novel-downloader.git
 ls novel-downloader/
 ```
@@ -1113,7 +1113,7 @@ git commit -m "feat: qidian adapter (VENDOR + parse_qidian_list_json)"
 - [ ] **Step 1: clone 上游**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/vendor
+cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/vendor
 git clone --depth 1 https://github.com/Despacito0o/FanqieRankTracker.git
 ls FanqieRankTracker/
 ```
@@ -1240,7 +1240,7 @@ git commit -m "feat: fanqie adapter (VENDOR + parse_fanqie_rank_list)"
 - [ ] **Step 1: clone 上游**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/vendor
+cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/vendor
 git clone --depth 1 https://github.com/staysharp1104/WebCrawler.git qimao-web-crawler
 ls qimao-web-crawler/
 ```
@@ -1960,7 +1960,7 @@ allowed-tools: Read Write Edit Grep Bash Task WebFetch
 ## CLI 调用
 
 ```bash
-python /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/scripts/scan.py [options]
+python /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/scripts/scan.py [options]
 ```
 
 或者：
@@ -2019,7 +2019,7 @@ chart-scan/
 ## 安装
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan
 pip install -e ".[fanqie,dev]"
 playwright install chromium  # 番茄需要
 ```
@@ -2035,13 +2035,13 @@ playwright install chromium  # 番茄需要
 ## 快速开始
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan
 pip install -e ".[fanqie,dev]"
 playwright install chromium  # 仅番茄需要
 
 # 跑一次扫描
 cd /path/to/your-novel-project
-python /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/scripts/scan.py \
+python /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/scripts/scan.py \
     --platform=qidian,fanqie \
     --category=玄幻,都市 \
     --top=30 \
@@ -2371,7 +2371,7 @@ git commit -m "docs: category-mapping + adapter-strategies references"
 完成所有 Phase 后，跑：
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan
 pip install -e ".[dev]"
 pytest tests/ -v
 pytest tests/ --cov=scripts --cov-report=term-missing
@@ -2383,7 +2383,7 @@ pytest tests/ --cov=scripts --cov-report=term-missing
 
 ```bash
 cd /tmp  # 或任何小说项目目录
-python /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/scripts/scan.py \
+python /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/scripts/scan.py \
     --platform=qidian --category=玄幻 --top=5 --period=weekly --verbose
 ```
 

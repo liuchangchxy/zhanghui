@@ -54,7 +54,7 @@
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -c "
 import json
 with open('tests/fixtures/fanqie_dump_20260815.json') as f:
@@ -141,7 +141,7 @@ def test_mapping_dict_covers_at_least_20_subcategories():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -m pytest tests/test_fanqie_subcat_map.py -v
 ```
 Expected: FAIL with `ModuleNotFoundError: No module named 'scripts.adapters.fanqie_subcat_map'`
@@ -234,7 +234,7 @@ def map_subcategory(subcat_name: str) -> str:
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -m pytest tests/test_fanqie_subcat_map.py -v
 ```
 Expected: 6 tests PASS
@@ -242,7 +242,7 @@ Expected: 6 tests PASS
 - [ ] **Step 2.3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/adapters/fanqie_subcat_map.py \
         .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/tests/test_fanqie_subcat_map.py
 git commit -m "feat(fanqie): subcategory → normalized category mapping + tests"
@@ -338,7 +338,7 @@ def test_fanqie_adapter_status_is_live_after_fix():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -m pytest tests/test_fanqie_adapter.py -v
 ```
 Expected: existing 3 tests PASS; 4 new happy-path tests FAIL with `RuntimeError` (current code raises) or `AttributeError: module 'scripts.adapters.fanqie' has no attribute 'httpx'`
@@ -534,7 +534,7 @@ class FanqieAdapter(BaseAdapter):
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -m pytest tests/test_fanqie_adapter.py -v
 ```
 Expected: 7 tests PASS (3 original + 4 new happy-path)
@@ -543,7 +543,7 @@ Expected: 7 tests PASS (3 original + 4 new happy-path)
 
 Run:
 ```bash
-cd /tmp && rm -rf cs-test-v2 && python3 /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/scan.py \
+cd /tmp && rm -rf cs-test-v2 && python3 /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/scan.py \
     --platform=fanqie \
     --category=玄幻 \
     --top=10 \
@@ -556,7 +556,7 @@ Expected: should fetch the fixture (mocked) OR the real dump from GitHub raw, pr
 - [ ] **Step 4.4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/adapters/fanqie.py \
         .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/tests/test_fanqie_adapter.py
 git commit -m "feat(fanqie): fetch from GitHub raw daily dump, drop Playwright dep"
@@ -585,7 +585,7 @@ class Strategy(str, Enum):
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -m pytest tests/ -v
 ```
 Expected: 38+ tests PASS (no regressions)
@@ -593,7 +593,7 @@ Expected: 38+ tests PASS (no regressions)
 - [ ] **Step 5.3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/adapters/base.py
 git commit -m "feat(adapters): add DIRECT_DUMP strategy enum for upstream-prebuilt dumps"
 ```
@@ -712,7 +712,7 @@ def test_parse_rank_markdown_handles_empty_input():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -m pytest tests/test_ciweimao_runner.py -v
 ```
 Expected: FAIL with `ModuleNotFoundError: No module named 'scripts.adapters.ciweimao_runner'`
@@ -953,7 +953,7 @@ def run_scraper(rank_type: str, output_dir: Path) -> Path:
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -m pytest tests/test_ciweimao_runner.py -v
 ```
 Expected: 4 tests PASS
@@ -961,7 +961,7 @@ Expected: 4 tests PASS
 - [ ] **Step 7.3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/adapters/ciweimao_runner.py \
         .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/tests/test_ciweimao_runner.py \
         .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/tests/fixtures/ciweimao_rank_click.md
@@ -979,7 +979,7 @@ git commit -m "feat(ciweimao): Markdown parser + Node subprocess wrapper for ven
 - [ ] **Step 8.1: Download the JS file**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 mkdir -p .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/vendor/worldwonderer_subset
 
 # Try gh CLI first (auth-aware)
@@ -1061,7 +1061,7 @@ MIT license terms. See https://github.com/worldwonderer/oh-story-claudecode/blob
 - [ ] **Step 8.4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/vendor/worldwonderer_subset/
 git commit -m "feat(ciweimao): vendor worldwonderer/oh-story-claudecode rank scraper (MIT)"
 ```
@@ -1206,7 +1206,7 @@ def test_ciweimao_adapter_status_is_live_after_fix():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -m pytest tests/test_ciweimao_adapter.py tests/test_ciweimao_runner.py -v
 ```
 Expected: 8 tests PASS (4 runner + 4 adapter including 3 new + 1 old metadata)
@@ -1214,7 +1214,7 @@ Expected: 8 tests PASS (4 runner + 4 adapter including 3 new + 1 old metadata)
 - [ ] **Step 9.4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/adapters/ciweimao.py \
         .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/tests/test_ciweimao_adapter.py
 git commit -m "feat(ciweimao): rewrite fetch() to use vendored CDP scraper (LIVE_WITH_SETUP)"
@@ -1270,14 +1270,14 @@ Replace with:
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
 python3 -m pytest tests/ -v
 ```
 Expected: 42+ tests PASS (no regressions across all adapters)
 
 Then:
 ```bash
-cd /tmp && rm -rf cs-final && python3 /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/scan.py \
+cd /tmp && rm -rf cs-final && python3 /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/scan.py \
     --platform=qidian,zongheng,qimao,fanqie,ciweimao \
     --category=玄幻 \
     --top=5 \
@@ -1291,7 +1291,7 @@ Expected: 3/5 platforms return books (qidian/zongheng/qimao already LIVE; fanqie
 - [ ] **Step 10.4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/KNOWN_LIMITATIONS.md \
         .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
 git commit -m "docs(chart-scan): v0.2 — fanqie+ciweimao LIVE_WITH_SETUP, 5/5 platforms covered"

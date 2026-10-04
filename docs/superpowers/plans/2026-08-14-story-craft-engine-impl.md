@@ -202,7 +202,7 @@ Expected: 3 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/story_craft.py .claude/plugins/webnovel-writer/scripts/tests/test_story_craft.py
 git commit -m "feat(story-craft): add init_story_craft with empty structure"
 ```
@@ -346,7 +346,7 @@ Expected: 8 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/story_craft.py .claude/plugins/webnovel-writer/scripts/tests/test_story_craft.py
 git commit -m "feat(story-craft): add foreshadow CRUD with state machine"
 ```
@@ -462,7 +462,7 @@ Expected: 11 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/story_craft.py .claude/plugins/webnovel-writer/scripts/tests/test_story_craft.py
 git commit -m "feat(story-craft): add timed_lock CRUD + deadline check"
 ```
@@ -584,7 +584,7 @@ Expected: 15 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/story_craft.py .claude/plugins/webnovel-writer/scripts/tests/test_story_craft.py
 git commit -m "feat(story-craft): add rhythm_curve ops + status check"
 ```
@@ -693,7 +693,7 @@ Expected: 18 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/story_craft.py .claude/plugins/webnovel-writer/scripts/tests/test_story_craft.py
 git commit -m "feat(story-craft): add character_arc + thematic_echoes ops"
 ```
@@ -824,7 +824,7 @@ Expected: 24 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/story_craft.py .claude/plugins/webnovel-writer/scripts/tests/test_story_craft.py
 git commit -m "feat(story-craft): add chapter_meta Scene-Sequel + hook_type ops"
 ```
@@ -953,7 +953,7 @@ Expected: 28 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/story_craft.py .claude/plugins/webnovel-writer/scripts/tests/test_story_craft.py
 git commit -m "feat(story-craft): add 15-beat volume operations + check"
 ```
@@ -1062,7 +1062,7 @@ Expected: 2 passed
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/migrate_story_craft.py .claude/plugins/webnovel-writer/scripts/tests/test_migration.py
 git commit -m "feat(story-craft): add migration script with backup"
 ```
@@ -1078,7 +1078,7 @@ git commit -m "feat(story-craft): add migration script with backup"
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/scripts
 python3 migrate_story_craft.py /Users/chang/Desktop/根源牌序/.webnovel/state.json
 ```
 Expected: `Migrated /Users/chang/Desktop/根源牌序/.webnovel/state.json`
@@ -1092,7 +1092,7 @@ Expected: `['rhythm_curve', 'foreshadow_chain', 'timed_locks', 'thematic_echoes'
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 ls /Users/chang/Desktop/根源牌序/.webnovel/*.bak
 ```
 Expected: file exists; do not commit .bak to git
@@ -1516,7 +1516,7 @@ Final Image 应是主题的最强一次回响。
 - [ ] **Step 9: Commit all 8 references**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/references/shared/
 git commit -m "feat(references): add 8 story-craft reference docs"
 ```
@@ -1582,7 +1582,7 @@ git commit -m "feat(references): add 8 story-craft reference docs"
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/skills/webnovel-plan/references/outlining/volume-beat-sheet.md
 git commit -m "feat(plan): add volume-beat-sheet template"
 ```
@@ -1641,7 +1641,7 @@ git commit -m "feat(plan): add volume-beat-sheet template"
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/skills/webnovel-plan/references/outlining/foreshadow-tracking-template.md
 git commit -m "feat(plan): add foreshadow-tracking template"
 ```
@@ -1694,7 +1694,7 @@ Find the Step 2 section and append:
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/skills/webnovel-plan/SKILL.md
 git commit -m "feat(plan): add craft awareness to Step 1 + new Step 2.5"
 ```
@@ -1737,7 +1737,7 @@ BLOCKER 处理：
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/skills/webnovel-plan/SKILL.md
 git commit -m "feat(plan): add Step 4.5 — generate 15-beat volume sheet"
 ```
@@ -1790,7 +1790,7 @@ BLOCKER 处理：
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/skills/webnovel-plan/SKILL.md
 git commit -m "feat(plan): add Step 6.5 — generate foreshadow chain + timed locks"
 ```
@@ -1821,7 +1821,7 @@ Find the Step 7 section and extend the "每章必须包含" list:
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/skills/webnovel-plan/SKILL.md
 git commit -m "feat(plan): extend Step 7 with Scene-Sequel + beat fields"
 ```
@@ -1862,7 +1862,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/skills/webnovel-plan/SKILL.md
 git commit -m "feat(plan): add Step 8.5 — craft consistency check"
 ```
@@ -1876,7 +1876,7 @@ git commit -m "feat(plan): add Step 8.5 — craft consistency check"
 
 - [ ] **Step 1: Read existing webnovel.py structure**
 
-Run: `grep -n "def cmd_\|^def main\|argparse" /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/scripts/webnovel.py | head -30`
+Run: `grep -n "def cmd_\|^def main\|argparse" /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/scripts/webnovel.py | head -30`
 
 - [ ] **Step 2: Add story-craft subcommand following existing pattern**
 
@@ -1929,7 +1929,7 @@ craft_parser.set_defaults(func=cmd_story_craft)
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/scripts
 python3 webnovel.py --project-root /Users/chang/Desktop/根源牌序 story-craft init-volume-beat --volume 1 --total-chapters 50
 python3 webnovel.py --project-root /Users/chang/Desktop/根源牌序 story-craft check-volume --volume 1
 ```
@@ -1938,7 +1938,7 @@ Expected: second command prints BLOCKER for Midpoint/All Is Lost
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/webnovel.py
 git commit -m "feat(webnovel.py): add story-craft subcommand group"
 ```
@@ -1954,7 +1954,7 @@ git commit -m "feat(webnovel.py): add story-craft subcommand group"
 
 - [ ] **Step 1: Read current reviewer.md structure**
 
-Run: `cat /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/agents/reviewer.md | head -50`
+Run: `cat /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/agents/reviewer.md | head -50`
 
 - [ ] **Step 2: Add 2 new dimensions to prompt**
 
@@ -2013,7 +2013,7 @@ Find the section listing the 5 review dimensions and extend:
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/agents/reviewer.md
 git commit -m "feat(reviewer): extend to 7 dimensions with beat + foreshadow checks"
 ```
@@ -2027,7 +2027,7 @@ git commit -m "feat(reviewer): extend to 7 dimensions with beat + foreshadow che
 
 - [ ] **Step 1: Read current review_pipeline.py**
 
-Run: `head -60 /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/scripts/review_pipeline.py`
+Run: `head -60 /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/scripts/review_pipeline.py`
 
 - [ ] **Step 2: Add craft check hooks**
 
@@ -2122,7 +2122,7 @@ Expected: 3 passed
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/review_pipeline.py .claude/plugins/webnovel-writer/scripts/tests/integration/test_review_with_craft.py
 git commit -m "feat(review): integrate story_craft checks into pipeline"
 ```
@@ -2151,7 +2151,7 @@ Find the existing template and replace its body with content pointing to `volume
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/templates/output/大纲-卷节拍表.md
 git commit -m "feat(template): upgrade volume beat sheet to 15-beat"
 ```
@@ -2179,7 +2179,7 @@ Find chapter template section and extend:
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/templates/output/大纲-卷详细大纲.md
 git commit -m "feat(template): add Scene-Sequel fields to chapter outline"
 ```
@@ -2195,7 +2195,7 @@ git commit -m "feat(template): add Scene-Sequel fields to chapter outline"
 
 - [ ] **Step 1: Read existing app.py routes**
 
-Run: `grep -n "@app.route\|^def " /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/dashboard/app.py | head -30`
+Run: `grep -n "@app.route\|^def " /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/dashboard/app.py | head -30`
 
 - [ ] **Step 2: Add 4 new routes**
 
@@ -2288,7 +2288,7 @@ Run: `cd .claude/plugins/webnovel-writer && python3 -m dashboard.app` then visit
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/dashboard/app.py
 git commit -m "feat(dashboard): add 4 story-craft panels"
 ```
@@ -2392,7 +2392,7 @@ Expected: 1 passed
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/scripts/tests/integration/test_plan_with_craft.py
 git commit -m "test: add end-to-end plan flow integration test"
 ```
@@ -2408,7 +2408,7 @@ git commit -m "test: add end-to-end plan flow integration test"
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/scripts
 python3 migrate_story_craft.py /Users/chang/Desktop/根源牌序/.webnovel/state.json
 ```
 Expected: `Migrated ...`
@@ -2440,11 +2440,11 @@ Expected: all green
 ### Task 26: Update project README + spec changelog
 
 **Files:**
-- Modify: `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/README.md` (if exists)
+- Modify: `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/README.md` (if exists)
 
 - [ ] **Step 1: Check README**
 
-Run: `ls /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/README.md`
+Run: `ls /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/README.md`
 
 - [ ] **Step 2: Add changelog entry**
 
@@ -2468,7 +2468,7 @@ Dashboard: 4 new panels.
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer/README.md
 git commit -m "docs: add v2.0 changelog for story-craft-engine"
 ```

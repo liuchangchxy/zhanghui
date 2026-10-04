@@ -39,7 +39,7 @@
 
 ### 2.2 工程层不变量（24 个本地参考项目横向）
 
-`/Users/chang/Desktop/ai写小说工具开发/references/04-ai-agent-systems/`（19 个 agent）+ `01-ai-webnovel-repos/upstream/02-skills/`（5 个 skill）+ `02-Openwrite/` 共 **24 个项目**：
+`/Users/chang/Desktop/zhanghui/references/04-ai-agent-systems/`（19 个 agent）+ `01-ai-webnovel-repos/upstream/02-skills/`（5 个 skill）+ `02-Openwrite/` 共 **24 个项目**：
 
 | 不变量 | 数据 |
 |---|---|

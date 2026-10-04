@@ -37,3 +37,9 @@ node_modules/
 *.egg-info/
 dist/
 build/
+
+# ── 参考库：第三方项目只读快照 ──────────────────────────
+# 2.1GB / 49396 文件 / 含 20+ 个嵌套 .git（别人仓库的完整克隆）
+# 仅本地开发调研用，永不进 git：既超 GitHub 体积上限，
+# 也是再分发他人代码。本地保留，详见 references/INDEX.md
+references/

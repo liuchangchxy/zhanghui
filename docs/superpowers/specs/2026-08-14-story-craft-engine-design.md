@@ -5,7 +5,7 @@
 | 日期 | 2026-08-14 |
 | 状态 | 草案（待用户审阅） |
 | 范围 | webnovel-writer 插件的规划层（webnovel-plan） |
-| 关联 | `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer/` |
+| 关联 | `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer/` |
 
 ---
 

@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # === 配置（按本机配置硬编码，跨机器用 sed 替换） ===
-PLUGIN_ROOT="/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang"
+PLUGIN_ROOT="/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang"
 MARKETPLACE="/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace"
 CACHE="/Users/chang/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang"
 

@@ -50,7 +50,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Add `do_not_copy_violation` to `VALID_CATEGORIES`**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/rejection_contract.py`. Find the `VALID_CATEGORIES` definition. Add `"do_not_copy_violation"`.
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/rejection_contract.py`. Find the `VALID_CATEGORIES` definition. Add `"do_not_copy_violation"`.
 
 - [ ] **Step 4: Verify test passes**
 
@@ -64,9 +64,9 @@ Expected: PASS.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/rejection_contract.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/rejection_contract.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "fix(p3-adversarial): C1 — rejection_contract accepts do_not_copy_violation
 
@@ -171,7 +171,7 @@ Expected: 6 FAIL.
 
 - [ ] **Step 3: Fix C2 — add `__main__` block with argparse**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py`. Append at the end:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py`. Append at the end:
 
 ```python
 
@@ -250,12 +250,12 @@ Expected: All 18 tests pass (12 original + 6 new).
 - [ ] **Step 8: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-write/SKILL.md
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/context-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/context-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "fix(p3-adversarial): C2+C3+C4+C5 — CLI main, CJK matcher fixes, doc accuracy
 
@@ -284,7 +284,7 @@ C5: build_step1_summary docstring now says '≤ 800 chars (~1200 CJK tokens)'
 
 - [ ] **Step 1: Read current reviewer.md**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/reviewer.md`. Find the section around line 199 that handles `do_not_copy_check.json`.
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/reviewer.md`. Find the section around line 199 that handles `do_not_copy_check.json`.
 
 - [ ] **Step 2: Update silent-pass to error**
 
@@ -307,9 +307,9 @@ Find the section that says something like "`do_not_copy_check.json` 不存在或
 - [ ] **Step 3: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/reviewer.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/reviewer.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "fix(p3-adversarial): I2 — do_not_copy dimension silent-pass replaced with error
 
@@ -343,7 +343,7 @@ Expected: All prior 157 + new tests passing.
 - [ ] **Step 2: Re-adversarial spot-check**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 # Verify C1 fix
 python3 -c "
 import sys

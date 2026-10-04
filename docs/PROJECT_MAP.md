@@ -7,7 +7,7 @@
 ## 三层结构
 
 ### 层 1：dev workspace（你唯一的项目）
-`/Users/chang/Desktop/ai写小说工具开发/`
+`/Users/chang/Desktop/zhanghui/`
 
 | 路径 | 性质 | 说明 |
 |---|---|---|

@@ -838,7 +838,7 @@ git commit -m "feat(fast-write): add snapshot verify preflight (PR 1)"
 
 ```bash
 cd /Users/chang/Desktop/根源牌序
-python3 /Users/chang/Desktop/ai写小说工具开发/.claude/scripts/snapshot_manager.py --project-root /Users/chang/Desktop/根源牌序 freeze 1
+python3 /Users/chang/Desktop/zhanghui/.claude/scripts/snapshot_manager.py --project-root /Users/chang/Desktop/根源牌序 freeze 1
 # 注：--project-root 是 argparse 全局选项，必须在子命令前
 ```
 
@@ -856,7 +856,7 @@ Expected: 看到 `manifest.json`、`大纲/`、`设定集/` 子目录。manifest
 - [ ] **Step 1.6.3: 跑 verify（无修改 → 应该 ok）**
 
 ```bash
-python3 /Users/chang/Desktop/ai写小说工具开发/.claude/scripts/snapshot_manager.py --project-root /Users/chang/Desktop/根源牌序 verify 1
+python3 /Users/chang/Desktop/zhanghui/.claude/scripts/snapshot_manager.py --project-root /Users/chang/Desktop/根源牌序 verify 1
 ```
 
 Expected: 退出码 0，`ok: true`。
@@ -865,7 +865,7 @@ Expected: 退出码 0，`ok: true`。
 
 ```bash
 echo "测试修改" >> /Users/chang/Desktop/根源牌序/大纲/总纲.md
-python3 /Users/chang/Desktop/ai写小说工具开发/.claude/scripts/snapshot_manager.py --project-root /Users/chang/Desktop/根源牌序 verify 1
+python3 /Users/chang/Desktop/zhanghui/.claude/scripts/snapshot_manager.py --project-root /Users/chang/Desktop/根源牌序 verify 1
 echo "exit=$?"
 # 改回去（手动，因为《根源牌序》非 git 仓库）
 # 实际 smoke test 时应记录原始内容并精确还原，或：
@@ -878,7 +878,7 @@ Expected: 退出码 1，`drifted_files` 含 `大纲/总纲.md`。
 - [ ] **Step 1.6.5: 跑全量测试**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/scripts && python3 -m pytest tests/ -v
+cd /Users/chang/Desktop/zhanghui/.claude/scripts && python3 -m pytest tests/ -v
 ```
 
 Expected: 全部 passed（包括老的 changes_gate 测试，不能回归）。
@@ -886,7 +886,7 @@ Expected: 全部 passed（包括老的 changes_gate 测试，不能回归）。
 - [ ] **Step 1.6.6: Commit（如有变化）**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git status  # 看是否有未提交改动
 # 通常 smoke test 不改代码，但若改了 setup 之类才需要 commit
 ```
@@ -1997,7 +1997,7 @@ EOF
 - [ ] **Step 3.6.2: dry-run**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 python3 .claude/scripts/revise_chapter.py \
     --chapter-file /tmp/revise_smoke/ch0005.md \
     --contract /tmp/revise_smoke/.webnovel/review/ch0005.json \
@@ -2009,7 +2009,7 @@ Expected: stdout JSON 含 `"dry_run": true`, `"target_sections": ["§2"]`, `"pla
 - [ ] **Step 3.6.3: 跑全量测试**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/scripts && python3 -m pytest tests/ -v
+cd /Users/chang/Desktop/zhanghui/.claude/scripts && python3 -m pytest tests/ -v
 ```
 
 Expected: 所有测试 passed（changes_gate + snapshot_manager + rejection_contract + revise_chapter）。
@@ -2451,7 +2451,7 @@ git commit -m "feat(fast-write): inject writer slice context (PR 2)"
 - [ ] **Step 2.4.1: 在《根源牌序》项目跑 read_slice writer**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 python3 -c "
 import sys
 sys.path.insert(0, '.claude/scripts')
@@ -2476,7 +2476,7 @@ Expected: writer slice 的 token 应明显小于全量基线（基线假设 ≥ 
 - [ ] **Step 2.4.3: 跑全量测试**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/scripts && python3 -m pytest tests/ -v
+cd /Users/chang/Desktop/zhanghui/.claude/scripts && python3 -m pytest tests/ -v
 ```
 
 Expected: 所有测试 passed。

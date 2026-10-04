@@ -122,7 +122,7 @@ Expected: PASS. If still red, diff your inserted strings against `test_prompt_in
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add webnovel-writer_chang/skills/webnovel-init/SKILL.md
 git commit -m "feat(init): Step 1.5 wiring — call deconstruction-agent with confirmation gate
 
@@ -202,7 +202,7 @@ Run the same pytest command. Expected: PASS. (Adding an unused kwarg doesn't cha
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "test(init): guard against unconditional idea_bank.json writes
 
@@ -350,7 +350,7 @@ Expected: All PASS (Task 1's test + others). If any fail, the new helper import 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): _validate_idea_bank_payload() — schema gate for idea_bank.json
 
@@ -525,7 +525,7 @@ Expected: All PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): _write_idea_bank() — three-state overwrite + wire into init_project()
 
@@ -611,7 +611,7 @@ Expected: All PASS (4 from Tasks 2-4 + this one).
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "test(init): guard semantic-match skip path
 
@@ -727,7 +727,7 @@ Expected: 7 PASSED (1 from Task 2 + 4 from Task 3 + 1 from Task 4 + 1 from Task 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "test(init): guard refuse + force-overwrite paths
 
@@ -792,7 +792,7 @@ Expected: All PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "test(init): guard unreadable --idea-bank-file path
 
@@ -879,7 +879,7 @@ rm -rf /tmp/manual_smoke_book
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add webnovel-writer_chang/scripts/init_project.py
 git commit -m "feat(init): --idea-bank-file + --idea-bank-force CLI flags
 

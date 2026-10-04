@@ -107,7 +107,7 @@ class PlanningHorizon:
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py
 git commit -m "feat(volume_state): add dataclasses (VolumeRecord, CandidateVolume, PlanningHorizon)"
 ```
@@ -238,7 +238,7 @@ Expected: ImportError or AttributeError for `VolumeStateManager`
 - [ ] **Step 3: Commit the failing test**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_volume_state.py
 git commit -m "test(volume_state): add state machine tests (red)"
 ```
@@ -417,7 +417,7 @@ Expected: 7 PASSED
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py
 git commit -m "feat(volume_state): implement VolumeStateManager (state machine + invariants)"
 ```
@@ -573,7 +573,7 @@ Expected: 3 PASSED
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/ai_volume_drafter.py \
         .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_ai_volume_drafter.py
 git commit -m "feat(ai_drafter): add draft_next_volume + tests (LLM-callable injected)"
@@ -658,7 +658,7 @@ Expected: TypeError (unexpected kwarg `volume_skeleton`) or similar
 - [ ] **Step 3: Commit the failing test**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_init_multi_volume.py
 git commit -m "test(init): add multi-volume init integration test (red)"
 ```
@@ -796,7 +796,7 @@ Expected: all PASS (existing tests should not break since `volume_skeleton=None`
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py
 git commit -m "feat(init): support volume_skeleton param + render multi-volume 总纲"
 ```
@@ -859,7 +859,7 @@ For each V_k:
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-init/references/multi-volume-ux.md
 git commit -m "docs(init): add multi-volume UX design reference"
 ```
@@ -974,7 +974,7 @@ D) 完全跳过这一卷（设 deferred）
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md
 git commit -m "docs(init): add Step 1.6 (multi-volume collector) + Step 5.5 (AI drafter)"
 ```
@@ -1035,7 +1035,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" master-outlin
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md
 git commit -m "docs(plan): Step 9 reads volumes[] for V+1 anchor (per spec §5.4)"
 ```
@@ -1136,7 +1136,7 @@ Expected: 5 PASSED (3 new + 2 from Task 5/6)
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_v_plus_one_anchor.py
 git commit -m "test(plan): add V+1 anchor semantics tests (confirmed vs deferred per spec §5.4)"
 ```
@@ -1240,7 +1240,7 @@ Expected: all PASSED (existing + new)
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_e2e_multi_volume_init.py
 git commit -m "test(e2e): smoke test for 3-volume init + user-stops-at-v1 flow"
 ```
@@ -1263,7 +1263,7 @@ Find the section listing skills/features in `README.md`. After the existing entr
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/README.md
 git commit -m "docs(readme): mention multi-volume init feature"
 ```

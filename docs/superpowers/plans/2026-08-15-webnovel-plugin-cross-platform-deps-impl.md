@@ -1783,7 +1783,7 @@ CLAUDE_PLUGIN_ROOT="$(pwd)/.claude/plugins/webnovel-writer_chang" \
 - [ ] **Step 4: 清理 worktree（如有）**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git worktree list | grep -v $(pwd) | awk '{print $1}' | xargs -I{} git worktree remove {}
 ```
 

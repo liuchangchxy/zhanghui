@@ -122,7 +122,7 @@ Expected: PASS. If still red, diff against `test_prompt_integrity.py:635-680` an
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md
 git commit -m "feat(init): Step 1.5 wiring — multi-file tree call + plan consumption pointer
 
@@ -235,7 +235,7 @@ Expected: All PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(agent): extend deconstruction-agent schema with 9 new fields (P0-Full)
 
@@ -384,7 +384,7 @@ Create `scripts/data_modules/templates/reference_report.md.j2`:
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/templates/reference_report.md.j2
 git commit -m "feat(init): reference_research report.md Jinja template
 
@@ -768,7 +768,7 @@ Expected: All PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/init_reference_tree.py webnovel-writer_chang/scripts/data_modules/tests/test_init_reference_tree.py
 git commit -m "feat(init): init_reference_tree builder — multi-file product tree from JSON
 
@@ -871,7 +871,7 @@ Expected: All (existing + 2 new) PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): idea_bank.json accepts optional reference_research_path field
 
@@ -1095,7 +1095,7 @@ Expected: All PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): --reference-research-dir + --reference-overwrite CLI flags
 
@@ -1184,7 +1184,7 @@ Expected: All PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(plan): consume reference_research tree when idea_bank pointer set
 

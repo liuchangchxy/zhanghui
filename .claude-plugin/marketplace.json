@@ -1,0 +1,16 @@
+{
+  "name": "zhanghui",
+  "description": "章回 Zhanghui —— 让 AI 写完整本长篇网文（Claude Code 插件）",
+  "owner": {
+    "name": "liuchangchxy",
+    "url": "https://github.com/liuchangchxy"
+  },
+  "plugins": [
+    {
+      "name": "webnovel-writer_chang",
+      "source": "./.claude/plugins/webnovel-writer_chang",
+      "description": "长篇网文创作系统：一致性数据链 + 风格指纹 + 去 AI 味 + 14 命令 4 agent（章回 Zhanghui）",
+      "version": "6.4.0"
+    }
+  ]
+}

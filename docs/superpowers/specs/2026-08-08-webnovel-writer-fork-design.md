@@ -38,7 +38,7 @@
 ### 1.1 目录结构
 
 ```
-/Users/chang/Desktop/webnovel-tool-lab/.claude/    ← 历史快照（2026-08-08 起点）。当前路径：/Users/chang/Desktop/ai写小说工具开发/
+/Users/chang/Desktop/webnovel-tool-lab/.claude/    ← 历史快照（2026-08-08 起点）。当前路径：/Users/chang/Desktop/zhanghui/
 ├── skills/                              ← 项目级 skill 层（核心新增/覆盖）
 │   ├── webnovel-write/skill.md           ← 主流程（已存在，需改造）
 │   ├── webnovel-review/skill.md          ← 审查（已存在，按需改造）

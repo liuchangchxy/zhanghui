@@ -257,14 +257,14 @@ Expected: 5 PASSED.
 - [ ] **Step 10: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/init_reference_tree.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/init_project.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_init_reference_tree.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/init_reference_tree.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/init_project.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_init_reference_tree.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "fix(adversarial): C1 init_candidates schema, C2 backup destruction, C3 symlink leak
 
@@ -441,7 +441,7 @@ Expected: All new tests PASS.
 (Same sync pattern as Task A.)
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "fix(adversarial): I1-I4 strict validation — marked_references types, version, paths, CJK punct
 
@@ -642,11 +642,11 @@ Open `skills/webnovel-plan/SKILL.md`. Find the "按需读取 reference_research 
 - [ ] **Step 6: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_scanner.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_scanner.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-plan/SKILL.md
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_scanner.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_scanner.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-plan/SKILL.md
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "feat(scan): reference_research_scanner helper — Python enforcement for plan
 
@@ -758,7 +758,7 @@ python3 -m pytest data_modules/tests/test_init_reference_tree.py data_modules/te
 - [ ] **Step 8: Sync + commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "fix(adversarial): M1-M6 — microsecond timestamps, path validation, rename, UTC validator, cleanup
 
@@ -794,7 +794,7 @@ Expected: 33 prior + 14 new = 47+ tests pass. Pre-existing failures (37 unrelate
 - [ ] **Step 2: Sync verification**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 for f in \
   agents/deconstruction-agent.md \
   scripts/init_reference_tree.py \

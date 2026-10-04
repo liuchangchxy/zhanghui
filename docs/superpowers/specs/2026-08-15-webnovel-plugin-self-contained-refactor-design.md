@@ -12,7 +12,7 @@
 把 fork 出来的 webnovel-writer plugin 重构为**自包含、可在任何书项目目录直接加载**，且具备**跨平台（macOS + Linux + Windows）自动安装 Python 依赖**的能力，通过 `webnovel-chang-marketplace` **公开分发**——用户装 marketplace 后零手动步骤可用；不再要求每个书项目手动配置 `.claude/`、不再依赖 dev workspace 的项目级 skill/scripts。
 
 ### 0.2 触发问题
-用户报告：cd 到 `/Users/chang/Desktop/根源牌序/` 后 `/webnovel-init`、`/webnovel-doctor`、`/webnovel-write` 等 skill 无法正常使用，SessionStart hook 也跑不出正确输出。同一时刻在 dev workspace `ai写小说工具开发/` 下却能跑——说明 plugin 跟 dev workspace 耦合过紧。
+用户报告：cd 到 `/Users/chang/Desktop/根源牌序/` 后 `/webnovel-init`、`/webnovel-doctor`、`/webnovel-write` 等 skill 无法正常使用，SessionStart hook 也跑不出正确输出。同一时刻在 dev workspace `zhanghui/` 下却能跑——说明 plugin 跟 dev workspace 耦合过紧。
 
 ### 0.3 明确不做的
 - 不重新发明 webnovel-writer（保留 plugin 主体，只重构路径与目录布局）
@@ -39,7 +39,7 @@
 ### 1.1 重构前：参考与开发混杂
 
 ```
-/Users/chang/Desktop/ai写小说工具开发/
+/Users/chang/Desktop/zhanghui/
 ├── .claude/
 │   ├── settings.json                [开发] dev 配置（含 hooks 覆写、过宽 permissions）
 │   ├── .webnovel-current-project    [开发] dev 指针
@@ -67,7 +67,7 @@
 ### 1.2 重构后：参考、dev 配置、plugin 三层清晰
 
 ```
-/Users/chang/Desktop/ai写小说工具开发/           ← dev workspace（你唯一的项目）
+/Users/chang/Desktop/zhanghui/           ← dev workspace（你唯一的项目）
 ├── .claude/
 │   ├── settings.json                [开发] 只剩 enabledPlugins + 必要 permissions，无 hooks 覆写
 │   ├── .webnovel-current-project    [开发] dev 指针（保留，README 说明仅 dev 用）
@@ -149,7 +149,7 @@ dev 模式下 plugin 三跳链路：
     ↓ 首次安装时 cp 同步
 ~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/         ← cache（Claude Code 实际加载）
     ↓ **必须建为 symlink** 指向
-/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/      ← dev 源码
+/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/      ← dev 源码
 ```
 
 **关键**：cache 必须建为 `ln -sfn` 指向 dev workspace 的 plugin/，而不是把 marketplace 拷贝过来。任何对 dev workspace 的修改都立即被 Claude Code 感知（无需 rehash）。如果 cache 是普通目录而非 symlink，dev 修改不会生效，会出现「测试通过但实际加载的仍是旧版」的诡异问题。

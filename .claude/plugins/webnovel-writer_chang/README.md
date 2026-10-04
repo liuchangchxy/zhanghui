@@ -1,6 +1,6 @@
-# ai写小说工具开发
+# 章回 Zhanghui —— plugin 本体
 
-为 webnovel-writer Claude Code 插件做的个人 skill 叠加层。解决三个具体痛点：
+章回（Zhanghui）的 plugin 本体：为 webnovel-writer 做的个人 skill 叠加层。解决三个具体痛点：
 1. 长篇一致性崩坏
 2. AI 味重
 3. 流程繁琐
@@ -8,7 +8,7 @@
 ## 项目结构
 
 ```
-ai写小说工具开发/
+zhanghui/
 ├── .claude/                  ← 核心实现（git tracked）
 │   ├── scripts/
 │   │   ├── changes_gate.py        CHANGES 协议 8 项校验 (R1-R8)
@@ -39,7 +39,7 @@ ai写小说工具开发/
 1. 新建一个项目文件夹，比如 `~/novel-test-1/`
 2. 在那个文件夹里建软链：
    ```bash
-   ln -sfn ~/ai写小说工具开发/.claude ./.claude
+   ln -sfn ~/zhanghui/.claude ./.claude
    ```
 3. 启动 `claude`（新会话）
 4. 项目级 skill 会被自动加载，无需修改

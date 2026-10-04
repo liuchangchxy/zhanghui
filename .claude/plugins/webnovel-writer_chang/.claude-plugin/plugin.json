@@ -1,12 +1,12 @@
 {
   "name": "webnovel-writer_chang",
   "version": "6.4.0",
-  "description": "长篇网文创作系统（skills + agents + data chain + RAG）",
+  "description": "章回 Zhanghui —— 长篇网文创作系统（skills + agents + data chain + RAG）",
   "author": {
     "name": "chang"
   },
-  "homepage": "https://github.com/lingfengQAQ/webnovel-writer",
-  "repository": "https://github.com/lingfengQAQ/webnovel-writer",
+  "homepage": "https://github.com/liuchangchxy/zhanghui",
+  "repository": "https://github.com/liuchangchxy/zhanghui",
   "license": "GPL-3.0",
   "keywords": [
     "webnovel",
@@ -14,7 +14,8 @@
     "claude-code",
     "skills",
     "agents",
-    "rag"
+    "rag",
+    "zhanghui"
   ],
   "skills": "./skills/",
   "commands": "./commands/"

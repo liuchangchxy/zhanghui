@@ -5,13 +5,13 @@
 ## 快速开始
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan
+cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan
 pip install -e ".[fanqie,dev]"
 playwright install chromium  # 仅番茄需要
 
 # 跑一次扫描
 cd /path/to/your-novel-project
-python /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/scripts/scan.py \
+python /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/scripts/scan.py \
     --platform=qidian,fanqie \
     --category=玄幻,都市 \
     --top=30 \

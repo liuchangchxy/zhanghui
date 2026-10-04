@@ -30,23 +30,23 @@
 
 | 文件/目录 | 用途 |
 |---|---|
-| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/` | ★ plugin 源码（dev workspace） |
-| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/.claude-plugin/plugin.json` | name: webnovel-writer_chang |
-| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/hooks/hooks.json` | SessionStart + PreToolUse guard |
-| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/` | 核心脚本（webnovel.py + 内化脚本） |
-| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/_shared/` | 跨 skill 共享脚本（text_humanizer.py） |
-| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/` | 14 个 SKILL.md（9 个原有 + 5 个迁移：fast-write/revise/deslop-check/resume/chart-scan） |
-| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/` | 4 个 agent md |
-| `ai写小说工具开发/.claude/plugins/webnovel-writer_chang/templates/` | 个人语料默认内容（init 时 copy 出去） |
+| `zhanghui/.claude/plugins/webnovel-writer_chang/` | ★ plugin 源码（dev workspace） |
+| `zhanghui/.claude/plugins/webnovel-writer_chang/.claude-plugin/plugin.json` | name: webnovel-writer_chang |
+| `zhanghui/.claude/plugins/webnovel-writer_chang/hooks/hooks.json` | SessionStart + PreToolUse guard |
+| `zhanghui/.claude/plugins/webnovel-writer_chang/scripts/` | 核心脚本（webnovel.py + 内化脚本） |
+| `zhanghui/.claude/plugins/webnovel-writer_chang/scripts/_shared/` | 跨 skill 共享脚本（text_humanizer.py） |
+| `zhanghui/.claude/plugins/webnovel-writer_chang/skills/` | 14 个 SKILL.md（9 个原有 + 5 个迁移：fast-write/revise/deslop-check/resume/chart-scan） |
+| `zhanghui/.claude/plugins/webnovel-writer_chang/agents/` | 4 个 agent md |
+| `zhanghui/.claude/plugins/webnovel-writer_chang/templates/` | 个人语料默认内容（init 时 copy 出去） |
 | `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/` | 你的专属 marketplace |
 | `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/.claude-plugin/marketplace.json` | 声明 plugin: webnovel-writer_chang |
 | `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/` | plugin 副本（dev → marketplace 同步目标） |
 | `~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/` | Claude Code 实际加载的 cache |
 | `~/.claude/settings.json` | marketplaces + enabledPlugins |
-| `ai写小说工具开发/.claude/settings.json` | dev 配置（瘦身后只保留 enabledPlugins + 必要权限） |
-| `ai写小说工具开发/docs/PROJECT_MAP.md` | 新增：参考 vs 开发分层图 |
-| `ai写小说工具开发/README.md` | 重写为 fork 开发指南 |
-| `ai写小说工具开发/docs/KNOWN_ISSUES.md` | 删除 M-H8 / MED-5 / MED-52 |
+| `zhanghui/.claude/settings.json` | dev 配置（瘦身后只保留 enabledPlugins + 必要权限） |
+| `zhanghui/docs/PROJECT_MAP.md` | 新增：参考 vs 开发分层图 |
+| `zhanghui/README.md` | 重写为 fork 开发指南 |
+| `zhanghui/docs/KNOWN_ISSUES.md` | 删除 M-H8 / MED-5 / MED-52 |
 
 ---
 
@@ -60,7 +60,7 @@
 - [ ] **Step 1: 检查 git 状态干净**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发 && git status
+cd /Users/chang/Desktop/zhanghui && git status
 ```
 
 预期输出：`nothing to commit, working tree clean`（如果有未提交改动，先 commit 或 stash）
@@ -68,7 +68,7 @@ cd /Users/chang/Desktop/ai写小说工具开发 && git status
 - [ ] **Step 2: 创建 worktree**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发 && git worktree add .claude/worktrees/refactor-self-contained -b refactor/self-contained
+cd /Users/chang/Desktop/zhanghui && git worktree add .claude/worktrees/refactor-self-contained -b refactor/self-contained
 ```
 
 预期输出：`Preparing worktree (new branch 'refactor/self-contained')... HEAD is now at 26e6c11 ...` 类似
@@ -79,7 +79,7 @@ cd /Users/chang/Desktop/ai写小说工具开发 && git worktree add .claude/work
 cd .claude/worktrees/refactor-self-contained && pwd
 ```
 
-预期输出：`/Users/chang/Desktop/ai写小说工具开发/.claude/worktrees/refactor-self-contained`
+预期输出：`/Users/chang/Desktop/zhanghui/.claude/worktrees/refactor-self-contained`
 
 - [ ] **Step 4: 验证 plugin 还在**
 
@@ -103,7 +103,7 @@ ls .claude/plugins/webnovel-writer/hooks/hooks.json && cat .claude/settings.json
 - [ ] **Step 1: git mv 重命名目录**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/worktrees/refactor-self-contained
+cd /Users/chang/Desktop/zhanghui/.claude/worktrees/refactor-self-contained
 git mv .claude/plugins/webnovel-writer .claude/plugins/webnovel-writer_chang
 ```
 
@@ -197,7 +197,7 @@ cat > ~/.claude/plugins/marketplaces/webnovel-chang-marketplace/.claude-plugin/m
   "plugins": [
     {
       "name": "webnovel-writer_chang",
-      "description": "fork of webnovel-writer with self-contained plugin layout; see ai写小说工具开发/ docs/PROJECT_MAP.md",
+      "description": "fork of webnovel-writer with self-contained plugin layout; see zhanghui/ docs/PROJECT_MAP.md",
       "version": "6.3.0",
       "source": "./webnovel-writer_chang"
     }
@@ -242,7 +242,7 @@ cat > .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_marketp
 # cache 走 symlink（见 Task 4 Step 7）会自动跟上。
 set -euo pipefail
 
-DEV_PLUGIN="/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang"
+DEV_PLUGIN="/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang"
 MKT_PLUGIN="$HOME/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang"
 
 if [[ ! -d "$DEV_PLUGIN" ]]; then
@@ -291,12 +291,12 @@ git commit -m "feat(plugin): add dev-only/sync_dev_to_marketplace.sh"
 - [ ] **Step 2: 创建 symlink**
 
 ```bash
-ln -sfn /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang \
+ln -sfn /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang \
     ~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang
 ls -la ~/.claude/plugins/cache/webnovel-chang-marketplace/
 ```
 
-预期输出：看到 `webnovel-writer_chang -> /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang`
+预期输出：看到 `webnovel-writer_chang -> /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang`
 
 - [ ] **Step 3: 验证 symlink 解析**
 
@@ -726,7 +726,7 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/worktrees/refactor-self-contained
+cd /Users/chang/Desktop/zhanghui/.claude/worktrees/refactor-self-contained
 git add -A
 git commit -m "feat(plugin/skills): migrate webnovel-fast-write + changes_gate/context_slice/snapshot_manager"
 ```
@@ -772,7 +772,7 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/worktrees/refactor-self-contained
+cd /Users/chang/Desktop/zhanghui/.claude/worktrees/refactor-self-contained
 git add -A
 git commit -m "feat(plugin/skills): migrate webnovel-revise + revise_chapter/rejection_contract/normalize-punctuation"
 ```
@@ -877,8 +877,8 @@ grep -n '/Users/chang/Desktop' .claude/plugins/webnovel-writer_chang/skills/webn
 把硬编码绝对路径改为 `${CLAUDE_PLUGIN_ROOT}` 引用：
 
 ```bash
-sed -i '' 's|python /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan/scripts/scan.py|python3 ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-chart-scan/scripts/scan.py|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
-sed -i '' 's|cd /Users/chang/Desktop/ai写小说工具开发/.claude/skills/webnovel-chart-scan|cd ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-chart-scan|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
+sed -i '' 's|python /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan/scripts/scan.py|python3 ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-chart-scan/scripts/scan.py|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
+sed -i '' 's|cd /Users/chang/Desktop/zhanghui/.claude/skills/webnovel-chart-scan|cd ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-chart-scan|g' .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
 grep -n '/Users/chang/Desktop' .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md
 ```
 
@@ -1138,7 +1138,7 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/worktrees/refactor-self-contained
+cd /Users/chang/Desktop/zhanghui/.claude/worktrees/refactor-self-contained
 git add -A
 git commit -m "chore(dev): remove empty .claude/skills/ and .claude/scripts/ after migration + merge tests/conftest.py"
 ```
@@ -1365,7 +1365,7 @@ git commit -m "feat(init): copy 个人语料 + 写作宪法 templates to .webnov
 ## Task 22: 删 dev settings.json 的 hooks 块
 
 **Files:**
-- Modify: `ai写小说工具开发/.claude/worktrees/refactor-self-contained/.claude/settings.json`
+- Modify: `zhanghui/.claude/worktrees/refactor-self-contained/.claude/settings.json`
 
 **为什么**：dev settings.json 的 hooks 块是用 `${CLAUDE_PROJECT_DIR}/.claude/plugins/webnovel-writer/hooks/...` 拼出来的——这是 dev 调试遗留（plugin 路径已重命名为 `_chang`，marketplace 自带 hooks.json 用 `${CLAUDE_PLUGIN_ROOT}` 是正确的）。dev hooks 本身已经用 `python3`（不像 plugin 的 hooks.json 用 `python`），删掉是对的。
 
@@ -1699,7 +1699,7 @@ git commit -m "fix(plugin): address self-contained test failures (path cleanup)"
 ## 三层结构
 
 ### 层 1：dev workspace（你唯一的项目）
-`/Users/chang/Desktop/ai写小说工具开发/`
+`/Users/chang/Desktop/zhanghui/`
 
 | 路径 | 性质 | 说明 |
 |---|---|---|
@@ -1761,7 +1761,7 @@ wc -l README.md
 - [ ] **Step 2: 重写 README**
 
 ```markdown
-# ai写小说工具开发
+# zhanghui
 
 > 个人 fork 的 webnovel-writer 工具开发 workspace
 
@@ -1867,7 +1867,7 @@ git commit -m "docs: remove obsolete CLAUDE_PROJECT_DIR-related known issues (ro
 - [ ] **Step 1: cd 到 dev workspace**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/worktrees/refactor-self-contained
+cd /Users/chang/Desktop/zhanghui/.claude/worktrees/refactor-self-contained
 ```
 
 - [ ] **Step 2: 启动 claude（新会话）**
@@ -1998,7 +1998,7 @@ ls 正文/第0001章*/ 2>/dev/null
 - [ ] **Step 1: 切回 main**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git checkout main
 ```
 
@@ -2013,7 +2013,7 @@ git log --oneline refactor/self-contained ^main | head -40
 - [ ] **Step 3: Squash merge**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git merge --squash refactor/self-contained
 git status
 ```
@@ -2044,7 +2044,7 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v 
 - [ ] **Step 5: 清理 worktree**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git worktree remove .claude/worktrees/refactor-self-contained
 git branch -d refactor/self-contained
 ```

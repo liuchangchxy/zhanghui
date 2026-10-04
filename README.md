@@ -1,148 +1,118 @@
-# ai写小说工具开发
+# 章回 Zhanghui
 
-> 个人 fork 的 webnovel-writer 工具开发 workspace
+> 让 AI 写完整本长篇网文 —— 一套跑在 [Claude Code](https://claude.com/claude-code) 里的长篇创作系统
 
-## 这是什么
+章回不解决「生成一段好看的文字」，它解决的是：**写到第 800 章，设定还没崩、文风还没飘、伏笔还没丢。**
 
-基于 [webnovel-writer](https://github.com/lingfengQAQ/webnovel-writer) 的个人 fork，加上 `_chang` 后缀做身份区分。**整个 fork 的目标：让 Claude Code 在任何书项目目录下直接加载这个 plugin，不要求书项目有 `.claude/` 配置。**
+## 为什么叫「章回」
 
-## 目录地图
+章回体是中文长篇连载小说的原生形态——一回落一章，回回相扣。这个工具的每一个设计都建立在「长篇连载」这个前提上：一致性数据链、跨章文风指纹、伏笔追踪、断点续写。脱离长篇，这些全无意义。名字直接指向它要解决的问题域。
 
-详见 [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md)。
+## 三个痛点，三种做法
 
-简版：
-- `.claude/plugins/webnovel-writer_chang/` — 你开发的 plugin（self-contained）
-- `docs/PROJECT_MAP.md` — 参考 vs 开发分层
-- `docs/superpowers/specs/` — 设计文档
-- `docs/superpowers/plans/` — 实施计划
+| 痛点 | 章回的做法 |
+|---|---|
+| **长篇一致性崩坏** | 正文写完由 `data-agent` 抽取事实 → CHANGES 协议 8 字段 → `changes_gate.py` 做 R1–R8 校验 → 写入 SQLite 数据链。设定、时间线、伏笔、角色状态全程可查、可验、可回滚 |
+| **AI 味重** | 双引擎 anti-slop 扫描（`text_humanizer.py` 查 AI 词与弱化副词 + `check-ai-patterns.js` 查破折号、预告腔等实战漏网句式），外加跨章文风指纹漂移检测 |
+| **流程繁琐** | 14 个斜杠命令覆盖「调研 → 初始化 → 规划 → 写作 → 审查 → 局部重写 → 诊断」全链路；信任方向时可用 `/fast-write` 快车道跳过 reviewer，省 60–80% token |
 
-## 加载机制
+## 装了什么
 
-1. Claude Code 启动时读 `~/.claude/settings.json` 的 `enabledPlugins`
-2. 找到 `webnovel-writer_chang@webnovel-chang-marketplace: true`
-3. 加载 `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/` 里的 marketplace.json
-4. 安装 plugin 到 `~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/`
-5. 注入 `CLAUDE_PLUGIN_ROOT` 环境变量
-6. plugin 自带的 hooks / skills / agents 全部可用
+### 14 个命令
 
-dev 模式下 cache 是 dev workspace 的 **symlink**，**修改立即生效**无需重启（但 hooks.json / plugin.json 改动建议重启一次）。
+| 命令 | 用途 |
+|---|---|
+| `/webnovel-init` | 分阶段交互收集创作信息，生成项目骨架与约束文件 |
+| `/webnovel-chart-scan` | 扫起点/番茄/纵横/七猫/刺猬猫榜单，调研题材、找对标书 |
+| `/webnovel-deconstruct` | 拆解参考书，提取可迁移的创作模式 |
+| `/webnovel-plan` | 基于总纲生成卷纲、时间线、章纲，增量写回设定集 |
+| `/webnovel-write` | 写章节（默认 2000–2500 字），完整流程 |
+| `/webnovel-fast-write` | 快车道写章，跳过 reviewer 与 polish |
+| `/webnovel-review` | 多维度审查：设定一致性、时间线、叙事连贯、角色、逻辑、节拍、草蛇灰线、禁抄合规 |
+| `/webnovel-revise` | 按 reviewer 的结构化反馈**局部**重写，只改标出的段落 |
+| `/webnovel-deslop-check` | 对已有章节独立跑 anti-slop 扫描 |
+| `/webnovel-query` | 查设定、角色、力量体系、势力、伏笔，支持紧急度与金手指状态 |
+| `/webnovel-resume` | 从 ledger 断点恢复，提示「沿用 / 重写 / 查看」 |
+| `/webnovel-learn` | 从当前会话提取成功写作模式，写入 `project_memory.json` |
+| `/webnovel-doctor` | 只读体检：目录、文件、JSON、SQLite、RAG 配置、依赖 |
+| `/webnovel-dashboard` | 启动只读管理面板，查看项目状态、实体图谱与章节内容 |
 
-## ⚠️ 第一次开发：跑 setup_dev_env.sh
+另有第 15 个 skill `/webnovel-style-profile`（无独立命令，写作流程内自动触发）：生成章节文风指纹并检测跨章漂移，仅做可计算的量化指标（句长 / 对话 / 标点 / 段长）。
 
-**这步不能跳过，跳过的话改了代码 Claude Code 看不到，plugin 直接挂。**
+### 4 个 agent
+
+`context-agent`（写前 research，产出写作任务书）· `data-agent`（从正文抽取事实，生成 commit artifacts）· `deconstruction-agent`（从参考书抽模式）· `reviewer`（统一审查，输出结构化问题清单）
+
+### 重跑守卫
+
+`update_master_outline` / `chapter_commit` / `snapshot_manager` 默认「目标已存在就报错」，调用者必须显式传 `--on-conflict=overwrite|append|skip|ask`。杜绝脚本静默覆盖已有产物。实现见 `scripts/_shared/safe_overwrite.py`。
+
+## 安装
+
+### 方式 A：从 GitHub 安装
+
+```bash
+claude plugin marketplace add liuchangchxy/zhanghui
+claude plugin install webnovel-writer_chang@zhanghui
+```
+
+装完在任意书项目目录下直接可用，**书项目侧不需要 `.claude/` 配置**。
+
+### 方式 B：本仓库作为开发工作区（作者本机流程）
+
+本仓库是一个**开发工作区**，插件本体在 `.claude/plugins/webnovel-writer_chang/`。
+本机安装靠 marketplace + cache 软链：
 
 ```bash
 bash .claude/plugins/webnovel-writer_chang/scripts/dev-only/setup_dev_env.sh
 ```
 
-这个脚本会：
-1. 验证 plugin source 完整
-2. 把 dev workspace 同步到 marketplace
-3. **把 cache 建为指向 dev workspace 的 symlink**（spec §2.3 强制）
-4. 验证 symlink 工作
-5. 跑 smoke test
+这个脚本幂等，会校验插件完整性、同步到 marketplace、**把 cache 建为指向 dev workspace 的软链**（改代码立即生效，无需重启），并跑 smoke test。
 
-**幂等**：可重复跑。如果 cache 已经是 symlink 不会有任何改动。
+First run 时插件会在后台自动安装 Python 依赖到 `~/.cache/webnovel-writer-chang/venvs/`；`chart-scan` 的番茄 adapter 需要 chromium，会弹一次 y/N。PyPI 不可达时自动切清华/阿里镜像。清理：`rm -rf ~/.cache/webnovel-writer-chang/`。
 
-SessionStart 已经加了自检——如果你忘了建 symlink 跑 setup_dev_env.sh，session_start 会在 stderr 警告你。
+## 使用
 
-## 日常开发流程
+在任意书项目目录下启动即可，**书项目侧不需要任何 `.claude/` 配置**：
 
-```
-1. 在 .claude/plugins/webnovel-writer_chang/ 里改代码
-2. 保存
-3. 重启 Claude Code（如果只改了 hooks.json / plugin.json，普通 .py 改动有时免重启）
-4. 验证
+```bash
+cd /path/to/your-novel
+claude
 ```
 
-**不要做**：
-- ❌ 手动 cp / 复制文件到 cache
-- ❌ 手动 cd 到 cache 改东西
-- ❌ 跳过 setup_dev_env.sh
+```
+/webnovel-init      # 首次初始化
+/webnovel-plan      # 生成卷纲章纲
+/webnovel-write     # 写章节
+/webnovel-review    # 审查
+/webnovel-doctor    # 诊断
+```
 
-**如果 cache 变回普通目录**（比如手动 sync 出错）：再跑一次 setup_dev_env.sh 它会修正。
+## 开发
 
-## 首次安装依赖
+改代码 → 跑 `bin/deploy-plugin.sh` 同步到 marketplace：
 
-第一次跑 `claude` 时，plugin 会自动在后台装 Python 依赖（不需要你手动操作）：
-- 装在 `~/.cache/webnovel-writer-chang/venvs/<module>/`
-- SessionStart 后台 fork 子进程，不阻塞你的会话
-- 装好后会写 `.install-stamp`，下次不再装
+```bash
+bash .claude/plugins/webnovel-writer_chang/bin/deploy-plugin.sh --dry-run   # 预览
+bash .claude/plugins/webnovel-writer_chang/bin/deploy-plugin.sh             # 真同步
+```
 
-`webnovel-chart-scan` 的 fanqie adapter 需要 chromium（~150MB），会弹一次 y/N 让你选。
+**不要**手动 cp 到 cache，也**不要**直接改 cache 里的文件。
 
-**离线场景**：默认从 PyPI 装；如果 PyPI 不可达会自动切国内镜像（清华/阿里）。要彻底离线请用 `WEBNOVEL_CACHE_DIR` 指向预装好的 venv。
-
-**清理**：`rm -rf ~/.cache/webnovel-writer-chang/` 即可重装。
-
-## 测试
+### 测试
 
 ```bash
 cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v
 ```
 
-## 同步到 marketplace（dev → marketplace）
+## 已知待办
 
-```bash
-bash .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_marketplace.sh
-```
+- `tests/test_run_behavior_evals.py` 当前 3 项失败（`skill_init_contract` / `skill_review_contract` / `write_blocks_before_commit`）——SKILL.md 内容与评测契约漂移，待修
+- plugin 名 `webnovel-writer_chang` 含下划线，非 kebab-case——Claude Code 可用，但上架 Claude.ai 目录要求 kebab-case
 
-跑这个脚本：rsync plugin + 验证 uv 4 个平台二进制 sha256。
+## 许可与来源
 
-## 写新章节
+**GPL-3.0**（见 [`LICENSE`](LICENSE)）。本项目是 [lingfengQAQ/webnovel-writer](https://github.com/lingfengQAQ/webnovel-writer) 的个人 fork，
+已吸收的第三方成果与完整署名见 [`NOTICE.md`](NOTICE.md)。
 
-在任何书项目目录下：
-```bash
-cd /path/to/your-novel
-claude
-# 在 claude 里：
-# /webnovel-init   # 首次初始化
-# /webnovel-write  # 写章节
-# /webnovel-doctor # 诊断
-```
-
-**书项目侧不需要任何 `.claude/` 配置。**
-
-## 当前能力
-
-### safe_overwrite（重跑守卫，2026-08-19）
-
-防止脚本静默覆盖已有产物。所有 P0 脚本（`update_master_outline` / `chapter_commit` / `snapshot_manager`）默认"目标已存在则报错"，调用者必须显式传 `--on-conflict=<mode>`：
-
-- `overwrite` — 覆盖（重跑全流程场景）
-- `append` — 追加（增量同步场景）
-- `skip` — 跳过（幂等检查场景）
-- `ask` — 询问人类（交互场景，依赖 `CLAUDE_PLUGIN_ROOT` 环境变量识别 Claude Code 上下文）
-
-实现：`scripts/_shared/safe_overwrite.py`。调用者样例：
-
-```bash
-python3 scripts/update_master_outline.py --project-root /path/to/proj --on-conflict=overwrite
-```
-
-不传 flag 且目标已存在 → 抛 `FileExistsError`，不修改文件。
-
-详见 [`CHANGELOG.md`](CHANGELOG.md) 2026-08-19 条目。
-
-## 常见问题
-
-### SessionStart 警告 "plugin cache is not a symlink"
-
-session_start.py 在 cache 不是 symlink 时会警告到 stderr。**修复**：跑 setup_dev_env.sh。
-
-### 改了代码但 Claude Code 看不到
-
-1. 确认 cache 是 symlink：`ls -la ~/.claude/plugins/cache/webnovel-chang-marketplace/`
-2. 如果不是 symlink：跑 setup_dev_env.sh
-3. 如果是 symlink 但内容不对：检查 `readlink` 指向的路径
-
-### Python 依赖没装 / 装错了
-
-```bash
-rm -rf ~/.cache/webnovel-writer-chang/
-# 下次 SessionStart 会自动重装
-```
-
-## 版本
-
-当前 plugin version: 6.4.0（safe-rerun 重构：safe_overwrite 守卫层落地）
+`references/`（本地调研用的第三方项目只读快照，2.1 GB）**不随仓库分发**。

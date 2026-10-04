@@ -1078,8 +1078,8 @@ So the relevant block of `main()` becomes:
 
 Run:
 ```bash
-CLAUDE_PLUGIN_ROOT=/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang \
-  python3 -X utf8 /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/hooks/session_start.py
+CLAUDE_PLUGIN_ROOT=/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang \
+  python3 -X utf8 /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/hooks/session_start.py
 ```
 Expected: stdout contains a ciweimao y/N prompt **IF** the venv is installed and `.ciweimao-prompted` doesn't exist. If the marker already exists (e.g., user accepted in prior run), no ciweimao prompt should appear.
 

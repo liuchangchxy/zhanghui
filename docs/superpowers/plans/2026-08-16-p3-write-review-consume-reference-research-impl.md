@@ -425,10 +425,10 @@ Expected: 12 PASSED.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "feat(injector): reference_research_injector — write/review consumption helper
 
@@ -476,7 +476,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Add Step 0 wiring to write SKILL.md**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md`. Find the "个人语料检测" and "写作宪法加载" blocks (around L157–166). Add a new block immediately after them:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md`. Find the "个人语料检测" and "写作宪法加载" blocks (around L157–166). Add a new block immediately after them:
 
 ```markdown
 
@@ -488,7 +488,7 @@ Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writ
 
 - [ ] **Step 4: Add Step 1 wiring to context-agent.md**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/context-agent.md`. Find the section listing the `load-context` base pack fields. Add a new row:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/context-agent.md`. Find the section listing the `load-context` base pack fields. Add a new row:
 
 ```markdown
 | `reference_research_summary` | string | ≤ 200 token | `reference_research_injector.build_step1_summary()` |
@@ -526,11 +526,11 @@ Expected: PASS.
 - [ ] **Step 7: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-write/SKILL.md
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/context-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/context-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "feat(write): wire reference_research_injector into write Step 0/1/2A
 
@@ -583,7 +583,7 @@ Expected: 2 FAIL.
 
 - [ ] **Step 3: Add do_not_copy check to review SKILL.md**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-review/SKILL.md`. Find Step 3 "并行 Task 调用" section. Add after:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-review/SKILL.md`. Find Step 3 "并行 Task 调用" section. Add after:
 
 ```markdown
 
@@ -603,7 +603,7 @@ Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writ
 
 - [ ] **Step 4: Add do_not_copy_violation category to reviewer.md**
 
-Open `/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/reviewer.md`. Find the section listing issue categories. Add `do_not_copy_violation` to the list. Update §5 / §6 / §7 wording accordingly.
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/reviewer.md`. Find the section listing issue categories. Add `do_not_copy_violation` to the list. Update §5 / §6 / §7 wording accordingly.
 
 Add a new step (after §3 reading do_not_copy_check.json):
 
@@ -640,11 +640,11 @@ Expected: 2 PASS.
 - [ ] **Step 6: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-review/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-review/SKILL.md
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/agents/reviewer.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
-cp /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-review/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-review/SKILL.md
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/reviewer.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
 
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add -A
 git commit -m "feat(review): do_not_copy check + new category do_not_copy_violation
 

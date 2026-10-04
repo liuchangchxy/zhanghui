@@ -112,7 +112,7 @@ def test_planted_eq_payoff_allowed_within_volume():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/unit/test_promise_ledger.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'data_modules.promise_ledger'`.
@@ -192,7 +192,7 @@ Expected: 3 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/promise_ledger.py
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_promise_ledger.py
 git commit -m "feat(promise-ledger): ForeshadowEntry dataclass with planted_volume/payoff invariant
@@ -324,7 +324,7 @@ def test_filter_by_volume():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/unit/test_promise_ledger.py -v
 ```
 Expected: 3 passed (Task 1) + 6 failed (新 API).
@@ -381,7 +381,7 @@ Expected: 9 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/promise_ledger.py
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_promise_ledger.py
 git commit -m "feat(promise-ledger): upsert / advance / payoff / list_overdue / list_for_volume
@@ -471,7 +471,7 @@ def test_volume_state_payoff_writes_back(fresh_state):
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/unit/test_volume_state.py::test_volume_state_owns_promise_ledger -v
 ```
 Expected: AttributeError / ImportError related to upsert_promise_entry.
@@ -537,7 +537,7 @@ from data_modules.promise_ledger import ForeshadowEntry, ForeshadowStatus, Promi
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/unit/test_volume_state.py -v
 ```
 Expected: 全部通过 (含 Task 3 新增 3 个 + 原 16 个).
@@ -545,7 +545,7 @@ Expected: 全部通过 (含 Task 3 新增 3 个 + 原 16 个).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_volume_state.py
 git commit -m "feat(volume-state): promise_ledger persistence + overdue query API
@@ -613,7 +613,7 @@ def test_init_volume_beat_idempotent_per_volume():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/unit/test_story_craft_multivolume.py -v
 ```
 Expected: FAIL with `multi-volume not yet supported (requested volume 2)`.
@@ -708,7 +708,7 @@ def fill_beat(state: dict, volume: int, beat_name: str, chapter: int, notes: str
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/unit/test_story_craft_multivolume.py tests/unit/ -v --ignore=tests/unit/test_promise_ledger.py
 ```
 Expected: 全部通过. (注意其他 test 可能依赖 volume_beat 的 legacy schema, 但因为我们做了迁移兼容, 应都过.)
@@ -723,7 +723,7 @@ python3 -m pytest tests/ -v 2>&1 | tail -50
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/story_craft.py
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_story_craft_multivolume.py
 git commit -m "feat(story-craft): multi-volume beat sheet (dict[vol, beat_sheet])
@@ -799,7 +799,7 @@ def test_evaluate_pre_write_gates_with_overdue_returns_blocker():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/unit/test_chunked_write.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'data_modules.chunked_write'`.
@@ -860,7 +860,7 @@ Expected: 4 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/chunked_write.py
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_chunked_write.py
 git commit -m "feat(chunked-write): ChunkedWritePolicy + evaluate_pre_write_gates
@@ -881,7 +881,7 @@ Spec 2026-08-19 §6.4: denova chapter-group policy (chunk_size=5 default)
 - [ ] **Step 1: 读现有测试断言**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 grep -n "_require_current_volume_artifacts\|all_volumes_mode" tests/integration/test_update_master_outline_volumes.py | head -20
 ```
 
@@ -919,7 +919,7 @@ import pytest
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/integration/test_update_master_outline_volumes.py -v
 ```
 Expected: 2 failed (新断言).
@@ -955,7 +955,7 @@ def _require_current_volume_artifacts(
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/integration/test_update_master_outline_volumes.py -v
 ```
 Expected: 全部通过 (新增 2 + 原 N).
@@ -963,7 +963,7 @@ Expected: 全部通过 (新增 2 + 原 N).
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/update_master_outline.py
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_update_master_outline_volumes.py
 git commit -m "feat(update-master-outline): all_volumes_mode bypass for plan stage
@@ -1063,7 +1063,7 @@ def test_generate_volume_blueprints_skips_deferred(tmp_path):
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/integration/test_plan_all_volumes.py -v
 ```
 Expected: ImportError / AttributeError on `generate_volume_blueprints`.
@@ -1179,7 +1179,7 @@ def generate_volume_blueprints(project_root, all_volumes: bool = False) -> int:
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/integration/test_plan_all_volumes.py tests/integration/test_plan_v_plus_one_anchor.py -v
 ```
 Expected: 全部通过 (新 3 + 原 3 regression 不破).
@@ -1187,7 +1187,7 @@ Expected: 全部通过 (新 3 + 原 3 regression 不破).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_all_volumes.py
 git commit -m "feat(init-project): --all-volumes mode generates N volume blueprint triplets
@@ -1208,7 +1208,7 @@ tests green; test_plan_v_plus_one_anchor regression preserved."
 - [ ] **Step 1: 读现有模板**
 
 ```bash
-cat /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/templates/output/大纲-总纲.md
+cat /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/templates/output/大纲-总纲.md
 ```
 
 - [ ] **Step 2: 在卷划分表后追加新表头**
@@ -1233,7 +1233,7 @@ cat /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/templates/output/大纲-总纲.md
 git commit -m "docs(template): add cross-volume promise ledger + beat map headers
 
@@ -1252,7 +1252,7 @@ manually by user during plan stage."
 - [ ] **Step 1: 读现有 Step 9**
 
 ```bash
-grep -n "Step 9\|9\\." /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md | head -10
+grep -n "Step 9\|9\\." /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md | head -10
 ```
 
 定位 Step 9 当前段落.
@@ -1287,7 +1287,7 @@ python3 scripts/init_project.py <project_dir> <title> \
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md
 git commit -m "docs(skill-plan): Step 9 documents --all-volumes mode
 
@@ -1305,7 +1305,7 @@ unchanged (preserves test_plan_v_plus_one_anchor regression)."
 - [ ] **Step 1: 读现有 Step 0**
 
 ```bash
-grep -n "^### Step 0\|^## Step 0" /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md | head -5
+grep -n "^### Step 0\|^## Step 0" /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md | head -5
 ```
 
 如果不存在 Step 0, 找最早的 Step (Step 1 / 准备).
@@ -1348,7 +1348,7 @@ if issues:
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
 git commit -m "docs(skill-write): Step 0 pre-write gate (oh-story + tianming pattern)
 
@@ -1451,7 +1451,7 @@ def test_e2e_full_flow(tmp_path):
 
 Run:
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/integration/test_e2e_macro_micro.py -v
 ```
 Expected: 1 passed.
@@ -1459,7 +1459,7 @@ Expected: 1 passed.
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_e2e_macro_micro.py
 git commit -m "test(e2e): macro-upfront + micro-chunked end-to-end flow
 
@@ -1540,7 +1540,7 @@ python3 scripts/init_project.py <project_dir> <title> \
 - [ ] **Step 3: 跑全量测试**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
 python3 -m pytest tests/ -v 2>&1 | tail -30
 ```
 
@@ -1549,7 +1549,7 @@ Expected: 全部通过. If any fail, fix before continuing.
 - [ ] **Step 4: 部署到 marketplace**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 ./bin/deploy-plugin.sh
 ```
 
@@ -1569,7 +1569,7 @@ Expected: no diff.
 - [ ] **Step 6: Commit + push**
 
 ```bash
-cd /Users/chang/Desktop/ai写小说工具开发
+cd /Users/chang/Desktop/zhanghui
 git add .claude/plugins/webnovel-writer_chang/bin/deploy-plugin.sh
 git add .claude/plugins/webnovel-writer_chang/README.md
 git commit -m "chore(deploy): sync new files to marketplace; document --all-volumes

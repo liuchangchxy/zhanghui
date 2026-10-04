@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-PLUGIN_ROOT = Path("/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang")
+PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang")
 
 
 @pytest.fixture

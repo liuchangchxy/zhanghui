@@ -37,7 +37,7 @@ echo "  ✓ $BOOK_PATH created"
 
 # 2. 跑 webnovel init 建 .webnovel/ 骨架
 echo "[2/4] Running webnovel init..."
-WEBNOVEL_PY="/Users/chang/Desktop/ai写小说工具开发/.claude/plugins/webnovel-writer_chang/scripts/webnovel.py"
+WEBNOVEL_PY="/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/webnovel.py"
 if [ ! -f "$WEBNOVEL_PY" ]; then
     echo "  ERROR: webnovel.py 不存在：$WEBNOVEL_PY"
     echo "  请先跑 ./setup_dev_env.sh"
