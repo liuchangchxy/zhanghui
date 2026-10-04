@@ -62,7 +62,7 @@ def test_legacy_sql_chapter_writer_rejects_story_system_project(temp_project):
     story_root.mkdir()
     (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
 
-    with pytest.raises(RuntimeError, match="legacy process_chapter_entities writes are disabled"):
+    with pytest.raises(RuntimeError, match="chapter facts must originate from durable CHAPTER_COMMIT projections"):
         SQLStateManager(temp_project).process_chapter_entities(1, [], [], [], [])
 
 

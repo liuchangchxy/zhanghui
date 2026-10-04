@@ -80,7 +80,7 @@ def test_legacy_chapter_index_writer_rejects_story_system_project(tmp_path):
     (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
     manager = IndexManager(DataModulesConfig.from_project_root(tmp_path))
 
-    with pytest.raises(RuntimeError, match="legacy chapter index writes are disabled"):
+    with pytest.raises(RuntimeError, match="chapter facts must originate from durable CHAPTER_COMMIT projections"):
         manager.process_chapter_data(1, "标题", "地点", 100, [], [])
 
 

@@ -128,7 +128,7 @@ def test_legacy_chapter_writer_is_blocked_after_story_commit_exists(temp_project
     service.persist_commit(payload)
 
     manager = StateManager(temp_project, enable_sqlite_sync=False)
-    with pytest.raises(RuntimeError, match="legacy process_chapter_result cannot write story facts"):
+    with pytest.raises(RuntimeError, match="chapter facts must originate from durable CHAPTER_COMMIT projections"):
         manager.process_chapter_result(1, {"entities_new": [{"id": "legacy"}]})
 
 

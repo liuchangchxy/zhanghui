@@ -10,12 +10,13 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .story_system_mode import is_story_system_project
+from .story_system_mode import require_legacy_canon_write_allowed
 
 
 class IndexChapterMixin:
     def add_chapter(self, meta: ChapterMeta):
         """添加/更新章节元数据"""
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -68,6 +69,7 @@ class IndexChapterMixin:
 
     def add_scenes(self, chapter: int, scenes: List[SceneMeta]):
         """添加章节场景"""
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
@@ -151,6 +153,7 @@ class IndexChapterMixin:
             confidence: 置信度
             skip_if_exists: 如果为True，当记录已存在时跳过（避免覆盖已有mentions）
         """
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
@@ -251,11 +254,7 @@ class IndexChapterMixin:
         """
         from .index_manager import ChapterMeta, SceneMeta
 
-        if is_story_system_project(self.config.project_root):
-            raise RuntimeError(
-                "project is in Story System canonical mode; legacy chapter index writes are disabled; "
-                "project the durable chapter commit or migrate/rebuild the project"
-            )
+        require_legacy_canon_write_allowed(self.config.project_root)
 
         stats = {"chapters": 0, "scenes": 0, "appearances": 0}
 

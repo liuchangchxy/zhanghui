@@ -13,6 +13,8 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from .story_system_mode import require_legacy_canon_write_allowed
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +67,7 @@ class IndexEntityMixin:
 
         返回是否为新实体
         """
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
@@ -264,6 +267,7 @@ class IndexEntityMixin:
 
         例如: update_entity_current("xiaoyan", {"realm": "斗师"})
         """
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
@@ -312,6 +316,29 @@ class IndexEntityMixin:
             conn.commit()
             return cursor.rowcount > 0
 
+    def set_entity_archive_status(self, entity_id: str, archived: bool) -> bool:
+        """Update the archive manager's lifecycle marker, not chapter-derived facts."""
+        status = "archived" if archived else "active"
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT current_json FROM entities WHERE id = ?", (entity_id,))
+            row = cursor.fetchone()
+            if not row:
+                return False
+            current = {}
+            if row["current_json"]:
+                try:
+                    current = json.loads(row["current_json"])
+                except json.JSONDecodeError:
+                    logger.warning("failed to parse current_json while updating archive status")
+            current["status"] = status
+            cursor.execute(
+                "UPDATE entities SET current_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (json.dumps(current, ensure_ascii=False), entity_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
     # ==================== v5.1 别名操作 ====================
 
     def register_alias(self, alias: str, entity_id: str, entity_type: str) -> bool:
@@ -320,6 +347,7 @@ class IndexEntityMixin:
 
         同一别名可映射多个实体 (如 "天云宗" → 地点 + 势力)
         """
+        require_legacy_canon_write_allowed(self.config.project_root)
         alias = str(alias).strip() if alias is not None else ""
         if not alias or not entity_id:
             return False
@@ -383,6 +411,7 @@ class IndexEntityMixin:
 
     def remove_alias(self, alias: str, entity_id: str) -> bool:
         """移除别名"""
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -400,6 +429,7 @@ class IndexEntityMixin:
 
         返回记录 ID
         """
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -472,6 +502,7 @@ class IndexEntityMixin:
         相同 (from, to, type) 会更新 description 和 chapter
         返回是否为新关系
         """
+        require_legacy_canon_write_allowed(self.config.project_root)
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
@@ -599,6 +630,7 @@ class IndexEntityMixin:
 
     def record_relationship_event(self, event: RelationshipEventMeta) -> int:
         """记录关系事件，返回事件 ID。"""
+        require_legacy_canon_write_allowed(self.config.project_root)
         from_entity = str(getattr(event, "from_entity", "") or "").strip()
         to_entity = str(getattr(event, "to_entity", "") or "").strip()
         rel_type = str(getattr(event, "type", "") or "").strip()
@@ -1057,4 +1089,5 @@ class IndexEntityMixin:
 
     def update_entity_field(self, entity_id: str, field: str, value: Any) -> bool:
         """Compatibility helper to update a single entity field in current_json."""
+        require_legacy_canon_write_allowed(self.config.project_root)
         return self.update_entity_current(entity_id, {field: value})

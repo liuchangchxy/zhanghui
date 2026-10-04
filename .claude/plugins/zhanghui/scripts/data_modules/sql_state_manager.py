@@ -26,7 +26,7 @@ from .index_manager import (
 )
 from .config import get_config
 from .observability import safe_log_tool_call
-from .story_system_mode import is_story_system_project
+from .story_system_mode import CANON_WRITE_ERROR, is_story_system_project
 
 
 @dataclass
@@ -116,6 +116,10 @@ class SQLStateManager:
 
         return result
 
+    def _reject_legacy_canon_write(self) -> None:
+        if is_story_system_project(self.config.project_root):
+            raise RuntimeError(CANON_WRITE_ERROR)
+
     # ==================== 实体操作 ====================
 
     def upsert_entity(self, entity: EntityData) -> bool:
@@ -129,6 +133,7 @@ class SQLStateManager:
 
         返回: 是否为新实体
         """
+        self._reject_legacy_canon_write()
         # 构建 EntityMeta
         meta = EntityMeta(
             id=entity.id,
@@ -192,6 +197,7 @@ class SQLStateManager:
 
     def update_entity_current(self, entity_id: str, updates: Dict) -> bool:
         """增量更新实体的 current 字段"""
+        self._reject_legacy_canon_write()
         return self._index_manager.update_entity_current(entity_id, updates)
 
     def resolve_alias(self, alias: str) -> List[Dict]:
@@ -204,6 +210,7 @@ class SQLStateManager:
 
     def register_alias(self, alias: str, entity_id: str, entity_type: str) -> bool:
         """注册别名"""
+        self._reject_legacy_canon_write()
         return self._index_manager.register_alias(alias, entity_id, entity_type)
 
     # ==================== 状态变化操作 ====================
@@ -222,6 +229,7 @@ class SQLStateManager:
 
         返回: 记录 ID
         """
+        self._reject_legacy_canon_write()
         change = StateChangeMeta(
             entity_id=entity_id,
             field=field,
@@ -259,6 +267,7 @@ class SQLStateManager:
 
         返回: 是否为新关系
         """
+        self._reject_legacy_canon_write()
         rel = RelationshipMeta(
             from_entity=from_entity,
             to_entity=to_entity,
@@ -306,11 +315,7 @@ class SQLStateManager:
 
         返回: 写入统计
         """
-        if is_story_system_project(self.config.project_root):
-            raise RuntimeError(
-                "project is in Story System canonical mode; legacy process_chapter_entities writes are disabled; "
-                "project the durable chapter commit or migrate/rebuild the project"
-            )
+        self._reject_legacy_canon_write()
         stats = {
             "entities_updated": 0,
             "entities_created": 0,
@@ -451,6 +456,7 @@ class SQLStateManager:
 
     def _update_last_appearance(self, entity_id: str, chapter: int):
         """更新实体的 last_appearance"""
+        self._reject_legacy_canon_write()
         with self._index_manager._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("""

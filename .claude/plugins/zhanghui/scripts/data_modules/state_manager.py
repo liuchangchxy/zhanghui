@@ -28,7 +28,7 @@ import filelock
 
 from .config import get_config
 from .observability import safe_append_perf_timing, safe_log_tool_call
-from .story_system_mode import is_story_system_project
+from .story_system_mode import CANON_WRITE_ERROR, is_story_system_project
 
 
 logger = logging.getLogger(__name__)
@@ -237,6 +237,8 @@ class StateManager:
         - 仅合并本实例产生的增量（pending_*）
         - 原子化写入
         """
+        self._reject_pending_canon_write()
+
         # 无增量时不写入，避免无意义覆盖
         has_pending = any(
             [
@@ -423,6 +425,7 @@ class StateManager:
 
     def _sync_to_sqlite(self) -> bool:
         """同步待处理数据到 SQLite（v5.1 引入，v5.4 沿用）"""
+        self._reject_pending_canon_write()
         if not self._sql_state_manager:
             return True
 
@@ -469,6 +472,7 @@ class StateManager:
             processed_appearances: 已通过 process_chapter_entities 处理的 (entity_id, chapter) 集合，
                                    用于避免重复写入 appearances 表（防止覆盖 mentions）
         """
+        self._reject_pending_canon_write()
         if not self._sql_state_manager:
             return True
 
@@ -615,6 +619,40 @@ class StateManager:
             logger.warning("SQLite sync failed: %s", e)
             return False
 
+    def _reject_legacy_canon_write(self) -> None:
+        if is_story_system_project(self.config.project_root):
+            raise RuntimeError(CANON_WRITE_ERROR)
+
+    def _has_pending_canon_mutations(self) -> bool:
+        """Return whether legacy buffers contain facts reserved for commit projections.
+
+        Canon-owned buffers: entity/alias/appearance patches, state changes,
+        relationships, chapter metadata, chapter progress/word count, committed
+        status, and the equivalent chapter batch queued for SQLite.
+
+        Disambiguation warnings/pending items and drafted/reviewed chapter status
+        are review/workflow metadata, so they remain writable through save_state.
+        """
+        sqlite_data = self._pending_sqlite_data
+        return any((
+            self._pending_entity_patches,
+            self._pending_alias_entries,
+            self._pending_state_changes,
+            self._pending_structured_relationships,
+            self._pending_chapter_meta,
+            self._pending_progress_chapter is not None,
+            self._pending_progress_words_delta != 0,
+            any(value == "chapter_committed" for value in self._pending_chapter_status.values()),
+            sqlite_data.get("entities_appeared"),
+            sqlite_data.get("entities_new"),
+            sqlite_data.get("state_changes"),
+            sqlite_data.get("relationships_new"),
+        ))
+
+    def _reject_pending_canon_write(self) -> None:
+        if is_story_system_project(self.config.project_root) and self._has_pending_canon_mutations():
+            raise RuntimeError(CANON_WRITE_ERROR)
+
     def _snapshot_sqlite_pending(self) -> Dict[str, Any]:
         """抓取 SQLite 侧 pending 快照，用于同步失败回滚内存队列。"""
         return {
@@ -657,6 +695,7 @@ class StateManager:
 
     def update_progress(self, chapter: int, words: int = 0):
         """更新进度"""
+        self._reject_legacy_canon_write()
         if "progress" not in self._state:
             self._state["progress"] = {}
         self._state["progress"]["current_chapter"] = chapter
@@ -681,6 +720,8 @@ class StateManager:
 
     def set_chapter_status(self, chapter: int, status: str) -> None:
         """设置章节状态（单调递进，不可回退）。"""
+        if status == "chapter_committed":
+            self._reject_legacy_canon_write()
         valid_statuses = set(self.CHAPTER_STATUS_ORDER + [self.REJECTED_CHAPTER_STATUS])
         if status not in valid_statuses:
             raise ValueError(
@@ -714,6 +755,7 @@ class StateManager:
 
     def _save_state(self) -> None:
         """直接持久化当前内存状态到 state.json（轻量写入，不走 pending 合并）。"""
+        self._reject_legacy_canon_write()
         self.config.ensure_dirs()
         atomic_write_json(self.config.state_file, self._state, backup=False)
 
@@ -808,6 +850,7 @@ class StateManager:
 
     def add_entity(self, entity: EntityState) -> bool:
         """添加新实体（v5.0 entities_v3 格式，v5.4 沿用）"""
+        self._reject_legacy_canon_write()
         entity_type = entity.type
         if entity_type not in self.ENTITY_TYPES:
             entity_type = "角色"
@@ -854,6 +897,7 @@ class StateManager:
 
     def _register_alias_internal(self, entity_id: str, entity_type: str, alias: str):
         """内部方法：注册别名到 index.db（v5.1 引入）"""
+        self._reject_legacy_canon_write()
         if not alias:
             return
         # v5.1 引入: 直接写入 SQLite
@@ -862,6 +906,7 @@ class StateManager:
 
     def update_entity(self, entity_id: str, updates: Dict[str, Any], entity_type: str = None) -> bool:
         """更新实体属性（v5.0 引入，v5.4 沿用）"""
+        self._reject_legacy_canon_write()
         # v5.1+ SQLite-first:
         # - entity_type 可能来自 SQLite（entities 表），但 state.json 不再持久化 entities_v3。
         # - 因此不能假设 self._state["entities_v3"][type][id] 一定存在（issues7 日志曾 KeyError）。
@@ -919,6 +964,7 @@ class StateManager:
 
     def update_entity_appearance(self, entity_id: str, chapter: int, entity_type: str = None):
         """更新实体出场章节"""
+        self._reject_legacy_canon_write()
         if not entity_type:
             entity_type = self.get_entity_type(entity_id)
         if not entity_type:
@@ -958,6 +1004,7 @@ class StateManager:
         chapter: int
     ):
         """记录状态变化"""
+        self._reject_legacy_canon_write()
         if "state_changes" not in self._state:
             self._state["state_changes"] = []
 
@@ -994,6 +1041,7 @@ class StateManager:
         chapter: int
     ):
         """添加关系"""
+        self._reject_legacy_canon_write()
         rel = Relationship(
             from_entity=from_entity,
             to_entity=to_entity,
@@ -1122,11 +1170,7 @@ class StateManager:
 
         返回警告列表
         """
-        if is_story_system_project(self.config.project_root):
-            raise RuntimeError(
-                "project is in Story System canonical mode; legacy process_chapter_result cannot write story facts; "
-                "submit through chapter-commit or migrate/rebuild the project"
-            )
+        self._reject_legacy_canon_write()
 
         warnings = []
 
@@ -1275,6 +1319,7 @@ class StateManager:
 
         用于确保 consistency-checker 等依赖 protagonist_state 的组件获取最新数据
         """
+        self._reject_legacy_canon_write()
         if entity_id is None:
             entity_id = self.get_protagonist_entity_id()
         if entity_id is None:
@@ -1316,6 +1361,7 @@ class StateManager:
 
         用于初始化或手动编辑 protagonist_state 后保持一致性
         """
+        self._reject_legacy_canon_write()
         if entity_id is None:
             entity_id = self.get_protagonist_entity_id()
         if entity_id is None:

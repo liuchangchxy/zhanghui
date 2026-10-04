@@ -10,6 +10,7 @@ from typing import Any
 from .commit_artifacts import extraction_dict, extraction_list, extraction_text
 from .config import DataModulesConfig
 from .index_manager import ChapterMeta, IndexManager, SceneMeta, StateChangeMeta
+from .story_system_mode import canonical_projection_write_scope
 
 try:
     from chapter_paths import find_chapter_file
@@ -25,6 +26,10 @@ class IndexProjectionWriter:
         if commit_payload["meta"]["status"] != "accepted":
             return {"applied": False, "writer": "index", "reason": "commit_rejected"}
 
+        with canonical_projection_write_scope(self.project_root):
+            return self._apply_accepted_commit(commit_payload)
+
+    def _apply_accepted_commit(self, commit_payload: dict) -> dict:
         manager = IndexManager(DataModulesConfig.from_project_root(self.project_root))
         applied_count = 0
         chapter_applied = self._upsert_chapter(manager, commit_payload)
