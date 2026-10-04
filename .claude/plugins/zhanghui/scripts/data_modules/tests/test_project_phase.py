@@ -148,6 +148,20 @@ def test_project_phase_prefers_projection_log_over_commit_status(tmp_path):
     assert snapshot.latest_commit.projection_status["vector"] == "failed:timeout"
 
 
+def test_project_phase_treats_missing_run_for_new_commit_as_pending(tmp_path):
+    _make_init_ready(tmp_path)
+    _write_json(
+        tmp_path / ".story-system" / "commits" / "chapter_001.commit.json",
+        {"meta": {"chapter": 1, "status": "accepted"}},
+    )
+
+    snapshot = resolve_project_phase(tmp_path)
+
+    assert snapshot.phase == PHASE_PROJECTION_FAILED
+    assert snapshot.latest_commit.projection_source == "pending"
+    assert snapshot.latest_commit.projection_status["state"] == "pending"
+
+
 def test_project_phase_treats_projection_log_pending_as_blocking(tmp_path):
     _make_init_ready(tmp_path)
     commit_path = tmp_path / ".story-system" / "commits" / "chapter_001.commit.json"

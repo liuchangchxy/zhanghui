@@ -401,6 +401,17 @@ class TestCommitChapter:
         assert result.chapter == 1
         assert result.entities_updated == 1
 
+    def test_legacy_commit_path_is_rejected_after_story_system_commit_exists(self, tmp_path):
+        cfg = _make_project(tmp_path)
+        commits_dir = tmp_path / ".story-system" / "commits"
+        commits_dir.mkdir(parents=True)
+        (commits_dir / "chapter_001.commit.json").write_text(
+            json.dumps({"meta": {"chapter": 1, "status": "accepted"}}), encoding="utf-8"
+        )
+
+        with pytest.raises(RuntimeError, match="legacy chapter writes are disabled"):
+            MemoryContractAdapter(cfg).commit_chapter(2, {"entities_new": []})
+
     def test_commit_chapter_delegates_to_chapter_commit_mainline(self, tmp_path):
         cfg = _make_project(tmp_path)
         adapter = MemoryContractAdapter(cfg)

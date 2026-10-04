@@ -5,6 +5,7 @@ Path in references: references/01-ai-webnovel-repos/upstream/02-skills/oh-story-
 """
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 from .patch_base import Patch, CheckContext, ApplyContext, Blocker
@@ -28,6 +29,17 @@ def _import_atomic_write_json():
 
 
 class ConsistencyRunner:
+    # These state.json fields are projections owned by accepted chapter commits.
+    # Consistency maintenance may update Intent/craft metadata and infrastructure,
+    # but it must not become another writer of chapter-derived story state.
+    COMMIT_OWNED_STATE_KEYS = (
+        "entity_state",
+        "protagonist_state",
+        "progress",
+        "strand_tracker",
+        "plot_threads",
+    )
+
     def __init__(self, project_root: Path, patches: list[Patch] | None = None):
         self.project_root = project_root
         self.patches = patches
@@ -104,6 +116,11 @@ class ConsistencyRunner:
             self.patches = self._default_patches()
 
         state = self._load_state()
+        commit_owned = {
+            key: deepcopy(state[key])
+            for key in self.COMMIT_OWNED_STATE_KEYS
+            if key in state
+        }
         # Pop stale fields before applying (Fix F: prevent next check from immediately failing)
         state.pop("_expected_revision", None)
         state.pop("_load_error", None)
@@ -123,6 +140,11 @@ class ConsistencyRunner:
         # Stamp wall-clock timestamp at the end (P5 leaves the field for caller to fill)
         from datetime import datetime, timezone
         state.setdefault("state", {})["_last_modified_at"] = datetime.now(timezone.utc).isoformat()
+        for key in self.COMMIT_OWNED_STATE_KEYS:
+            if key in commit_owned:
+                state[key] = commit_owned[key]
+            else:
+                state.pop(key, None)
         self._save_state(state)
 
     def _load_state(self) -> dict:

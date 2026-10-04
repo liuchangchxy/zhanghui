@@ -43,6 +43,18 @@ class CrashingApplyPatch(Patch):
     def apply(self, ctx): raise ValueError("apply kaboom")
 
 
+class CanonMutationPatch(Patch):
+    name = "canon_mutation"
+    description = "attempts to edit commit-owned state projections"
+    depends_on = ()
+    def check(self, ctx): return []
+    def apply(self, ctx):
+        ctx.state["entity_state"]["hero"]["realm"] = "伪造境界"
+        ctx.state["progress"]["current_chapter"] = 999
+        ctx.state["plot_threads"]["foreshadowing"].append({"content": "绕过提交"})
+        ctx.state["story_craft"]["volume_anchors"]["anchors"].append({"volume": 2})
+
+
 def test_runner_with_clean_patches():
     runner = ConsistencyRunner(project_root=Path("/tmp"), patches=[CleanPatch()])
     assert runner.run_all(chapter=1) == []
@@ -162,6 +174,27 @@ def test_runner_apply_all_continues_after_apply_crash():
         saved = json.loads(state_path.read_text(encoding="utf-8"))
         assert "_apply_errors" in saved
         assert any("crashing_apply" in err for err in saved["_apply_errors"])
+
+
+def test_runner_apply_all_preserves_commit_owned_state_projections():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / ".webnovel").mkdir(parents=True)
+        state_path = root / ".webnovel" / "state.json"
+        original = {
+            "entity_state": {"hero": {"realm": "斗者"}},
+            "progress": {"current_chapter": 4},
+            "plot_threads": {"foreshadowing": [{"content": "已有伏笔"}]},
+            "story_craft": {"volume_anchors": {"anchors": []}},
+        }
+        state_path.write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
+        ConsistencyRunner(root, patches=[CanonMutationPatch()]).apply_all(chapter=5)
+
+        saved = json.loads(state_path.read_text(encoding="utf-8"))
+        assert saved["entity_state"] == original["entity_state"]
+        assert saved["progress"] == original["progress"]
+        assert saved["plot_threads"] == original["plot_threads"]
+        assert saved["story_craft"]["volume_anchors"]["anchors"] == [{"volume": 2}]
 
 
 def test_runner_save_state_uses_atomic_when_available(monkeypatch):

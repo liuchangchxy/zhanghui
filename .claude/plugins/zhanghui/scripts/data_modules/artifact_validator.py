@@ -278,44 +278,9 @@ def validate_chapter_commit(path: str | Path) -> dict[str, Any]:
             continue
         nested_reports.append(validate_artifact_payload(artifact, payload.get(artifact), path=str(commit_path)))
 
-    projection_status = payload.get("projection_status") or {}
-    if not isinstance(projection_status, dict):
-        projection_status = {}
-    for writer in REQUIRED_PROJECTION_WRITERS:
-        status = str(projection_status.get(writer) or "").strip()
-        if not status:
-            report["errors"].append(
-                _issue(
-                    ERROR_PROJECTION_INCOMPLETE,
-                    message=f"projection {writer} status missing",
-                    path=str(commit_path),
-                    field=f"projection_status.{writer}",
-                    impact="postcommit 必须确认 state/index/summary/memory/vector 五项投影状态。",
-                    repair="重新执行 chapter-commit 或补跑 projections retry/replay。",
-                )
-            )
-        elif status.startswith("failed:"):
-            report["errors"].append(
-                _issue(
-                    ERROR_PROJECTION_FAILURE,
-                    message=f"projection {writer} failed: {status}",
-                    path=str(commit_path),
-                    field=f"projection_status.{writer}",
-                    impact="提交事实已生成，但 read-model 投影不完整。",
-                    repair="修复失败原因后补跑 projection retry/replay。",
-                )
-            )
-        elif status not in OK_PROJECTION_STATUSES:
-            report["errors"].append(
-                _issue(
-                    ERROR_PROJECTION_INCOMPLETE,
-                    message=f"projection {writer} status is {status}",
-                    path=str(commit_path),
-                    field=f"projection_status.{writer}",
-                    impact="postcommit 只接受 projection 状态 done 或 skipped。",
-                    repair="等待投影完成或补跑 projections retry/replay。",
-                )
-            )
+    # A chapter commit validates the durable fact transaction only. Projection
+    # execution state is mutable and checked by the postcommit gate from the
+    # projection run log (legacy commits may still carry a status snapshot).
 
     merged = merge_reports(nested_reports, artifact="chapter_commit_nested")
     report["errors"].extend(merged["errors"])

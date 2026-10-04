@@ -515,26 +515,20 @@ sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 Use the Agent tool to run `webnovel-writer:data-agent`
 ```
 
-Data Agent 默认子步骤（全部执行）：
+Data Agent 只生成临时提取产物，不直接写入事实或状态投影。提取产物由 `chapter-commit` 校验、提交，并驱动后续投影。Data Agent 默认子步骤：
 - A. 加载上下文
 - B. AI 实体提取
 - C. 实体消歧
-- D. 写入 state/index
-- E. 写入章节摘要
-- F. AI 场景切片
-- G. RAG 向量索引（`rag index-chapter --scenes ...`）
-- H. 风格样本评估（`style extract --scenes ...`，仅 `review_score >= 80` 时）
-- I. 债务利息（默认跳过）
+- D. 生成实体与状态变化提取产物
+- E. 生成章节摘要提取产物
+- F. 生成场景切片提取产物
 
-`--scenes` 来源优先级（G/H 步骤共用）：
-1. 优先从 `index.db` 的 scenes 记录获取（Step F 写入的结果）
-2. 其次按 `start_line` / `end_line` 从正文切片构造
-3. 最后允许单场景退化（整章作为一个 scene）
+`chapter-commit` 的 projection writers 从 durable commit 刷新状态、索引、摘要、记忆和向量查询数据。风格样本提取是单独的 Craft 操作，不属于 Canon 提交或其成功条件；债务利息默认跳过。
 
 Step 5 失败隔离规则：
-- 若 G/H 失败原因是 `--scenes` 缺失、scene 为空、scene JSON 格式错误：只补跑 G/H 子步骤，不回滚或重跑 Step 1-4。
-- 若 A-E 失败（state/index/summary 写入失败）：仅重跑 Step 5，不回滚已通过的 Step 1-4。
-- 禁止因 RAG/style 子步骤失败而重跑整个写作链。
+- 若 A-F 产物生成失败：仅重跑 Step 5，不回滚已通过的 Step 1-4。
+- 若 chapter-commit 已成功但任一 projection 失败：只从 durable commit 执行 `projections retry`，不重跑提取或整个写作链。
+- 风格样本等 Craft 操作失败不改变 Canon commit 状态。
 
 执行后检查（最小白名单）：
 - `.webnovel/state.json`
@@ -559,8 +553,7 @@ Step 5 失败隔离规则：
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" chapter-commit \
   --chapter {chapter_num} \
   --chapter-file "正文/第{chapter_padded}章-{title_safe}.md" \
-  --review-score "${REVIEW_SCORE}" \
-  --on-conflict=overwrite
+  --review-score "${REVIEW_SCORE}"
 
 ```
 
@@ -586,7 +579,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" st
 
 #### Step 5.6：postcommit projection 五项验证
 
-`chapter-commit` 通过后必须验证 5 项 projection：`state/index/summary/memory/vector 更新状态`（即 state / index / summary / memory / vector 五项 projection）。失败唯一兜底是 `projections retry --chapter {chapter_num}`（重跑失败的 projection 子集，不得重跑整个写作链）：
+`chapter-commit` 先持久化 canonical commit，再运行 projection。投影状态写入 `.webnovel/projection_log.jsonl`，不写入 canonical commit。缺失或失败的投影可由 durable commit 重建。验证 5 项 projection：`state/index/summary/memory/vector`。失败唯一兜底是 `projections retry --chapter {chapter_num}`（从已提交事实重建投影，不得重跑提取或整个写作链）：
 
 ```bash
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" projections retry --chapter {chapter_num}
@@ -668,22 +661,19 @@ tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || t
 - 审查分数可追溯，`overall_score` 与 Step 5 输入一致。
 - 润色后未破坏大纲与设定约束。
 
-### 状态产物所有权（data-agent 唯一写入者）
+### 状态产物所有权（chapter-commit 与 projection writers）
 
 主流程对 reviewer JSON 的落盘语义：reviewer 通过 Agent tool 返回结构化 JSON，主流程落盘到 `.webnovel/tmp/review_results.json`（review-pipeline 后续接续）。主流程不直接重写该文件。
 
-其余状态产物（state/index/summaries/memory/vectors/projection）的所有权约束：
+其余状态产物（state/index/summaries/memory/vectors）的所有权约束：
 
-- 唯一写入者：`data-agent` subagent（Step 5 调用）
-- 主流程只检查文件存在与 schema，不直接写 state/index/summaries/memory/vectors/projection
+- Data Agent 只生成临时提取产物，不写这些持久化产物。
+- `chapter-commit` 先写 `.story-system/commits/chapter_{NNN}.commit.json`，随后 projection writers 从该提交写入投影。
+- 主流程只检查文件存在与 schema，不直接写 state/index/summaries/memory/vectors。
 - 写入路径约定：
-  - `state.json` → data-agent 写入（主流程读）
-  - `index.db` → data-agent 写入（主流程查询）
-  - `summaries/*.json` → data-agent 写入
-  - `memory/*.json` → data-agent 写入
-  - `vectors/*.npz` → data-agent 写入
-  - `projection/*.json` → data-agent 写入
-- 产物所有权凭证：`.webnovel/tmp/subagent_runs/write-data-agent.jsonl`
+  - `state.json`、`index.db`、章节事件 JSON、summaries、memory、vectors → projection writers 写入；投影可由 durable chapter commit 重试重建
+  - projection 执行状态 → `.webnovel/projection_log.jsonl`
+- 临时提取产物所有权凭证：`.webnovel/tmp/subagent_runs/write-data-agent.jsonl`
 
 ## 失败处理（最小回滚）
 

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -71,7 +72,7 @@ def test_retry_projection_replays_existing_commit(tmp_path):
     assert read_projection_runs(tmp_path, chapter=3)
 
 
-def test_retry_projection_does_not_rewrite_commit_side_effects(tmp_path):
+def test_retry_projection_rebuilds_event_read_models_from_commit(tmp_path):
     _make_accepted_commit_with_event(tmp_path, chapter=3)
     event_path = tmp_path / ".story-system" / "events" / "chapter_003.events.json"
     assert not event_path.exists()
@@ -80,8 +81,30 @@ def test_retry_projection_does_not_rewrite_commit_side_effects(tmp_path):
 
     assert report["ok"] is True
     assert report["projection_status"]["memory"] in {"done", "skipped"}
-    assert not event_path.exists()
+    assert event_path.is_file()
+    events = json.loads(event_path.read_text(encoding="utf-8"))
+    assert [event["event_id"] for event in events] == ["evt-open-loop"]
+    with sqlite3.connect(tmp_path / ".webnovel" / "index.db") as conn:
+        rows = conn.execute(
+            "SELECT event_id, chapter FROM story_events WHERE chapter = 3"
+        ).fetchall()
+    assert rows == [("evt-open-loop", 3)]
     assert read_projection_runs(tmp_path, chapter=3)
+
+
+def test_retry_projection_replay_keeps_event_read_models_aligned_and_unique(tmp_path):
+    _make_accepted_commit_with_event(tmp_path, chapter=3)
+
+    first = retry_projection(tmp_path, chapter=3)
+    second = retry_projection(tmp_path, chapter=3)
+
+    assert first["ok"] is True
+    assert second["ok"] is True
+    with sqlite3.connect(tmp_path / ".webnovel" / "index.db") as conn:
+        rows = conn.execute(
+            "SELECT event_id, chapter FROM story_events WHERE chapter = 3"
+        ).fetchall()
+    assert rows == [("evt-open-loop", 3)]
 
 
 def test_retry_projection_reports_missing_commit(tmp_path):

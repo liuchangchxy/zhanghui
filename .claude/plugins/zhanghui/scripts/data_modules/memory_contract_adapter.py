@@ -64,6 +64,12 @@ class MemoryContractAdapter:
     # ------------------------------------------------------------------
 
     def commit_chapter(self, chapter: int, result: dict) -> CommitResult:
+        commits_dir = Path(self.config.project_root) / ".story-system" / "commits"
+        if commits_dir.is_dir() and any(commits_dir.glob("chapter_*.commit.json")) and not self._should_use_commit_mainline(result):
+            raise RuntimeError(
+                "legacy chapter writes are disabled after Story System commits exist; "
+                "provide the chapter commit artifacts and use chapter-commit"
+            )
         if self._should_use_commit_mainline(result):
             return self._commit_chapter_mainline(chapter, result)
 
@@ -129,11 +135,9 @@ class MemoryContractAdapter:
             disambiguation_result=result.get("disambiguation_result", {}) or {},
             extraction_result=result.get("extraction_result", {}) or {},
         )
-        # memory_contract_adapter 是 batch replay 路径，必须显式 overwrite
-        # （service 默认 strict 会让现有 chapter commit 报错，CHANGELOG 已注 breaking change）
-        service.persist_commit(payload, on_conflict="overwrite")
-        if payload["meta"]["status"] == "accepted":
-            payload = service.apply_projections(payload, on_conflict="overwrite")
+        # Ordinary adapter calls are strict too; replacements must be an
+        # explicit CLI operation with an intentional conflict override.
+        payload = service.apply_projections(payload)
 
         summary_file = self.config.webnovel_dir / "summaries" / f"ch{chapter:04d}.md"
         return CommitResult(

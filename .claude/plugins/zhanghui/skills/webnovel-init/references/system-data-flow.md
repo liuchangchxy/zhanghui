@@ -29,7 +29,7 @@ cat "${CLAUDE_PLUGIN_ROOT}/skills/webnovel-query/references/system-data-flow.md"
 ├── 大纲/           # 卷纲/章纲
 ├── 设定集/         # 世界观/力量体系/角色卡
 └── .webnovel/
-    ├── state.json          # 权威状态
+    ├── state.json          # 兼容状态投影（Story System commit 才是章节事实权威）
     ├── workflow_state.json # 工作流断点
     ├── index.db            # SQLite 索引
     └── archive/            # 归档数据
@@ -37,9 +37,10 @@ cat "${CLAUDE_PLUGIN_ROOT}/skills/webnovel-query/references/system-data-flow.md"
 ```
 
 ### 当前结构核心变化
-- **双 Agent 架构**: Context Agent (读) + Data Agent (写)
-- **无 XML 标签**: 纯正文写作，Data Agent AI 自动提取实体
+- **事实提交边界**: `chapter-commit` 将本章 Canon 持久化到 `.story-system/commits/chapter_NNN.commit.json`，再运行下游投影
+- **Data Agent**: 生成临时提取产物，不直接写 Canon 或状态投影
+- **无 XML 标签**: 纯正文写作，提取产物经校验后由提交入口处理
 - **SQLite 存储**: entities/aliases/state_changes 迁移到 index.db
-- **state.json 精简**: 保持 < 5KB，主要包含 progress/protagonist_state/strand_tracker/disambiguation
+- **state.json 精简**: 兼容投影，主要包含 progress/protagonist_state/strand_tracker/disambiguation
 
 </instructions>

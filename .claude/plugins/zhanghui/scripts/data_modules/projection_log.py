@@ -19,7 +19,9 @@ def projection_log_path(project_root: str | Path) -> Path:
 
 
 def commit_hash(commit_payload: dict[str, Any]) -> str:
-    raw = json.dumps(commit_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    canonical_payload = dict(commit_payload)
+    canonical_payload.pop("projection_status", None)
+    raw = json.dumps(canonical_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

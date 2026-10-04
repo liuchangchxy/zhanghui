@@ -27,15 +27,13 @@ def main() -> None:
     parser.add_argument(
         "--on-conflict",
         choices=["overwrite", "skip"],
-        default="overwrite",
-        help="已存在 chapter commit 时如何处理: overwrite/skip；默认 overwrite。"
+        default=None,
+        help="已存在 chapter commit 时如何处理: overwrite/skip；默认拒绝覆盖。"
         "append/ask 不支持 (chapter commit 是不可变的 point-in-time snapshot)。",
     )
     args = parser.parse_args()
 
-    # CLI 层 default=overwrite：CLI 是用户显式动作；service 层 default=None 保持严格。
-    # apply_projections 内部会调用 persist_commit 一次（chapter_commit_service.py:174），
-    # 所以这里不重复调，避免双写 + projection_status pending→done 中间态。
+    # The durable chapter transaction is stored before any projection writer runs.
     service = ChapterCommitService(Path(args.project_root))
     payload = service.build_commit(
         chapter=args.chapter,

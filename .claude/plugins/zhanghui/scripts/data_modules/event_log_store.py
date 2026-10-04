@@ -33,9 +33,23 @@ class EventLogStore:
 
     def write_events(self, chapter: int, events: Any) -> Path:
         normalized = self.normalize_events(chapter, events)
+        commit_path = self.paths.commit_json(chapter)
+        commit = read_json_if_exists(commit_path)
+        if not isinstance(commit, dict) or (commit.get("meta") or {}).get("status") != "accepted":
+            raise ValueError(
+                f"accepted chapter commit is required before projecting events: {commit_path}"
+            )
+        committed_events = self.normalize_events(
+            chapter,
+            ((commit.get("extraction_result") or {}).get("accepted_events") or []),
+        )
+        if normalized != committed_events:
+            raise ValueError(
+                f"event projection does not match accepted commit events: {commit_path}"
+            )
         path = self.paths.event_json(chapter)
         write_json(path, normalized)
-        self._write_sqlite_mirror(normalized)
+        self._write_sqlite_mirror(chapter, normalized)
         return path
 
     def read_events(self, chapter: int) -> List[Dict[str, Any]]:
@@ -106,7 +120,7 @@ class EventLogStore:
     def normalize_events(self, chapter: int, events: Any) -> List[Dict[str, Any]]:
         return normalize_accepted_events(chapter, events)
 
-    def _write_sqlite_mirror(self, events: List[Dict[str, Any]]) -> None:
+    def _write_sqlite_mirror(self, chapter: int, events: List[Dict[str, Any]]) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
@@ -127,9 +141,10 @@ class EventLogStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_story_events_type ON story_events(event_type)"
             )
+            conn.execute("DELETE FROM story_events WHERE chapter = ?", (chapter,))
             conn.executemany(
                 """
-                INSERT OR IGNORE INTO story_events(event_id, chapter, event_type, subject, payload_json)
+                INSERT OR REPLACE INTO story_events(event_id, chapter, event_type, subject, payload_json)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 [

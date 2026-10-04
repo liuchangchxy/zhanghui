@@ -133,7 +133,7 @@ def test_validate_commit_artifact_files_merges_reports(tmp_path):
     }
 
 
-def test_validate_chapter_commit_reports_projection_failure(tmp_path):
+def test_validate_chapter_commit_remains_valid_when_projection_failed(tmp_path):
     commit = _write_json(
         tmp_path / "chapter_001.commit.json",
         {
@@ -158,11 +158,11 @@ def test_validate_chapter_commit_reports_projection_failure(tmp_path):
 
     report = validate_chapter_commit(commit)
 
-    assert report["ok"] is False
-    assert any(item["type"] == ERROR_PROJECTION_FAILURE for item in report["errors"])
+    assert report["ok"] is True
+    assert not any(item["type"] == ERROR_PROJECTION_FAILURE for item in report["errors"])
 
 
-def test_validate_chapter_commit_requires_all_projection_writers(tmp_path):
+def test_validate_chapter_commit_does_not_require_mutable_projection_status(tmp_path):
     commit = _write_json(
         tmp_path / "chapter_001.commit.json",
         {
@@ -192,12 +192,8 @@ def test_validate_chapter_commit_requires_all_projection_writers(tmp_path):
 
     report = validate_chapter_commit(commit)
 
-    assert report["ok"] is False
-    incomplete = [
-        item for item in report["errors"] if item["type"] == ERROR_PROJECTION_INCOMPLETE
-    ]
-    assert incomplete
-    assert any("vector" in item["message"] for item in incomplete)
+    assert report["ok"] is True
+    assert not any(item["type"] == ERROR_PROJECTION_INCOMPLETE for item in report["errors"])
 
 
 def test_artifact_validator_rejects_missing_required_top_level_fields(tmp_path):

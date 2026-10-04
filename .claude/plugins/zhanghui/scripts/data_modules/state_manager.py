@@ -1121,6 +1121,13 @@ class StateManager:
 
         返回警告列表
         """
+        commits_dir = Path(self.config.project_root) / ".story-system" / "commits"
+        if commits_dir.is_dir() and any(commits_dir.glob("chapter_*.commit.json")):
+            raise RuntimeError(
+                "legacy process_chapter_result cannot write story facts after Story System commits exist; "
+                "submit through chapter-commit and retry projections from the durable commit"
+            )
+
         warnings = []
 
         # v5.1 引入: 记录章节号用于 SQLite 同步

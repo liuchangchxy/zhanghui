@@ -114,6 +114,24 @@ def test_save_state_no_pending(temp_project):
     assert not temp_project.state_file.exists()
 
 
+def test_legacy_chapter_writer_is_blocked_after_story_commit_exists(temp_project):
+    from data_modules.chapter_commit_service import ChapterCommitService
+
+    service = ChapterCommitService(temp_project.project_root)
+    payload = service.build_commit(
+        chapter=1,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={"entity_deltas": [], "state_deltas": [], "accepted_events": []},
+    )
+    service.persist_commit(payload)
+
+    manager = StateManager(temp_project, enable_sqlite_sync=False)
+    with pytest.raises(RuntimeError, match="legacy process_chapter_result cannot write story facts"):
+        manager.process_chapter_result(1, {"entities_new": [{"id": "legacy"}]})
+
+
 def test_save_state_with_sqlite_sync_and_protagonist(temp_project):
     manager = StateManager(temp_project)
     manager.add_entity(EntityState(id="xiaoyan", name="萧炎", type="角色", tier="核心"))

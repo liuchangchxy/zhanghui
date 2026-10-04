@@ -58,6 +58,20 @@ class TestPersistCommitConflictGuard:
         # 文件未被覆盖
         assert json.loads(existing.read_text()).get("old") is True
 
+    def test_apply_projections_does_not_overwrite_existing_commit_by_default(self, service_with_existing_commit, monkeypatch):
+        service, existing = service_with_existing_commit
+        payload = _make_payload(service, chapter=1)
+        monkeypatch.setattr(
+            service,
+            "_projection_writers",
+            lambda: pytest.fail("projection ran before commit conflict was rejected"),
+        )
+
+        with pytest.raises(ChapterCommitError, match="已存在"):
+            service.apply_projections(payload)
+
+        assert json.loads(existing.read_text()).get("old") is True
+
     def test_overwrite_replaces_existing(self, service_with_existing_commit):
         """--on-conflict=overwrite + commit 已存在 → 文件被替换为新 payload。"""
         service, existing = service_with_existing_commit

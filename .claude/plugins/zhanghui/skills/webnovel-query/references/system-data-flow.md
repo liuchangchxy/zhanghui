@@ -9,7 +9,7 @@ purpose: 项目初始化和状态查询时加载，理解数据结构
 
 <instructions>
 
-> ⚠️ 本文件描述 `.webnovel/` 投影层数据结构与早期写作流程，供查询时理解 read-model。v6.0.0 写后主链已改为 Story System（`.story-system/` 合同树 + accepted `CHAPTER_COMMIT`）；下文「双 Agent 架构 / 每章数据链 / Data Agent 直接写入」等描述为历史流程，事实以 Story System 为准。
+> 本文件中的 `.webnovel/` 文件和 SQLite 表说明的是兼容投影/read-model。章节 Canon 的 authority 是 `.story-system/commits/chapter_NNN.commit.json`；其 `accepted_events` 是提交内事实，`.story-system/events/*.events.json` 与 SQLite `story_events` 是事件查询投影。下文旧写作链路和 Data Agent 直接写入描述只适用于历史流程。
 
 ## 目录约定
 
@@ -19,8 +19,8 @@ purpose: 项目初始化和状态查询时加载，理解数据结构
 ├── 大纲/           # 卷纲/章纲/场景纲
 ├── 设定集/         # 世界观/力量体系/角色卡/物品卡
 └── .webnovel/
-    ├── state.json          # 精简状态 (< 5KB)：进度/主角/strand_tracker/消歧
-    ├── index.db            # SQLite 主存储：实体/别名/关系/状态变化/章节/场景
+    ├── state.json          # 兼容状态投影 (< 5KB)：进度/主角/strand_tracker/消歧
+    ├── index.db            # SQLite 查询投影：实体/别名/关系/状态变化/章节/场景
     ├── workflow_state.json # 工作流断点（legacy；v6 写章主链改用 Story System chapter-commit）
     ├── vectors.db          # RAG 向量数据库
     ├── summaries/          # 章节摘要（chNNNN.md）
@@ -28,7 +28,11 @@ purpose: 项目初始化和状态查询时加载，理解数据结构
 
 ```
 
-## 架构变更说明
+## Read-model 结构说明
+
+`state.json` 与 `index.db` 便于读取和查询，不是章节 Canon 的独立 authority。`chapter-commit` 先持久化事实提交，再运行派生投影；投影失败时通过 `projections retry --chapter N` 从该提交恢复。
+
+## 历史架构变更说明
 
 **核心变化**: 解决 state.json 膨胀问题（20章后 token 爆炸）
 
@@ -43,7 +47,7 @@ purpose: 项目初始化和状态查询时加载，理解数据结构
 | strand_tracker | state.json | state.json (保留) |
 | disambiguation_* | state.json | state.json (保留) |
 
-## 双 Agent 架构
+## 历史双 Agent 架构（仅作旧流程参考）
 
 ```
 写作前: Context Agent 读取数据 → 组装上下文包
@@ -52,12 +56,12 @@ purpose: 项目初始化和状态查询时加载，理解数据结构
 
 写作中: Writer 使用上下文包生成纯正文（无 XML 标签）
 
-写作后: Data Agent 处理正文 → AI 提取实体 → 写入数据链
+写作后（历史流程）: Data Agent 处理正文 → AI 提取实体 → 写入数据链
         ├── 写入 index.db（实体/别名/状态变化/关系）
         ├── 更新 state.json（进度/主角快照 + chapter_meta）
         └── 写入 summaries/chNNNN.md（章节摘要）
 
-Context Agent (读) ←→ index.db + state.json ←→ Data Agent (写)
+Context Agent (读) ←→ index.db + state.json ←→ Data Agent (旧流程写入者)
 
 ```
 
@@ -78,7 +82,7 @@ Context Agent (读) ←→ index.db + state.json ←→ Data Agent (写)
 
 | 模块 | 职责 |
 |------|------|
-| `state_manager.py` | 实体状态管理（精简 state.json + SQLite 同步） |
+| `state_manager.py` | 兼容实体状态管理（legacy 项目可用；有 Story System commits 后禁止 legacy 章节事实写入） |
 | `sql_state_manager.py` | SQLite 状态管理（替代 JSON 写入） |
 | `index_manager.py` | SQLite 索引管理（实体/别名/关系/状态变化/章节/场景） |
 | `entity_linker.py` | 别名注册与消歧 |
@@ -123,7 +127,7 @@ Context Agent (读) ←→ index.db + state.json ←→ Data Agent (写)
 
 ```
 
-> `update_state.py` 用于手动/脚本化更新 `progress`/`protagonist_state`/`strand_tracker` 等字段；主流程通常由 Data Agent 在处理数据链时同步推进进度。
+> 旧接口说明：`update_state.py` 是显式管理/兼容操作；它不创建章节 Canon。新版写章流程由 `chapter-commit` 提交事实，再由 projection writers 派生兼容状态。Data Agent 仅生成临时提取产物。
 
 ## state.json 精简结构
 

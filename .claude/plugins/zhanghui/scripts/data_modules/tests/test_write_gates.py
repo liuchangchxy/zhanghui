@@ -176,7 +176,7 @@ def test_postcommit_gate_reports_projection_failure(tmp_path):
     report = run_write_gate(tmp_path, chapter=1, stage="postcommit")
 
     assert report["ok"] is False
-    assert any(item["code"] == "commit.projection_failure" for item in report["errors"])
+    assert any(item["code"] == "projection_failure" for item in report["errors"])
 
 
 def test_postcommit_gate_prefers_projection_log_failure(tmp_path):
