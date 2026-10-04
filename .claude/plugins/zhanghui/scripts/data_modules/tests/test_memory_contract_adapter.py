@@ -427,6 +427,20 @@ class TestCommitChapter:
         with pytest.raises(RuntimeError, match="Story System canonical mode"):
             manager.process_chapter_result(1, {"entities_new": [{"id": "new_fact"}]})
 
+    def test_story_system_mainline_fails_without_final_prose_and_proposal(self, tmp_path):
+        cfg = _make_project(tmp_path)
+        story_root = tmp_path / ".story-system"
+        story_root.mkdir()
+        (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+        with pytest.raises(RuntimeError, match="final chapter_text and proposed_changes are required"):
+            MemoryContractAdapter(cfg).commit_chapter(1, {
+                "review_result": {"blocking_count": 0},
+                "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+                "disambiguation_result": {"pending": []},
+                "extraction_result": {"accepted_events": [], "state_deltas": [], "entity_deltas": []},
+                "reconciliation_result": {"schema_version": "story-reconciliation/v1", "status": "passed"},
+            })
+
     def test_commit_chapter_delegates_to_chapter_commit_mainline(self, tmp_path):
         cfg = _make_project(tmp_path)
         adapter = MemoryContractAdapter(cfg)
@@ -441,6 +455,7 @@ class TestCommitChapter:
             "location_state_changes": [], "faction_state_changes": [], "time_progression": None,
             "item_transfers": [], "unresolved_questions": [],
         }
+        final_text = "正文内容\n<chapter_changes>" + json.dumps(changes, ensure_ascii=False) + "</chapter_changes>"
         result = adapter.commit_chapter(
             3,
             {
@@ -453,7 +468,9 @@ class TestCommitChapter:
                 },
                 "disambiguation_result": {"pending": []},
                 "extraction_result": extraction,
-                "reconciliation_result": reconcile_changes(changes, extraction, chapter_text="test-final-chapter"),
+                "chapter_text": final_text,
+                "proposed_changes": changes,
+                "reconciliation_result": reconcile_changes(changes, extraction, chapter_text=final_text),
             },
         )
 

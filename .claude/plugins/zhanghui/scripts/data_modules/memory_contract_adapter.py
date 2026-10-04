@@ -134,6 +134,8 @@ class MemoryContractAdapter:
             fulfillment_result=result.get("fulfillment_result", {}) or {},
             disambiguation_result=result.get("disambiguation_result", {}) or {},
             extraction_result=result.get("extraction_result", {}) or {},
+            chapter_text=result.get("chapter_text"),
+            proposed_changes=result.get("proposed_changes"),
             reconciliation_result=result.get("reconciliation_result"),
         )
         # Ordinary adapter calls are strict too; replacements must be an

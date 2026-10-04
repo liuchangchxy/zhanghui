@@ -26,7 +26,7 @@ chapter-commit 由写章主流程运行，data-agent 不在此执行（见 §5 �
 
 ## 3. 流程
 
-**A 加载**：project_root 由调用方传入（已过 preflight），Read 最终正文 + 查实体索引和别名。`<chapter_changes>...</chapter_changes>` 是 Writer 的 ProposedChanges 声明，必须从观察输入中排除；不得读取其内容来补齐、调整或迎合 extraction。
+**A 加载**：project_root 由调用方传入（已过 preflight），Read `chapter_file` + 查实体索引和别名。写章/修订主流程必须先用 `prepare_data_agent_input.py` 生成 prose-only artifact，并且只把该路径作为 `chapter_file` 传入；禁止把包含 `<chapter_changes>...</chapter_changes>` 的完整章节作为观察输入。不得读取 Proposal 来补齐、调整或迎合 extraction。
 
 **B 提取与消歧**：同一轮完成，不额外调 LLM。置信度>0.8 自动采用，0.5-0.8 采用+warning，<0.5 标记待人工。
 

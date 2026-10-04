@@ -33,7 +33,7 @@ from .override_ledger_service import (
     ensure_override_ledger_columns,
     persist_amend_proposals,
 )
-from .reconciliation import verify_observed_payload
+from .reconciliation import reconcile_changes, split_chapter_and_changes
 
 
 class ChapterCommitError(RuntimeError):
@@ -51,20 +51,35 @@ class ChapterCommitService:
         fulfillment_result: Dict[str, Any],
         disambiguation_result: Dict[str, Any],
         extraction_result: Dict[str, Any],
+        chapter_text: str | None = None,
+        proposed_changes: Dict[str, Any] | None = None,
         reconciliation_result: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         review = ReviewResult.model_validate(review_result)
         fulfillment = FulfillmentResult.model_validate(fulfillment_result)
         disambiguation = DisambiguationResult.model_validate(disambiguation_result)
         extraction = ExtractionResult.model_validate(extraction_result)
-        if reconciliation_result is None:
-            raise ChapterCommitError("reconciliation_result is required before chapter commit")
-        try:
-            accepted_payload = verify_observed_payload(
-                reconciliation_result, extraction.model_dump()
+        if not isinstance(chapter_text, str) or proposed_changes is None:
+            raise ChapterCommitError(
+                "final chapter_text and proposed_changes are required; reconciliation artifacts do not authorize commits"
             )
+        try:
+            _, parsed_proposal = split_chapter_and_changes(chapter_text)
+            if parsed_proposal != proposed_changes:
+                raise ValueError("proposed_changes do not match CHANGES parsed from final chapter")
+            expected_reconciliation = reconcile_changes(
+                proposed_changes, extraction.model_dump(), chapter_text=chapter_text
+            )
+            if expected_reconciliation["status"] != "passed":
+                raise ValueError("reconciliation did not pass; chapter commit is blocked")
+            if reconciliation_result is not None and reconciliation_result != expected_reconciliation:
+                raise ValueError("reconciliation audit artifact is stale or does not match service recomputation")
+            accepted_payload = expected_reconciliation["accepted_payload"]
         except ValueError as exc:
             raise ChapterCommitError(str(exc)) from exc
+        # Derived audit data is deliberately calculated here. Caller supplied JSON
+        # can only be compared for freshness; it cannot grant commit authority.
+        reconciliation_result = expected_reconciliation
         rejected = bool(review.blocking_count) or bool(
             fulfillment.missed_nodes
         ) or bool(disambiguation.pending)
@@ -95,6 +110,9 @@ class ChapterCommitService:
                 "legacy_state_role": "projection_only",
                 "reconciliation_schema": reconciliation_result["schema_version"],
                 "reconciliation_observed_sha256": reconciliation_result["observed_sha256"],
+                "reconciliation_prose_sha256": reconciliation_result["prose_sha256"],
+                "reconciliation_proposed_sha256": reconciliation_result["proposed_sha256"],
+                "reconciliation_chapter_sha256": reconciliation_result["chapter_sha256"],
             },
             "outline_snapshot": {
                 "planned_nodes": fulfillment.planned_nodes,

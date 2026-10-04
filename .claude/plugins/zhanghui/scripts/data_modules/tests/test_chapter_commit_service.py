@@ -50,29 +50,118 @@ def test_commit_service_accepts_when_all_checks_pass(tmp_path):
     assert "entity_deltas" not in payload
 
 
-def test_commit_service_rejects_missing_reconciliation(tmp_path):
+def test_commit_service_rejects_missing_original_reconciliation_inputs_even_with_no_artifact(tmp_path):
     service = ChapterCommitService(tmp_path)
-    with pytest.raises(Exception, match="reconciliation_result is required"):
+    with pytest.raises(Exception, match="final chapter_text and proposed_changes are required"):
         service.build_commit(
             chapter=3,
             review_result={"blocking_count": 0},
             fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
             disambiguation_result={"pending": []},
             extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+            reconciliation_result={"schema_version": "story-reconciliation/v1", "status": "passed",
+                                   "observed_sha256": "forged", "accepted_payload": {"state_deltas": []}},
         )
 
 
 def test_commit_service_rejects_conflicted_reconciliation(tmp_path):
     service = ChapterCommitService(tmp_path)
     extraction = {"state_deltas": [], "entity_deltas": [], "accepted_events": []}
-    with pytest.raises(Exception, match="did not pass"):
+    with pytest.raises(Exception, match="audit artifact is stale"):
         service.build_commit(
             chapter=3,
             review_result={"blocking_count": 0},
             fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
             disambiguation_result={"pending": []},
             extraction_result=extraction,
+            proposed_changes={
+                "character_state_changes": [], "new_plot_points": [],
+                "foreshadowing_actions": [], "location_state_changes": [],
+                "faction_state_changes": [], "time_progression": None,
+                "item_transfers": [], "unresolved_questions": [],
+            },
+            chapter_text="final prose\n<chapter_changes>" + json.dumps({
+                "character_state_changes": [], "new_plot_points": [],
+                "foreshadowing_actions": [], "location_state_changes": [],
+                "faction_state_changes": [], "time_progression": None,
+                "item_transfers": [], "unresolved_questions": [],
+            }) + "</chapter_changes>",
             reconciliation_result={"schema_version": "story-reconciliation/v1", "status": "conflict", "conflicts": [], "observed_sha256": "x", "accepted_payload": {}},
+        )
+
+
+def test_service_recomputes_and_rejects_forged_passed_artifact(tmp_path):
+    service = ChapterCommitService(tmp_path)
+    with pytest.raises(Exception, match="audit artifact is stale"):
+        service.build_commit(
+            chapter=3,
+            review_result={"blocking_count": 0},
+            fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+            disambiguation_result={"pending": []},
+            extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+            proposed_changes={
+                "character_state_changes": [], "new_plot_points": [],
+                "foreshadowing_actions": [], "location_state_changes": [],
+                "faction_state_changes": [], "time_progression": None,
+                "item_transfers": [], "unresolved_questions": [],
+            },
+            chapter_text="forged prose\n<chapter_changes>" + json.dumps({
+                "character_state_changes": [], "new_plot_points": [],
+                "foreshadowing_actions": [], "location_state_changes": [],
+                "faction_state_changes": [], "time_progression": None,
+                "item_transfers": [], "unresolved_questions": [],
+            }) + "</chapter_changes>",
+            reconciliation_result={"schema_version": "story-reconciliation/v1", "status": "passed",
+                                   "observed_sha256": "forged", "accepted_payload": {"state_deltas": []}},
+        )
+
+
+def test_service_detects_stale_prose_and_proposal_against_audit(tmp_path):
+    from data_modules.reconciliation import reconcile_changes
+
+    service = ChapterCommitService(tmp_path)
+    proposal = {
+        "character_state_changes": [], "new_plot_points": [], "foreshadowing_actions": [],
+        "location_state_changes": [], "faction_state_changes": [], "time_progression": None,
+        "item_transfers": [], "unresolved_questions": [],
+    }
+    extraction = {"state_deltas": [], "entity_deltas": [], "accepted_events": []}
+    chapter_text = "final prose\n<chapter_changes>" + json.dumps(proposal) + "</chapter_changes>"
+    audit = reconcile_changes(proposal, extraction, chapter_text=chapter_text)
+    changed_proposal = {**proposal, "new_plot_points": [{"plot": "changed"}]}
+    changed_proposal_text = "正文\n<chapter_changes>" + json.dumps(changed_proposal) + "</chapter_changes>"
+    for changed_text, supplied_proposal in (
+        (chapter_text + " polished", proposal),
+        (changed_proposal_text, changed_proposal),
+    ):
+        with pytest.raises(Exception):
+            service.build_commit(
+                chapter=3, review_result={"blocking_count": 0},
+                fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+                disambiguation_result={"pending": []}, extraction_result=extraction,
+                chapter_text=changed_text, proposed_changes=supplied_proposal, reconciliation_result=audit,
+            )
+
+
+def test_service_detects_stale_extraction_against_audit(tmp_path):
+    from data_modules.reconciliation import reconcile_changes
+
+    service = ChapterCommitService(tmp_path)
+    proposal = {
+        "character_state_changes": [], "new_plot_points": [], "foreshadowing_actions": [],
+        "location_state_changes": [], "faction_state_changes": [], "time_progression": None,
+        "item_transfers": [], "unresolved_questions": [],
+    }
+    text = "final prose\n<chapter_changes>" + json.dumps(proposal) + "</chapter_changes>"
+    extraction = {"state_deltas": [], "entity_deltas": [], "accepted_events": []}
+    audit = reconcile_changes(proposal, extraction, chapter_text=text)
+    with pytest.raises(Exception, match="audit artifact is stale"):
+        service.build_commit(
+            chapter=3, review_result={"blocking_count": 0},
+            fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+            disambiguation_result={"pending": []},
+            extraction_result={"state_deltas": [{"entity_id": "x", "field": "realm", "new": "筑基"}], "entity_deltas": [], "accepted_events": []},
+            chapter_text=text, proposed_changes=proposal, reconciliation_result=audit,
         )
 
 

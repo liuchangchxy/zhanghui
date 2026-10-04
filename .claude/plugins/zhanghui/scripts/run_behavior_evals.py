@@ -194,12 +194,21 @@ def _eval_commit_projection_runtime(root: Path, case: dict[str, Any]) -> dict[st
         (project_root / ".webnovel").mkdir(parents=True, exist_ok=True)
         (project_root / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
         service = ChapterCommitService(project_root)
+        proposed_changes = {
+            "character_state_changes": [], "new_plot_points": [],
+            "foreshadowing_actions": [], "location_state_changes": [],
+            "faction_state_changes": [], "time_progression": None,
+            "item_transfers": [], "unresolved_questions": [],
+        }
+        chapter_text = "behavior eval prose\n<chapter_changes>" + json.dumps(proposed_changes, ensure_ascii=False) + "</chapter_changes>"
         payload = service.build_commit(
             chapter=1,
             review_result={"blocking_count": 1},
             fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
             disambiguation_result={"pending": []},
             extraction_result={"accepted_events": [], "state_deltas": [], "entity_deltas": []},
+            chapter_text=chapter_text,
+            proposed_changes=proposed_changes,
         )
         projected = service.apply_projections(payload)
         state_path = project_root / ".webnovel" / "state.json"

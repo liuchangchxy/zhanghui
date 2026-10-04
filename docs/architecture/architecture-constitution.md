@@ -21,7 +21,7 @@ The commit file is the transaction boundary and source for replay. The per-chapt
 - After the final prose is stable, the Writer refreshes CHANGES; the gate validates its protocol and existing integrity rules. The extraction then runs independently, followed by deterministic reconciliation.
 - `.webnovel/tmp/reconciliation_result.json` records normalized matches, `proposed_not_observed`, `unproposed_observed`, explicit conflicts, accepted payload, source indexes, and hashes binding the result to the final chapter and extraction.
 - Observed facts with no proposal remain eligible for acceptance and are marked `unproposed_observed`. Declarations with no observed support are never copied into Canon. Deterministic contradictory values for the same normalized entity and field are hard conflicts and block commit. Unstructured narrative claims are not guessed into matches.
-- `ChapterCommitService` requires a passed reconciliation artifact and copies the accepted event/state/entity payload from it. Only the validated durable `CHAPTER_COMMIT` persists those facts; reconciliation itself never writes Canon or projections.
+- `ChapterCommitService` receives final chapter text, the parsed `ProposedChanges`, and `ObservedChanges`; it reparses CHANGES, validates all inputs, and recomputes reconciliation itself. A reconciliation JSON is a derived audit artifact that can only be compared for exact freshness. Only the validated durable `CHAPTER_COMMIT` persists facts; reconciliation itself never writes Canon or projections.
 
 ## Ownership
 

@@ -36,7 +36,7 @@ allowed-tools: Read Write Edit Grep Bash
    - 不再一次性 Read 全本大纲/设定/所有章节。
 5. **刷新 ProposedChanges + Step 4.5 校验**：按最终正文重新生成 `<chapter_changes>` 后调用 `changes_gate.py`（详见主 skill 的 Step 4.5）。后续任何正文 rewrite 都必须再刷新。
 6. **Step 4.6 anti-slop 扫描**：调用 `text_humanizer.py` + `check-ai-patterns.js`（详见主 skill 的 Step 4.6）。
-7. **Step 5 data-agent**：调用 `webnovel-writer:data-agent` subagent 只从最终正文（排除 CHANGES 块）产出 extraction_result 等 3 份 artifact。
+7. **Step 5 data-agent**：先用 `prepare_data_agent_input.py` 将最终章节拆成 `.webnovel/tmp/data_agent_prose.md` 与 `.webnovel/tmp/proposed_changes.json`，再调用 `webnovel-writer:data-agent`，`chapter_file` 只传 prose-only 文件路径。正文后续变更时必须重新拆分、提取和对账。
 8. **Reconciliation**：运行主 skill Step 5 中的 `reconcile_changes.py` 命令，生成 `.webnovel/tmp/reconciliation_result.json`。conflict 或 schema 失败时不得 commit。
 9. **Step 5.2 chapter-commit**：调用 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py chapter-commit`，必须传 reconciliation artifact 与同一最终正文文件。
 10. **Step 6 备份**：调用 `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py backup`。

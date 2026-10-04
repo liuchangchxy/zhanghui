@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -37,27 +38,29 @@ def main() -> None:
 
     # The durable chapter transaction is stored before any projection writer runs.
     service = ChapterCommitService(Path(args.project_root))
-    from changes_gate import parse_changes
-    from data_modules.reconciliation import reconcile_changes, verify_reconciliation_freshness
+    from data_modules.reconciliation import split_chapter_and_changes
     reconciliation_result = _read_json(args.reconciliation_result)
     chapter_text = Path(args.chapter_file).read_text(encoding="utf-8")
-    verify_reconciliation_freshness(reconciliation_result, chapter_text=chapter_text)
-    proposed_changes, parse_error = parse_changes(chapter_text)
-    if parse_error:
-        raise ValueError(f"CHANGES invalid at commit time: {parse_error}")
-    expected_reconciliation = reconcile_changes(
-        proposed_changes,
-        _read_json(args.extraction_result),
-        chapter_text=chapter_text,
+    gate = subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("changes_gate.py")),
+         "--chapter-file", args.chapter_file, "--db", str(Path(args.project_root) / ".webnovel" / "index.db"), "--json"],
+        capture_output=True, text=True, check=False,
     )
-    if reconciliation_result != expected_reconciliation:
-        raise ValueError("reconciliation_result does not match final CHANGES and extraction artifacts")
+    try:
+        gate_result = json.loads(gate.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"changes_gate did not return valid JSON: {exc}") from exc
+    if gate.returncode or not gate_result.get("passed"):
+        raise ValueError("changes_gate failed; chapter commit is blocked")
+    _, proposed_changes = split_chapter_and_changes(chapter_text)
     payload = service.build_commit(
         chapter=args.chapter,
         review_result=_read_json(args.review_result),
         fulfillment_result=_read_json(args.fulfillment_result),
         disambiguation_result=_read_json(args.disambiguation_result),
         extraction_result=_read_json(args.extraction_result),
+        chapter_text=chapter_text,
+        proposed_changes=proposed_changes,
         reconciliation_result=reconciliation_result,
     )
     payload = service.apply_projections(payload, on_conflict=args.on_conflict)

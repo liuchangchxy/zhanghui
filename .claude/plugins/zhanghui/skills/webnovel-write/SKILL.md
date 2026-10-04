@@ -508,7 +508,8 @@ sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 
 使用 Agent 调用 `webnovel-writer:data-agent`，参数：
 - `chapter`
-- `chapter_file` 必须传入实际章节文件路径；若详细大纲已有章节名，优先传 `正文/第{chapter_padded}章-{title_safe}.md`，否则传 `正文/第{chapter_padded}章.md`
+- 先运行 `prepare_data_agent_input.py`，把实际最终章节拆成 prose-only 文件与独立 ProposedChanges JSON；Data Agent 的 `chapter_file` 必须指向 prose-only 文件，绝不传原始章节文件。
+- 原始 final chapter file 仍作为 `chapter-commit --chapter-file` 输入；提取阶段产出的 proposal JSON 与它解析出的 CHANGES 必须一致。
 - `review_score=Step 3 overall_score`
 - `project_root`
 - `storage_path=.webnovel/`
@@ -519,7 +520,16 @@ sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 Use the Agent tool to run `webnovel-writer:data-agent`
 ```
 
-Data Agent 只观察最终正文；读取时必须排除 `<chapter_changes>` 声明，不得为了与 Writer 声明一致而改 extraction。它只生成临时提取产物，不直接写入事实或状态投影。完成提取后执行 reconciliation：
+生成隔离输入并调用 Data Agent：
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/prepare_data_agent_input.py" \
+  --chapter-file "${PROJECT_ROOT}/正文/第{chapter_padded}章-{title_safe}.md" \
+  --prose-output "${PROJECT_ROOT}/.webnovel/tmp/data_agent_prose.md" \
+  --changes-output "${PROJECT_ROOT}/.webnovel/tmp/proposed_changes.json"
+```
+
+Data Agent 只收到 `.webnovel/tmp/data_agent_prose.md` 路径。正文改动后必须重新拆分并重新提取；Proposal 单独保存在 `.webnovel/tmp/proposed_changes.json`，不会混入观察输入。Data Agent 只生成临时提取产物，不直接写入事实或状态投影。完成提取后执行 reconciliation：
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/reconcile_changes.py" \
