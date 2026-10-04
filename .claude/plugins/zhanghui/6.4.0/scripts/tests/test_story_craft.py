@@ -1,0 +1,413 @@
+"""Tests for story_craft module (story_craft state.json field operations)."""
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+# 让 import 能找到 story_craft.py
+_SCRIPTS = Path(__file__).resolve().parent.parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+from story_craft import (
+    init_story_craft,
+    StoryCraftFieldError,
+    add_foreshadow,
+    payoff_foreshadow,
+    add_timed_lock,
+    fulfill_timed_lock,
+    check_timed_lock_deadlines,
+    record_emotion_peak,
+    check_rhythm_status,
+    increment_chapters_since_peak,
+    set_character_arc,
+    add_thematic_echo,
+    set_chapter_meta,
+    check_scene_sequel,
+    init_volume_beat,
+    fill_beat,
+    check_volume_beat,
+    VALID_BEATS,
+)  # noqa: E402
+
+
+def test_init_story_craft_creates_empty_structure():
+    with tempfile.NamedTemporaryFile(suffix='.json', delete=False, mode='w') as f:
+        json.dump({"project_info": {}, "progress": {}}, f)
+        path = f.name
+
+    try:
+        result = init_story_craft(path)
+        assert "story_craft" in result
+        assert result["story_craft"]["foreshadow_chain"] == []
+        assert result["story_craft"]["timed_locks"] == []
+        assert result["story_craft"]["rhythm_curve"]["chapters_since_peak"] == 0
+        assert result["story_craft"]["thematic_echoes"] == []
+        assert result["story_craft"]["character_arc"] is None
+    finally:
+        Path(path).unlink()
+
+
+def test_init_story_craft_is_idempotent():
+    with tempfile.NamedTemporaryFile(suffix='.json', delete=False, mode='w') as f:
+        json.dump({"project_info": {}, "progress": {}}, f)
+        path = f.name
+
+    try:
+        first = init_story_craft(path)
+        second = init_story_craft(path)
+        assert first["story_craft"] == second["story_craft"]
+    finally:
+        Path(path).unlink()
+
+
+def test_init_story_craft_preserves_existing():
+    with tempfile.NamedTemporaryFile(suffix='.json', delete=False, mode='w') as f:
+        json.dump({
+            "project_info": {"title": "Test"},
+            "story_craft": {"rhythm_curve": {"chapters_since_peak": 5}}
+        }, f)
+        path = f.name
+
+    try:
+        result = init_story_craft(path)
+        assert result["project_info"]["title"] == "Test"
+        assert result["story_craft"]["rhythm_curve"]["chapters_since_peak"] == 5
+    finally:
+        Path(path).unlink()
+
+
+def test_init_story_craft_raises_file_not_found_when_missing():
+    nonexistent = Path(tempfile.gettempdir()) / "definitely_not_a_real_state_file_xyz_12345.json"
+    if nonexistent.exists():
+        nonexistent.unlink()
+
+    try:
+        try:
+            init_story_craft(nonexistent)
+        except FileNotFoundError:
+            pass
+        else:
+            raise AssertionError("Expected FileNotFoundError but no exception was raised")
+    finally:
+        if nonexistent.exists():
+            nonexistent.unlink()
+
+
+def test_init_story_craft_raises_field_error_when_not_dict():
+    with tempfile.NamedTemporaryFile(suffix='.json', delete=False, mode='w') as f:
+        json.dump({"project_info": {}, "story_craft": "not a dict"}, f)
+        path = f.name
+
+    try:
+        try:
+            init_story_craft(path)
+        except StoryCraftFieldError:
+            pass
+        else:
+            raise AssertionError("Expected StoryCraftFieldError but no exception was raised")
+    finally:
+        Path(path).unlink()
+
+
+def test_add_foreshadow_creates_item():
+    state = {"story_craft": {"foreshadow_chain": []}}
+    item = {
+        "id": "FS-001",
+        "type": "物谶",
+        "depth": "中层",
+        "content": "血玉蜘蛛蛛丝",
+        "buried_chapter": 5,
+        "expected_payoff_chapter": 25,
+        "payoff_method": "虚天鼎钥匙",
+        "linked_entities": ["韩立", "血玉蜘蛛"]
+    }
+    result = add_foreshadow(state, item)
+    assert len(result["story_craft"]["foreshadow_chain"]) == 1
+    assert result["story_craft"]["foreshadow_chain"][0]["id"] == "FS-001"
+    assert result["story_craft"]["foreshadow_chain"][0]["status"] == "active"
+
+
+def test_add_foreshadow_assigns_next_id():
+    state = {"story_craft": {"foreshadow_chain": [{"id": "FS-001"}]}}
+    result = add_foreshadow(state, {"type": "物谶", "depth": "表层"})
+    assert result["story_craft"]["foreshadow_chain"][1]["id"] == "FS-002"
+
+
+def test_add_foreshadow_validates_depth():
+    state = {"story_craft": {"foreshadow_chain": []}}
+    with __import__("pytest").raises(ValueError):
+        add_foreshadow(state, {"type": "物谶", "depth": "invalid"})
+
+
+def test_payoff_foreshadow_marks_paid_off():
+    state = {"story_craft": {"foreshadow_chain": [
+        {"id": "FS-001", "status": "active"}
+    ]}}
+    result = payoff_foreshadow(state, "FS-001", chapter=25, quality="强")
+    assert result["story_craft"]["foreshadow_chain"][0]["status"] == "paid_off"
+    assert result["story_craft"]["foreshadow_chain"][0]["payoff_chapter"] == 25
+    assert result["story_craft"]["foreshadow_chain"][0]["payoff_quality"] == "强"
+
+
+def test_payoff_foreshadow_raises_if_already_paid():
+    state = {"story_craft": {"foreshadow_chain": [
+        {"id": "FS-001", "status": "paid_off"}
+    ]}}
+    with __import__("pytest").raises(ValueError):
+        payoff_foreshadow(state, "FS-001", chapter=25, quality="强")
+
+
+def test_add_timed_lock_creates_item():
+    state = {"story_craft": {"timed_locks": []}}
+    item = {
+        "id": "TL-001",
+        "description": "玄幻主角 3 章内出村",
+        "deadline_chapter": 3
+    }
+    result = add_timed_lock(state, item)
+    assert len(result["story_craft"]["timed_locks"]) == 1
+    assert result["story_craft"]["timed_locks"][0]["status"] == "active"
+
+
+def test_fulfill_timed_lock_marks_done():
+    state = {"story_craft": {"timed_locks": [
+        {"id": "TL-001", "status": "active"}
+    ]}}
+    result = fulfill_timed_lock(state, "TL-001", chapter=2)
+    assert result["story_craft"]["timed_locks"][0]["status"] == "fulfilled"
+    assert result["story_craft"]["timed_locks"][0]["fulfilled_chapter"] == 2
+
+
+def test_check_timed_lock_deadlines_returns_overdue():
+    state = {"story_craft": {"timed_locks": [
+        {"id": "TL-001", "deadline_chapter": 3, "status": "active"},
+        {"id": "TL-002", "deadline_chapter": 10, "status": "active"},
+        {"id": "TL-003", "deadline_chapter": 5, "status": "fulfilled"}
+    ]}}
+    overdue = check_timed_lock_deadlines(state, current_chapter=7)
+    ids = [t["id"] for t in overdue]
+    assert "TL-001" in ids
+    assert "TL-002" not in ids  # not yet overdue
+    assert "TL-003" not in ids  # already fulfilled
+
+
+def test_record_emotion_peak_resets_counter():
+    state = {"story_craft": {"rhythm_curve": {
+        "last_emotion_peak_chapter": 5,
+        "chapters_since_peak": 3,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+    }}}
+    result = record_emotion_peak(state, chapter=8, intensity=7, type_="medium_cool_point")
+    assert result["story_craft"]["rhythm_curve"]["last_emotion_peak_chapter"] == 8
+    assert result["story_craft"]["rhythm_curve"]["chapters_since_peak"] == 0
+    assert len(result["story_craft"]["rhythm_curve"]["history"]) == 1
+
+
+def test_check_rhythm_returns_warning_when_over_threshold():
+    state = {"story_craft": {"rhythm_curve": {
+        "last_emotion_peak_chapter": 1,
+        "chapters_since_peak": 4,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+    }}}
+    status = check_rhythm_status(state)
+    assert status == "warning"
+
+
+def test_check_rhythm_returns_block_when_over_block_threshold():
+    state = {"story_craft": {"rhythm_curve": {
+        "last_emotion_peak_chapter": 1,
+        "chapters_since_peak": 6,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+    }}}
+    status = check_rhythm_status(state)
+    assert status == "block"
+
+
+def test_check_rhythm_returns_ok_when_within_threshold():
+    state = {"story_craft": {"rhythm_curve": {
+        "last_emotion_peak_chapter": 1,
+        "chapters_since_peak": 1,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+    }}}
+    status = check_rhythm_status(state)
+    assert status == "ok"
+
+
+def test_set_character_arc_replaces_existing():
+    state = {"story_craft": {"character_arc": None}}
+    arc = {
+        "name": "林川",
+        "starting_state": "归乡迷茫",
+        "ending_state": "接受本源",
+        "transformation": "通过卡池觉醒"
+    }
+    result = set_character_arc(state, arc)
+    assert result["story_craft"]["character_arc"]["name"] == "林川"
+    assert result["story_craft"]["character_arc"]["key_moments"] == []
+
+
+def test_add_thematic_echo():
+    state = {"story_craft": {"thematic_echoes": []}}
+    result = add_thematic_echo(
+        state,
+        premise="真正的强大是记忆而非力量",
+        chapter=5,
+        manifestation="主角回忆根源时力量觉醒"
+    )
+    assert len(result["story_craft"]["thematic_echoes"]) == 1
+    assert result["story_craft"]["thematic_echoes"][0]["premise"] == "真正的强大是记忆而非力量"
+    assert len(result["story_craft"]["thematic_echoes"][0]["echoes"]) == 1
+
+
+def test_add_thematic_echo_appends_to_existing_premise():
+    state = {"story_craft": {"thematic_echoes": [
+        {"id": "TE-001", "premise": "记忆与力量", "echoes": [{"chapter": 3}]}
+    ]}}
+    result = add_thematic_echo(state, premise="记忆与力量", chapter=10, manifestation="第二次觉醒")
+    assert len(result["story_craft"]["thematic_echoes"]) == 1  # same premise, not duplicated
+    assert len(result["story_craft"]["thematic_echoes"][0]["echoes"]) == 2
+
+
+def test_set_character_arc_raises_for_missing_required_field():
+    state = {"story_craft": {"character_arc": None}}
+    with __import__("pytest").raises(ValueError):
+        set_character_arc(state, {"name": "X", "starting_state": "a", "ending_state": "b"})  # missing transformation
+
+
+def test_set_chapter_meta_validates_hook_type():
+    state = {"chapter_meta": {}}
+    with __import__("pytest").raises(ValueError):
+        set_chapter_meta(state, chapter=1, hook_type="unknown")
+
+
+def test_set_chapter_meta_writes_all_fields():
+    state = {"chapter_meta": {}}
+    result = set_chapter_meta(
+        state,
+        chapter=5,
+        beat_position="Midpoint",
+        hook_type="反转式",
+        scene_goal="获得神器",
+        scene_conflict="守护者阻挡",
+        sequel_decision="使用神器"
+    )
+    cm = result["chapter_meta"]["5"]
+    assert cm["beat_position"] == "Midpoint"
+    assert cm["hook_type"] == "反转式"
+    assert cm["scene_goal"] == "获得神器"
+    assert cm["hook_type"] in {"悬念式", "反转式", "情绪炸弹式", "信息投放式", "留白式", "反讽式"}
+
+
+def test_set_chapter_meta_foreshadow_buried_array():
+    state = {"chapter_meta": {}}
+    result = set_chapter_meta(
+        state,
+        chapter=5,
+        foreshadow_buried=["FS-001", "FS-003"]
+    )
+    assert result["chapter_meta"]["5"]["foreshadow_buried"] == ["FS-001", "FS-003"]
+
+
+def test_check_scene_sequel_blocks_when_goal_missing():
+    cm = {"scene_goal": None, "scene_conflict": "ok", "sequel_decision": "ok"}
+    issues = check_scene_sequel(cm)
+    assert any("scene_goal" in i for i in issues)
+
+
+def test_check_scene_sequel_warns_when_setback_missing():
+    cm = {
+        "scene_goal": "ok", "scene_conflict": "ok",
+        "scene_setback": None, "scene_resolution": "ok",
+        "sequel_reaction": "ok", "sequel_dilemma": "ok", "sequel_decision": "ok"
+    }
+    issues = check_scene_sequel(cm)
+    assert any(i.startswith("WARN") for i in issues)
+
+
+def test_check_scene_sequel_ok_when_all_filled():
+    cm = {
+        "scene_goal": "ok", "scene_conflict": "ok",
+        "scene_setback": "ok", "scene_resolution": "ok",
+        "sequel_reaction": "ok", "sequel_dilemma": "ok", "sequel_decision": "ok"
+    }
+    issues = check_scene_sequel(cm)
+    assert issues == []
+
+
+VALID_BEATS = [
+    "Opening Image", "Theme Stated", "Setup", "Catalyst", "Debate",
+    "Break Into Two", "B Story", "Fun and Games", "Midpoint",
+    "Bad Guys Close In", "All Is Lost", "Dark Night of the Soul",
+    "Break Into Three", "Finale", "Final Image"
+]
+
+
+def test_init_volume_beat_creates_empty_skeleton():
+    state = {"story_craft": {}}
+    result = init_volume_beat(state, volume=1, total_chapters=50)
+    beats = result["story_craft"]["volume_beat"]["beats"]
+    assert len(beats) == 15
+    assert beats[0]["name"] == "Opening Image"
+    assert beats[0]["chapter"] == 1
+    assert beats[8]["name"] == "Midpoint"
+    assert beats[8]["chapter"] == 25  # 50% of 50
+
+
+def test_fill_beat_updates_status():
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    result = fill_beat(state, volume=1, beat_name="Midpoint", chapter=25, notes="假胜利")
+    beats = result["story_craft"]["volume_beat"]["beats"]
+    midpoint = next(b for b in beats if b["name"] == "Midpoint")
+    assert midpoint["filled"] is True
+    assert midpoint["chapter"] == 25
+    assert midpoint["notes"] == "假胜利"
+
+
+def test_check_volume_beat_returns_blocker_for_missing_midpoint():
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    issues = check_volume_beat(state, volume=1)
+    assert any("Midpoint" in i for i in issues)
+    assert any("BLOCKER" in i for i in issues)
+
+
+def test_check_volume_beat_ok_when_midpoint_and_all_is_lost_filled():
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    fill_beat(state, volume=1, beat_name="Midpoint", chapter=25, notes="")
+    fill_beat(state, volume=1, beat_name="All Is Lost", chapter=37, notes="")
+    issues = check_volume_beat(state, volume=1)
+    blockers = [i for i in issues if "BLOCKER" in i]
+    assert blockers == []
+
+
+def test_check_volume_beat_returns_friendly_when_not_initialized():
+    state = {"story_craft": {}}
+    issues = check_volume_beat(state, volume=1)
+    assert any("not initialized" in i for i in issues)
+    assert any("BLOCKER" in i for i in issues)
+
+
+def test_fill_beat_raises_when_volume_mismatch():
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    with __import__("pytest").raises(ValueError):
+        fill_beat(state, volume=2, beat_name="Midpoint", chapter=25, notes="")
+
+
+def test_check_volume_beat_raises_when_volume_mismatch():
+    """Sibling-key schema (2026-08-19): V2 query against V1-initialized state
+    must return a friendly BLOCKER (volume_beats not initialized for V2),
+    NOT raise — V1 and V2+ coexist independently."""
+    state = init_volume_beat({"story_craft": {}}, volume=1, total_chapters=50)
+    issues = check_volume_beat(state, volume=2)
+    assert any("not initialized" in i for i in issues)
+    assert any("BLOCKER" in i for i in issues)

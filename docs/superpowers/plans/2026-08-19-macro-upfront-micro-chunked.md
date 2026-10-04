@@ -19,34 +19,34 @@
 
 | 路径 | 类型 | 行数参考 |
 |---|---|---|
-| `.claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py` | 改 | 282 行（commit 580af18） |
-| `.claude/plugins/webnovel-writer_chang/scripts/data_modules/promise_ledger.py` | **新增** | ~120 行 |
-| `.claude/plugins/webnovel-writer_chang/scripts/data_modules/chunked_write.py` | **新增** | ~80 行 |
-| `.claude/plugins/webnovel-writer_chang/scripts/story_craft.py` | 改 | 382 行（line 315 `init_volume_beat` 硬限） |
-| `.claude/plugins/webnovel-writer_chang/scripts/update_master_outline.py` | 改 | 324 行（line 37 `_require_current_volume_artifacts`） |
-| `.claude/plugins/webnovel-writer_chang/scripts/init_project.py` | 改 | 1059 行（line 965 `main()` argparse） |
-| `.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md` | 改 | 467 行（Step 9） |
-| `.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md` | 改 | 760 行（Step 0 pre-write gate） |
-| `.claude/plugins/webnovel-writer_chang/templates/output/大纲-总纲.md` | 改 | 模板（加跨卷伏笔账本 + 节拍映射表头） |
-| `.claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_promise_ledger.py` | **新增** | TDD 红→绿 |
-| `.claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_chunked_write.py` | **新增** | TDD 红→绿 |
-| `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_all_volumes.py` | **新增** | TDD 红→绿 |
-| `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_e2e_macro_micro.py` | **新增** | 端到端 |
+| `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py` | 改 | 282 行（commit 580af18） |
+| `.claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py` | **新增** | ~120 行 |
+| `.claude/plugins/zhanghui/scripts/data_modules/chunked_write.py` | **新增** | ~80 行 |
+| `.claude/plugins/zhanghui/scripts/story_craft.py` | 改 | 382 行（line 315 `init_volume_beat` 硬限） |
+| `.claude/plugins/zhanghui/scripts/update_master_outline.py` | 改 | 324 行（line 37 `_require_current_volume_artifacts`） |
+| `.claude/plugins/zhanghui/scripts/init_project.py` | 改 | 1059 行（line 965 `main()` argparse） |
+| `.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md` | 改 | 467 行（Step 9） |
+| `.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md` | 改 | 760 行（Step 0 pre-write gate） |
+| `.claude/plugins/zhanghui/templates/output/大纲-总纲.md` | 改 | 模板（加跨卷伏笔账本 + 节拍映射表头） |
+| `.claude/plugins/zhanghui/scripts/tests/unit/test_promise_ledger.py` | **新增** | TDD 红→绿 |
+| `.claude/plugins/zhanghui/scripts/tests/unit/test_chunked_write.py` | **新增** | TDD 红→绿 |
+| `.claude/plugins/zhanghui/scripts/tests/integration/test_plan_all_volumes.py` | **新增** | TDD 红→绿 |
+| `.claude/plugins/zhanghui/scripts/tests/integration/test_e2e_macro_micro.py` | **新增** | 端到端 |
 | `bin/deploy-plugin.sh` | 改 | 新文件加进 RUNTIME_FILES / TEST_FILES |
-| `.claude/plugins/webnovel-writer_chang/README.md` | 改 | 加 `--all-volumes` 文档 |
+| `.claude/plugins/zhanghui/README.md` | 改 | 加 `--all-volumes` 文档 |
 
 ---
 
 ### Task 1: promise_ledger dataclass + ForeshadowEntry + ledger 状态机（不依赖 state.json）
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/promise_ledger.py`
-- Test: `.claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_promise_ledger.py`
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py`
+- Test: `.claude/plugins/zhanghui/scripts/tests/unit/test_promise_ledger.py`
 
 - [ ] **Step 1: 写失败测试 — ForeshadowEntry 必填字段**
 
 ```python
-# .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_promise_ledger.py
+# .claude/plugins/zhanghui/scripts/tests/unit/test_promise_ledger.py
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
@@ -112,7 +112,7 @@ def test_planted_eq_payoff_allowed_within_volume():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/unit/test_promise_ledger.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'data_modules.promise_ledger'`.
@@ -120,7 +120,7 @@ Expected: `ModuleNotFoundError: No module named 'data_modules.promise_ledger'`.
 - [ ] **Step 3: 写最小实现**
 
 ```python
-# .claude/plugins/webnovel-writer_chang/scripts/data_modules/promise_ledger.py
+# .claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py
 """Promise ledger for cross-volume foreshadowing.
 
 Spec: docs/superpowers/specs/2026-08-19-macro-upfront-micro-chunked-design.md §5.1.
@@ -193,8 +193,8 @@ Expected: 3 passed.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/promise_ledger.py
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_promise_ledger.py
+git add .claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py
+git add .claude/plugins/zhanghui/scripts/tests/unit/test_promise_ledger.py
 git commit -m "feat(promise-ledger): ForeshadowEntry dataclass with planted_volume/payoff invariant
 
 Per spec 2026-08-19 §5.1 cross-volume foreshadowing schema.
@@ -208,8 +208,8 @@ precede expected_payoff_volume; same-volume plant/payoff allowed.
 ### Task 2: PromiseLedger API — upsert / advance / payoff / overdue detection
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/promise_ledger.py`
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_promise_ledger.py`
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py`
+- Modify: `.claude/plugins/zhanghui/scripts/tests/unit/test_promise_ledger.py`
 
 - [ ] **Step 1: 写失败测试 — ledger CRUD + overdue detection**
 
@@ -324,7 +324,7 @@ def test_filter_by_volume():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/unit/test_promise_ledger.py -v
 ```
 Expected: 3 passed (Task 1) + 6 failed (新 API).
@@ -382,8 +382,8 @@ Expected: 9 passed.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/promise_ledger.py
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_promise_ledger.py
+git add .claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py
+git add .claude/plugins/zhanghui/scripts/tests/unit/test_promise_ledger.py
 git commit -m "feat(promise-ledger): upsert / advance / payoff / list_overdue / list_for_volume
 
 6 new tests green. Spec 2026-08-19 §5.1 cross-volume ledger API.
@@ -396,8 +396,8 @@ counts as overdue (whole-volume skip); same-volume payoffs check chapter."
 ### Task 3: VolumeStateManager 接入 promise_ledger（state.json 持久化）
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py`
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_volume_state.py`
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py`
+- Modify: `.claude/plugins/zhanghui/scripts/tests/unit/test_volume_state.py`
 
 - [ ] **Step 1: 写失败测试 — VolumeStateManager 读写 promise_ledger**
 
@@ -471,14 +471,14 @@ def test_volume_state_payoff_writes_back(fresh_state):
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/unit/test_volume_state.py::test_volume_state_owns_promise_ledger -v
 ```
 Expected: AttributeError / ImportError related to upsert_promise_entry.
 
 - [ ] **Step 3: 实现 VolumeStateManager 新方法**
 
-修改 `.claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py`:
+修改 `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py`:
 
 ```python
 # Append to imports at top
@@ -537,7 +537,7 @@ from data_modules.promise_ledger import ForeshadowEntry, ForeshadowStatus, Promi
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/unit/test_volume_state.py -v
 ```
 Expected: 全部通过 (含 Task 3 新增 3 个 + 原 16 个).
@@ -546,8 +546,8 @@ Expected: 全部通过 (含 Task 3 新增 3 个 + 原 16 个).
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_volume_state.py
+git add .claude/plugins/zhanghui/scripts/data_modules/volume_state.py
+git add .claude/plugins/zhanghui/scripts/tests/unit/test_volume_state.py
 git commit -m "feat(volume-state): promise_ledger persistence + overdue query API
 
 VolumeStateManager now owns state.json.project_info.promise_ledger.
@@ -561,13 +561,13 @@ unaffected (round-trip safety verified)."
 ### Task 4: story_craft.py — `init_volume_beat` 跨卷扩展（去硬限）
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/story_craft.py`
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/tests/unit/` （新文件 test_story_craft_multivolume.py）
+- Modify: `.claude/plugins/zhanghui/scripts/story_craft.py`
+- Modify: `.claude/plugins/zhanghui/scripts/tests/unit/` （新文件 test_story_craft_multivolume.py）
 
 - [ ] **Step 1: 写失败测试 — 跨卷初始化 V1+V2 都成功**
 
 ```python
-# .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_story_craft_multivolume.py
+# .claude/plugins/zhanghui/scripts/tests/unit/test_story_craft_multivolume.py
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -613,14 +613,14 @@ def test_init_volume_beat_idempotent_per_volume():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/unit/test_story_craft_multivolume.py -v
 ```
 Expected: FAIL with `multi-volume not yet supported (requested volume 2)`.
 
 - [ ] **Step 3: 修改 `init_volume_beat` schema — 改成 dict[vol, beat_sheet]**
 
-修改 `.claude/plugins/webnovel-writer_chang/scripts/story_craft.py:308-330`:
+修改 `.claude/plugins/zhanghui/scripts/story_craft.py:308-330`:
 
 ```python
 # Replace init_volume_beat body (lines 308-330) with:
@@ -708,7 +708,7 @@ def fill_beat(state: dict, volume: int, beat_name: str, chapter: int, notes: str
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/unit/test_story_craft_multivolume.py tests/unit/ -v --ignore=tests/unit/test_promise_ledger.py
 ```
 Expected: 全部通过. (注意其他 test 可能依赖 volume_beat 的 legacy schema, 但因为我们做了迁移兼容, 应都过.)
@@ -724,8 +724,8 @@ python3 -m pytest tests/ -v 2>&1 | tail -50
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/story_craft.py
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_story_craft_multivolume.py
+git add .claude/plugins/zhanghui/scripts/story_craft.py
+git add .claude/plugins/zhanghui/scripts/tests/unit/test_story_craft_multivolume.py
 git commit -m "feat(story-craft): multi-volume beat sheet (dict[vol, beat_sheet])
 
 Per spec 2026-08-19 §6.1: remove 'multi-volume not yet supported' hard
@@ -740,13 +740,13 @@ all updated. 3 new tests green; full test suite must stay green."
 ### Task 5: `chunked_write.py` — ChunkedWritePolicy + evaluate_pre_write_gates
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/chunked_write.py`
-- Test: `.claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_chunked_write.py`
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/chunked_write.py`
+- Test: `.claude/plugins/zhanghui/scripts/tests/unit/test_chunked_write.py`
 
 - [ ] **Step 1: 写失败测试**
 
 ```python
-# .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_chunked_write.py
+# .claude/plugins/zhanghui/scripts/tests/unit/test_chunked_write.py
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -799,7 +799,7 @@ def test_evaluate_pre_write_gates_with_overdue_returns_blocker():
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/unit/test_chunked_write.py -v
 ```
 Expected: `ModuleNotFoundError: No module named 'data_modules.chunked_write'`.
@@ -807,7 +807,7 @@ Expected: `ModuleNotFoundError: No module named 'data_modules.chunked_write'`.
 - [ ] **Step 3: 写实现**
 
 ```python
-# .claude/plugins/webnovel-writer_chang/scripts/data_modules/chunked_write.py
+# .claude/plugins/zhanghui/scripts/data_modules/chunked_write.py
 """Chunked write policy + pre-write gate evaluator.
 
 Spec: docs/superpowers/specs/2026-08-19-macro-upfront-micro-chunked-design.md §6.4.
@@ -861,8 +861,8 @@ Expected: 4 passed.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/chunked_write.py
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_chunked_write.py
+git add .claude/plugins/zhanghui/scripts/data_modules/chunked_write.py
+git add .claude/plugins/zhanghui/scripts/tests/unit/test_chunked_write.py
 git commit -m "feat(chunked-write): ChunkedWritePolicy + evaluate_pre_write_gates
 
 Spec 2026-08-19 §6.4: denova chapter-group policy (chunk_size=5 default)
@@ -875,13 +875,13 @@ Spec 2026-08-19 §6.4: denova chapter-group policy (chunk_size=5 default)
 ### Task 6: `update_master_outline.py` — `all_volumes_mode` 旁路
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/update_master_outline.py`
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_update_master_outline_volumes.py`
+- Modify: `.claude/plugins/zhanghui/scripts/update_master_outline.py`
+- Modify: `.claude/plugins/zhanghui/scripts/tests/integration/test_update_master_outline_volumes.py`
 
 - [ ] **Step 1: 读现有测试断言**
 
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 grep -n "_require_current_volume_artifacts\|all_volumes_mode" tests/integration/test_update_master_outline_volumes.py | head -20
 ```
 
@@ -919,14 +919,14 @@ import pytest
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/integration/test_update_master_outline_volumes.py -v
 ```
 Expected: 2 failed (新断言).
 
 - [ ] **Step 4: 修改 `_require_current_volume_artifacts` 接受 `all_volumes_mode`**
 
-修改 `.claude/plugins/webnovel-writer_chang/scripts/update_master_outline.py:37-48`:
+修改 `.claude/plugins/zhanghui/scripts/update_master_outline.py:37-48`:
 
 ```python
 # Replace _require_current_volume_artifacts with:
@@ -955,7 +955,7 @@ def _require_current_volume_artifacts(
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/integration/test_update_master_outline_volumes.py -v
 ```
 Expected: 全部通过 (新增 2 + 原 N).
@@ -964,8 +964,8 @@ Expected: 全部通过 (新增 2 + 原 N).
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/update_master_outline.py
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_update_master_outline_volumes.py
+git add .claude/plugins/zhanghui/scripts/update_master_outline.py
+git add .claude/plugins/zhanghui/scripts/tests/integration/test_update_master_outline_volumes.py
 git commit -m "feat(update-master-outline): all_volumes_mode bypass for plan stage
 
 Spec 2026-08-19 §6.3: --all-volumes mode lets plan stage generate N
@@ -978,13 +978,13 @@ Default behavior unchanged. 2 new tests green."
 ### Task 7: `init_project.py` — `--all-volumes` CLI 入口 + generate_blueprint() 函数
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/init_project.py`
-- Test: `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_all_volumes.py`
+- Modify: `.claude/plugins/zhanghui/scripts/init_project.py`
+- Test: `.claude/plugins/zhanghui/scripts/tests/integration/test_plan_all_volumes.py`
 
 - [ ] **Step 1: 写失败测试 — `--all-volumes` 一次性铺 V1-V3 蓝图**
 
 ```python
-# .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_all_volumes.py
+# .claude/plugins/zhanghui/scripts/tests/integration/test_plan_all_volumes.py
 """Spec 2026-08-19 §6.2: --all-volumes mode generates N volume blueprint triplets."""
 import sys
 import tempfile
@@ -1063,14 +1063,14 @@ def test_generate_volume_blueprints_skips_deferred(tmp_path):
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/integration/test_plan_all_volumes.py -v
 ```
 Expected: ImportError / AttributeError on `generate_volume_blueprints`.
 
 - [ ] **Step 3: 实现 `generate_volume_blueprints()`**
 
-修改 `.claude/plugins/webnovel-writer_chang/scripts/init_project.py`. 在 `init_project()` 之后追加:
+修改 `.claude/plugins/zhanghui/scripts/init_project.py`. 在 `init_project()` 之后追加:
 
 ```python
 def _render_volume_blueprint(volume: dict, total_project_chapters: int) -> tuple[str, str, str]:
@@ -1179,7 +1179,7 @@ def generate_volume_blueprints(project_root, all_volumes: bool = False) -> int:
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/integration/test_plan_all_volumes.py tests/integration/test_plan_v_plus_one_anchor.py -v
 ```
 Expected: 全部通过 (新 3 + 原 3 regression 不破).
@@ -1188,8 +1188,8 @@ Expected: 全部通过 (新 3 + 原 3 regression 不破).
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_all_volumes.py
+git add .claude/plugins/zhanghui/scripts/init_project.py
+git add .claude/plugins/zhanghui/scripts/tests/integration/test_plan_all_volumes.py
 git commit -m "feat(init-project): --all-volumes mode generates N volume blueprint triplets
 
 Spec 2026-08-19 §6.2: new --all-volumes CLI flag + generate_volume_blueprints()
@@ -1203,12 +1203,12 @@ tests green; test_plan_v_plus_one_anchor regression preserved."
 ### Task 8: `templates/output/大纲-总纲.md` 加跨卷伏笔账本 + 节拍映射表头
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/templates/output/大纲-总纲.md`
+- Modify: `.claude/plugins/zhanghui/templates/output/大纲-总纲.md`
 
 - [ ] **Step 1: 读现有模板**
 
 ```bash
-cat /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/templates/output/大纲-总纲.md
+cat /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/templates/output/大纲-总纲.md
 ```
 
 - [ ] **Step 2: 在卷划分表后追加新表头**
@@ -1234,7 +1234,7 @@ cat /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/template
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/templates/output/大纲-总纲.md
+git add .claude/plugins/zhanghui/templates/output/大纲-总纲.md
 git commit -m "docs(template): add cross-volume promise ledger + beat map headers
 
 Spec 2026-08-19 §5.1: 总纲 now has empty tables for promise_ledger
@@ -1247,12 +1247,12 @@ manually by user during plan stage."
 ### Task 9: `webnovel-plan` SKILL.md Step 9 接入 `--all-volumes`
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md`
+- Modify: `.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md`
 
 - [ ] **Step 1: 读现有 Step 9**
 
 ```bash
-grep -n "Step 9\|9\\." /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md | head -10
+grep -n "Step 9\|9\\." /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md | head -10
 ```
 
 定位 Step 9 当前段落.
@@ -1288,7 +1288,7 @@ python3 scripts/init_project.py <project_dir> <title> \
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md
+git add .claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md
 git commit -m "docs(skill-plan): Step 9 documents --all-volumes mode
 
 Spec 2026-08-19 §6.2: --all-volumes is opt-in. Default behavior
@@ -1300,12 +1300,12 @@ unchanged (preserves test_plan_v_plus_one_anchor regression)."
 ### Task 10: `webnovel-write` SKILL.md 注入 pre-write gate 钩子
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md`
+- Modify: `.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md`
 
 - [ ] **Step 1: 读现有 Step 0**
 
 ```bash
-grep -n "^### Step 0\|^## Step 0" /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md | head -5
+grep -n "^### Step 0\|^## Step 0" /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md | head -5
 ```
 
 如果不存在 Step 0, 找最早的 Step (Step 1 / 准备).
@@ -1349,7 +1349,7 @@ if issues:
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+git add .claude/plugins/zhanghui/skills/webnovel-write/SKILL.md
 git commit -m "docs(skill-write): Step 0 pre-write gate (oh-story + tianming pattern)
 
 Spec 2026-08-19 §6.4: write stage evaluates overdue foreshadows before
@@ -1361,7 +1361,7 @@ each chapter; BLOCKER on overdue. Escape hatch: WEBNOVEL_DISABLE_CHUNKED_GATE=1.
 ### Task 11: 端到端测试 — `test_e2e_macro_micro.py`
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_e2e_macro_micro.py`
+- Create: `.claude/plugins/zhanghui/scripts/tests/integration/test_e2e_macro_micro.py`
 
 - [ ] **Step 1: 写端到端测试**
 
@@ -1451,7 +1451,7 @@ def test_e2e_full_flow(tmp_path):
 
 Run:
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/integration/test_e2e_macro_micro.py -v
 ```
 Expected: 1 passed.
@@ -1460,7 +1460,7 @@ Expected: 1 passed.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_e2e_macro_micro.py
+git add .claude/plugins/zhanghui/scripts/tests/integration/test_e2e_macro_micro.py
 git commit -m "test(e2e): macro-upfront + micro-chunked end-to-end flow
 
 Verifies: init 3-volume project → --all-volumes plan writes 3 triplets
@@ -1473,8 +1473,8 @@ blocker. Covers full spec 2026-08-19 flow."
 ### Task 12: 部署 — `bin/deploy-plugin.sh` + README + 全量测试回归
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/bin/deploy-plugin.sh`
-- Modify: `.claude/plugins/webnovel-writer_chang/README.md`
+- Modify: `.claude/plugins/zhanghui/bin/deploy-plugin.sh`
+- Modify: `.claude/plugins/zhanghui/README.md`
 - Verify: 全部测试绿 + marketplace sync 完成
 
 - [ ] **Step 1: `bin/deploy-plugin.sh` 加新文件**
@@ -1540,7 +1540,7 @@ python3 scripts/init_project.py <project_dir> <title> \
 - [ ] **Step 3: 跑全量测试**
 
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts
 python3 -m pytest tests/ -v 2>&1 | tail -30
 ```
 
@@ -1558,10 +1558,10 @@ Expected: 14 runtime + 11 test files synced.
 - [ ] **Step 5: 验证 marketplace 副本一致**
 
 ```bash
-diff -q .claude/plugins/webnovel-writer_chang/scripts/data_modules/promise_ledger.py \
-       /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/promise_ledger.py
-diff -q .claude/plugins/webnovel-writer_chang/scripts/data_modules/chunked_write.py \
-       /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/chunked_write.py
+diff -q .claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py \
+       /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/promise_ledger.py
+diff -q .claude/plugins/zhanghui/scripts/data_modules/chunked_write.py \
+       /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/chunked_write.py
 ```
 
 Expected: no diff.
@@ -1570,8 +1570,8 @@ Expected: no diff.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/bin/deploy-plugin.sh
-git add .claude/plugins/webnovel-writer_chang/README.md
+git add .claude/plugins/zhanghui/bin/deploy-plugin.sh
+git add .claude/plugins/zhanghui/README.md
 git commit -m "chore(deploy): sync new files to marketplace; document --all-volumes
 
 Adds promise_ledger.py + chunked_write.py to RUNTIME_FILES.
@@ -1597,5 +1597,5 @@ Full test suite green; marketplace copies verified identical."
 - 内部 spec: `docs/superpowers/specs/2026-08-19-macro-upfront-micro-chunked-design.md` (commit 1079342)
 - 上一版 spec: `docs/superpowers/specs/2026-08-18-multi-volume-init-design.md`
 - 上一版 plan: `docs/superpowers/plans/2026-08-18-multi-volume-init.md`（参考 path bug 修复经验）
-- VolumeStateManager 现状: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py` (commit 580af18)
+- VolumeStateManager 现状: `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py` (commit 580af18)
 - 现有测试 regression baseline: `scripts/tests/integration/test_plan_v_plus_one_anchor.py`

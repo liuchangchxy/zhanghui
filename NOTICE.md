@@ -9,7 +9,7 @@
 |---|---|---|
 | [lingfengQAQ/webnovel-writer](https://github.com/lingfengQAQ/webnovel-writer) | GPL-3.0 | 本仓库的 fork 基座 |
 
-上游 GPL-3.0 代码位于 `.claude/plugins/webnovel-writer_chang/`，包含其 `vendor/uv/`
+上游 GPL-3.0 代码位于 `.claude/plugins/zhanghui/`，包含其 `vendor/uv/`
 （uv 二进制，随上游一同分发；`hooks/install_python_deps.py` 依赖它自动安装 Python 依赖）。
 
 ## 已吸收的第三方成果

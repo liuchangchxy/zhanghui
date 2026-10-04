@@ -31,13 +31,13 @@ No new skill registration (skills/ dir auto-discovered by manifest).
 ## Task 1: Slash command wrapper for `/webnovel-deconstruct`
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/commands/deconstruct.md`
+- Create: `.claude/plugins/zhanghui/commands/deconstruct.md`
 
 (Independent task — pure file create, ~5 lines.)
 
 - [ ] **Step 1: Create the file**
 
-Create `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/commands/deconstruct.md`:
+Create `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/commands/deconstruct.md`:
 
 ```markdown
 ---
@@ -49,14 +49,14 @@ Use the Skill tool to invoke the `webnovel-deconstruct` skill
 - [ ] **Step 2: Sync to marketplace copy**
 
 ```bash
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/commands/deconstruct.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/commands/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/commands/deconstruct.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/commands/"
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/commands/deconstruct.md
+git add .claude/plugins/zhanghui/commands/deconstruct.md
 git commit -m "feat(deconstruct): add /webnovel-deconstruct slash command wrapper"
 ```
 
@@ -67,8 +67,8 @@ git commit -m "feat(deconstruct): add /webnovel-deconstruct slash command wrappe
 ## Task 2: Unlock deconstruction-agent description + test
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md` (frontmatter only)
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py` (add 1 test)
+- Modify: `.claude/plugins/zhanghui/agents/deconstruction-agent.md` (frontmatter only)
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py` (add 1 test)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -85,7 +85,7 @@ def test_deconstruction_agent_is_not_init_only():
 - [ ] **Step 2: Run test, verify it fails**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_deconstruction_agent_is_not_init_only -v 2>&1 | tail -8
 ```
 
@@ -93,7 +93,7 @@ Expected: FAIL — `deconstruction-agent.md` description currently says "/webnov
 
 - [ ] **Step 3: Modify agent frontmatter**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md`. Find the `description:` line in frontmatter (top of file). Change from:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/deconstruction-agent.md`. Find the `description:` line in frontmatter (top of file). Change from:
 
 ```
 description: /webnovel-init 的参考书拆解子代理。
@@ -110,7 +110,7 @@ Do NOT modify the body of the agent prompt — only the frontmatter description.
 - [ ] **Step 4: Run test, verify green**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_deconstruction_agent_is_not_init_only -v 2>&1 | tail -8
 ```
 
@@ -119,10 +119,10 @@ Expected: PASS.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/deconstruction-agent.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/agents/"
 
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md .claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
+git add .claude/plugins/zhanghui/agents/deconstruction-agent.md .claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(agent): unlock deconstruction-agent description for multi-caller
 
 Previously locked to /webnovel-init Step 1.5 only. Now also callable
@@ -137,8 +137,8 @@ unchanged — caller is responsible for persistence."
 ## Task 3: `marked_references.py` helper + 5 tests
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/marked_references.py`
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_marked_references.py`
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/marked_references.py`
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_marked_references.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -203,7 +203,7 @@ def test_load_returns_none_if_file_missing(tmp_path):
 - [ ] **Step 2: Run tests, verify they fail (module doesn't exist)**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_marked_references.py -v 2>&1 | tail -10
 ```
 
@@ -211,7 +211,7 @@ Expected: All 5 FAIL with `No module named 'marked_references'`.
 
 - [ ] **Step 3: Implement the helper**
 
-Create `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/marked_references.py`:
+Create `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/marked_references.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -297,7 +297,7 @@ def write_marked_references(payload: dict, path: Path) -> Path:
 - [ ] **Step 4: Run tests, verify all 5 pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_marked_references.py -v 2>&1 | tail -10
 ```
 
@@ -306,11 +306,11 @@ Expected: 5 PASSED.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/marked_references.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/"
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_marked_references.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/marked_references.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_marked_references.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/"
 
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/marked_references.py .claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_marked_references.py
+git add .claude/plugins/zhanghui/scripts/data_modules/marked_references.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_marked_references.py
 git commit -m "feat(scan): marked_references.py helper — read/write/validate manifest
 
 Schema:
@@ -328,13 +328,13 @@ skill (--from-scan reads)."
 ## Task 4: `webnovel-deconstruct` SKILL.md (main skill file)
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/skills/webnovel-deconstruct/SKILL.md`
+- Create: `.claude/plugins/zhanghui/skills/webnovel-deconstruct/SKILL.md`
 
 (Depends on Tasks 1, 2 — references both the slash command and the unlocked agent. Pure doc create, ~120 lines.)
 
 - [ ] **Step 1: Create the skill file**
 
-Create `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-deconstruct/SKILL.md`:
+Create `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-deconstruct/SKILL.md`:
 
 ```markdown
 ---
@@ -427,10 +427,10 @@ CLI 形式（命令壳 `commands/deconstruct.md` 已经在）：
 - [ ] **Step 2: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-deconstruct/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-deconstruct/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/"
 
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-deconstruct/SKILL.md
+git add .claude/plugins/zhanghui/skills/webnovel-deconstruct/SKILL.md
 git commit -m "feat(skill): webnovel-deconstruct SKILL.md — independent deconstruction entry
 
 Multi-book per project. Default overwrite with backup. Same quality
@@ -444,8 +444,8 @@ gate as init Step 1.5. Never touches idea_bank.json or state.json."
 ## Task 5: chart-scan SKILL.md update + integrity test
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md`
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py` (add 1 test)
+- Modify: `.claude/plugins/zhanghui/skills/webnovel-chart-scan/SKILL.md`
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py` (add 1 test)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -466,7 +466,7 @@ def test_chart_scan_skill_mentions_marked_references():
 - [ ] **Step 2: Run test, verify it fails**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_chart_scan_skill_mentions_marked_references -v 2>&1 | tail -8
 ```
 
@@ -474,7 +474,7 @@ Expected: FAIL — chart-scan SKILL.md has no mention of marked-references or de
 
 - [ ] **Step 3: Add marked-references section to chart-scan SKILL.md**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md`. Find the end of the file (after the platform coverage table at the end). Append a new section:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-chart-scan/SKILL.md`. Find the end of the file (after the platform coverage table at the end). Append a new section:
 
 ```markdown
 
@@ -505,7 +505,7 @@ Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills
 - [ ] **Step 4: Run test, verify green**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_chart_scan_skill_mentions_marked_references -v 2>&1 | tail -8
 ```
 
@@ -514,11 +514,11 @@ Expected: PASS.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md"
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-chart-scan/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-chart-scan/SKILL.md"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/"
 
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md .claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
+git add .claude/plugins/zhanghui/skills/webnovel-chart-scan/SKILL.md .claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(scan): chart-scan marked-references.json handoff to /webnovel-deconstruct
 
 Adds 标记对标书 section. chart-scan stays hermetic (no auto-write);
@@ -532,11 +532,11 @@ user must explicitly mark. marked-references.json schema documented."
 ## Task 6: chart-scan `output.py` add `write_marked_references()` helper
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py`
+- Modify: `.claude/plugins/zhanghui/skills/webnovel-chart-scan/scripts/output.py`
 
 - [ ] **Step 1: Read current `output.py`**
 
-Read `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py` to understand its style and existing helpers.
+Read `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-chart-scan/scripts/output.py` to understand its style and existing helpers.
 
 - [ ] **Step 2: Add `write_marked_references()` helper**
 
@@ -577,7 +577,7 @@ def write_marked_references(references: list[dict], output_dir: str | Path) -> P
 - [ ] **Step 3: Verify no regression in chart-scan tests**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py -v 2>&1 | tail -10
 ```
 
@@ -586,10 +586,10 @@ Expected: All P0-Full + P1+P2 tests pass.
 - [ ] **Step 4: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-chart-scan/scripts/output.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-chart-scan/scripts/output.py"
 
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/output.py
+git add .claude/plugins/zhanghui/skills/webnovel-chart-scan/scripts/output.py
 git commit -m "feat(scan): write_marked_references() helper in chart-scan output.py
 
 Pure helper — callable from SKILL.md flow. chart-scan itself still
@@ -603,8 +603,8 @@ doesn't auto-write (preserved hermetic behavior)."
 ## Task 7: plan SKILL.md auto-discovery + integrity test
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md`
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py` (add 1 test)
+- Modify: `.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md`
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py` (add 1 test)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -624,7 +624,7 @@ def test_plan_auto_discovers_reference_research():
 - [ ] **Step 2: Run test, verify it fails**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_plan_auto_discovers_reference_research -v 2>&1 | tail -8
 ```
 
@@ -632,7 +632,7 @@ Expected: FAIL — current plan SKILL.md (P0-Full) only mentions `idea_bank.json
 
 - [ ] **Step 3: Update plan SKILL.md consumption section**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md`. Find the existing "### 按需读取 reference_research 拆书产物" section (around line 100). Replace its body with:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md`. Find the existing "### 按需读取 reference_research 拆书产物" section (around line 100). Replace its body with:
 
 ```markdown
 读完 `idea_bank.json` 后，按以下规则加载所有可用拆书产物：
@@ -660,7 +660,7 @@ Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills
 - [ ] **Step 4: Run test, verify green**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_plan_auto_discovers_reference_research -v 2>&1 | tail -8
 ```
 
@@ -669,11 +669,11 @@ Expected: PASS.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-plan/SKILL.md"
-cp "/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-plan/SKILL.md"
+cp "/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/"
 
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md .claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
+git add .claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md .claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(plan): auto-discover .webnovel/reference_research/*/ trees
 
 Previously plan only loaded idea_bank.reference_research_path (single
@@ -725,7 +725,7 @@ cat > /tmp/p12_schema.json << 'EOF'
 EOF
 
 # Build tree directly (simulating what /webnovel-deconstruct would do)
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -c "
 import sys, json, pathlib
 sys.path.insert(0, '.')
@@ -752,7 +752,7 @@ Expected: No such file (P2 doesn't touch idea_bank).
 - [ ] **Step 3: Verify chart-scan marked-references round-trip**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -c "
 import sys, json, pathlib
 sys.path.insert(0, '.')
@@ -780,7 +780,7 @@ Expected: File written and loaded successfully, 2 references.
 - [ ] **Step 4: Verify plan SKILL.md text mentions auto-discovery**
 
 ```bash
-grep -A 2 "reference_research/\*" /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md | head -5
+grep -A 2 "reference_research/\*" /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md | head -5
 ```
 
 Expected: At least one line mentioning `reference_research/*` glob pattern.
@@ -788,7 +788,7 @@ Expected: At least one line mentioning `reference_research/*` glob pattern.
 - [ ] **Step 5: Run the full test suite one final time**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest \
   data_modules/tests/test_prompt_integrity.py::test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate \
   data_modules/tests/test_prompt_integrity.py::test_deconstruction_agent_schema_extension \

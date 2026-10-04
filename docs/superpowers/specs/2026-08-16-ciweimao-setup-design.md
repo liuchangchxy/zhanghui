@@ -3,7 +3,7 @@
 > **状态**：设计稿，待用户审批
 > **日期**：2026-08-16
 > **作者**：与 Claude 对话产出
-> **代码归属**：`/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/`
+> **代码归属**：`/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/`
 
 ---
 

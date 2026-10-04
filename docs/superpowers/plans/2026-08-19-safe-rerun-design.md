@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 实现"重跑一次都要问三态（重写 / 部分改写 / 不改）"的覆盖守卫层，让 webnovel-writer_chang 所有写入路径在重跑时不再静默覆盖。
+**Goal:** 实现"重跑一次都要问三态（重写 / 部分改写 / 不改）"的覆盖守卫层，让 zhanghui 所有写入路径在重跑时不再静默覆盖。
 
 **Architecture:** 新增 `safe_overwrite.py` 统一处理冲突；4 个 P0 脚本（`update_master_outline` / `chapter_commit` / `snapshot_manager`）+ plan 2 个脚本问题接入；新增 `check_plan_artifacts.py` 把 3 处 SKILL.md"询问"声明落到脚本；调用者同步传 `--on-conflict=overwrite`。默认行为从"静默覆盖"改为"存在则报错"，调用者必须显式传 flag。
 
@@ -52,7 +52,7 @@ def test_resolve_conflict_no_exists_no_mode():
 - [ ] **Step 2: 跑测试确认它们失败（红）**
 
 ```bash
-cd /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang
+cd /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui
 PYTHONPATH=. pytest scripts/tests/test_safe_overwrite.py -v
 ```
 
@@ -292,7 +292,7 @@ from pathlib import Path
 
 import pytest
 
-PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang")
+PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui")
 
 
 @pytest.fixture
@@ -504,7 +504,7 @@ from pathlib import Path
 
 import pytest
 
-PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang")
+PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui")
 
 
 @pytest.fixture
@@ -597,7 +597,7 @@ from pathlib import Path
 
 import pytest
 
-PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang")
+PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui")
 
 
 @pytest.fixture
@@ -840,7 +840,7 @@ from pathlib import Path
 
 import pytest
 
-PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang")
+PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui")
 
 
 @pytest.fixture
@@ -931,7 +931,7 @@ from pathlib import Path
 
 import pytest
 
-PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang")
+PLUGIN_ROOT = Path("/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui")
 
 
 @pytest.fixture
@@ -1406,12 +1406,12 @@ mkdir -p /tmp/test_proj/.webnovel /tmp/test_proj/大纲
 echo '{"project_info":{"title":"T","genre":"x"},"volumes":[]}' > /tmp/test_proj/.webnovel/state.json
 echo '{"next_volume_anchor":{"volume":1,"volume_name":"V","chapters_range":"1-50","core_conflict":"x","volume_end_climax":"y"}}' > /tmp/test_proj/大纲/第1卷-总纲写回.json
 echo -e "# 总纲\n\n## 卷划分\n| 卷号 | 卷名 | 章节范围 | 核心冲突 | 卷末高潮 |\n|------|------|----------|----------|----------|\n| 1 | OLD | 1-50 | old | old |\n" > /tmp/test_proj/大纲/总纲.md
-python3 .claude/plugins/webnovel-writer_chang/scripts/update_master_outline.py --project-root /tmp/test_proj --volume 1 2>&1 | grep -q "已存在" && echo "PASS" || echo "FAIL"
+python3 .claude/plugins/zhanghui/scripts/update_master_outline.py --project-root /tmp/test_proj --volume 1 2>&1 | grep -q "已存在" && echo "PASS" || echo "FAIL"
 
 # 2. plan 8 缺陷修复
 echo "=== Test 2: 悬念钩 可入库 ==="
-PYTHONPATH=.claude/plugins/webnovel-writer_chang python3 -c "
-from sys import path; path.insert(0, '.claude/plugins/webnovel-writer_chang')
+PYTHONPATH=.claude/plugins/zhanghui python3 -c "
+from sys import path; path.insert(0, '.claude/plugins/zhanghui')
 from scripts.story_craft import set_chapter_meta
 s = {}
 set_chapter_meta(s, chapter=1, hook_type='悬念钩')
@@ -1420,12 +1420,12 @@ print('PASS' if s['chapter_meta']['1']['hook_type'] == '悬念钩' else 'FAIL')
 
 # 3. SKILL.md 落地脚本存在
 echo "=== Test 3: check_plan_artifacts.py 存在 ==="
-test -f .claude/plugins/webnovel-writer_chang/scripts/check_plan_artifacts.py && echo "PASS" || echo "FAIL"
+test -f .claude/plugins/zhanghui/scripts/check_plan_artifacts.py && echo "PASS" || echo "FAIL"
 
 # 4. 调用者传 --on-conflict=overwrite
 echo "=== Test 4: plan SKILL.md 所有调用都有 --on-conflict ==="
-grep -c "on-conflict=overwrite" .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md
-grep -c "on-conflict=overwrite" .claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md
+grep -c "on-conflict=overwrite" .claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md
+grep -c "on-conflict=overwrite" .claude/plugins/zhanghui/skills/webnovel-write/SKILL.md
 ```
 
 Expected: 全部 PASS / 数字 ≥ 1

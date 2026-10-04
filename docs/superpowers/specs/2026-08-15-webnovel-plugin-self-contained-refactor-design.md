@@ -71,7 +71,7 @@
 ├── .claude/
 │   ├── settings.json                [开发] 只剩 enabledPlugins + 必要 permissions，无 hooks 覆写
 │   ├── .webnovel-current-project    [开发] dev 指针（保留，README 说明仅 dev 用）
-│   ├── plugins/webnovel-writer_chang/  [开发] ★ plugin 源码（self-contained）
+│   ├── plugins/zhanghui/  [开发] ★ plugin 源码（self-contained）
 │   ├── references/                  [参考] 不动
 │   ├── sources/webnovel-writer-upstream/ [参考] 不动
 │   └── worktrees/                   [不动]
@@ -86,12 +86,12 @@
 
 ~/.claude/plugins/marketplaces/
 └── webnovel-chang-marketplace/      [新增] 你专属的 marketplace
-    ├── .claude-plugin/marketplace.json  声明 plugin: webnovel-writer_chang
-    └── webnovel-writer_chang/           plugin 副本（dev 同步目标）
+    ├── .claude-plugin/marketplace.json  声明 plugin: zhanghui
+    └── zhanghui/           plugin 副本（dev 同步目标）
 
 ~/.claude/settings.json              [修改] 切换到 fork
     "marketplaces": { "webnovel-chang-marketplace": "<absolute path>" }
-    "enabledPlugins": { "webnovel-writer_chang@webnovel-chang-marketplace": true }
+    "enabledPlugins": { "zhanghui@webnovel-chang-marketplace": true }
 
 <书项目>/（如 /Users/chang/Desktop/根源牌序/）   ← 零配置
     .webnovel/
@@ -113,11 +113,11 @@
 Claude Code 启动
     ↓
 读取 ~/.claude/settings.json
-    ↓ 找到 enabledPlugins.webnovel-writer_chang@webnovel-chang-marketplace: true
+    ↓ 找到 enabledPlugins.zhanghui@webnovel-chang-marketplace: true
 加载 marketplace webnovel-chang-marketplace
     ↓ 解析 .claude-plugin/marketplace.json
-定位 plugin webnovel-writer_chang
-    ↓ 安装到 ~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/
+定位 plugin zhanghui
+    ↓ 安装到 ~/.claude/plugins/cache/webnovel-chang-marketplace/zhanghui/
 注入 CLAUDE_PLUGIN_ROOT 环境变量
     ↓ 指向 cache 路径（dev 模式可 symlink 到 dev workspace 加速）
 加载 plugin 内容：
@@ -145,11 +145,11 @@ Claude Code 启动
 
 dev 模式下 plugin 三跳链路：
 ```
-~/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/   ← marketplace repo
+~/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/   ← marketplace repo
     ↓ 首次安装时 cp 同步
-~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/         ← cache（Claude Code 实际加载）
+~/.claude/plugins/cache/webnovel-chang-marketplace/zhanghui/         ← cache（Claude Code 实际加载）
     ↓ **必须建为 symlink** 指向
-/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/      ← dev 源码
+/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/      ← dev 源码
 ```
 
 **关键**：cache 必须建为 `ln -sfn` 指向 dev workspace 的 plugin/，而不是把 marketplace 拷贝过来。任何对 dev workspace 的修改都立即被 Claude Code 感知（无需 rehash）。如果 cache 是普通目录而非 symlink，dev 修改不会生效，会出现「测试通过但实际加载的仍是旧版」的诡异问题。
@@ -168,12 +168,12 @@ dev 模式下 plugin 三跳链路：
 
 | 位置 | 现状 | 重构后 |
 |---|---|---|
-| plugin 目录 | `plugins/webnovel-writer/` | `plugins/webnovel-writer_chang/` |
-| `plugin.json` 的 `name` | `"webnovel-writer"` | `"webnovel-writer_chang"` |
+| plugin 目录 | `plugins/webnovel-writer/` | `plugins/zhanghui/` |
+| `plugin.json` 的 `name` | `"webnovel-writer"` | `"zhanghui"` |
 | `plugin.json` 的 `version` | `"6.2.1"` | `"6.3.0"` |
-| `enabledPlugins` key | `webnovel-writer@webnovel-writer-marketplace` | `webnovel-writer_chang@webnovel-chang-marketplace` |
+| `enabledPlugins` key | `webnovel-writer@webnovel-writer-marketplace` | `zhanghui@webnovel-chang-marketplace` |
 | marketplace 仓库 | `webnovel-writer-marketplace/` | `webnovel-chang-marketplace/` |
-| `marketplace.json` `plugins[0].name` | `webnovel-writer` | `webnovel-writer_chang` |
+| `marketplace.json` `plugins[0].name` | `webnovel-writer` | `zhanghui` |
 | `marketplace.json` `plugins[0].version` | 跟随 upstream | `6.3.0` |
 | `sync_plugin_version.py` 检查路径 | 旧名 | 新名 |
 | README / docs 字样 | 混用 | 统一为 `_chang` 后缀 |
@@ -186,7 +186,7 @@ dev 模式下 plugin 三跳链路：
 
 ### 4.1 plugin 内部自包含化（最核心）
 
-- **5 个项目级 skill 搬入 plugin**（每个 skill 自带 scripts 子目录；跨 skill 共享的脚本放 `plugins/webnovel-writer_chang/scripts/_shared/`，避免重复）：
+- **5 个项目级 skill 搬入 plugin**（每个 skill 自带 scripts 子目录；跨 skill 共享的脚本放 `plugins/zhanghui/scripts/_shared/`，避免重复）：
   - `webnovel-fast-write` ← `.claude/skills/webnovel-fast-write/` + 依赖 `changes_gate.py` / `context_slice.py` / `snapshot_manager.py` / `text_humanizer.py`
   - `webnovel-revise` ← `.claude/skills/webnovel-revise/` + 依赖 `revise_chapter.py` / `rejection_contract.py` / `normalize-punctuation.js`
   - `webnovel-deslop-check` ← `.claude/skills/webnovel-deslop-check/` + 依赖 `check-ai-patterns.js` / `text_humanizer.py`（共享）
@@ -194,10 +194,10 @@ dev 模式下 plugin 三跳链路：
   - `webnovel-chart-scan` ← `.claude/skills/webnovel-chart-scan/`
 
 - **被 plugin 自带 skill（webnovel-write / webnovel-style-profile）调用的脚本直接搬入 plugin 主 scripts/ 目录**：
-  - `style_fingerprint.py` → `plugins/webnovel-writer_chang/scripts/style_fingerprint.py`（被 webnovel-write 调）
-  - `tracking_query.py` → `plugins/webnovel-writer_chang/scripts/tracking_query.py`（被 webnovel-write 调）
+  - `style_fingerprint.py` → `plugins/zhanghui/scripts/style_fingerprint.py`（被 webnovel-write 调）
+  - `tracking_query.py` → `plugins/zhanghui/scripts/tracking_query.py`（被 webnovel-write 调）
 
-- **共享脚本归位**：`text_humanizer.py` 同时被 fast-write 和 deslop-check 调用，统一放 `plugins/webnovel-writer_chang/scripts/_shared/text_humanizer.py`，两个 skill 的 SKILL.md 用 `${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py` 引用
+- **共享脚本归位**：`text_humanizer.py` 同时被 fast-write 和 deslop-check 调用，统一放 `plugins/zhanghui/scripts/_shared/text_humanizer.py`，两个 skill 的 SKILL.md 用 `${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py` 引用
 
 - **路径变量统一**：
   - `python` → `python3`（hooks.json + 所有 SKILL.md + 所有 agent md）
@@ -208,7 +208,7 @@ dev 模式下 plugin 三跳链路：
   - **新功能**：`templates/个人语料.md` 与 `templates/写作宪法.md` 默认模板（首次创建），含空 schema + 示例
   - init 流程：把 templates/ 两份 copy 到 `<book>/.webnovel/writer-profile/`，用户编辑这里
   - `webnovel-write/SKILL.md:158` 等读取路径同步改为 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md`
-  - 模板放 `plugins/webnovel-writer_chang/templates/`（plugin root，非 skills/webnovel-init/）
+  - 模板放 `plugins/zhanghui/templates/`（plugin root，非 skills/webnovel-init/）
 
 ### 4.2 dev workspace 瘦身
 
@@ -218,7 +218,7 @@ dev 模式下 plugin 三跳链路：
     - 删：`.claude/scripts/{changes_gate,tracking_query,style_fingerprint}.py` / `.claude/scripts/{check-ai-patterns,normalize-punctuation}.js` / `.claude/plugins/webnovel-writer/scripts/webnovel.py` / `.claude/plugins/webnovel-writer/scripts/data_modules/*` / `.claude/plugins/webnovel-writer/skills/webnovel-style-profile/*`
     - 加：`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/webnovel.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py*)`、`Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js*)`、`Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/normalize-punctuation.js*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/style_fingerprint.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/tracking_query.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/context_slice.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/snapshot_manager.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/rejection_contract.py*)`、`Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/extract_chapter_context.py*)`
     - 注：`${CLAUDE_PLUGIN_ROOT}` 在 settings.json 的 Bash allow 里被原样作为 glob 字符串处理（不展开），所以允许规则能匹配到任何 cache 路径下的对应脚本
-  - `enabledPlugins.webnovel-writer` 裸名 → `webnovel-writer_chang@webnovel-chang-marketplace`
+  - `enabledPlugins.webnovel-writer` 裸名 → `zhanghui@webnovel-chang-marketplace`
 
 - `.claude/skills/` → 删空（已搬入 plugin）
 
@@ -231,11 +231,11 @@ dev 模式下 plugin 三跳链路：
 ### 4.3 独立 marketplace 建立
 
 - 创建目录 `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/`
-- 写 `.claude-plugin/marketplace.json`，声明 plugin `webnovel-writer_chang`
-- 把 dev workspace 的 `plugins/webnovel-writer_chang/` 同步到 `marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/`（首次手动 cp；后续可写 sync 脚本）
+- 写 `.claude-plugin/marketplace.json`，声明 plugin `zhanghui`
+- 把 dev workspace 的 `plugins/zhanghui/` 同步到 `marketplaces/webnovel-chang-marketplace/zhanghui/`（首次手动 cp；后续可写 sync 脚本）
 - 修改 `~/.claude/settings.json`：
   - 加 `marketplaces` 字段指向新 marketplace 路径
-  - `enabledPlugins.webnovel-writer_chang@webnovel-chang-marketplace: true`
+  - `enabledPlugins.zhanghui@webnovel-chang-marketplace: true`
   - 可选：保留 `webnovel-writer@webnovel-writer-marketplace: false`（切到 false 而不是删除，留可回滚路径）
 
 ### 4.4 文档
@@ -252,8 +252,8 @@ dev 模式下 plugin 三跳链路：
 
 ### 4.5 测试与验证脚本
 
-- 保留 `plugins/webnovel-writer_chang/scripts/tests/` 全部 pytest
-- 新增 `plugins/webnovel-writer_chang/scripts/tests/test_self_contained.py`：
+- 保留 `plugins/zhanghui/scripts/tests/` 全部 pytest
+- 新增 `plugins/zhanghui/scripts/tests/test_self_contained.py`：
   - 断言所有 SKILL.md 不含 `${CLAUDE_PROJECT_DIR}`
   - 断言所有 SKILL.md 用 `python3` 而非 `python`
   - 断言所有 `${CLAUDE_PLUGIN_ROOT}` 引用都解析到真实存在的路径
@@ -285,7 +285,7 @@ dev 模式下 plugin 三跳链路：
 #### 4.6.2 vendor/uv/ 布局
 
 ```
-plugins/webnovel-writer_chang/vendor/uv/
+plugins/zhanghui/vendor/uv/
 ├── uv-darwin-arm64           ← macOS Apple Silicon
 ├── uv-darwin-x86_64          ← macOS Intel
 ├── uv-linux-x86_64           ← Linux x86_64
@@ -372,15 +372,15 @@ SessionStart (session_start.py 扩展)
 
 | 文件 | 操作 |
 |---|---|
-| `plugins/webnovel-writer_chang/vendor/uv/*` | 新增（裸二进制 commit，不用 LFS） |
-| `plugins/webnovel-writer_chang/hooks/session_start.py` | 改：扩展检测 Python skill 依赖 + fork 后台进程 |
-| `plugins/webnovel-writer_chang/hooks/install_python_deps.py` | 新增：实际跑 uv 的脚本（纯函数 + 子进程封装） |
-| `plugins/webnovel-writer_chang/hooks/hooks.json` | 改：SessionStart timeout **默认** 30s（覆盖原 5s）；实现里保证「检测 + fork」步骤 < 2s 完成，超时只是兜底，**不会真用到** |
-| `plugins/webnovel-writer_chang/skills/webnovel-chart-scan/pyproject.toml` | 已有，确保 extras 标注清晰（fanqie / dev） |
-| `plugins/webnovel-writer_chang/dashboard/pyproject.toml` | **新增**（替代裸 `requirements.txt`，让 install 流程统一） |
-| `plugins/webnovel-writer_chang/scripts/` 隐式 `pydantic` 依赖 | 顺手补：加 `pyproject.toml` 或 `requirements.txt` 显式声明 |
-| `plugins/webnovel-writer_chang/scripts/tests/test_install_*.py` | 新增：install 流程的单元 + 集成测试 |
-| `plugins/webnovel-writer_chang/scripts/sync_dev_to_marketplace.sh` | 改：release 时同步 uv 二进制 |
+| `plugins/zhanghui/vendor/uv/*` | 新增（裸二进制 commit，不用 LFS） |
+| `plugins/zhanghui/hooks/session_start.py` | 改：扩展检测 Python skill 依赖 + fork 后台进程 |
+| `plugins/zhanghui/hooks/install_python_deps.py` | 新增：实际跑 uv 的脚本（纯函数 + 子进程封装） |
+| `plugins/zhanghui/hooks/hooks.json` | 改：SessionStart timeout **默认** 30s（覆盖原 5s）；实现里保证「检测 + fork」步骤 < 2s 完成，超时只是兜底，**不会真用到** |
+| `plugins/zhanghui/skills/webnovel-chart-scan/pyproject.toml` | 已有，确保 extras 标注清晰（fanqie / dev） |
+| `plugins/zhanghui/dashboard/pyproject.toml` | **新增**（替代裸 `requirements.txt`，让 install 流程统一） |
+| `plugins/zhanghui/scripts/` 隐式 `pydantic` 依赖 | 顺手补：加 `pyproject.toml` 或 `requirements.txt` 显式声明 |
+| `plugins/zhanghui/scripts/tests/test_install_*.py` | 新增：install 流程的单元 + 集成测试 |
+| `plugins/zhanghui/scripts/sync_dev_to_marketplace.sh` | 改：release 时同步 uv 二进制 |
 | `README.md` | 改：加"首次使用会后台装依赖"说明 + 离线场景说明 + 镜像配置说明 |
 
 ---
@@ -400,8 +400,8 @@ SessionStart (session_start.py 扩展)
 
 | 测试 | 步骤 | 通过条件 |
 |---|---|---|
-| 单元测试 | `pytest plugins/webnovel-writer_chang/scripts/tests/` | 全绿 |
-| 自包含断言 | `pytest plugins/webnovel-writer_chang/scripts/tests/test_self_contained.py` | 反模式扫描全 0 命中 |
+| 单元测试 | `pytest plugins/zhanghui/scripts/tests/` | 全绿 |
+| 自包含断言 | `pytest plugins/zhanghui/scripts/tests/test_self_contained.py` | 反模式扫描全 0 命中 |
 | dev 加载测试 | `cd dev && claude → /webnovel-doctor` | 报 OK，hook 输出完整 |
 | **根治测试** | `cd /Users/chang/Desktop/根源牌序 && claude → SessionStart 输出完整 → /webnovel-doctor` | 报 OK，**book 项目下零 `.claude/` 配置** |
 | 写章节测试 | 在根源牌序 下跑 `/webnovel-init` 重做 → `/webnovel-write` 写一章 | 个人语料落在 `<book>/.webnovel/writer-profile/`；数据链完整 |
@@ -416,7 +416,7 @@ SessionStart (session_start.py 扩展)
 
 | 风险 | 兜底 |
 |---|---|
-| cache symlink 失效（cache 6.2.1 → dev 副本的 hack） | 拆掉 symlink，重跑 `claude plugin install webnovel-writer_chang@webnovel-chang-marketplace` |
+| cache symlink 失效（cache 6.2.1 → dev 副本的 hack） | 拆掉 symlink，重跑 `claude plugin install zhanghui@webnovel-chang-marketplace` |
 | 现有 根源牌序 项目半初始化 state.json 残留（`project_info` 填了但 `init_completed` 缺失） | init skill 启动时检测 `progress.init_completed` 缺失则警告 + 给出 `--force` 选项 |
 | dev 副本与 marketplace 副本 drift | README 写明「dev 时改 dev workspace 的 plugin/，发布时改 marketplace 仓库的 plugin/」双源约定；提供 `scripts/sync_dev_to_marketplace.sh` 一键 cp 同步 |
 | `python3` 在某些 Linux 发行版指向 Python 2 | hooks 用 `python3 -X utf8` 字面量，依赖显式 python3；如未来要兼容 Linux，加一个 venv 探测脚本 |

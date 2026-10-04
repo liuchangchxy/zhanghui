@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 让 `webnovel-writer_chang` plugin 在 macOS / Linux / Windows 上零手动步骤可用 — 首次 SessionStart 后台自动安装 Python 依赖，plugin 升级自动重建 venv。
+**Goal:** 让 `zhanghui` plugin 在 macOS / Linux / Windows 上零手动步骤可用 — 首次 SessionStart 后台自动安装 Python 依赖，plugin 升级自动重建 venv。
 
 **Architecture:** 用 `uv`（~15MB 跨平台单文件二进制）作为 Python bootstrapper。SessionStart hook 在 `~/.cache/webnovel-writer-chang/venvs/<module>/` 检测每个 Python 模块的 venv 状态，`.install-stamp`（sha256 of pyproject.toml）与当前不匹配则后台 fork 子进程跑 `uv venv` + `uv pip install`。chart-scan 的 chromium（150MB）单独走 Claude prompt 让用户选 y/N。**主 SessionStart hook < 2s 完成，不阻塞当前会话**。
 
@@ -42,7 +42,7 @@
 | 镜像 fallback | 默认 PyPI；CN IP 时自动切清华/阿里；fallback 链：PyPI 官方 → 清华 → 阿里 |
 | Python 版本 | uv 自动管；缺失时下载 Python 3.11+（用户无感） |
 | Commit 粒度 | 每个 Task 末尾一个 commit，格式 `<type>(<scope>): <what>` |
-| 测试位置 | `plugins/webnovel-writer_chang/scripts/tests/`，统一命令 `cd plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v` |
+| 测试位置 | `plugins/zhanghui/scripts/tests/`，统一命令 `cd plugins/zhanghui/scripts && python3 -m pytest tests/ -v` |
 
 ---
 
@@ -50,18 +50,18 @@
 
 | 文件/目录 | 操作 | 内容 |
 |---|---|---|
-| `plugins/webnovel-writer_chang/vendor/uv/uv-darwin-arm64` | 新增 | macOS Apple Silicon uv 二进制 |
-| `plugins/webnovel-writer_chang/vendor/uv/uv-darwin-x86_64` | 新增 | macOS Intel uv 二进制 |
-| `plugins/webnovel-writer_chang/vendor/uv/uv-linux-x86_64` | 新增 | Linux x86_64 uv 二进制 |
-| `plugins/webnovel-writer_chang/vendor/uv/uv-windows-x86_64.exe` | 新增 | Windows x86_64 uv 二进制 |
-| `plugins/webnovel-writer_chang/vendor/uv/SHA256SUMS` | 新增 | 4 个二进制 sha256 |
-| `plugins/webnovel-writer_chang/hooks/install_python_deps.py` | 新增 | 实际跑 uv 的脚本（可独立调用） |
-| `plugins/webnovel-writer_chang/hooks/session_start.py` | 修改 | 扩展：检测 Python 依赖 + fork 后台 |
-| `plugins/webnovel-writer_chang/hooks/hooks.json` | 修改 | timeout 5s → 30s |
-| `plugins/webnovel-writer_chang/dashboard/pyproject.toml` | 新增 | 替代裸 `requirements.txt` |
-| `plugins/webnovel-writer_chang/scripts/pyproject.toml` | 新增 | 声明根 scripts/ 的隐式 pydantic 依赖 |
-| `plugins/webnovel-writer_chang/scripts/tests/test_install_*.py` | 新增 | install 流程测试（单元 + 集成） |
-| `plugins/webnovel-writer_chang/scripts/sync_dev_to_marketplace.sh` | 修改 | release 时同步 uv 二进制 |
+| `plugins/zhanghui/vendor/uv/uv-darwin-arm64` | 新增 | macOS Apple Silicon uv 二进制 |
+| `plugins/zhanghui/vendor/uv/uv-darwin-x86_64` | 新增 | macOS Intel uv 二进制 |
+| `plugins/zhanghui/vendor/uv/uv-linux-x86_64` | 新增 | Linux x86_64 uv 二进制 |
+| `plugins/zhanghui/vendor/uv/uv-windows-x86_64.exe` | 新增 | Windows x86_64 uv 二进制 |
+| `plugins/zhanghui/vendor/uv/SHA256SUMS` | 新增 | 4 个二进制 sha256 |
+| `plugins/zhanghui/hooks/install_python_deps.py` | 新增 | 实际跑 uv 的脚本（可独立调用） |
+| `plugins/zhanghui/hooks/session_start.py` | 修改 | 扩展：检测 Python 依赖 + fork 后台 |
+| `plugins/zhanghui/hooks/hooks.json` | 修改 | timeout 5s → 30s |
+| `plugins/zhanghui/dashboard/pyproject.toml` | 新增 | 替代裸 `requirements.txt` |
+| `plugins/zhanghui/scripts/pyproject.toml` | 新增 | 声明根 scripts/ 的隐式 pydantic 依赖 |
+| `plugins/zhanghui/scripts/tests/test_install_*.py` | 新增 | install 流程测试（单元 + 集成） |
+| `plugins/zhanghui/scripts/sync_dev_to_marketplace.sh` | 修改 | release 时同步 uv 二进制 |
 | `README.md` | 修改 | 加"首次使用会后台装依赖"说明 |
 
 ---
@@ -71,12 +71,12 @@
 ### Task 1: 下载 uv 二进制 + SHA256SUMS
 
 **Files:**
-- Create: `plugins/webnovel-writer_chang/vendor/uv/{uv-darwin-arm64,uv-darwin-x86_64,uv-linux-x86_64,uv-windows-x86_64.exe,SHA256SUMS}`
+- Create: `plugins/zhanghui/vendor/uv/{uv-darwin-arm64,uv-darwin-x86_64,uv-linux-x86_64,uv-windows-x86_64.exe,SHA256SUMS}`
 
 - [ ] **Step 1: 创建 vendor/uv/ 目录**
 
 ```bash
-mkdir -p .claude/plugins/webnovel-writer_chang/vendor/uv
+mkdir -p .claude/plugins/zhanghui/vendor/uv
 ```
 
 - [ ] **Step 2: 下载 4 平台 uv 二进制（锁定版本 0.4.18）**
@@ -86,19 +86,19 @@ UV_VERSION="0.4.18"
 BASE="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}"
 
 curl -fsSL "${BASE}/uv-aarch64-apple-darwin.tar.gz" | tar -xz -C /tmp uv-aarch64-apple-darwin/uv && \
-  cp /tmp/uv-aarch64-apple-darwin/uv .claude/plugins/webnovel-writer_chang/vendor/uv/uv-darwin-arm64
+  cp /tmp/uv-aarch64-apple-darwin/uv .claude/plugins/zhanghui/vendor/uv/uv-darwin-arm64
 
 curl -fsSL "${BASE}/uv-x86_64-apple-darwin.tar.gz" | tar -xz -C /tmp uv-x86_64-apple-darwin/uv && \
-  cp /tmp/uv-x86_64-apple-darwin/uv .claude/plugins/webnovel-writer_chang/vendor/uv/uv-darwin-x86_64
+  cp /tmp/uv-x86_64-apple-darwin/uv .claude/plugins/zhanghui/vendor/uv/uv-darwin-x86_64
 
 curl -fsSL "${BASE}/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C /tmp uv-x86_64-unknown-linux-gnu/uv && \
-  cp /tmp/uv-x86_64-unknown-linux-gnu/uv .claude/plugins/webnovel-writer_chang/vendor/uv/uv-linux-x86_64
+  cp /tmp/uv-x86_64-unknown-linux-gnu/uv .claude/plugins/zhanghui/vendor/uv/uv-linux-x86_64
 
 curl -fsSL -o /tmp/uv-win.zip "${BASE}/uv-x86_64-pc-windows-msvc.zip" && \
-  unzip -p /tmp/uv-win.zip uv.exe > .claude/plugins/webnovel-writer_chang/vendor/uv/uv-windows-x86_64.exe
+  unzip -p /tmp/uv-win.zip uv.exe > .claude/plugins/zhanghui/vendor/uv/uv-windows-x86_64.exe
 
-chmod +x .claude/plugins/webnovel-writer_chang/vendor/uv/uv-darwin-* .claude/plugins/webnovel-writer_chang/vendor/uv/uv-linux-*
-ls -la .claude/plugins/webnovel-writer_chang/vendor/uv/
+chmod +x .claude/plugins/zhanghui/vendor/uv/uv-darwin-* .claude/plugins/zhanghui/vendor/uv/uv-linux-*
+ls -la .claude/plugins/zhanghui/vendor/uv/
 ```
 
 预期：4 个二进制 + 文件大小约 15-25MB
@@ -106,7 +106,7 @@ ls -la .claude/plugins/webnovel-writer_chang/vendor/uv/
 - [ ] **Step 3: 生成 SHA256SUMS**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/vendor/uv
+cd .claude/plugins/zhanghui/vendor/uv
 shasum -a 256 uv-darwin-arm64 uv-darwin-x86_64 uv-linux-x86_64 uv-windows-x86_64.exe > SHA256SUMS
 cat SHA256SUMS
 ```
@@ -116,7 +116,7 @@ cat SHA256SUMS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/vendor/uv/
+git add .claude/plugins/zhanghui/vendor/uv/
 git commit -m "feat(install): vendor uv ${UV_VERSION} binaries for 4 platforms"
 ```
 
@@ -125,7 +125,7 @@ git commit -m "feat(install): vendor uv ${UV_VERSION} binaries for 4 platforms"
 ### Task 2: 写 uv 校验测试
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_uv_vendor.py`
+- Test: `plugins/zhanghui/scripts/tests/test_uv_vendor.py`
 
 - [ ] **Step 1: 写失败测试**
 
@@ -173,7 +173,7 @@ def test_uv_binary_sha256_matches(binary):
 - [ ] **Step 2: 跑测试确认全绿**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_uv_vendor.py -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/test_uv_vendor.py -v
 ```
 
 预期：8 passed (2 tests × 4 binaries)
@@ -181,7 +181,7 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test
 - [ ] **Step 3: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_uv_vendor.py
+git add .claude/plugins/zhanghui/scripts/tests/test_uv_vendor.py
 git commit -m "test(install): verify uv binary sha256"
 ```
 
@@ -192,8 +192,8 @@ git commit -m "test(install): verify uv binary sha256"
 ### Task 3: 写 compute_install_stamp 测试 + 实现
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py`
-- Create: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Test: `plugins/zhanghui/scripts/tests/test_install_python_deps.py`
+- Create: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 写失败测试**
 
@@ -227,14 +227,14 @@ def test_compute_install_stamp_includes_requirements_txt(tmp_path):
 - [ ] **Step 2: 跑测试确认失败（function not defined）**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_install_python_deps.py -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/test_install_python_deps.py -v
 ```
 
 预期：ImportError / ModuleNotFoundError
 
 - [ ] **Step 3: 最小实现 compute_install_stamp**
 
-Create `plugins/webnovel-writer_chang/hooks/install_python_deps.py`:
+Create `plugins/zhanghui/hooks/install_python_deps.py`:
 
 ```python
 """install_python_deps.py — 实际跑 uv 安装 Python 依赖。
@@ -267,7 +267,7 @@ def compute_install_stamp(module_dir: Path) -> str:
 - [ ] **Step 4: 跑测试确认通过**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_install_python_deps.py::test_compute_install_stamp_returns_sha256 tests/test_install_python_deps.py::test_compute_install_stamp_includes_requirements_txt -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/test_install_python_deps.py::test_compute_install_stamp_returns_sha256 tests/test_install_python_deps.py::test_compute_install_stamp_includes_requirements_txt -v
 ```
 
 预期：2 passed
@@ -275,8 +275,8 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py \
-        .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/scripts/tests/test_install_python_deps.py \
+        .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): add compute_install_stamp"
 ```
 
@@ -285,8 +285,8 @@ git commit -m "feat(install): add compute_install_stamp"
 ### Task 4: 写 select_uv_binary 测试 + 实现
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py` (extend)
-- Modify: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Test: `plugins/zhanghui/scripts/tests/test_install_python_deps.py` (extend)
+- Modify: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 在 test 文件追加测试**
 
@@ -332,14 +332,14 @@ def test_select_uv_binary_unsupported_raises(monkeypatch, tmp_path):
 - [ ] **Step 2: 跑测试确认失败**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_install_python_deps.py -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/test_install_python_deps.py -v
 ```
 
 预期：4 failed (NameError: select_uv_binary)
 
 - [ ] **Step 3: 实现 select_uv_binary**
 
-Append to `plugins/webnovel-writer_chang/hooks/install_python_deps.py`:
+Append to `plugins/zhanghui/hooks/install_python_deps.py`:
 
 ```python
 import platform as _platform
@@ -383,7 +383,7 @@ def select_uv_binary(vendor_uv_dir: Path) -> Path:
 - [ ] **Step 4: 跑测试确认通过**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_install_python_deps.py -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/test_install_python_deps.py -v
 ```
 
 预期：6 passed (2 stamp + 4 binary)
@@ -391,8 +391,8 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py \
-        .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/scripts/tests/test_install_python_deps.py \
+        .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): add select_uv_binary with platform detection"
 ```
 
@@ -401,8 +401,8 @@ git commit -m "feat(install): add select_uv_binary with platform detection"
 ### Task 5: 写 resolve_cache_dir 测试 + 实现（含多级 fallback）
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py` (extend)
-- Modify: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Test: `plugins/zhanghui/scripts/tests/test_install_python_deps.py` (extend)
+- Modify: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 追加测试**
 
@@ -437,14 +437,14 @@ def test_resolve_cache_dir_creates_dir(monkeypatch, tmp_path):
 - [ ] **Step 2: 跑测试确认失败**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_install_python_deps.py -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/test_install_python_deps.py -v
 ```
 
 预期：3 failed
 
 - [ ] **Step 3: 实现 resolve_cache_dir**
 
-Append to `plugins/webnovel-writer_chang/hooks/install_python_deps.py`:
+Append to `plugins/zhanghui/hooks/install_python_deps.py`:
 
 ```python
 import os
@@ -472,7 +472,7 @@ def resolve_cache_dir() -> Path:
 - [ ] **Step 4: 跑测试确认通过**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_install_python_deps.py -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/test_install_python_deps.py -v
 ```
 
 预期：9 passed
@@ -480,8 +480,8 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py \
-        .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/scripts/tests/test_install_python_deps.py \
+        .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): add resolve_cache_dir with env override"
 ```
 
@@ -490,8 +490,8 @@ git commit -m "feat(install): add resolve_cache_dir with env override"
 ### Task 6: 写 should_install_module 测试 + 实现
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py` (extend)
-- Modify: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Test: `plugins/zhanghui/scripts/tests/test_install_python_deps.py` (extend)
+- Modify: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 追加测试**
 
@@ -568,8 +568,8 @@ def should_install_module(module_dir: Path) -> str:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py \
-        .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/scripts/tests/test_install_python_deps.py \
+        .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): add should_install_module with stamp check"
 ```
 
@@ -578,8 +578,8 @@ git commit -m "feat(install): add should_install_module with stamp check"
 ### Task 7: 写 find_python_modules 测试 + 实现（扫描 plugin skills）
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py` (extend)
-- Modify: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Test: `plugins/zhanghui/scripts/tests/test_install_python_deps.py` (extend)
+- Modify: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 追加测试**
 
@@ -636,8 +636,8 @@ def find_python_modules(plugin_root: Path) -> list[Path]:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py \
-        .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/scripts/tests/test_install_python_deps.py \
+        .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): add find_python_modules"
 ```
 
@@ -646,8 +646,8 @@ git commit -m "feat(install): add find_python_modules"
 ### Task 8: 写 install_module 函数 + 实现（实际跑 uv）
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py` (extend)
-- Modify: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Test: `plugins/zhanghui/scripts/tests/test_install_python_deps.py` (extend)
+- Modify: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 追加测试**
 
@@ -782,8 +782,8 @@ def install_module(module_dir: Path) -> None:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py \
-        .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/scripts/tests/test_install_python_deps.py \
+        .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): add install_module with venv + pip + stamp"
 ```
 
@@ -792,8 +792,8 @@ git commit -m "feat(install): add install_module with venv + pip + stamp"
 ### Task 8b: 写 is_venv_corrupted 测试 + 实现（spec §4.6.5 "已有 venv 损坏"）
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py` (extend)
-- Modify: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Test: `plugins/zhanghui/scripts/tests/test_install_python_deps.py` (extend)
+- Modify: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 追加测试**
 
@@ -898,7 +898,7 @@ def should_install_module(module_dir: Path) -> str:
 - [ ] **Step 5: 跑测试确认通过**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_install_python_deps.py -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/test_install_python_deps.py -v
 ```
 
 预期：22 passed (15 原有 + 3 corrupted + 集成后 should_install 新增的 "corrupted venv" 分支已被原测试间接覆盖)
@@ -906,8 +906,8 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test
 - [ ] **Step 6: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py \
-        .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/scripts/tests/test_install_python_deps.py \
+        .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): detect and rebuild corrupted venv (spec §4.6.5)"
 ```
 
@@ -916,8 +916,8 @@ git commit -m "feat(install): detect and rebuild corrupted venv (spec §4.6.5)"
 ### Task 8c: 写 PyPI 镜像 fallback（spec §4.6.5 "网络断 / PyPI 不可达"）
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py` (extend)
-- Modify: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Test: `plugins/zhanghui/scripts/tests/test_install_python_deps.py` (extend)
+- Modify: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 追加测试**
 
@@ -1011,7 +1011,7 @@ Replace Task 8 的 install_module 里的 subprocess.run 调用，给 uv pip inst
 - [ ] **Step 5: 跑测试确认通过**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test_install_python_deps.py -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/test_install_python_deps.py -v
 ```
 
 预期：25 passed
@@ -1019,8 +1019,8 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/test
 - [ ] **Step 6: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py \
-        .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/scripts/tests/test_install_python_deps.py \
+        .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): PyPI mirror fallback (PyPI/CN auto-detect + env override)"
 ```
 
@@ -1029,7 +1029,7 @@ git commit -m "feat(install): PyPI mirror fallback (PyPI/CN auto-detect + env ov
 ### Task 9: 写 main() 入口（独立调用入口）
 
 **Files:**
-- Modify: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Modify: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 实现 main()**
 
@@ -1094,7 +1094,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: 手动验证 --help 跑通**
 
 ```bash
-python3 .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py --help
+python3 .claude/plugins/zhanghui/hooks/install_python_deps.py --help
 ```
 
 预期：argparse 输出 usage
@@ -1110,7 +1110,7 @@ name = "fake-skill"
 version = "0.0.1"
 dependencies = []
 EOF
-python3 .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py --plugin-root "$TMPPLUGIN"
+python3 .claude/plugins/zhanghui/hooks/install_python_deps.py --plugin-root "$TMPPLUGIN"
 ```
 
 预期：输出 `OK: fake-skill` 或在 uv 不可达时报错（uv 二进制跟 python3.14 的兼容性问题正常暴露）
@@ -1118,7 +1118,7 @@ python3 .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py --plu
 - [ ] **Step 4: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): add main() CLI entry"
 ```
 
@@ -1129,7 +1129,7 @@ git commit -m "feat(install): add main() CLI entry"
 ### Task 10: 添加 dashboard/pyproject.toml
 
 **Files:**
-- Create: `plugins/webnovel-writer_chang/dashboard/pyproject.toml`
+- Create: `plugins/zhanghui/dashboard/pyproject.toml`
 
 - [ ] **Step 1: 写 pyproject.toml**
 
@@ -1157,15 +1157,15 @@ include = ["*"]
 - [ ] **Step 2: 备份旧的裸 requirements.txt（保留兼容兜底）**
 
 ```bash
-mv .claude/plugins/webnovel-writer_chang/dashboard/requirements.txt \
-   .claude/plugins/webnovel-writer_chang/dashboard/requirements.txt.legacy
+mv .claude/plugins/zhanghui/dashboard/requirements.txt \
+   .claude/plugins/zhanghui/dashboard/requirements.txt.legacy
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/dashboard/pyproject.toml \
-        .claude/plugins/webnovel-writer_chang/dashboard/requirements.txt.legacy
+git add .claude/plugins/zhanghui/dashboard/pyproject.toml \
+        .claude/plugins/zhanghui/dashboard/requirements.txt.legacy
 git commit -m "feat(dashboard): add pyproject.toml replacing requirements.txt"
 ```
 
@@ -1174,7 +1174,7 @@ git commit -m "feat(dashboard): add pyproject.toml replacing requirements.txt"
 ### Task 11: 添加根 scripts/ 的 pyproject.toml
 
 **Files:**
-- Create: `plugins/webnovel-writer_chang/scripts/pyproject.toml`
+- Create: `plugins/zhanghui/scripts/pyproject.toml`
 
 - [ ] **Step 1: 写 pyproject.toml**
 
@@ -1182,8 +1182,8 @@ git commit -m "feat(dashboard): add pyproject.toml replacing requirements.txt"
 
 ```bash
 grep -rhE "^(import|from) (pydantic|fastapi|httpx|numpy|pandas)" \
-  .claude/plugins/webnovel-writer_chang/scripts/*.py \
-  .claude/plugins/webnovel-writer_chang/scripts/data_modules/*.py 2>/dev/null | sort -u
+  .claude/plugins/zhanghui/scripts/*.py \
+  .claude/plugins/zhanghui/scripts/data_modules/*.py 2>/dev/null | sort -u
 ```
 
 - [ ] **Step 2: 根据 grep 结果写 pyproject.toml**
@@ -1208,7 +1208,7 @@ build-backend = "setuptools.build_meta"
 - [ ] **Step 3: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/pyproject.toml
+git add .claude/plugins/zhanghui/scripts/pyproject.toml
 git commit -m "feat(scripts): add pyproject.toml declaring pydantic"
 ```
 
@@ -1219,12 +1219,12 @@ git commit -m "feat(scripts): add pyproject.toml declaring pydantic"
 ### Task 12: 扩展 session_start.py 检测 Python 依赖 + 后台 fork
 
 **Files:**
-- Modify: `plugins/webnovel-writer_chang/hooks/session_start.py`
+- Modify: `plugins/zhanghui/hooks/session_start.py`
 
 - [ ] **Step 1: 读现有 session_start.py**
 
 ```bash
-cat .claude/plugins/webnovel-writer_chang/hooks/session_start.py
+cat .claude/plugins/zhanghui/hooks/session_start.py
 ```
 
 确认现有结构（按 §0 全局约定走 `< 2s` 完成）。
@@ -1292,7 +1292,7 @@ dependencies = []
 EOF
 CLAUDE_PLUGIN_ROOT="$TMPPLUGIN" python3 -c "
 import sys
-sys.path.insert(0, '.claude/plugins/webnovel-writer_chang/hooks')
+sys.path.insert(0, '.claude/plugins/zhanghui/hooks')
 from session_start import trigger_background_python_install
 from pathlib import Path
 trigger_background_python_install(Path('$TMPPLUGIN'))
@@ -1305,7 +1305,7 @@ print('forked')
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/hooks/session_start.py
+git add .claude/plugins/zhanghui/hooks/session_start.py
 git commit -m "feat(hooks): session_start triggers background Python install"
 ```
 
@@ -1314,7 +1314,7 @@ git commit -m "feat(hooks): session_start triggers background Python install"
 ### Task 13: 改 hooks.json timeout 5s → 30s
 
 **Files:**
-- Modify: `plugins/webnovel-writer_chang/hooks/hooks.json`
+- Modify: `plugins/zhanghui/hooks/hooks.json`
 
 - [ ] **Step 1: 编辑**
 
@@ -1338,7 +1338,7 @@ git commit -m "feat(hooks): session_start triggers background Python install"
 - [ ] **Step 2: 验证 JSON 合法**
 
 ```bash
-python3 -c "import json; print(json.load(open('.claude/plugins/webnovel-writer_chang/hooks/hooks.json'))['hooks']['SessionStart'][0]['hooks'][0]['timeout'])"
+python3 -c "import json; print(json.load(open('.claude/plugins/zhanghui/hooks/hooks.json'))['hooks']['SessionStart'][0]['hooks'][0]['timeout'])"
 ```
 
 预期：`30`
@@ -1346,7 +1346,7 @@ python3 -c "import json; print(json.load(open('.claude/plugins/webnovel-writer_c
 - [ ] **Step 3: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/hooks/hooks.json
+git add .claude/plugins/zhanghui/hooks/hooks.json
 git commit -m "feat(hooks): SessionStart timeout 5s → 30s"
 ```
 
@@ -1357,8 +1357,8 @@ git commit -m "feat(hooks): SessionStart timeout 5s → 30s"
 ### Task 14: 写 should_prompt_chromium 测试 + 实现
 
 **Files:**
-- Test: `plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py` (extend)
-- Modify: `plugins/webnovel-writer_chang/hooks/install_python_deps.py`
+- Test: `plugins/zhanghui/scripts/tests/test_install_python_deps.py` (extend)
+- Modify: `plugins/zhanghui/hooks/install_python_deps.py`
 
 - [ ] **Step 1: 追加测试**
 
@@ -1447,8 +1447,8 @@ def format_chromium_prompt() -> str:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_python_deps.py \
-        .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+git add .claude/plugins/zhanghui/scripts/tests/test_install_python_deps.py \
+        .claude/plugins/zhanghui/hooks/install_python_deps.py
 git commit -m "feat(install): add chromium prompt mechanism"
 ```
 
@@ -1457,7 +1457,7 @@ git commit -m "feat(install): add chromium prompt mechanism"
 ### Task 15: 在 session_start.py 加 chromium 弹窗触发逻辑
 
 **Files:**
-- Modify: `plugins/webnovel-writer_chang/hooks/session_start.py`
+- Modify: `plugins/zhanghui/hooks/session_start.py`
 
 - [ ] **Step 1: 追加 check_chromium_prompt 函数**
 
@@ -1507,7 +1507,7 @@ rm -rf ~/.cache/webnovel-writer-chang/venvs/webnovel-chart-scan
 # 创建 fake venv + stamp 但无 chromium marker
 mkdir -p ~/.cache/webnovel-writer-chang/venvs/webnovel-chart-scan
 echo "fake-stamp" > ~/.cache/webnovel-writer-chang/venvs/webnovel-chart-scan/.install-stamp
-CLAUDE_PLUGIN_ROOT="$(pwd)/.claude/plugins/webnovel-writer_chang" python3 .claude/plugins/webnovel-writer_chang/hooks/session_start.py
+CLAUDE_PLUGIN_ROOT="$(pwd)/.claude/plugins/zhanghui" python3 .claude/plugins/zhanghui/hooks/session_start.py
 ```
 
 预期：stdout 包含 "fanqie adapter 需要下载 chromium"
@@ -1515,7 +1515,7 @@ CLAUDE_PLUGIN_ROOT="$(pwd)/.claude/plugins/webnovel-writer_chang" python3 .claud
 - [ ] **Step 4: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/hooks/session_start.py
+git add .claude/plugins/zhanghui/hooks/session_start.py
 git commit -m "feat(hooks): session_start emits chromium prompt when needed"
 ```
 
@@ -1526,8 +1526,8 @@ git commit -m "feat(hooks): session_start emits chromium prompt when needed"
 ### Task 16: 写 Docker 集成测试（ubuntu:latest 无 Python 场景）
 
 **Files:**
-- Create: `plugins/webnovel-writer_chang/scripts/tests/test_install_docker.py`
-- Create: `plugins/webnovel-writer_chang/scripts/tests/Dockerfile.install-test`
+- Create: `plugins/zhanghui/scripts/tests/test_install_docker.py`
+- Create: `plugins/zhanghui/scripts/tests/Dockerfile.install-test`
 
 - [ ] **Step 1: 写 Dockerfile.install-test**
 
@@ -1590,7 +1590,7 @@ which docker && docker --version
 如果 docker 可用：
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang
+cd .claude/plugins/zhanghui
 DOCKER_INSTALL_TEST=1 python3 scripts/tests/test_install_docker.py -v -s 2>&1 | tail -30
 ```
 
@@ -1599,8 +1599,8 @@ DOCKER_INSTALL_TEST=1 python3 scripts/tests/test_install_docker.py -v -s 2>&1 | 
 - [ ] **Step 4: Commit（即使没本地跑也提交，CI 会跑）**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/test_install_docker.py \
-        .claude/plugins/webnovel-writer_chang/scripts/tests/Dockerfile.install-test
+git add .claude/plugins/zhanghui/scripts/tests/test_install_docker.py \
+        .claude/plugins/zhanghui/scripts/tests/Dockerfile.install-test
 git commit -m "test(install): Docker integration test for clean ubuntu"
 ```
 
@@ -1619,9 +1619,9 @@ name: install-cross-platform
 on:
   pull_request:
     paths:
-      - 'plugins/webnovel-writer_chang/vendor/uv/**'
-      - 'plugins/webnovel-writer_chang/hooks/install_python_deps.py'
-      - 'plugins/webnovel-writer_chang/scripts/tests/test_install_*.py'
+      - 'plugins/zhanghui/vendor/uv/**'
+      - 'plugins/zhanghui/hooks/install_python_deps.py'
+      - 'plugins/zhanghui/scripts/tests/test_install_*.py'
       - '.github/workflows/install-cross-platform.yml'
   push:
     branches: [main]
@@ -1641,12 +1641,12 @@ jobs:
       - name: Verify uv binary sha256
         shell: bash
         run: |
-          cd plugins/webnovel-writer_chang
+          cd plugins/zhanghui
           python3 -m pytest scripts/tests/test_uv_vendor.py -v
       - name: Unit tests for install_python_deps
         shell: bash
         run: |
-          cd plugins/webnovel-writer_chang
+          cd plugins/zhanghui
           python3 -m pytest scripts/tests/test_install_python_deps.py -v
 ```
 
@@ -1673,13 +1673,13 @@ git commit -m "ci: cross-platform install test matrix (ubuntu/macos/windows)"
 ### Task 18: sync_dev_to_marketplace.sh 加 uv 同步步骤
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/sync_dev_to_marketplace.sh` (或 dev-only/)
+- Modify: `.claude/plugins/zhanghui/scripts/sync_dev_to_marketplace.sh` (或 dev-only/)
 
 - [ ] **Step 1: 读现有脚本**
 
 ```bash
-cat .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_cache.sh 2>/dev/null \
-  || cat .claude/plugins/webnovel-writer_chang/scripts/sync_dev_to_marketplace.sh 2>/dev/null \
+cat .claude/plugins/zhanghui/scripts/dev-only/sync_dev_to_cache.sh 2>/dev/null \
+  || cat .claude/plugins/zhanghui/scripts/sync_dev_to_marketplace.sh 2>/dev/null \
   || echo "NOT FOUND - 需要先找到正确的 sync 脚本路径"
 ```
 
@@ -1704,8 +1704,8 @@ echo "Verifying uv binary sha256..."
 - [ ] **Step 4: Commit**
 
 ```bash
-git add .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_cache.sh \
-        .claude/plugins/webnovel-writer_chang/scripts/sync_dev_to_marketplace.sh
+git add .claude/plugins/zhanghui/scripts/dev-only/sync_dev_to_cache.sh \
+        .claude/plugins/zhanghui/scripts/sync_dev_to_marketplace.sh
 git commit -m "feat(sync): verify uv binary sha256 after marketplace sync"
 ```
 
@@ -1757,7 +1757,7 @@ git commit -m "docs(readme): explain first-time install behavior"
 - [ ] **Step 1: 跑全部单元测试**
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/ -v
 ```
 
 预期：全绿（test_uv_vendor.py + test_install_python_deps.py + 既有 self-contained 测试）
@@ -1765,8 +1765,8 @@ cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v
 - [ ] **Step 2: 手动跑 session_start.py，确认 < 2s 完成**
 
 ```bash
-time CLAUDE_PLUGIN_ROOT="$(pwd)/.claude/plugins/webnovel-writer_chang" \
-  python3 .claude/plugins/webnovel-writer_chang/hooks/session_start.py
+time CLAUDE_PLUGIN_ROOT="$(pwd)/.claude/plugins/zhanghui" \
+  python3 .claude/plugins/zhanghui/hooks/session_start.py
 ```
 
 预期：real < 2.0s；stdout 可能含 chromium prompt（如果 chart-scan venv 已就绪）
@@ -1774,8 +1774,8 @@ time CLAUDE_PLUGIN_ROOT="$(pwd)/.claude/plugins/webnovel-writer_chang" \
 - [ ] **Step 3: 手动跑 install_python_deps.py 确认可独立调用**
 
 ```bash
-CLAUDE_PLUGIN_ROOT="$(pwd)/.claude/plugins/webnovel-writer_chang" \
-  python3 .claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py
+CLAUDE_PLUGIN_ROOT="$(pwd)/.claude/plugins/zhanghui" \
+  python3 .claude/plugins/zhanghui/hooks/install_python_deps.py
 ```
 
 预期：所有 module 输出 OK / SKIP；如果有 module 没 pyproject.toml（按 §4.6.7 设计 chart-scan 有、dashboard 有、scripts 有），全部 OK 或 SKIP
@@ -1790,7 +1790,7 @@ git worktree list | grep -v $(pwd) | awk '{print $1}' | xargs -I{} git worktree 
 - [ ] **Step 5: 同步 marketplace**
 
 ```bash
-bash .claude/plugins/webnovel-writer_chang/scripts/dev-only/sync_dev_to_cache.sh
+bash .claude/plugins/zhanghui/scripts/dev-only/sync_dev_to_cache.sh
 ```
 
 预期：sync 完成，无报错（cache 是 symlink 自动跟上；marketplace 仓库是独立目录需 cp）

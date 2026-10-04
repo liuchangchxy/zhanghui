@@ -11,7 +11,7 @@
 
 | 路径 | 性质 | 说明 |
 |---|---|---|
-| `.claude/plugins/webnovel-writer_chang/` | **开发** | plugin 源码（self-contained） |
+| `.claude/plugins/zhanghui/` | **开发** | plugin 源码（self-contained） |
 | `.claude/settings.json` | **开发** | dev 配置（瘦身后只剩 enabledPlugins + 必要权限） |
 | `.claude/.webnovel-current-project` | **开发** | dev 指针，仅 dev workspace 内部用 |
 | `.claude/references/` | 参考 | 文档参考 |
@@ -26,16 +26,16 @@
 | 路径 | 性质 | 说明 |
 |---|---|---|
 | `.claude-plugin/marketplace.json` | **开发** | marketplace manifest |
-| `webnovel-writer_chang/` | **开发** | plugin 副本（与 dev workspace 同步） |
+| `zhanghui/` | **开发** | plugin 副本（与 dev workspace 同步） |
 
 ### 层 3：cache（Claude Code 实际加载位置）
-`~/.claude/plugins/cache/webnovel-chang-marketplace/webnovel-writer_chang/`
+`~/.claude/plugins/cache/webnovel-chang-marketplace/zhanghui/`
 
-dev 模式下 symlink 到 dev workspace 的 `plugins/webnovel-writer_chang/`，修改立即生效。
+dev 模式下 symlink 到 dev workspace 的 `plugins/zhanghui/`，修改立即生效。
 
 ## 修改规则
 
-- **改 plugin 代码**：在 `.claude/plugins/webnovel-writer_chang/` 里改，cache 通过 symlink 自动 reload
+- **改 plugin 代码**：在 `.claude/plugins/zhanghui/` 里改，cache 通过 symlink 自动 reload
 - **改 plugin metadata**：plugin.json / hooks.json 在 plugin 目录里改
 - **改 marketplace manifest**：直接改 `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/.claude-plugin/marketplace.json`
 - **同步 dev → marketplace**：跑 `scripts/dev-only/sync_dev_to_marketplace.sh`

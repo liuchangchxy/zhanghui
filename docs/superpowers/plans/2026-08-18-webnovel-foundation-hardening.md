@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 webnovel-writer_chang fork 上吸收 7 个跨卷一致性补丁（伏笔 DAG / 大纲 anchor / event matrix / pacing / state revision / reader contract / derived views），全部为硬门禁，把地基从 ⭐⭐⭐ 提到 ⭐⭐⭐⭐。
+**Goal:** 在 zhanghui fork 上吸收 7 个跨卷一致性补丁（伏笔 DAG / 大纲 anchor / event matrix / pacing / state revision / reader contract / derived views），全部为硬门禁，把地基从 ⭐⭐⭐ 提到 ⭐⭐⭐⭐。
 
 **Architecture:** 分层 — `scripts/consistency/core/` 提供 `Patch` 抽象 + `Runner` 调度；`scripts/consistency/patches/` 放 7 个具体补丁；`scripts/consistency/cli.py` 暴露 CLI；skill 端（plan/write/review）薄集成。
 
@@ -1332,7 +1332,7 @@ python -m pytest tests/integration/test_runner_e2e.py -v
 
 ### Task 29：webnovel-plan 集成
 
-**Files:** Modify `.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md`
+**Files:** Modify `.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md`
 
 在 Step 7 拆章完成后追加：
 
@@ -1348,7 +1348,7 @@ python webnovel.py consistency check --project-root "$PROJECT_ROOT" --chapter {c
 
 ### Task 30：webnovel-write 集成
 
-**Files:** Modify `.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md`
+**Files:** Modify `.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md`
 
 Step 2A 写前：
 ```bash
@@ -1361,7 +1361,7 @@ python webnovel.py consistency apply --project-root "$PROJECT_ROOT" --chapter {c
 
 ### Task 31：webnovel-review 集成
 
-**Files:** Modify `.claude/plugins/webnovel-writer_chang/skills/webnovel-review/SKILL.md`
+**Files:** Modify `.claude/plugins/zhanghui/skills/webnovel-review/SKILL.md`
 
 在 reviewer 输出追加"consistency 维度"：列出所有 BLOCKER。
 

@@ -33,7 +33,7 @@ No new files except the test file. No new skill/command/agent.
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py::test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate -v 2>&1 | tail -30
 ```
 
@@ -41,7 +41,7 @@ Expected: FAIL with at least one assertion error mentioning a missing literal li
 
 - [ ] **Step 2: Insert Step 1.5 into webnovel-init/SKILL.md**
 
-Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-init/SKILL.md`. Find the line:
+Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-init/SKILL.md`. Find the line:
 
 ```
 ### Step 2：角色骨架与关系冲突
@@ -113,7 +113,7 @@ Find `### Step 6：一致性复述与最终确认`. In the "必须输出'初始�
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py::test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate -v 2>&1 | tail -15
 ```
 
@@ -123,7 +123,7 @@ Expected: PASS. If still red, diff your inserted strings against `test_prompt_in
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add webnovel-writer_chang/skills/webnovel-init/SKILL.md
+git add zhanghui/skills/webnovel-init/SKILL.md
 git commit -m "feat(init): Step 1.5 wiring — call deconstruction-agent with confirmation gate
 
 Turns test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate green.
@@ -177,7 +177,7 @@ def test_init_no_idea_bank_when_flag_absent(tmp_path, monkeypatch):
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py::test_init_no_idea_bank_when_flag_absent -v 2>&1 | tail -10
 ```
 
@@ -203,7 +203,7 @@ Run the same pytest command. Expected: PASS. (Adding an unused kwarg doesn't cha
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add zhanghui/scripts/init_project.py zhanghui/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "test(init): guard against unconditional idea_bank.json writes
 
 Adds test_init_no_idea_bank_when_flag_absent and the idea_bank_file
@@ -271,7 +271,7 @@ def test_validate_idea_bank_rejects_bad_reference_source_enum():
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py -v -k "validate" 2>&1 | tail -20
 ```
 
@@ -341,7 +341,7 @@ Run the same pytest command. Expected: 4 PASSED.
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py -v 2>&1 | tail -10
 ```
 
@@ -351,7 +351,7 @@ Expected: All PASS (Task 1's test + others). If any fail, the new helper import 
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add zhanghui/scripts/init_project.py zhanghui/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): _validate_idea_bank_payload() — schema gate for idea_bank.json
 
 Validates version=1, required top-level keys, source.reference_source
@@ -428,7 +428,7 @@ def test_init_writes_idea_bank_when_flag_provided_and_target_absent(tmp_path, mo
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py::test_init_writes_idea_bank_when_flag_provided_and_target_absent -v 2>&1 | tail -15
 ```
 
@@ -516,7 +516,7 @@ Run the same pytest command. Expected: PASS.
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py data_modules/tests/test_prompt_integrity.py -v 2>&1 | tail -15
 ```
 
@@ -526,7 +526,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add zhanghui/scripts/init_project.py zhanghui/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): _write_idea_bank() — three-state overwrite + wire into init_project()
 
 Implements spec §D2:
@@ -592,7 +592,7 @@ def test_init_skips_idea_bank_when_target_semantically_matches(tmp_path, monkeyp
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py::test_init_skips_idea_bank_when_target_semantically_matches -v 2>&1 | tail -10
 ```
 
@@ -602,7 +602,7 @@ Expected: PASS. (This is regression protection — the implementation already ha
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py -v 2>&1 | tail -15
 ```
 
@@ -612,7 +612,7 @@ Expected: All PASS (4 from Tasks 2-4 + this one).
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add zhanghui/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "test(init): guard semantic-match skip path
 
 Regression test — Task 4's _write_idea_bank() already implements
@@ -708,7 +708,7 @@ def test_init_force_overwrites_when_existing_differs(tmp_path, monkeypatch):
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py -v -k "refuses or force" 2>&1 | tail -15
 ```
 
@@ -718,7 +718,7 @@ Expected: Both PASS. (Task 4's `_write_idea_bank(force=...)` already implements 
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py -v 2>&1 | tail -20
 ```
 
@@ -728,7 +728,7 @@ Expected: 7 PASSED (1 from Task 2 + 4 from Task 3 + 1 from Task 4 + 1 from Task 
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add zhanghui/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "test(init): guard refuse + force-overwrite paths
 
 Two regression tests. _write_idea_bank() already implements both:
@@ -773,7 +773,7 @@ def test_init_hard_errors_on_unreadable_idea_bank_file(tmp_path, monkeypatch):
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py::test_init_hard_errors_on_unreadable_idea_bank_file -v 2>&1 | tail -10
 ```
 
@@ -783,7 +783,7 @@ Expected: PASS. (`_write_idea_bank()` calls `Path.is_file()` first and raises `S
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py data_modules/tests/test_prompt_integrity.py -v 2>&1 | tail -15
 ```
 
@@ -793,7 +793,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add zhanghui/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "test(init): guard unreadable --idea-bank-file path
 
 If the flag is set but the file is missing, init must SystemExit
@@ -854,7 +854,7 @@ to:
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py data_modules/tests/test_prompt_integrity.py data_modules/tests/test_init_project_pruning.py -v 2>&1 | tail -20
 ```
 
@@ -864,7 +864,7 @@ Expected: All PASS. (The pre-existing `test_init_project_pruning.py` must contin
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python init_project.py /tmp/manual_smoke_book "Smoke" "仙侠" \
   --protagonist-name "P" --idea-bank-file /nonexistent.json 2>&1 | tail -5
 ```
@@ -880,7 +880,7 @@ rm -rf /tmp/manual_smoke_book
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add webnovel-writer_chang/scripts/init_project.py
+git add zhanghui/scripts/init_project.py
 git commit -m "feat(init): --idea-bank-file + --idea-bank-force CLI flags
 
 Adds two argparse entries to main() and threads them through to
@@ -899,7 +899,7 @@ smoke confirms missing-flag path SystemExits cleanly."
 Without a real /webnovel-init session available in CI, simulate the wiring end-to-end via direct Python:
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 
 # 1. Build a payload that mimics what Step 1.5 would produce
 python -c "
@@ -938,7 +938,7 @@ Expected:
 - [ ] **Step 2: Run the without-reference path**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 
 rm -rf /tmp/smoke_book_noref
 python init_project.py /tmp/smoke_book_noref "原创书" "都市" \
@@ -954,7 +954,7 @@ Expected: `.webnovel/` contains `state.json`, `writer-profile/`, but **NOT** `id
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/ -v 2>&1 | tail -30
 ```
 

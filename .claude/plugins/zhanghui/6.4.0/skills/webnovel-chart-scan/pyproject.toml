@@ -1,0 +1,32 @@
+[project]
+name = "webnovel-chart-scan"
+version = "0.2.2"
+description = "扫 5 个网文平台分类榜单的 Claude Code skill"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "pydantic>=2.6",
+    "lxml>=5.0",
+]
+
+[project.optional-dependencies]
+fanqie = ["playwright>=1.41"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+
+[project.scripts]
+chart-scan = "scripts.scan:main"
+webnovel-chart-scan-setup-ciweimao = "scripts.ciweimao_setup.setup_ciweimao:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scripts*", "vendor*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (network-dependent) — run with: pytest -m slow",
+]
+addopts = "-m 'not slow'"

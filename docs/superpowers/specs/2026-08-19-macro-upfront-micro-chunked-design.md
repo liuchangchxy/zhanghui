@@ -225,17 +225,17 @@ def evaluate_pre_write_gates(chapter: int) -> List[Blocker]:
 
 | 文件 | 改动类型 | 关键变更 |
 |---|---|---|
-| `.claude/plugins/webnovel-writer_chang/scripts/story_craft.py` | 改 | `init_volume_beat()` 支持跨卷参数；新加 `init_cross_volume_beat_map()` |
-| `.claude/plugins/webnovel-writer_chang/scripts/update_master_outline.py` | 改 | `_require_current_volume_artifacts` 加 `all_volumes_mode` 参数；新增跨卷伏笔账本写入 |
-| `.claude/plugins/webnovel-writer_chang/scripts/init_project.py` | 改 | 加 `--all-volumes` CLI 入口；新增 `cross_volume_foreshadowing` / `promise_ledger` 字段 |
-| `.claude/plugins/webnovel-writer_chang/scripts/data_modules/chunked_write.py` | **新增** | `ChunkedWritePolicy` + `evaluate_pre_write_gates` |
-| `.claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py` | 改 | 加跨卷伏笔 / 承诺账本 API（§6.1） |
-| `.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md` | 改 | Step 9 按 §6.2 加 `--all-volumes` 段落 |
-| `.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md` | 改 | 注入 chunked 续写钩子（Step 0：pre-write gate check） |
-| `.claude/plugins/webnovel-writer_chang/templates/output/大纲-总纲.md` | 改 | 加跨卷伏笔账本 + 节拍映射表头 |
-| `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_all_volumes.py` | **新增** | 测 N 卷蓝图一次性产出 + index continuity |
-| `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_promise_ledger.py` | **新增** | 测伏笔账本 + overdue BLOCKER |
-| `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_flow_writes_minimal_next_volume_anchor.py` | 改断言 | 默认模式行为不变；新增 `--all-volumes` 模式分支 |
+| `.claude/plugins/zhanghui/scripts/story_craft.py` | 改 | `init_volume_beat()` 支持跨卷参数；新加 `init_cross_volume_beat_map()` |
+| `.claude/plugins/zhanghui/scripts/update_master_outline.py` | 改 | `_require_current_volume_artifacts` 加 `all_volumes_mode` 参数；新增跨卷伏笔账本写入 |
+| `.claude/plugins/zhanghui/scripts/init_project.py` | 改 | 加 `--all-volumes` CLI 入口；新增 `cross_volume_foreshadowing` / `promise_ledger` 字段 |
+| `.claude/plugins/zhanghui/scripts/data_modules/chunked_write.py` | **新增** | `ChunkedWritePolicy` + `evaluate_pre_write_gates` |
+| `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py` | 改 | 加跨卷伏笔 / 承诺账本 API（§6.1） |
+| `.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md` | 改 | Step 9 按 §6.2 加 `--all-volumes` 段落 |
+| `.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md` | 改 | 注入 chunked 续写钩子（Step 0：pre-write gate check） |
+| `.claude/plugins/zhanghui/templates/output/大纲-总纲.md` | 改 | 加跨卷伏笔账本 + 节拍映射表头 |
+| `.claude/plugins/zhanghui/scripts/tests/integration/test_plan_all_volumes.py` | **新增** | 测 N 卷蓝图一次性产出 + index continuity |
+| `.claude/plugins/zhanghui/scripts/tests/integration/test_promise_ledger.py` | **新增** | 测伏笔账本 + overdue BLOCKER |
+| `.claude/plugins/zhanghui/scripts/tests/integration/test_plan_flow_writes_minimal_next_volume_anchor.py` | 改断言 | 默认模式行为不变；新增 `--all-volumes` 模式分支 |
 
 ## 8. 测试策略
 
@@ -296,7 +296,7 @@ def evaluate_pre_write_gates(chapter: int) -> List[Blocker]:
 
 ### 内部（项目内）
 - `docs/superpowers/specs/2026-08-18-multi-volume-init-design.md`（上一版 spec，本 spec 显式扩展）
-- `.claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py`（VolumeStateManager 实现）
+- `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py`（VolumeStateManager 实现）
 
 ### 外部（craft wisdom）
 - The Write Practice, "How To Write a Novel" — plantser 是大多数作家状态

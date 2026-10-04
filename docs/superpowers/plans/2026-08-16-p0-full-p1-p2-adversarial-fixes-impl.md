@@ -72,7 +72,7 @@ def test_build_reference_tree_with_minimal_init_candidates():
 - [ ] **Step 2: Verify C1 tests fail (or pass with wrong fixture)**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_init_candidates_is_object_not_list_in_agent_schema data_modules/tests/test_init_reference_tree.py::test_build_reference_tree_with_minimal_init_candidates -v 2>&1 | tail -10
 ```
 
@@ -85,7 +85,7 @@ Open `agents/deconstruction-agent.md`. Find the schema section that declares `in
 - [ ] **Step 4: Verify C1 tests pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_init_candidates_is_object_not_list_in_agent_schema data_modules/tests/test_init_reference_tree.py::test_build_reference_tree_with_minimal_init_candidates -v 2>&1 | tail -5
 ```
 
@@ -180,7 +180,7 @@ def test_build_reference_tree_refuses_symlink_target(tmp_path):
 - [ ] **Step 6: Verify C2/C3 tests fail**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_init_idea_bank.py::test_init_refuses_symlink_reference_research_dir data_modules/tests/test_init_idea_bank.py::test_init_overwrite_preserves_old_schema_outside_target data_modules/tests/test_init_reference_tree.py::test_build_reference_tree_refuses_symlink_target -v 2>&1 | tail -10
 ```
 
@@ -248,7 +248,7 @@ In `scripts/init_project.py`, find the reference_research validation block (arou
 - [ ] **Step 9: Verify all C1/C2/C3 tests pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_init_candidates_is_object_not_list_in_agent_schema data_modules/tests/test_init_reference_tree.py::test_build_reference_tree_with_minimal_init_candidates data_modules/tests/test_init_reference_tree.py::test_build_reference_tree_refuses_symlink_target data_modules/tests/test_init_idea_bank.py::test_init_refuses_symlink_reference_research_dir data_modules/tests/test_init_idea_bank.py::test_init_overwrite_preserves_old_schema_outside_target -v 2>&1 | tail -10
 ```
 
@@ -257,12 +257,12 @@ Expected: 5 PASSED.
 - [ ] **Step 10: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/init_reference_tree.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/init_project.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_init_reference_tree.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/deconstruction-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/init_reference_tree.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/init_project.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_init_reference_tree.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_init_idea_bank.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/
 
 cd /Users/chang/Desktop/zhanghui
 git add -A
@@ -371,7 +371,7 @@ def test_sanitize_book_title_strips_cjk_punctuation():
 - [ ] **Step 2: Verify tests fail**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_marked_references.py data_modules/tests/test_init_idea_bank.py data_modules/tests/test_init_reference_tree.py -v -k "rejects_empty_string_title or rejects_whitespace or rejects_non_string or rejects_version or rejects_non_string_reference or rejects_path_traversal or rejects_absolute or strips_cjk" 2>&1 | tail -15
 ```
 
@@ -430,7 +430,7 @@ Find the `_CJK_BRACKETS = "《》「」『』【】"` definition. Replace the `r
 - [ ] **Step 7: Verify all I1-I4 tests pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_marked_references.py data_modules/tests/test_init_idea_bank.py data_modules/tests/test_init_reference_tree.py -v -k "rejects_empty_string_title or rejects_whitespace or rejects_non_string or rejects_version or rejects_non_string_reference or rejects_path_traversal or rejects_absolute or strips_cjk" 2>&1 | tail -15
 ```
 
@@ -544,7 +544,7 @@ def test_scanner_validates_idea_bank_pointer(tmp_path):
 - [ ] **Step 2: Verify tests fail**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_reference_research_scanner.py -v 2>&1 | tail -10
 ```
 
@@ -552,7 +552,7 @@ Expected: All 4 FAIL with `No module named 'reference_research_scanner'`.
 
 - [ ] **Step 3: Implement the scanner**
 
-Create `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/reference_research_scanner.py`:
+Create `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/reference_research_scanner.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -618,7 +618,7 @@ def scan_reference_research_trees(project_root: Path) -> list[Path]:
 - [ ] **Step 4: Verify tests pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_reference_research_scanner.py -v 2>&1 | tail -10
 ```
 
@@ -642,9 +642,9 @@ Open `skills/webnovel-plan/SKILL.md`. Find the "按需读取 reference_research 
 - [ ] **Step 6: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_scanner.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_scanner.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-plan/SKILL.md
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/reference_research_scanner.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_reference_research_scanner.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-plan/SKILL.md
 
 cd /Users/chang/Desktop/zhanghui
 git add -A
@@ -751,7 +751,7 @@ In `scripts/data_modules/marked_references.py`, remove `Any` from `from typing i
 (Sync to marketplace first, then run.)
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_init_reference_tree.py data_modules/tests/test_marked_references.py -v -k "backup_timestamp or slug_timestamp" 2>&1 | tail -10
 ```
 
@@ -779,7 +779,7 @@ M6: remove unused Any import from marked_references.py."
 - [ ] **Step 1: Full test suite run**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest \
   data_modules/tests/test_prompt_integrity.py \
   data_modules/tests/test_init_reference_tree.py \
@@ -810,7 +810,7 @@ for f in \
   scripts/data_modules/tests/test_prompt_integrity.py \
   scripts/data_modules/tests/test_reference_research_scanner.py
 do
-  diff -q ".claude/plugins/webnovel-writer_chang/$f" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/$f" || echo "OUT OF SYNC: $f"
+  diff -q ".claude/plugins/zhanghui/$f" "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/$f" || echo "OUT OF SYNC: $f"
 done
 echo "Sync check complete"
 ```

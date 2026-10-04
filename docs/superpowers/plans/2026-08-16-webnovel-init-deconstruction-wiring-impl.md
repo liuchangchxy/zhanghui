@@ -39,7 +39,7 @@ No new skill or command. No new agent.
 
 Run:
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py::test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate -v 2>&1 | tail -10
 ```
 
@@ -47,7 +47,7 @@ Expected: FAIL on missing literals like `Step 1.5：灵感来源询问`. If alre
 
 - [ ] **Step 2: Insert Step 1.5 with all required literals**
 
-Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-init/SKILL.md`. Find `### Step 2：角色骨架与关系冲突`. Immediately BEFORE it, insert:
+Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-init/SKILL.md`. Find `### Step 2：角色骨架与关系冲突`. Immediately BEFORE it, insert:
 
 ```markdown
 ### Step 1.5：灵感来源询问
@@ -113,7 +113,7 @@ Find `### Step 6：一致性复述与最终确认`. In the bullet list "必须�
 - [ ] **Step 5: Run the integrity test, verify green**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py::test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate -v 2>&1 | tail -10
 ```
 
@@ -123,7 +123,7 @@ Expected: PASS. If still red, diff against `test_prompt_integrity.py:635-680` an
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md
+git add .claude/plugins/zhanghui/skills/webnovel-init/SKILL.md
 git commit -m "feat(init): Step 1.5 wiring — multi-file tree call + plan consumption pointer
 
 Turns test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate
@@ -183,7 +183,7 @@ def test_deconstruction_agent_schema_extension():
 - [ ] **Step 2: Run the test, verify 9 new-field assertions fail**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py::test_deconstruction_agent_schema_extension -v 2>&1 | tail -15
 ```
 
@@ -191,7 +191,7 @@ Expected: FAIL on the first missing new field (likely `chapter_rhythm`).
 
 - [ ] **Step 3: Add the 9 new fields to deconstruction-agent.md**
 
-Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/deconstruction-agent.md`. Find the section that lists the JSON schema fields (around line 89, "只返回严格结构化的 `init_reference_research` JSON"). Add a new subsection AFTER the existing field list, titled "## 扩展字段（P0-Full 新增）":
+Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/agents/deconstruction-agent.md`. Find the section that lists the JSON schema fields (around line 89, "只返回严格结构化的 `init_reference_research` JSON"). Add a new subsection AFTER the existing field list, titled "## 扩展字段（P0-Full 新增）":
 
 ```markdown
 ## 扩展字段（P0-Full 新增）
@@ -217,7 +217,7 @@ Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webno
 - [ ] **Step 4: Run the test, verify green**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py::test_deconstruction_agent_schema_extension -v 2>&1 | tail -10
 ```
 
@@ -226,7 +226,7 @@ Expected: PASS.
 - [ ] **Step 5: Run full prompt-integrity suite to confirm no regression**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py -v 2>&1 | tail -10
 ```
 
@@ -236,7 +236,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/agents/deconstruction-agent.md webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
+git add .claude/plugins/zhanghui/agents/deconstruction-agent.md zhanghui/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(agent): extend deconstruction-agent schema with 9 new fields (P0-Full)
 
 Additive: chapter_rhythm / narrative_function / boundary_reason /
@@ -261,7 +261,7 @@ original work's names/places/etc.)."
 - [ ] **Step 1: Verify jinja2 is available**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -c "import jinja2; print(jinja2.__version__)"
 ```
 
@@ -270,7 +270,7 @@ Expected: prints version. If `ModuleNotFoundError`, add to `pyproject.toml` and 
 - [ ] **Step 2: Create the template directory**
 
 ```bash
-mkdir -p "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/templates"
+mkdir -p "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/templates"
 ```
 
 - [ ] **Step 3: Write the template**
@@ -385,7 +385,7 @@ Create `scripts/data_modules/templates/reference_report.md.j2`:
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/templates/reference_report.md.j2
+git add .claude/plugins/zhanghui/scripts/data_modules/templates/reference_report.md.j2
 git commit -m "feat(init): reference_research report.md Jinja template
 
 Renders init_reference_research JSON to a human-readable Markdown
@@ -558,7 +558,7 @@ def test_build_reference_tree_overwrites_with_flag(tmp_path):
 - [ ] **Step 2: Run tests, verify all fail with ImportError**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_reference_tree.py -v 2>&1 | tail -20
 ```
 
@@ -566,7 +566,7 @@ Expected: All 11 FAIL with `No module named 'init_reference_tree'`.
 
 - [ ] **Step 3: Implement `init_reference_tree.py`**
 
-Create `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/init_reference_tree.py`:
+Create `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/init_reference_tree.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -750,7 +750,7 @@ def validate_reference_tree(tree: Path) -> bool:
 - [ ] **Step 4: Run tests, verify all pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_reference_tree.py -v 2>&1 | tail -20
 ```
 
@@ -759,7 +759,7 @@ Expected: 11 PASSED.
 - [ ] **Step 5: Run full prompt-integrity + init_idea_bank + init_project_pruning suite**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py data_modules/tests/test_init_idea_bank.py data_modules/tests/test_init_project_pruning.py -v 2>&1 | tail -20
 ```
 
@@ -769,7 +769,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/init_reference_tree.py webnovel-writer_chang/scripts/data_modules/tests/test_init_reference_tree.py
+git add .claude/plugins/zhanghui/scripts/data_modules/init_reference_tree.py zhanghui/scripts/data_modules/tests/test_init_reference_tree.py
 git commit -m "feat(init): init_reference_tree builder — multi-file product tree from JSON
 
 Implements spec §D3:
@@ -827,7 +827,7 @@ def test_validate_idea_bank_accepts_missing_reference_research_path():
 - [ ] **Step 2: Run tests, verify they fail (function currently rejects unknown fields)**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py -v -k "reference_research" 2>&1 | tail -10
 ```
 
@@ -862,7 +862,7 @@ If tests still fail, check whether `data["source"]["reference_source"]` validati
 - [ ] **Step 4: Re-run tests, verify they pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py -v 2>&1 | tail -15
 ```
 
@@ -872,7 +872,7 @@ Expected: All (existing + 2 new) PASS.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add .claude/plugins/zhanghui/scripts/init_project.py zhanghui/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): idea_bank.json accepts optional reference_research_path field
 
 Backward-compatible: existing payloads without the field still validate.
@@ -1010,7 +1010,7 @@ def test_init_overwrites_with_explicit_force_flag(tmp_path, monkeypatch):
 - [ ] **Step 2: Run tests, verify they fail (kwargs don't exist)**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py -v -k "reference_research or overwrite" 2>&1 | tail -15
 ```
 
@@ -1086,7 +1086,7 @@ And in the `init_project(...)` call, add at the end:
 - [ ] **Step 6: Run all init tests, verify all pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_init_idea_bank.py data_modules/tests/test_init_reference_tree.py data_modules/tests/test_init_project_pruning.py -v 2>&1 | tail -25
 ```
 
@@ -1096,7 +1096,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py webnovel-writer_chang/scripts/data_modules/tests/test_init_idea_bank.py
+git add .claude/plugins/zhanghui/scripts/init_project.py zhanghui/scripts/data_modules/tests/test_init_idea_bank.py
 git commit -m "feat(init): --reference-research-dir + --reference-overwrite CLI flags
 
 Adds 2 kwargs to init_project() and 2 argparse entries. Validates the
@@ -1132,7 +1132,7 @@ def test_plan_reads_reference_research_when_pointer_set():
 - [ ] **Step 2: Run test, verify fails**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py::test_plan_reads_reference_research_when_pointer_set -v 2>&1 | tail -10
 ```
 
@@ -1140,7 +1140,7 @@ Expected: FAIL on missing `reference_research_path`.
 
 - [ ] **Step 3: Add consumption section to webnovel-plan/SKILL.md**
 
-Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-plan/SKILL.md`. Find the existing "按需读取设定集" line (around line 98). Add a new section immediately AFTER it:
+Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-plan/SKILL.md`. Find the existing "按需读取设定集" line (around line 98). Add a new section immediately AFTER it:
 
 ```markdown
 ### 按需读取 reference_research 拆书产物
@@ -1166,7 +1166,7 @@ Open `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webno
 - [ ] **Step 4: Run test, verify passes**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py::test_plan_reads_reference_research_when_pointer_set -v 2>&1 | tail -10
 ```
 
@@ -1175,7 +1175,7 @@ Expected: PASS.
 - [ ] **Step 5: Run full prompt-integrity suite, verify no regression**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/test_prompt_integrity.py -v 2>&1 | tail -15
 ```
 
@@ -1185,7 +1185,7 @@ Expected: All PASS.
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py
+git add .claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md zhanghui/scripts/data_modules/tests/test_prompt_integrity.py
 git commit -m "feat(plan): consume reference_research tree when idea_bank pointer set
 
 webnovel-plan now reads .webnovel/reference_research/<book-safe>/
@@ -1204,7 +1204,7 @@ pointer falls back to old behavior."
 - [ ] **Step 1: Run with-reference path smoke (spec T5 item 1-4)**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 
 # 1. Build a minimal valid schema mimicking Step 1.5 agent output
 python -c "
@@ -1237,7 +1237,7 @@ pathlib.Path('/tmp/ref_schema.json').write_text(json.dumps(schema, ensure_ascii=
 
 # 2. Build the tree
 python -c "
-import sys; sys.path.insert(0, '/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules')
+import sys; sys.path.insert(0, '/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules')
 import json, pathlib
 from init_reference_tree import build_reference_tree
 schema = json.loads(pathlib.Path('/tmp/ref_schema.json').read_text(encoding='utf-8'))
@@ -1247,7 +1247,7 @@ print('Tree built at:', tree)
 
 # 3. Run init with reference tree
 rm -rf /tmp/smoke_book
-python /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/init_project.py /tmp/smoke_book "凡人+" "仙侠" \
+python /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/init_project.py /tmp/smoke_book "凡人+" "仙侠" \
   --protagonist-name "陈墨" --reference-research-dir "/tmp/ref_workspace/.webnovel/reference_research/fanren-xiuxian-chuan" 2>&1 | tail -10
 
 # 4. Verify tree copied to project
@@ -1268,7 +1268,7 @@ Expected:
 - [ ] **Step 2: Run without-reference path smoke (spec T5 item 5)**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 
 rm -rf /tmp/smoke_book_noref
 python init_project.py /tmp/smoke_book_noref "原创书" "都市" \
@@ -1284,7 +1284,7 @@ Expected: `.webnovel/` contains `state.json`, `writer-profile/`, but **NO** `ref
 - [ ] **Step 3: Run the full test suite one final time**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python -m pytest data_modules/tests/ -v 2>&1 | tail -30
 ```
 

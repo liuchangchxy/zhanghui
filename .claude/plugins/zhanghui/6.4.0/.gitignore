@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+*.temp
+.ace-tool/
+
+# Workspace pointer (local only)
+.webnovel-current-project
+
+# Local test scratch (do not commit)
+scripts/.tmp_pytest/
+scripts/.tmp_pytest_manual/
+scripts/zzz_test.db*
+
+# Test fixture scratch (conftest redirects tempfile to <repo>/.tmp/pytest/)
+.tmp/
+
+# Frontend build artifacts (Vite/React dashboard)
+dashboard/frontend/dist/
+dashboard/frontend/node_modules/
+# test edit

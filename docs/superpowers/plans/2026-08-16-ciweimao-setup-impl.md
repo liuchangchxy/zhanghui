@@ -15,21 +15,21 @@
 ## File Structure
 
 **Create:**
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/ciweimao_setup/__init__.py` — empty package marker
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/ciweimao_setup/setup_ciweimao.py` — orchestrator + helpers (find_chrome_binary, check_chrome_running, check_agent_browser, install_agent_browser, launch_chrome, verify_cdp_ready, setup_ciweimao)
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/ciweimao_setup/sessionstart_integration.py` — `_ciweimao_marker`, `should_prompt_ciweimao`, `write_ciweimao_decision`, `format_ciweimao_prompt`
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/tests/test_ciweimao_setup.py` — unit tests for setup_ciweimao module
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/tests/test_ciweimao_sessionstart_integration.py` — unit tests for decision marker mirror
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/tests/test_ciweimao_e2e.py` — end-to-end test with skip-if-unavailable
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/tests/test_ciweimao_runner_humanize.py` — tests for humanized error messages
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/scripts/ciweimao_setup/__init__.py` — empty package marker
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/scripts/ciweimao_setup/setup_ciweimao.py` — orchestrator + helpers (find_chrome_binary, check_chrome_running, check_agent_browser, install_agent_browser, launch_chrome, verify_cdp_ready, setup_ciweimao)
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/scripts/ciweimao_setup/sessionstart_integration.py` — `_ciweimao_marker`, `should_prompt_ciweimao`, `write_ciweimao_decision`, `format_ciweimao_prompt`
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/tests/test_ciweimao_setup.py` — unit tests for setup_ciweimao module
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/tests/test_ciweimao_sessionstart_integration.py` — unit tests for decision marker mirror
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/tests/test_ciweimao_e2e.py` — end-to-end test with skip-if-unavailable
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/tests/test_ciweimao_runner_humanize.py` — tests for humanized error messages
 
 **Modify:**
-- `.claude/plugins/webnovel-writer_chang/hooks/session_start.py` — add `check_ciweimao_prompt()` and call from `main()`
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/adapters/ciweimao_runner.py` — env var port, humanized errors
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/scripts/adapters/ciweimao.py` — delete dead code, period=weekly comment
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/pyproject.toml` — entry point for setup script
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/KNOWN_LIMITATIONS.md` — note new setup flow
-- `.claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/SKILL.md` — update "安装" section
+- `.claude/plugins/zhanghui/hooks/session_start.py` — add `check_ciweimao_prompt()` and call from `main()`
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/scripts/adapters/ciweimao_runner.py` — env var port, humanized errors
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/scripts/adapters/ciweimao.py` — delete dead code, period=weekly comment
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/pyproject.toml` — entry point for setup script
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/KNOWN_LIMITATIONS.md` — note new setup flow
+- `.claude/plugins/zhanghui/skills/webnovel-chart-scan/SKILL.md` — update "安装" section
 
 ---
 
@@ -113,7 +113,7 @@ def test_find_chrome_binary_raises_when_not_found(monkeypatch):
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan && ../../../../webnovel_chart_scan.egg-info/../../../../../../tmp/chart-scan-venv/bin/python -m pytest tests/test_ciweimao_setup.py -v 2>&1 | head -30` (or substitute the venv path)
+Run: `cd .claude/plugins/zhanghui/skills/webnovel-chart-scan && ../../../../webnovel_chart_scan.egg-info/../../../../../../tmp/chart-scan-venv/bin/python -m pytest tests/test_ciweimao_setup.py -v 2>&1 | head -30` (or substitute the venv path)
 Expected: `ModuleNotFoundError: No module named 'scripts.ciweimao_setup.setup_ciweimao'`
 
 - [ ] **Step 4: Write minimal implementation**
@@ -190,7 +190,7 @@ def find_chrome_binary() -> Path:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan && <VENV_PYTHON> -m pytest tests/test_ciweimao_setup.py -v`
+Run: `cd .claude/plugins/zhanghui/skills/webnovel-chart-scan && <VENV_PYTHON> -m pytest tests/test_ciweimao_setup.py -v`
 Expected: 4 passed
 
 - [ ] **Step 6: Commit**
@@ -936,7 +936,7 @@ def _resolve_cache_dir_via_hook() -> Path:
     """
     try:
         # Add <plugin>/hooks to sys.path so we can import install_python_deps
-        # (which lives in .claude/plugins/webnovel-writer_chang/hooks/).
+        # (which lives in .claude/plugins/zhanghui/hooks/).
         plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
         if plugin_root:
             sys.path.insert(0, str(Path(plugin_root) / "hooks"))
@@ -1078,8 +1078,8 @@ So the relevant block of `main()` becomes:
 
 Run:
 ```bash
-CLAUDE_PLUGIN_ROOT=/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang \
-  python3 -X utf8 /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/hooks/session_start.py
+CLAUDE_PLUGIN_ROOT=/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui \
+  python3 -X utf8 /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/hooks/session_start.py
 ```
 Expected: stdout contains a ciweimao y/N prompt **IF** the venv is installed and `.ciweimao-prompted` doesn't exist. If the marker already exists (e.g., user accepted in prior run), no ciweimao prompt should appear.
 
@@ -1328,7 +1328,7 @@ This task has minimal automation risk. Run existing tests to verify nothing brea
 
 Run:
 ```bash
-cd .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd .claude/plugins/zhanghui/skills/webnovel-chart-scan
 grep -rn "parse_category_html\|_extract_book_id\|CATEGORY_SLUG_MAP\|PERIOD_SORT_MAP" scripts/ tests/
 ```
 Expected: matches only in `scripts/adapters/ciweimao.py` (the dead code itself) and `KNOWN_LIMITATIONS.md` (history). No live consumers.
@@ -1415,7 +1415,7 @@ git commit -m "refactor(ciweimao): remove dead BeautifulSoup path + period comme
 
 - [ ] **Step 1: Locate the `[project.scripts]` section**
 
-Run: `grep -n "scripts\]" .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan/pyproject.toml`
+Run: `grep -n "scripts\]" .claude/plugins/zhanghui/skills/webnovel-chart-scan/pyproject.toml`
 Expected: find `[project.scripts]` block (may not exist if no entry points are registered)
 
 - [ ] **Step 2: Add entry point**
@@ -1435,7 +1435,7 @@ NOTE: The exact package name depends on how chart-scan is currently packaged. Ch
 
 Verify by running:
 ```bash
-cd .claude/plugins/webnovel-writer_chang/skills/webnovel-chart-scan
+cd .claude/plugins/zhanghui/skills/webnovel-chart-scan
 <VENV_PYTHON> -c "from webnovel_chart_scan.ciweimao_setup.setup_ciweimao import main; print('ok')"
 ```
 Expected: `ok`

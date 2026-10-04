@@ -27,8 +27,8 @@
 ## Task 1: `reference_research_injector.py` helper + 12 unit tests
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py`
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_injector.py`
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/reference_research_injector.py`
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_reference_research_injector.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -203,7 +203,7 @@ def test_build_step1_summary_multiple_trees_primary_first(tmp_path, monkeypatch)
 - [ ] **Step 2: Run tests, verify all fail with ImportError**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_reference_research_injector.py -v 2>&1 | tail -15
 ```
 
@@ -211,7 +211,7 @@ Expected: All 12 FAIL with `No module named 'reference_research_injector'`.
 
 - [ ] **Step 3: Implement `reference_research_injector.py`**
 
-Create `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py`:
+Create `/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/reference_research_injector.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -416,7 +416,7 @@ def build_do_not_copy_check_data(project_root: Path, chapter_text: str) -> list[
 - [ ] **Step 4: Run tests, verify all 12 pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_reference_research_injector.py -v 2>&1 | tail -15
 ```
 
@@ -425,8 +425,8 @@ Expected: 12 PASSED.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/
 
 cd /Users/chang/Desktop/zhanghui
 git add -A
@@ -447,9 +447,9 @@ borrowable structures capped at 5, satisfaction point inclusion."
 ## Task 2: write SKILL.md + context-agent.md wiring
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md`
-- Modify: `.claude/plugins/webnovel-writer_chang/agents/context-agent.md`
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py`
+- Modify: `.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md`
+- Modify: `.claude/plugins/zhanghui/agents/context-agent.md`
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py`
 
 - [ ] **Step 1: Write failing test**
 
@@ -468,7 +468,7 @@ def test_write_skill_references_reference_research_injector():
 - [ ] **Step 2: Run test, verify fails**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_write_skill_references_reference_research_injector -v 2>&1 | tail -8
 ```
 
@@ -476,7 +476,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Add Step 0 wiring to write SKILL.md**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md`. Find the "个人语料检测" and "写作宪法加载" blocks (around L157–166). Add a new block immediately after them:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md`. Find the "个人语料检测" and "写作宪法加载" blocks (around L157–166). Add a new block immediately after them:
 
 ```markdown
 
@@ -488,7 +488,7 @@ Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills
 
 - [ ] **Step 4: Add Step 1 wiring to context-agent.md**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/context-agent.md`. Find the section listing the `load-context` base pack fields. Add a new row:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/context-agent.md`. Find the section listing the `load-context` base pack fields. Add a new row:
 
 ```markdown
 | `reference_research_summary` | string | ≤ 200 token | `reference_research_injector.build_step1_summary()` |
@@ -517,7 +517,7 @@ Open write SKILL.md. Find the `cat core-constraints.md` line in Step 2A. Insert 
 - [ ] **Step 6: Run test, verify passes**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_write_skill_references_reference_research_injector -v 2>&1 | tail -8
 ```
 
@@ -526,9 +526,9 @@ Expected: PASS.
 - [ ] **Step 7: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-write/SKILL.md
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/context-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-write/SKILL.md
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/context-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/
 
 cd /Users/chang/Desktop/zhanghui
 git add -A
@@ -547,9 +547,9 @@ Injections are graceful no-ops when no reference_research tree exists."
 ## Task 3: review SKILL.md + reviewer.md do_not_copy check
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-review/SKILL.md`
-- Modify: `.claude/plugins/webnovel-writer_chang/agents/reviewer.md`
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py`
+- Modify: `.claude/plugins/zhanghui/skills/webnovel-review/SKILL.md`
+- Modify: `.claude/plugins/zhanghui/agents/reviewer.md`
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py`
 
 - [ ] **Step 1: Write 2 failing tests**
 
@@ -575,7 +575,7 @@ def test_reviewer_agent_supports_do_not_copy_violation_category():
 - [ ] **Step 2: Run tests, verify fail**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_review_skill_references_do_not_copy_check data_modules/tests/test_prompt_integrity.py::test_reviewer_agent_supports_do_not_copy_violation_category -v 2>&1 | tail -8
 ```
 
@@ -583,7 +583,7 @@ Expected: 2 FAIL.
 
 - [ ] **Step 3: Add do_not_copy check to review SKILL.md**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-review/SKILL.md`. Find Step 3 "并行 Task 调用" section. Add after:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-review/SKILL.md`. Find Step 3 "并行 Task 调用" section. Add after:
 
 ```markdown
 
@@ -603,7 +603,7 @@ Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills
 
 - [ ] **Step 4: Add do_not_copy_violation category to reviewer.md**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/reviewer.md`. Find the section listing issue categories. Add `do_not_copy_violation` to the list. Update §5 / §6 / §7 wording accordingly.
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/reviewer.md`. Find the section listing issue categories. Add `do_not_copy_violation` to the list. Update §5 / §6 / §7 wording accordingly.
 
 Add a new step (after §3 reading do_not_copy_check.json):
 
@@ -631,7 +631,7 @@ Add a new step (after §3 reading do_not_copy_check.json):
 - [ ] **Step 5: Run tests, verify pass**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_prompt_integrity.py::test_review_skill_references_do_not_copy_check data_modules/tests/test_prompt_integrity.py::test_reviewer_agent_supports_do_not_copy_violation_category -v 2>&1 | tail -8
 ```
 
@@ -640,9 +640,9 @@ Expected: 2 PASS.
 - [ ] **Step 6: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-review/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-review/SKILL.md
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/reviewer.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-review/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-review/SKILL.md
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/reviewer.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/
 
 cd /Users/chang/Desktop/zhanghui
 git add -A
@@ -666,7 +666,7 @@ each violation becomes a critical issue with line number + evidence."
 
 ```bash
 mkdir -p /tmp/p3_smoke
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -c "
 import sys, json, pathlib
 sys.path.insert(0, '.')
@@ -696,7 +696,7 @@ ls /tmp/p3_smoke/.webnovel/reference_research/fanren-xiuxian-chuan/
 - [ ] **Step 2: Verify Step 1 summary**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -715,7 +715,7 @@ Expected: Output contains 主对标书、可借鉴、规避。Len ≤ 800.
 - [ ] **Step 3: Verify Step 2A section**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -731,7 +731,7 @@ Expected: Output contains all 4 sections (不可照搬、canon_contamination、�
 - [ ] **Step 4: Verify do_not_copy check**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -c "
 import sys
 sys.path.insert(0, '.')
@@ -753,7 +753,7 @@ Expected: 3 violations (line 2 "韩立", line 4 "韩立", line 4 "神秘小瓶")
 - [ ] **Step 5: Run full test suite**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest \
   data_modules/tests/test_prompt_integrity.py \
   data_modules/tests/test_init_reference_tree.py \

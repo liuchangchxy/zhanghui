@@ -1,0 +1,700 @@
+---
+name: webnovel-init
+description: 深度初始化网文项目。通过分阶段交互收集完整创作信息，生成可直接进入规划与写作的项目骨架与约束文件。
+allowed-tools: Read Write Edit Grep Bash AskUserQuestion WebSearch WebFetch
+---
+
+# Project Initialization (Deep Mode)
+
+## 目标
+
+- 通过结构化交互收集足够信息，避免"先生成再返工"。
+- 产出可落地项目骨架：`.webnovel/state.json`、`设定集/*`、`大纲/总纲.md`、`.webnovel/idea_bank.json`。
+- 保证后续 `/webnovel-plan` 与 `/webnovel-write` 可直接运行。
+
+## 执行原则
+
+1. 先收集，再生成；未过充分性闸门，不执行 `init_project.py`。
+2. 分波次提问，每轮只问"当前缺失且会阻塞下一步"的信息。
+3. 允许调用 `Read/Grep/Bash/Task/AskUserQuestion/WebSearch/WebFetch` 辅助收集。
+4. 用户已明确的信息不重复问；冲突信息优先让用户裁决。
+5. Deep 模式优先完整性，允许慢一点，但禁止漏关键字段。
+
+## 引用加载等级（strict, lazy）
+
+采用分级加载，避免一次性灌入全部资料：
+
+- L0：未确认任务前，不预加载参考。
+- L1：每个阶段仅加载该阶段"必读"文件。
+- L2：仅在题材、金手指、创意约束触发条件满足时加载扩展参考。
+- L3：市场趋势类、时效类资料仅在用户明确要求时加载。
+
+路径约定：
+- `references/...` 相对当前 skill 目录（`${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/references/...`）。
+- `templates/...` 相对当前 skill 目录（`${CLAUDE_PLUGIN_ROOT}/skills/webnovel-init/templates/...`）—— H-R4-14 修正：templates 是 skill 的一部分，跟着 skill 走；不要写成 `${CLAUDE_PLUGIN_ROOT}/templates/...`，否则 plugin 与本地两份副本会指向不同目录。
+- **Phase E 例外**：`个人语料.md` 与 `写作宪法.md` 的基线模板位于 `${CLAUDE_PLUGIN_ROOT}/templates/`（plugin 级），不属于 skill 自带 templates/。init 把它们 copy 到 `${PROJECT_ROOT}/.webnovel/writer-profile/`。
+
+默认加载清单：
+- L1（启动前）：`references/genre-tropes.md`
+- L1（按需）：`${CLAUDE_PLUGIN_ROOT}/templates/写作宪法.md` —— 仅当用户尚未提供时加载，作为风格底线占位
+- L2（按需）：
+  - 题材模板：`${CLAUDE_PLUGIN_ROOT}/templates/genres/{genre}.md`
+  - 金手指：`templates/golden-finger-templates.md`
+  - 世界观：`references/worldbuilding/faction-systems.md`
+  - 创意约束：按下方"逐文件引用清单"触发加载
+  - 爽文深度：题材命中爽文相关 canonical（玄幻/都市/仙侠/历史 等）时按需加载
+
+## References（逐文件引用清单）
+
+### 根目录
+
+- `references/genre-tropes.md`
+  - 用途：Step 1 题材归一化、题材特征提示。
+  - 触发：所有项目必读。
+- `references/system-data-flow.md`
+  - 用途：初始化产物与后续 `/plan`、`/write` 的数据流一致性检查。
+  - 触发：Step 0 预检必读。
+
+### worldbuilding
+
+- `references/worldbuilding/character-design.md`
+  - 用途：Step 2 角色维度补问（目标、缺陷、动机、反差）。
+  - 触发：用户人物信息抽象或扁平时加载。
+- `references/worldbuilding/faction-systems.md`
+  - 用途：Step 4 势力格局与组织层级设计。
+  - 触发：Step 4 默认加载。
+- `references/worldbuilding/power-systems.md`
+  - 用途：Step 4 力量体系类型与边界定义。
+  - 触发：涉及修仙/玄幻/高武/异能时加载。
+- `references/worldbuilding/setting-consistency.md`
+  - 用途：Step 6 一致性复述前做设定冲突检查。
+  - 触发：Step 6 默认加载。
+- `references/worldbuilding/world-rules.md`
+  - 用途：Step 4 世界规则与禁忌项收束。
+  - 触发：Step 4 默认加载。
+
+### creativity
+
+- `references/creativity/creativity-constraints.md`
+  - 用途：Step 5 创意约束包主 schema。
+  - 触发：Step 5 必读。
+- `references/creativity/inspiration-collection.md`
+  - 用途：用户卡住时提供卖点/钩子候选。
+  - 触发：Step 1 或 Step 5 卡顿时加载。
+- `references/creativity/selling-points.md`
+  - 用途：Step 5 卖点生成与筛选。
+  - 触发：Step 5 必读。
+- `references/creativity/market-positioning.md`
+  - 用途：目标读者/平台定位与商业化语义统一。
+  - 触发：Step 1 用户提及平台或商业目标时加载。
+- `references/creativity/anti-trope-xianxia.md`
+  - 用途：反套路库（修仙/玄幻/高武/西幻）。
+  - 触发：题材命中对应映射时加载。
+- `references/creativity/anti-trope-urban.md`
+  - 用途：反套路库（都市/历史）。
+  - 触发：题材命中对应映射时加载。
+- `references/creativity/anti-trope-game.md`
+  - 用途：反套路库（游戏/科幻/末世）。
+  - 触发：题材命中对应映射时加载。
+- `references/creativity/anti-trope-rules-mystery.md`
+  - 用途：反套路库（规则/悬疑/灵异/克苏鲁）。
+  - 触发：题材命中对应映射时加载。
+
+## 工具策略（按需）
+
+- `Read/Grep`：读取项目上下文与参考文件（`README.md`、`CLAUDE.md`、`${CLAUDE_PLUGIN_ROOT}/templates/genres/*`、`references/*`）。
+- `Bash`：执行 `init_project.py`、文件存在性检查、最小验证命令。
+- `Task`：拆分并行子任务（如题材映射、约束包候选生成、文件验证）。
+- `AskUserQuestion`：用于关键分歧裁决、候选方案选择、最终确认。
+- `WebSearch`：用于检索最新市场趋势、平台风向、题材数据（可带域名过滤）。
+- `WebFetch`：用于抓取已确定来源页面内容并做事实核验。
+- 外部检索触发条件：
+  - 用户明确要求参考市场趋势或平台风向；
+  - 创意约束需要"时间敏感依据"；
+  - 对题材信息存在明显不确定。
+
+## 交互流程（Deep）
+
+### Step 0：预检与上下文加载
+
+环境设置（bash 命令执行前）：
+```bash
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
+
+if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/scripts" ]; then
+  echo "ERROR: 未设置 CLAUDE_PLUGIN_ROOT 或缺少目录: ${CLAUDE_PLUGIN_ROOT}/scripts" >&2
+  exit 1
+fi
+export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
+
+export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+
+```
+
+必须做：
+- 确认当前目录可写。
+- 解析脚本目录并确认入口存在（仅支持插件目录）：
+  - 固定路径：`${CLAUDE_PLUGIN_ROOT}/scripts`
+  - 入口脚本：`${SCRIPTS_DIR}/webnovel.py`
+- 建议先打印解析结果，避免写到错误目录：
+  - `python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where`
+- 加载最小参考：
+  - `references/system-data-flow.md`（用于校对 init 产物与 plan/write 输入链路）
+  - `references/genre-tropes.md`
+  - `${CLAUDE_PLUGIN_ROOT}/templates/genres/`（仅在用户选定题材后按需读取）
+- **创作宪法加载**：`${CLAUDE_PLUGIN_ROOT}/templates/写作宪法.md`（仅检测存在性，不强制内容）
+  - 存在 → 作为风格底线参考，L1 常驻
+  - 不存在 → 不阻断，但在 Step 6 提示用户可填写以固化风格底线
+- **创作宪法加载**：`${CLAUDE_PLUGIN_ROOT}/templates/写作宪法.md`（Phase E 起基线目录迁到 plugin 级），仅检测存在性，不强制内容。
+  - 存在 → 作为风格底线参考，L1 常驻
+  - 不存在 → 不阻断，但在 Step 6 提示用户可填写以固化风格底线
+- **创作宪法落库约定（Phase E）**：宪法模板在 init 末尾被自动 copy 到 `${PROJECT_ROOT}/.webnovel/writer-profile/写作宪法.md`（仅当目标文件不存在）。`/webnovel-write` 的 Step 0 优先从书项目副本读；若副本缺失则回退到 plugin 基线模板。
+
+#### 重跑守卫（Step 0 后置，2026-08-19 新增）
+
+init 不允许重 init 已 confirmed 项目；若用户明确要"沿用 + 部分改写"，先扫一遍 artifact 状态：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/check_plan_artifacts.py" \
+  --project-root "${PROJECT_ROOT}" --volume 1 \
+  --format json
+```
+
+输出非空 → **必须用 AskUserQuestion 三态询问用户**（沿用 / 部分改写 / 暂停初始化）。
+
+### Step 1：故事核与商业定位
+
+收集项（必收）：
+- 书名（可先给工作名）
+- 题材（支持 A+B 复合题材）
+- 目标规模（总字数或总章数）
+- 一句话故事
+- 核心冲突
+- 目标读者/平台
+
+题材集合（用于归一化与映射）：
+- 玄幻修仙类：修仙 | 系统流 | 高武 | 西幻 | 无限流 | 末世 | 科幻
+- 都市现代类：都市异能 | 都市日常 | 都市脑洞 | 现实题材 | 黑暗题材 | 电竞 | 直播文
+- 言情类：古言 | 宫斗宅斗 | 青春甜宠 | 豪门总裁 | 职场婚恋 | 民国言情 | 幻想言情 | 现言脑洞 | 女频悬疑 | 狗血言情 | 替身文 | 多子多福 | 种田 | 年代
+- 特殊题材：规则怪谈 | 悬疑脑洞 | 悬疑灵异 | 历史古代 | 历史脑洞 | 游戏体育 | 抗战谍战 | 知乎短篇 | 克苏鲁
+
+交互方式：
+- 优先让用户自由描述，再二次结构化确认。
+- 若用户卡住，给 2-4 个候选方向供选。
+
+### Step 1.5：灵感来源询问
+
+进入故事核采集前，先问用户灵感来源——**不要默认拆书**。
+
+向用户抛出唯一开场问题（必须包含字面串"你这本书的灵感来源想从哪里开始"）：
+
+```
+你这本书的灵感来源想从哪里开始？
+  A) 原创 / 暂无参考书 → 跳过拆解，跳过 reference_research/ 与 idea_bank.json 写入
+  B) 有参考书名 + 平台线索（如"起点《XX》"）→ quick 模式（无文本，quality.passed=false 风险高）
+  C) 有参考书名 + 本地正文路径 → deep 模式（路径不可读时降级 quick）
+  D) 有参考书名 + 仅摘录（粘进对话）→ quick 模式
+```
+
+用户选 A：记录 `reference_source = "none"`，**不写任何文件**，直接进入 Step 2。
+
+用户选 B/C/D：用以下字面调用方式触发拆解子代理（主流程**不得由 init 主流程口头替代拆解结果**，必须拿原始 JSON）：
+
+```
+Use the Agent tool to run `webnovel-writer:deconstruction-agent`
+```
+
+调用时传入字段（参考 `agents/deconstruction-agent.md §2`）：`reference_title`、`reference_source`、`reference_text_path` 或 `reference_text_excerpt`、`analysis_mode`、`init_goal`、`target_genre`。**禁止使用 `subagent-type` 字段**——Claude Code 的 Agent tool 不接受该参数。拆解子代理还必须返回 9 个 handoff 字段：`reader_promise`、`opening_hook_patterns`、`cool_point_loops`、`protagonist_patterns`、`antagonist_pressure_patterns`、`pacing_notes`、`borrowable_structures`、`differentiation_requirements`、`init_candidates`。
+
+子代理返回 `init_reference_research` JSON 对象（即 init_reference_research JSON 对象，包含 9 个新增字段：`chapter_rhythm`、`narrative_function`、`boundary_reason`、`protagonist_action_chain`、`emotion_curve`、`satisfaction_point`、`foreshadowing`、`gains_costs`、`character_changes`）。**用户确认前**，以下行为禁止：
+
+- 写入 `.webnovel/reference_research/`、`idea_bank.json`、`.story-system`、`设定集/`、`大纲/`、`正文/`、`.webnovel/state.json`
+- 由主流程口头重写拆解结论
+
+检查返回 JSON 的 `quality` 字段（必须含字面 `` `quality` `` 和 `` `quality.passed=false` ``）：
+
+- 若 `quality.passed=false` 或 `confidence < 0.85`（含字面 `` `confidence < 0.85` ``）：把缺漏展示给用户，问三种处理：(i) 用更多文本重跑；(ii) 用稀疏模式继续；(iii) 放弃参考（默认 (iii)）。
+- 否则：调用 `scripts/data_modules/init_reference_tree.py:build_reference_tree()` 把 JSON 渲染成 `.webnovel/reference_research/<book-safe>/` 多文件树（见 D3 目录结构）。把 `do_not_copy` 字段和 `canon_contamination_warnings` 字段**原文**展示给用户。
+
+用户确认后，主流程：
+1. 调用 `init_reference_tree.py` 落盘树
+2. 写 `idea_bank.json`，新增 `reference_research_path` 字段指向树
+3. 通过临时文件 + `--reference-research-dir` 传给 `webnovel.py init` 验证树存在
+4. **禁止**直接拼接到 CLI argv 大字段里
+
+> Step 2-6 只能使用用户确认过、并已变形为本书差异化表达的模式；不可借用尚未确认或仍携带原作设定的字段。
+
+### Step 1.6：多卷骨架采集（新增）
+
+> **条件触发**：仅当用户预期 ≥ 2 卷时进入；若用户明确说"单卷完结"，跳过本步。
+>
+> **必读参考**：`references/multi-volume-ux.md`（本步骤的设计依据；执行本步前先读完）。
+
+#### 1.6.1 询问总卷数
+
+```
+你预计全书大约几卷？
+
+A. 已知具体数（如 8 卷） → 让我知道
+B. 大概范围（如 5-10 卷） → 让我知道
+C. 不确定，先填第一卷  → 跳过本项
+D. 让 AI 建议
+```
+
+记录 `expected_total_volumes`（可空）。
+
+#### 1.6.2 逐卷采集循环
+
+每轮采集 `VolumeRecord`，必填字段：
+- `title`（卷名）
+- `chapter_range`（章节范围，格式 "1-80" 或 "约 60 章"）
+- `core_conflict`（核心冲突，一句话）
+- `climax`（卷末高潮/状态变化）
+
+可选字段：`key_cool_points` / `characters_to_appear` / `foreshadowing`。
+
+每卷结束时调用 `VolumeStateManager.append_or_update()`，**不要**自己写 state.json。
+
+#### 1.6.3 每卷结束时的 4 选 1
+
+```
+A) 继续填写 V_{k+1}
+B) 让 AI 起草 V_{k+1}（进入 Step 5.5）
+C) 暂不确定后续卷，结束采集（设置 later_volumes_status=deferred）
+D) 批量粘贴剩余卷（一次贴多行表格）
+```
+
+#### 1.6.4 批量粘贴模式
+
+支持 markdown 表格直接粘贴：
+
+```
+| 卷号 | 卷名 | 章节范围 | 核心冲突 | 卷末高潮 |
+| 1 | 起势 | 1-80 | 宗门考核 | 夺得首席 |
+| 2 | 深入 | 81-180 | 敌派入侵 | 师尊受伤 |
+```
+
+逐行解析为 `VolumeRecord`，与逐卷循环走相同的状态机。
+
+#### 硬约束
+
+- `volumes[i].index` 必须连续无空洞（由 `VolumeStateManager` 强制）
+- 不创建空的 V2-VN 记录；用户没填就是没有
+- 不预填占位行到总纲
+
+### Step 2：角色骨架与关系冲突
+
+> Step 2-6 只能使用用户确认过、并已变形为本书差异化表达的模式。
+
+收集项（必收）：
+- 主角姓名
+- 主角欲望（想要什么）
+- 主角缺陷（会害他付代价的缺陷）
+- 主角结构（单主角/多主角）
+- 感情线配置（无/单女主/多女主）
+- 反派分层（小/中/大）与镜像对抗一句话
+
+收集项（可选）：
+- 主角原型标签（成长型/复仇型/天才流等）
+- 多主角分工
+- **个人语料**（Step 2 末检测 `${CLAUDE_PLUGIN_ROOT}/templates/个人语料.md` 是否存在；Phase E 起基线目录迁到 plugin 级 `${CLAUDE_PLUGIN_ROOT}/templates/`）：
+  - 用户先在 `${CLAUDE_PLUGIN_ROOT}/templates/个人语料.md` 填写并保存（这是基线目录）。
+  - 存在 → 复制为 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md`，记入"个人表达指纹"清单，由后续 `/webnovel-write` 触发时注入（实际注入时机为 write 的 Step 1 任务书与 Step 2A 写作执行包，详见 webnovel-write/SKILL.md 的"个人语料检测"段；init 本身只复制文件，不做注入）。
+  - 不存在 → 提示用户："如需在写作时注入个人语料风格，请先在 `${CLAUDE_PLUGIN_ROOT}/templates/个人语料.md` 填写并保存，init 会自动复制为 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md`"。
+
+### Step 3：金手指与兑现机制
+
+收集项（必收）：
+- 金手指类型（可为"无金手指"）
+- 名称/系统名（无则留空）
+- 风格（硬核/诙谐/黑暗/克制等）
+- 可见度（谁知道）
+- 不可逆代价（必须有代价或明确"无+理由"）
+- 成长节奏（慢热/中速/快节奏）
+
+收集项（条件必收）：
+- 若为系统流：系统性格、升级节奏
+- 若为重生：重生时间点、记忆完整度
+- 若为传承/器灵：辅助边界与出手限制
+
+### Step 4：世界观与力量规则
+
+收集项（必收）：
+- 世界规模（单城/多域/大陆/多界）
+- 力量体系类型
+- 势力格局
+- 社会阶层与资源分配
+
+收集项（题材相关）：
+- 货币体系与兑换规则
+- 宗门/组织层级
+- 境界链与小境界
+
+### Step 5：创意约束包（差异化核心）
+
+流程：
+1. 基于题材映射加载反套路库（最多 2 个主相关库）。
+2. 生成 2-3 套创意包，每套包含：
+   - 一句话卖点
+   - 反套路规则 1 条
+   - 硬约束 2-3 条
+   - 主角缺陷驱动一句话
+   - 反派镜像一句话
+   - 开篇钩子
+3. 三问筛选：
+   - 为什么这题材必须这么写？
+   - 换成常规主角会不会塌？
+   - 卖点能否一句话讲清且不撞模板？
+4. 展示五维评分（详见 `references/creativity/creativity-constraints.md` 的 `8.1 五维评分`），辅助用户决策。
+5. 用户选择最终方案，或拒绝并给出原因。
+
+备注：
+- 若用户要求"贴近当下市场"，可触发外部检索并标注时间戳。
+
+### Step 5.5：AI 卷骨架起草（新增）
+
+> **触发条件**：仅当用户在 Step 1.6.3 选 B 时进入。
+
+调用 `data_modules/ai_volume_drafter.py:draft_next_volume()`：
+- 输入：用户的一句话 + 已 confirmed 卷列表 + 题材 + 目标 index
+- 输出：`CandidateVolume`（status=draft, source=ai）
+- **绝对不直接写盘**——只放在 `VolumeStateManager._drafts` 里
+
+调用 LLM：沿用主 LLM 配置（与 `webnovel-write` 同源）。
+
+#### 用户裁决
+
+AI 返回后，必须询问用户：
+
+```
+AI 起草了 V_{k+1}：
+
+卷名：<X>
+核心冲突：<Y>
+卷末高潮：<Z>
+
+A) 接受（status: draft → confirmed）
+B) 修改后接受（让用户改字段后接受）
+C) 拒绝，自己填
+D) 完全跳过这一卷（设 deferred）
+```
+
+只有 A / B 走 `VolumeStateManager.confirm_volume(k+1)`。
+
+#### 禁止行为
+
+- 禁止 AI 自动确认（无用户决议则不写入 state.json）
+- 禁止从已确认卷推断未填字段
+- 禁止覆盖已 confirmed 卷的字段
+
+### Step 6：一致性复述与最终确认
+
+必须输出"初始化摘要草案"并让用户确认：
+- 故事核（题材/一句话故事/核心冲突）
+- 主角核（欲望/缺陷）
+- 金手指核（能力与代价）
+- 世界核（规模/力量/势力）
+- 创意约束核（反套路 + 硬约束）
+- 汇总 Step 1.5 已确认的灵感来源（参考书名 / 分析模式 / 置信度 / reference_research 路径 / 反套路 / 硬约束数量）
+
+确认规则：
+- 用户未明确确认，不执行生成。
+- 若用户仅改局部，回到对应 Step 最小重采集。
+
+## 内部数据模型（初始化收集对象）
+
+```json
+{
+  "project": {
+    "title": "",
+    "genre": "",
+    "target_words": 0,
+    "target_chapters": 0,
+    "one_liner": "",
+    "core_conflict": "",
+    "target_reader": "",
+    "platform": ""
+  },
+  "protagonist": {
+    "name": "",
+    "desire": "",
+    "flaw": "",
+    "archetype": "",
+    "structure": "单主角"
+  },
+  "relationship": {
+    "heroine_config": "",
+    "heroine_names": [],
+    "heroine_role": "",
+    "co_protagonists": [],
+    "co_protagonist_roles": [],
+    "antagonist_tiers": {},
+    "antagonist_level": "",
+    "antagonist_mirror": ""
+  },
+  "golden_finger": {
+    "type": "",
+    "name": "",
+    "style": "",
+    "visibility": "",
+    "irreversible_cost": "",
+    "growth_rhythm": ""
+  },
+  "world": {
+    "scale": "",
+    "factions": "",
+    "power_system_type": "",
+    "social_class": "",
+    "resource_distribution": "",
+    "currency_system": "",
+    "currency_exchange": "",
+    "sect_hierarchy": "",
+    "cultivation_chain": "",
+    "cultivation_subtiers": ""
+  },
+  "constraints": {
+    "anti_trope": "",
+    "hard_constraints": [],
+    "core_selling_points": [],
+    "opening_hook": ""
+  }
+}
+
+```
+
+## 充分性闸门（必须通过）
+
+未满足以下条件前，禁止执行 `init_project.py`：
+
+1. 书名、题材（可复合）已确定。
+2. 目标规模可计算（字数或章数至少一个）。
+3. 主角姓名 + 欲望 + 缺陷完整。
+4. 世界规模 + 力量体系类型完整。
+5. 金手指类型已确定（允许"无金手指"）。
+6. 创意约束已确定：
+   - 反套路规则 1 条
+   - 硬约束至少 2 条
+   - 或用户明确拒绝并记录原因。
+
+## 项目目录安全规则（必须）
+
+- `project_root` 必须由书名安全化生成（去非法字符，空格转 `-`）。
+- 若安全化结果为空或以 `.` 开头，自动前缀 `proj-`。
+- 禁止在插件目录下生成项目文件（`${CLAUDE_PLUGIN_ROOT}`）。
+
+## 执行生成
+
+### 1) 运行初始化脚本
+
+```bash
+python "${SCRIPTS_DIR}/webnovel.py" init \
+  "{project_root}" \
+  "{title}" \
+  "{genre}" \
+  --protagonist-name "{protagonist_name}" \
+  --target-words {target_words} \
+  --target-chapters {target_chapters} \
+  --golden-finger-name "{gf_name}" \
+  --golden-finger-type "{gf_type}" \
+  --golden-finger-style "{gf_style}" \
+  --core-selling-points "{core_points}" \
+  --protagonist-structure "{protagonist_structure}" \
+  --heroine-config "{heroine_config}" \
+  --heroine-names "{heroine_names}" \
+  --heroine-role "{heroine_role}" \
+  --co-protagonists "{co_protagonists}" \
+  --co-protagonist-roles "{co_protagonist_roles}" \
+  --antagonist-tiers "{antagonist_tiers}" \
+  --world-scale "{world_scale}" \
+  --factions "{factions}" \
+  --power-system-type "{power_system_type}" \
+  --social-class "{social_class}" \
+  --resource-distribution "{resource_distribution}" \
+  --gf-visibility "{gf_visibility}" \
+  --gf-irreversible-cost "{gf_irreversible_cost}" \
+  --currency-system "{currency_system}" \
+  --currency-exchange "{currency_exchange}" \
+  --sect-hierarchy "{sect_hierarchy}" \
+  --cultivation-chain "{cultivation_chain}" \
+  --cultivation-subtiers "{cultivation_subtiers}" \
+  --protagonist-desire "{protagonist_desire}" \
+  --protagonist-flaw "{protagonist_flaw}" \
+  --protagonist-archetype "{protagonist_archetype}" \
+  --antagonist-level "{antagonist_level}" \
+  --target-reader "{target_reader}" \
+  --platform "{platform}"
+
+```
+
+### 2) 写入 `idea_bank.json`
+
+写入 `.webnovel/idea_bank.json`：
+
+```json
+{
+  "selected_idea": {
+    "title": "",
+    "one_liner": "",
+    "anti_trope": "",
+    "hard_constraints": []
+  },
+  "constraints_inherited": {
+    "anti_trope": "",
+    "hard_constraints": [],
+    "protagonist_flaw": "",
+    "antagonist_mirror": "",
+    "opening_hook": ""
+  }
+}
+
+```
+
+### 3) Patch 总纲
+
+必须补齐：
+- 故事一句话
+- 核心主线 / 核心暗线
+- 创意约束（反套路、硬约束、主角缺陷、反派镜像）
+- 反派分层
+- 关键爽点里程碑（2-3 条）
+
+### 4) 复制个人语料 + 写作宪法 默认模板到书项目
+
+`init_project.py` 在末尾自动从 plugin 模板目录 copy 两份默认模板到书项目（Phase E 新增）：
+
+```bash
+mkdir -p "${PROJECT_ROOT}/.webnovel/writer-profile"
+cp "${CLAUDE_PLUGIN_ROOT}/templates/个人语料.md"   "${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md"
+cp "${CLAUDE_PLUGIN_ROOT}/templates/写作宪法.md"   "${PROJECT_ROOT}/.webnovel/writer-profile/写作宪法.md"
+echo "✅ 个人语料模板已写入 ${PROJECT_ROOT}/.webnovel/writer-profile/，请编辑后保存。"
+```
+
+约定：
+- 仅在书项目副本不存在时 copy（避免覆盖用户已编辑的内容）。
+- 基线模板位于 `${CLAUDE_PLUGIN_ROOT}/templates/`（plugin 级，与 skill 解耦，升级不被覆盖）。
+- 用户直接编辑书项目里的副本，**不要**改 plugin 内的源模板。
+
+## 验证与交付
+
+执行检查：
+
+```bash
+test -f "{project_root}/.webnovel/state.json"
+find "{project_root}/设定集" -maxdepth 1 -type f -name "*.md"
+test -f "{project_root}/大纲/总纲.md"
+test -f "{project_root}/.webnovel/idea_bank.json"
+test -f "{project_root}/.webnovel/writer-profile/个人语料.md"
+test -f "{project_root}/.webnovel/writer-profile/写作宪法.md"
+
+```
+
+成功标准：
+- `state.json` 存在且关键字段不为空（title/genre/target_words/target_chapters）。
+- 设定集核心文件存在：`世界观.md`、`力量体系.md`、`主角卡.md`、`金手指设计.md`。
+- `总纲.md` 已填核心主线与约束字段。
+- `idea_bank.json` 已写入且与最终选定方案一致。
+- `.webnovel/writer-profile/{个人语料.md, 写作宪法.md}` 已 copy（Phase E 新增）。
+
+## 失败处理（最小回滚）
+
+触发条件：
+- 关键文件缺失；
+- 总纲关键字段缺失；
+- 约束启用但 `idea_bank.json` 缺失或内容不一致。
+
+恢复流程：
+1. 仅补缺失字段，不全量重问。
+2. 仅重跑最小步骤：
+   - 文件缺失 -> 重跑 `init_project.py`；
+   - 总纲缺字段 -> 只 patch 总纲；
+   - idea_bank 不一致 -> 只重写该文件。
+3. 重新验证，全部通过后结束。
+
+## 作者友好最终报告契约
+
+最终回复必须面向作者，不输出原始 JSON、traceback 或长命令日志。使用固定三段式，并以一句总状态开头：
+
+```text
+总状态：已完成 / 部分完成 / 需要你处理 / 未完成。
+
+一、产生的文件与完成情况
+- ...
+
+二、过程中遇到的问题与异常耗时
+- 已自动处理：...
+- 建议确认：...
+- 必须处理：...
+
+三、下一步建议
+- ...
+
+```
+
+必须汇报：
+- `state.json` 关键字段是否齐备（title/genre/target_words/target_chapters）。
+- 设定集核心文件是否落盘：`世界观.md`、`力量体系.md`、`主角卡.md`、`金手指设计.md`。
+- `总纲.md` 核心主线与约束字段是否填齐。
+- `idea_bank.json` 是否与最终选定方案一致。
+- `.webnovel/writer-profile/{个人语料.md, 写作宪法.md}` 是否 copy 完成（Phase E 新增）。
+- 对参考书的 `deconstruction-agent` 拆解是否落盘到 `.webnovel/deconstructions/`（不污染新书 canon）。
+- 项目根 guard、`PROJECT_ROOT` 解析、`CLAUDE_PLUGIN_ROOT` / `WORKSPACE_ROOT` 环境变量是否设置成功。
+
+异常分类：
+- 已自动处理：自动补缺失字段、自动重跑最小步骤、自动 patch 总纲、自动补 idea_bank。
+- 建议确认：参考书候选、主角人设倾向、金手指方向、卖点主张、目标读者分层等需要作者看一眼。
+- 必须处理：核心文件缺失且无法补齐、总纲关键字段空白、`BLOCKER` 未裁决、设定集冲突。
+
+下一步建议必须使用任务化语言 + 可复制命令，例如：
+
+```text
+- 接下来可以进入大纲规划阶段：
+  /webnovel-plan 1
+
+```
+
+不写 token 统计；如需排查故障，只给日志路径或建议运行 `/webnovel-doctor`。
+
+## SubagentRun 可汇总信号
+
+主流程对每个 subagent 调用必须记录一次 `SubagentRun` JSON：
+
+```json
+{
+  "name": "deconstruction-agent",
+  "status": "completed | partial | failed | skipped",
+  "problems": [],
+  "auto_handled": [],
+  "needs_user_action": false,
+  "duration_ms": 0,
+  "outputs": []
+}
+```
+
+写入路径：`.webnovel/tmp/subagent_runs/init-{chapter}.jsonl`（每行一个 SubagentRun）。
+
+主流程"汇总 Step 1.5 已确认的灵感来源"并把它整合到下一步输入。
+
+## 作者友好过程提示与恢复契约
+
+初始化开始前先说明本次会经历：解项目根 -> 收集创作意图 -> 生成设定集 -> 拆解参考书 -> 落地总纲 -> 写入作者档案。过程提示用作者语言，不直接输出原始 JSON、traceback 或长命令日志；技术详情写入 `.webnovel/logs/run_last.log`：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
+  --event init-progress \
+  --payload-json "{\"stage\": \"init\"}" \
+  --format text
+
+```
+
+过程提示每次不超过两行，只说当前动作和影响，例如"正在落总纲：会把核心主线、约束字段和参考书拆解结果一起写盘"。少打扰确认策略：默认继续推进；只有项目根 guard 失败、设定冲突、参考书候选取舍、需要覆盖已有项目时才询问。
+
+需要用户裁决时使用有限选项，并说明影响；例如沿用默认 / 修改设定 / 暂停初始化。卡住时必须说明卡点、已完成内容和恢复建议，例如"设定集和总纲已保留，参考书拆解失败；重新运行 `/webnovel-init` 会只重做拆解批次"。
+
+不可恢复故障才在最终报告提示 `.webnovel/logs/run_last.log`；平时只保留日志，不打扰作者。收尾必须调用作者报告 helper：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" user-report \
+  --stage init \
+  --format text
+
+```

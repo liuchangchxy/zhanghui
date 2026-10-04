@@ -33,7 +33,7 @@
 ## Task 1: VolumeRecord + CandidateVolume dataclasses
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py`
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py`
 
 - [ ] **Step 1: Create the dataclass module with stub**
 
@@ -108,7 +108,7 @@ class PlanningHorizon:
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py
+git add .claude/plugins/zhanghui/scripts/data_modules/volume_state.py
 git commit -m "feat(volume_state): add dataclasses (VolumeRecord, CandidateVolume, PlanningHorizon)"
 ```
 
@@ -117,7 +117,7 @@ git commit -m "feat(volume_state): add dataclasses (VolumeRecord, CandidateVolum
 ## Task 2: VolumeStateManager state machine — write failing test
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_volume_state.py`
+- Create: `.claude/plugins/zhanghui/scripts/tests/unit/test_volume_state.py`
 
 - [ ] **Step 1: Create test file**
 
@@ -232,14 +232,14 @@ def test_later_volumes_status_deferred_by_default(fresh_state):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd .claude/plugins/webnovel-writer_chang && python3 -m pytest scripts/tests/unit/test_volume_state.py -v`
+Run: `cd .claude/plugins/zhanghui && python3 -m pytest scripts/tests/unit/test_volume_state.py -v`
 Expected: ImportError or AttributeError for `VolumeStateManager`
 
 - [ ] **Step 3: Commit the failing test**
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_volume_state.py
+git add .claude/plugins/zhanghui/scripts/tests/unit/test_volume_state.py
 git commit -m "test(volume_state): add state machine tests (red)"
 ```
 
@@ -248,7 +248,7 @@ git commit -m "test(volume_state): add state machine tests (red)"
 ## Task 3: Implement VolumeStateManager
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py:54-end`
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py:54-end`
 
 - [ ] **Step 1: Append the manager class to volume_state.py**
 
@@ -411,14 +411,14 @@ def _now_iso() -> str:
 
 - [ ] **Step 2: Run tests to verify they pass**
 
-Run: `cd .claude/plugins/webnovel-writer_chang && python3 -m pytest scripts/tests/unit/test_volume_state.py -v`
+Run: `cd .claude/plugins/zhanghui && python3 -m pytest scripts/tests/unit/test_volume_state.py -v`
 Expected: 7 PASSED
 
 - [ ] **Step 3: Commit**
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py
+git add .claude/plugins/zhanghui/scripts/data_modules/volume_state.py
 git commit -m "feat(volume_state): implement VolumeStateManager (state machine + invariants)"
 ```
 
@@ -427,8 +427,8 @@ git commit -m "feat(volume_state): implement VolumeStateManager (state machine +
 ## Task 4: AI Volume Drafter — write failing test
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/data_modules/ai_volume_drafter.py`
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_ai_volume_drafter.py`
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/ai_volume_drafter.py`
+- Create: `.claude/plugins/zhanghui/scripts/tests/unit/test_ai_volume_drafter.py`
 
 - [ ] **Step 1: Create the drafter stub**
 
@@ -567,15 +567,15 @@ def test_draft_raises_on_missing_fields():
 
 - [ ] **Step 3: Run test to verify it passes (stub already implements logic)**
 
-Run: `cd .claude/plugins/webnovel-writer_chang && python3 -m pytest scripts/tests/unit/test_ai_volume_drafter.py -v`
+Run: `cd .claude/plugins/zhanghui && python3 -m pytest scripts/tests/unit/test_ai_volume_drafter.py -v`
 Expected: 3 PASSED
 
 - [ ] **Step 4: Commit**
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/data_modules/ai_volume_drafter.py \
-        .claude/plugins/webnovel-writer_chang/scripts/tests/unit/test_ai_volume_drafter.py
+git add .claude/plugins/zhanghui/scripts/data_modules/ai_volume_drafter.py \
+        .claude/plugins/zhanghui/scripts/tests/unit/test_ai_volume_drafter.py
 git commit -m "feat(ai_drafter): add draft_next_volume + tests (LLM-callable injected)"
 ```
 
@@ -584,7 +584,7 @@ git commit -m "feat(ai_drafter): add draft_next_volume + tests (LLM-callable inj
 ## Task 5: Wire VolumeStateManager into init_project.py — write failing test
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_init_multi_volume.py`
+- Create: `.claude/plugins/zhanghui/scripts/tests/integration/test_init_multi_volume.py`
 
 - [ ] **Step 1: Create the failing integration test**
 
@@ -652,14 +652,14 @@ def test_init_no_volumes_writes_empty_outline():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd .claude/plugins/webnovel-writer_chang && python3 -m pytest scripts/tests/integration/test_init_multi_volume.py -v`
+Run: `cd .claude/plugins/zhanghui && python3 -m pytest scripts/tests/integration/test_init_multi_volume.py -v`
 Expected: TypeError (unexpected kwarg `volume_skeleton`) or similar
 
 - [ ] **Step 3: Commit the failing test**
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_init_multi_volume.py
+git add .claude/plugins/zhanghui/scripts/tests/integration/test_init_multi_volume.py
 git commit -m "test(init): add multi-volume init integration test (red)"
 ```
 
@@ -668,8 +668,8 @@ git commit -m "test(init): add multi-volume init integration test (red)"
 ## Task 6: Implement volume_skeleton param in init_project.py
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/init_project.py:317` (add param)
-- Modify: `.claude/plugins/webnovel-writer_chang/scripts/init_project.py:680` (use new path)
+- Modify: `.claude/plugins/zhanghui/scripts/init_project.py:317` (add param)
+- Modify: `.claude/plugins/zhanghui/scripts/init_project.py:680` (use new path)
 
 - [ ] **Step 1: Add `volume_skeleton` parameter to `init_project()`**
 
@@ -785,19 +785,19 @@ Find the block around line 388 that updates `state["project_info"]`. Add this AF
 
 - [ ] **Step 5: Run the integration test to verify it passes**
 
-Run: `cd .claude/plugins/webnovel-writer_chang && python3 -m pytest scripts/tests/integration/test_init_multi_volume.py -v`
+Run: `cd .claude/plugins/zhanghui && python3 -m pytest scripts/tests/integration/test_init_multi_volume.py -v`
 Expected: 2 PASSED
 
 - [ ] **Step 6: Run the existing init tests to verify no regression**
 
-Run: `cd .claude/plugins/webnovel-writer_chang && python3 -m pytest scripts/tests/ -v -k "init or volume"`
+Run: `cd .claude/plugins/zhanghui && python3 -m pytest scripts/tests/ -v -k "init or volume"`
 Expected: all PASS (existing tests should not break since `volume_skeleton=None` keeps old behavior)
 
 - [ ] **Step 7: Commit**
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/init_project.py
+git add .claude/plugins/zhanghui/scripts/init_project.py
 git commit -m "feat(init): support volume_skeleton param + render multi-volume 总纲"
 ```
 
@@ -806,7 +806,7 @@ git commit -m "feat(init): support volume_skeleton param + render multi-volume �
 ## Task 7: Add multi-volume-ux reference doc
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/skills/webnovel-init/references/multi-volume-ux.md`
+- Create: `.claude/plugins/zhanghui/skills/webnovel-init/references/multi-volume-ux.md`
 
 - [ ] **Step 1: Write the reference doc**
 
@@ -860,7 +860,7 @@ For each V_k:
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-init/references/multi-volume-ux.md
+git add .claude/plugins/zhanghui/skills/webnovel-init/references/multi-volume-ux.md
 git commit -m "docs(init): add multi-volume UX design reference"
 ```
 
@@ -869,7 +869,7 @@ git commit -m "docs(init): add multi-volume UX design reference"
 ## Task 8: Modify webnovel-init SKILL.md — add Step 1.6 and Step 5.5
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md`
+- Modify: `.claude/plugins/zhanghui/skills/webnovel-init/SKILL.md`
 
 - [ ] **Step 1: Add Step 1.6 section after Step 1**
 
@@ -975,7 +975,7 @@ D) 完全跳过这一卷（设 deferred）
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md
+git add .claude/plugins/zhanghui/skills/webnovel-init/SKILL.md
 git commit -m "docs(init): add Step 1.6 (multi-volume collector) + Step 5.5 (AI drafter)"
 ```
 
@@ -984,7 +984,7 @@ git commit -m "docs(init): add Step 1.6 (multi-volume collector) + Step 5.5 (AI 
 ## Task 9: Modify webnovel-plan SKILL.md Step 9 — V+1 anchor from state
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md:336-344`
+- Modify: `.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md:336-344`
 
 - [ ] **Step 1: Replace the Step 9 "执行最小总纲写回" block**
 
@@ -1036,7 +1036,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" master-outlin
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md
+git add .claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md
 git commit -m "docs(plan): Step 9 reads volumes[] for V+1 anchor (per spec §5.4)"
 ```
 
@@ -1045,7 +1045,7 @@ git commit -m "docs(plan): Step 9 reads volumes[] for V+1 anchor (per spec §5.4
 ## Task 10: Add plan-flow V+1 anchor tests (per spec §5.4)
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_v_plus_one_anchor.py`
+- Create: `.claude/plugins/zhanghui/scripts/tests/integration/test_plan_v_plus_one_anchor.py`
 
 > **Note**: Spec referenced `test_plan_flow_writes_minimal_next_volume_anchor.py` but that file exists only in the upstream archive (`references/03-webnovel-writer-upstream/...`), not in our fork. We create a new test file with the same intent.
 
@@ -1130,14 +1130,14 @@ def test_plan_v1_three_volumes_no_v4_row(tmp_path):
 
 - [ ] **Step 2: Run all plan-flow related tests**
 
-Run: `cd .claude/plugins/webnovel-writer_chang && python3 -m pytest scripts/tests/integration/test_plan_v_plus_one_anchor.py scripts/tests/integration/test_init_multi_volume.py -v`
+Run: `cd .claude/plugins/zhanghui && python3 -m pytest scripts/tests/integration/test_plan_v_plus_one_anchor.py scripts/tests/integration/test_init_multi_volume.py -v`
 Expected: 5 PASSED (3 new + 2 from Task 5/6)
 
 - [ ] **Step 3: Commit**
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_v_plus_one_anchor.py
+git add .claude/plugins/zhanghui/scripts/tests/integration/test_plan_v_plus_one_anchor.py
 git commit -m "test(plan): add V+1 anchor semantics tests (confirmed vs deferred per spec §5.4)"
 ```
 
@@ -1146,7 +1146,7 @@ git commit -m "test(plan): add V+1 anchor semantics tests (confirmed vs deferred
 ## Task 11: End-to-end smoke test
 
 **Files:**
-- Create: `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_e2e_multi_volume_init.py`
+- Create: `.claude/plugins/zhanghui/scripts/tests/integration/test_e2e_multi_volume_init.py`
 
 - [ ] **Step 1: Write the smoke test**
 
@@ -1229,19 +1229,19 @@ def test_e2e_user_stops_at_v1():
 
 - [ ] **Step 2: Run smoke test**
 
-Run: `cd .claude/plugins/webnovel-writer_chang && python3 -m pytest scripts/tests/integration/test_e2e_multi_volume_init.py -v`
+Run: `cd .claude/plugins/zhanghui && python3 -m pytest scripts/tests/integration/test_e2e_multi_volume_init.py -v`
 Expected: 2 PASSED
 
 - [ ] **Step 3: Run full test suite to verify no regression**
 
-Run: `cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v --tb=short`
+Run: `cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/ -v --tb=short`
 Expected: all PASSED (existing + new)
 
 - [ ] **Step 4: Commit**
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_e2e_multi_volume_init.py
+git add .claude/plugins/zhanghui/scripts/tests/integration/test_e2e_multi_volume_init.py
 git commit -m "test(e2e): smoke test for 3-volume init + user-stops-at-v1 flow"
 ```
 
@@ -1250,7 +1250,7 @@ git commit -m "test(e2e): smoke test for 3-volume init + user-stops-at-v1 flow"
 ## Task 12: Update INDEX + close out
 
 **Files:**
-- Modify: `.claude/plugins/webnovel-writer_chang/README.md` (optional: mention the new feature)
+- Modify: `.claude/plugins/zhanghui/README.md` (optional: mention the new feature)
 
 - [ ] **Step 1: Add a one-line entry to README under existing feature list**
 
@@ -1264,7 +1264,7 @@ Find the section listing skills/features in `README.md`. After the existing entr
 
 ```bash
 cd /Users/chang/Desktop/zhanghui
-git add .claude/plugins/webnovel-writer_chang/README.md
+git add .claude/plugins/zhanghui/README.md
 git commit -m "docs(readme): mention multi-volume init feature"
 ```
 

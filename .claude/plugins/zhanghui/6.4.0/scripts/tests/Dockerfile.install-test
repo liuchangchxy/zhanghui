@@ -1,0 +1,10 @@
+FROM ubuntu:latest
+RUN apt-get update && apt-get install -y python3 python3-pip curl ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /plugin
+COPY . /plugin/
+RUN ls vendor/uv/uv-linux-x86_64 && chmod +x vendor/uv/uv-linux-x86_64
+ENV CLAUDE_PLUGIN_ROOT=/plugin
+RUN python3 hooks/install_python_deps.py
+RUN test -f /root/.cache/webnovel-writer-chang/venvs/dashboard/.install-stamp || \
+    test -f /root/.cache/webnovel-writer-chang/venvs/webnovel-chart-scan/.install-stamp
+CMD ["echo", "install ok"]

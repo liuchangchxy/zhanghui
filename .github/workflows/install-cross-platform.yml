@@ -3,9 +3,9 @@ name: install-cross-platform
 on:
   pull_request:
     paths:
-      - '.claude/plugins/webnovel-writer_chang/vendor/uv/**'
-      - '.claude/plugins/webnovel-writer_chang/hooks/install_python_deps.py'
-      - '.claude/plugins/webnovel-writer_chang/scripts/tests/test_install_*.py'
+      - '.claude/plugins/zhanghui/vendor/uv/**'
+      - '.claude/plugins/zhanghui/hooks/install_python_deps.py'
+      - '.claude/plugins/zhanghui/scripts/tests/test_install_*.py'
       - '.github/workflows/install-cross-platform.yml'
   push:
     branches: [main]
@@ -25,10 +25,10 @@ jobs:
       - name: Verify uv binary sha256
         shell: bash
         run: |
-          cd .claude/plugins/webnovel-writer_chang
+          cd .claude/plugins/zhanghui
           python3 -m pytest scripts/tests/test_uv_vendor.py -v
       - name: Unit tests for install_python_deps
         shell: bash
         run: |
-          cd .claude/plugins/webnovel-writer_chang
+          cd .claude/plugins/zhanghui
           python3 -m pytest scripts/tests/test_install_python_deps.py -v

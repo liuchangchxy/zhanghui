@@ -53,18 +53,18 @@
 
 ```bash
 claude plugin marketplace add liuchangchxy/zhanghui
-claude plugin install webnovel-writer_chang@zhanghui
+claude plugin install zhanghui@zhanghui
 ```
 
 装完在任意书项目目录下直接可用，**书项目侧不需要 `.claude/` 配置**。
 
 ### 方式 B：本仓库作为开发工作区（作者本机流程）
 
-本仓库是一个**开发工作区**，插件本体在 `.claude/plugins/webnovel-writer_chang/`。
+本仓库是一个**开发工作区**，插件本体在 `.claude/plugins/zhanghui/`。
 本机安装靠 marketplace + cache 软链：
 
 ```bash
-bash .claude/plugins/webnovel-writer_chang/scripts/dev-only/setup_dev_env.sh
+bash .claude/plugins/zhanghui/scripts/dev-only/setup_dev_env.sh
 ```
 
 这个脚本幂等，会校验插件完整性、同步到 marketplace、**把 cache 建为指向 dev workspace 的软链**（改代码立即生效，无需重启），并跑 smoke test。
@@ -93,8 +93,8 @@ claude
 改代码 → 跑 `bin/deploy-plugin.sh` 同步到 marketplace：
 
 ```bash
-bash .claude/plugins/webnovel-writer_chang/bin/deploy-plugin.sh --dry-run   # 预览
-bash .claude/plugins/webnovel-writer_chang/bin/deploy-plugin.sh             # 真同步
+bash .claude/plugins/zhanghui/bin/deploy-plugin.sh --dry-run   # 预览
+bash .claude/plugins/zhanghui/bin/deploy-plugin.sh             # 真同步
 ```
 
 **不要**手动 cp 到 cache，也**不要**直接改 cache 里的文件。
@@ -102,13 +102,13 @@ bash .claude/plugins/webnovel-writer_chang/bin/deploy-plugin.sh             # �
 ### 测试
 
 ```bash
-cd .claude/plugins/webnovel-writer_chang/scripts && python3 -m pytest tests/ -v
+cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/ -v
 ```
 
 ## 已知待办
 
 - `tests/test_run_behavior_evals.py` 当前 3 项失败（`skill_init_contract` / `skill_review_contract` / `write_blocks_before_commit`）——SKILL.md 内容与评测契约漂移，待修
-- plugin 名 `webnovel-writer_chang` 含下划线，非 kebab-case——Claude Code 可用，但上架 Claude.ai 目录要求 kebab-case
+- plugin 名 `zhanghui` 含下划线，非 kebab-case——Claude Code 可用，但上架 Claude.ai 目录要求 kebab-case
 
 ## 许可与来源
 

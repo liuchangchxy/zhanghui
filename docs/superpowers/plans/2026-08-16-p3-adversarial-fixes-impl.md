@@ -42,7 +42,7 @@ def test_rejection_contract_accepts_do_not_copy_violation():
 - [ ] **Step 2: Verify test fails**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_rejection_contract.py::test_rejection_contract_accepts_do_not_copy_violation -v 2>&1 | tail -10
 ```
 
@@ -50,12 +50,12 @@ Expected: FAIL.
 
 - [ ] **Step 3: Add `do_not_copy_violation` to `VALID_CATEGORIES`**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/rejection_contract.py`. Find the `VALID_CATEGORIES` definition. Add `"do_not_copy_violation"`.
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/rejection_contract.py`. Find the `VALID_CATEGORIES` definition. Add `"do_not_copy_violation"`.
 
 - [ ] **Step 4: Verify test passes**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_rejection_contract.py::test_rejection_contract_accepts_do_not_copy_violation -v 2>&1 | tail -8
 ```
 
@@ -64,7 +64,7 @@ Expected: PASS.
 - [ ] **Step 5: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/rejection_contract.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/rejection_contract.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/
 
 cd /Users/chang/Desktop/zhanghui
 git add -A
@@ -94,7 +94,7 @@ def test_cli_build_step1_summary(tmp_path):
     import subprocess
     import sys
     _build_minimal_tree(tmp_path, borrowable=["宗门升级"])
-    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py"
+    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/reference_research_injector.py"
     result = subprocess.run(
         [sys.executable, helper, "build-step1-summary", "--project-root", str(tmp_path)],
         capture_output=True, text=True, timeout=10,
@@ -106,7 +106,7 @@ def test_cli_build_step1_summary(tmp_path):
 def test_cli_build_step2a_section(tmp_path):
     import subprocess, sys
     _build_minimal_tree(tmp_path, do_not_copy=["韩立人设"])
-    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py"
+    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/reference_research_injector.py"
     result = subprocess.run(
         [sys.executable, helper, "build-step2a-section", "--project-root", str(tmp_path)],
         capture_output=True, text=True, timeout=10,
@@ -118,7 +118,7 @@ def test_cli_build_step2a_section(tmp_path):
 def test_cli_build_do_not_copy_check_data(tmp_path):
     import subprocess, sys, json
     _build_minimal_tree(tmp_path, do_not_copy=["韩立人设"])
-    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py"
+    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/reference_research_injector.py"
     chapter_text = "韩立出场了\n"
     result = subprocess.run(
         [sys.executable, helper, "build-do-not-copy-check-data",
@@ -163,7 +163,7 @@ def test_step1_summary_docstring_mentions_char_cap():
 - [ ] **Step 2: Verify tests fail**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_reference_research_injector.py -v -k "cli_build or skips_subtoken or matches_colon_form or docstring_mentions_char_cap" 2>&1 | tail -15
 ```
 
@@ -171,7 +171,7 @@ Expected: 6 FAIL.
 
 - [ ] **Step 3: Fix C2 — add `__main__` block with argparse**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py`. Append at the end:
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/reference_research_injector.py`. Append at the end:
 
 ```python
 
@@ -241,7 +241,7 @@ Update the `build_step1_summary()` docstring to say "≤ 800 chars (~1200 CJK to
 - [ ] **Step 7: Verify all new tests pass + no regression**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest data_modules/tests/test_reference_research_injector.py -v 2>&1 | tail -25
 ```
 
@@ -250,10 +250,10 @@ Expected: All 18 tests pass (12 original + 6 new).
 - [ ] **Step 8: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/scripts/data_modules/tests/test_reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/tests/
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/skills/webnovel-write/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/skills/webnovel-write/SKILL.md
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/context-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/data_modules/tests/test_reference_research_injector.py /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/tests/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/skills/webnovel-write/SKILL.md
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/context-agent.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/agents/
 
 cd /Users/chang/Desktop/zhanghui
 git add -A
@@ -284,7 +284,7 @@ C5: build_step1_summary docstring now says '≤ 800 chars (~1200 CJK tokens)'
 
 - [ ] **Step 1: Read current reviewer.md**
 
-Open `/Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/reviewer.md`. Find the section around line 199 that handles `do_not_copy_check.json`.
+Open `/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/reviewer.md`. Find the section around line 199 that handles `do_not_copy_check.json`.
 
 - [ ] **Step 2: Update silent-pass to error**
 
@@ -307,7 +307,7 @@ Find the section that says something like "`do_not_copy_check.json` 不存在或
 - [ ] **Step 3: Sync + commit**
 
 ```bash
-cp /Users/chang/Desktop/zhanghui/.claude/plugins/webnovel-writer_chang/agents/reviewer.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/agents/
+cp /Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/agents/reviewer.md /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/agents/
 
 cd /Users/chang/Desktop/zhanghui
 git add -A
@@ -326,7 +326,7 @@ reference_research/ exists."
 - [ ] **Step 1: Run full test suite**
 
 ```bash
-cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts
+cd /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts
 python3 -m pytest \
   data_modules/tests/test_prompt_integrity.py \
   data_modules/tests/test_init_reference_tree.py \
@@ -347,7 +347,7 @@ cd /Users/chang/Desktop/zhanghui
 # Verify C1 fix
 python3 -c "
 import sys
-sys.path.insert(0, '.claude/plugins/webnovel-writer_chang/scripts')
+sys.path.insert(0, '.claude/plugins/zhanghui/scripts')
 from rejection_contract import build_contract_from_reviewer_output, validate_contract
 contract = build_contract_from_reviewer_output({'chapter': 1, 'issues': [{'severity': 'critical', 'category': 'do_not_copy_violation', 'location': '第1段', 'description': 'x', 'fix_hint': 'y', 'blocking': True}]})
 validate_contract(contract)
@@ -355,12 +355,12 @@ print('C1 OK')
 "
 
 # Verify C2 fix (CLI)
-python3 /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/webnovel-writer_chang/scripts/data_modules/reference_research_injector.py build-step1-summary --project-root /tmp/nonexistent 2>&1 | head -3
+python3 /Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/reference_research_injector.py build-step1-summary --project-root /tmp/nonexistent 2>&1 | head -3
 
 # Verify C3 fix (false positive)
 python3 -c "
 import sys, pathlib, tempfile
-sys.path.insert(0, '.claude/plugins/webnovel-writer_chang/scripts')
+sys.path.insert(0, '.claude/plugins/zhanghui/scripts')
 from data_modules.init_reference_tree import build_reference_tree
 from data_modules.reference_research_injector import build_do_not_copy_check_data
 with tempfile.TemporaryDirectory() as td:
@@ -382,7 +382,7 @@ with tempfile.TemporaryDirectory() as td:
 # Verify C4 fix (colon-form)
 python3 -c "
 import sys, pathlib, tempfile
-sys.path.insert(0, '.claude/plugins/webnovel-writer_chang/scripts')
+sys.path.insert(0, '.claude/plugins/zhanghui/scripts')
 from data_modules.init_reference_tree import build_reference_tree
 from data_modules.reference_research_injector import build_do_not_copy_check_data
 with tempfile.TemporaryDirectory() as td:

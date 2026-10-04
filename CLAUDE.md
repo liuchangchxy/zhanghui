@@ -28,7 +28,7 @@
 ## 3. references/ 与项目代码的分界
 
 - `references/` — ⛔ **只读快照**，来源原始代码，**永远不改**
-- `.claude/plugins/webnovel-writer_chang/` — ✅ 我们自己的代码，**唯一可写的地方**
+- `.claude/plugins/zhanghui/` — ✅ 我们自己的代码，**唯一可写的地方**
 - `study/` — ✅ 提取层和决策日志，记录"我们从参考学到了什么"
 
 引用参考时必须有 cite：

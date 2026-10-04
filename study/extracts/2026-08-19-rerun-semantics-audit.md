@@ -1,6 +1,6 @@
 ---
 name: 2026-08-19-rerun-semantics-audit
-description: 第一次系统性审计 webnovel-writer_chang 全部 15 个 skill 的"重跑/覆盖"语义。结论：plan 报的 8 个缺陷全部为真；但 init / volume_state / chapter_commit 已经在脚本层有显式守卫，定位不均。
+description: 第一次系统性审计 zhanghui 全部 15 个 skill 的"重跑/覆盖"语义。结论：plan 报的 8 个缺陷全部为真；但 init / volume_state / chapter_commit 已经在脚本层有显式守卫，定位不均。
 metadata:
   type: project
 ---
@@ -15,7 +15,7 @@ metadata:
 
 ## 审计方法
 
-- 通读 `.claude/plugins/webnovel-writer_chang/skills/*/SKILL.md`（15 份）
+- 通读 `.claude/plugins/zhanghui/skills/*/SKILL.md`（15 份）
 - 配套检查 `scripts/` 下所有 .py 中涉及 `overwrite` / `exists` / `merge` / `append_or_update` / `已存在` / `询问` 的关键函数
 - 验证每个声称有"询问"机制的 SKILL.md 是否在脚本层落地
 

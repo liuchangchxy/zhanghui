@@ -189,14 +189,14 @@ load_planning_horizon() -> PlanningHorizon
 
 | 文件 | 改动类型 | 关键变更 |
 |---|---|---|
-| `.claude/plugins/webnovel-writer_chang/scripts/init_project.py` | 改 | `_build_master_outline` 路径**默认启用**（取代 `_inject_volume_rows`）；加 `expected_total_volumes` / `confirmed_through_volume` / `later_volumes_status` 字段写入 |
-| `.claude/plugins/webnovel-writer_chang/scripts/data_modules/volume_state.py` | **新增** | VolumeStateManager + CandidateVolume dataclass + 状态机校验 |
-| `.claude/plugins/webnovel-writer_chang/templates/output/大纲-总纲.md` | 改 | 卷划分表改为可扩展；加"卷字段说明"段 |
-| `.claude/plugins/webnovel-writer_chang/skills/webnovel-init/SKILL.md` | 改 | 加 Step 1.6（卷骨架采集循环）+ Step 5.5（AI 起草候选态） |
-| `.claude/plugins/webnovel-writer_chang/skills/webnovel-init/references/multi-volume-ux.md` | **新增** | 压缩 ainovel-cli / StoryForge / 天命 的设计原则 |
-| `.claude/plugins/webnovel-writer_chang/skills/webnovel-plan/SKILL.md` | 改 | Step 9 段落按本设计 §5.4 改写 |
-| `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_init_volumes.py` | **新增** | 测采集循环、状态机、deferred 不持久化 |
-| `.claude/plugins/webnovel-writer_chang/scripts/tests/integration/test_plan_flow_writes_minimal_next_volume_anchor.py` | 改断言 | 按 §5.4 改 |
+| `.claude/plugins/zhanghui/scripts/init_project.py` | 改 | `_build_master_outline` 路径**默认启用**（取代 `_inject_volume_rows`）；加 `expected_total_volumes` / `confirmed_through_volume` / `later_volumes_status` 字段写入 |
+| `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py` | **新增** | VolumeStateManager + CandidateVolume dataclass + 状态机校验 |
+| `.claude/plugins/zhanghui/templates/output/大纲-总纲.md` | 改 | 卷划分表改为可扩展；加"卷字段说明"段 |
+| `.claude/plugins/zhanghui/skills/webnovel-init/SKILL.md` | 改 | 加 Step 1.6（卷骨架采集循环）+ Step 5.5（AI 起草候选态） |
+| `.claude/plugins/zhanghui/skills/webnovel-init/references/multi-volume-ux.md` | **新增** | 压缩 ainovel-cli / StoryForge / 天命 的设计原则 |
+| `.claude/plugins/zhanghui/skills/webnovel-plan/SKILL.md` | 改 | Step 9 段落按本设计 §5.4 改写 |
+| `.claude/plugins/zhanghui/scripts/tests/integration/test_init_volumes.py` | **新增** | 测采集循环、状态机、deferred 不持久化 |
+| `.claude/plugins/zhanghui/scripts/tests/integration/test_plan_flow_writes_minimal_next_volume_anchor.py` | 改断言 | 按 §5.4 改 |
 
 ---
 
