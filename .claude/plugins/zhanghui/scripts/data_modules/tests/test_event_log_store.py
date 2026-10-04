@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from data_modules.tests.commit_helpers import build_commit_with_reconciliation
 from data_modules.event_log_store import EventLogStore
 
 
@@ -14,7 +15,7 @@ def _persist_commit(tmp_path: Path, chapter: int, events: list) -> list:
     from data_modules.chapter_commit_service import ChapterCommitService
 
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=chapter,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},

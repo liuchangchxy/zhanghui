@@ -48,7 +48,7 @@ allowed-tools: Read Write Edit Grep Bash
    ```bash
    python3 .../changes_gate.py --chapter-file "正文/第${NNNN}章-${title}.md" --db index.db --json
    ```
-7. **回写 data-agent**（可选）：重跑 `webnovel-writer:data-agent` 让 index.db 同步。
+7. **回写 data-agent**（可选）：先用 `prepare_data_agent_input.py` 从修订后的章节生成 prose-only 临时文件与独立 ProposedChanges JSON；调用 `webnovel-writer:data-agent` 时 `chapter_file` 只传 prose-only 文件，不能传含 `<chapter_changes>` 的原文件。
 
 ## 退出条件
 

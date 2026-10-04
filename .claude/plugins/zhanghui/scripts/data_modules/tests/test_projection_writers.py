@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from data_modules.tests.commit_helpers import build_commit_with_reconciliation
 from data_modules.chapter_commit_service import ChapterCommitService
 from data_modules.config import DataModulesConfig
 from data_modules.index_manager import IndexManager
@@ -309,7 +310,7 @@ def test_accepted_chapter_commits_advance_progress_and_word_count(tmp_path):
 
     service = ChapterCommitService(tmp_path)
     for chapter in (1, 2):
-        payload = service.build_commit(
+        payload = build_commit_with_reconciliation(service,
             chapter=chapter,
             review_result={"blocking_count": 0},
             fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
@@ -422,7 +423,7 @@ def test_accepted_commit_updates_state_json_end_to_end(tmp_path):
     (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
 
     service = ChapterCommitService(tmp_path)
-    commit_payload = service.build_commit(
+    commit_payload = build_commit_with_reconciliation(service,
         chapter=3,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": ["发现陷阱"], "covered_nodes": ["发现陷阱"], "missed_nodes": [], "extra_nodes": []},
@@ -587,7 +588,7 @@ def test_accepted_commit_writes_chapter_index_tables(tmp_path):
     (chapters_dir / "第0003章.md").write_text("第三章正文内容", encoding="utf-8")
 
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=3,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
@@ -633,7 +634,7 @@ def test_index_projection_writer_is_idempotent_for_replay(tmp_path):
     (chapters_dir / "第0003章.md").write_text("第三章正文内容", encoding="utf-8")
 
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=3,
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},

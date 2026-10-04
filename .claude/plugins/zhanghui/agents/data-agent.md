@@ -26,7 +26,7 @@ chapter-commit 由写章主流程运行，data-agent 不在此执行（见 §5 �
 
 ## 3. 流程
 
-**A 加载**：project_root 由调用方传入（已过 preflight），Read 正文 + 查实体索引和别名。
+**A 加载**：project_root 由调用方传入（已过 preflight），Read `chapter_file` + 查实体索引和别名。写章/修订主流程必须先用 `prepare_data_agent_input.py` 生成 prose-only artifact，并且只把该路径作为 `chapter_file` 传入；禁止把包含 `<chapter_changes>...</chapter_changes>` 的完整章节作为观察输入。不得读取 Proposal 来补齐、调整或迎合 extraction。
 
 **B 提取与消歧**：同一轮完成，不额外调 LLM。置信度>0.8 自动采用，0.5-0.8 采用+warning，<0.5 标记待人工。
 
@@ -53,7 +53,7 @@ hook_strength: "strong"
 
 ```
 
-长期记忆只提炼"可跨章复用"的事实，转成 events/deltas 写入 extraction_result。摘要中的每条埋设伏笔必须同步写一条 `accepted_events[].event_type == "open_loop_created"`；已回收则用 `promise_paid_off` 或对应闭合事件。
+长期记忆只提炼"可跨章复用"的事实，转成 events/deltas 写入 extraction_result。摘要中的每条埋设伏笔必须同步写一条 `accepted_events[].event_type == "open_loop_created"`；已回收则用 `promise_paid_off` 或对应闭合事件。提取基于最终正文，不以 CHANGES 声明作证据；提交前由独立 reconciliation 对账。
 
 ## 4. 输入
 
@@ -65,7 +65,7 @@ hook_strength: "strong"
 ## 5. 边界
 
 - 不额外调 LLM；置信度<0.5 不自动写入；不回滚上游步骤。
-- 只生成三份 tmp artifact；不直接写 state/index/summaries/memory/vectors/projection（这些由 chapter-commit 投影链完成）。
+- 只生成三份 tmp artifact；不直接写 state/index/summaries/memory/vectors/projection（这些由 chapter-commit 投影链完成）。`ObservedChanges` 只包含正文观察，不能从 ProposedChanges 补事实。
 
 ## 6. 校验清单
 

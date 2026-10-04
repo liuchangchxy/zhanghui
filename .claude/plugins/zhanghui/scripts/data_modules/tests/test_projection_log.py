@@ -13,6 +13,7 @@ def _ensure_scripts_on_path() -> None:
 
 _ensure_scripts_on_path()
 
+from data_modules.tests.commit_helpers import build_commit_with_reconciliation
 from data_modules.chapter_commit_service import ChapterCommitService  # noqa: E402
 from data_modules.projection_log import (  # noqa: E402
     append_projection_run,
@@ -88,7 +89,7 @@ def test_chapter_commit_service_writes_projection_log(tmp_path):
     (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
 
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=7,
         review_result={"blocking_count": 1},
         fulfillment_result={
@@ -119,7 +120,7 @@ def test_chapter_commit_service_marks_vector_store_zero_as_failed(monkeypatch, t
     )
 
     service = ChapterCommitService(tmp_path)
-    payload = service.build_commit(
+    payload = build_commit_with_reconciliation(service,
         chapter=8,
         review_result={"blocking_count": 0},
         fulfillment_result={

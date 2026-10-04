@@ -1,5 +1,7 @@
 # CHANGES 协议字段定义
 
+`<chapter_changes>` 是 Writer 的 ProposedChanges 声明，不是 Canon 或已发生事实。润色/重写结束、最终正文稳定后，必须重新生成整个块，再运行 `changes_gate.py`。`changes_gate.py` 负责 CHANGES 容器、schema、枚举及现有账本完整性检查；它不做 ProposedChanges 与 ObservedChanges 的语义 reconciliation。
+
 本协议借鉴天命 AI 写小说工具的结构化变更声明机制，**简化到 8 个核心字段**以降低 LLM 输出成本。
 
 ## 容器形式
