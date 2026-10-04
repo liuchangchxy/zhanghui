@@ -99,29 +99,20 @@ class ChangesDocument:
 
 def _find_changes_source(
     chapter_text: str,
-) -> tuple[str | None, str | None, tuple[tuple[int, int], ...]]:
-    """Apply the existing format priority and expose the matching source ranges."""
+) -> tuple[str | None, str | None, tuple[tuple[int, int], ...], str | None]:
+    """Find all declared formats, rejecting documents that mix containers."""
     format_names = ("xml", "separator", "heading")
-    for format_name, pattern in zip(format_names, CHANGE_PATTERNS):
-        matches = list(pattern.finditer(chapter_text))
-        if matches:
-            # Preserve the established priority and last-match selection. Remove
-            # every candidate of this winning format from the observation channel.
-            selected = matches[-1].group(1).strip()
-            spans = []
-            for match in matches:
-                start, end = match.span()
-                if format_name == "separator" and chapter_text[end:end + 3] == "---":
-                    end += 3
-                spans.append((start, end))
-            return selected, format_name, tuple(spans)
+    candidates: dict[str, list[re.Match[str]]] = {
+        name: list(pattern.finditer(chapter_text))
+        for name, pattern in zip(format_names, CHANGE_PATTERNS)
+    }
 
-    # Keep the existing bare-JSON heuristic exactly: only the final paragraph,
-    # braces at both ends, and at least four required-field key spellings.
+    # A JSON tail inside a heading/XML/separator block is that container's
+    # payload, not a second format. A separate trailing JSON proposal is mixed.
     tail = chapter_text.rstrip().split("\n\n")[-1].strip()
+    json_span: tuple[int, int] | None = None
     if tail.startswith("{") and tail.endswith("}"):
-        candidate_keys = REQUIRED_TOP_LEVEL_FIELDS
-        matched = sum(1 for k in candidate_keys if f'"{k}"' in tail)
+        matched = sum(1 for key in REQUIRED_TOP_LEVEL_FIELDS if f'"{key}"' in tail)
         if matched >= 4:
             stripped_end = len(chapter_text.rstrip())
             separator_start = chapter_text[:stripped_end].rfind("\n\n")
@@ -130,8 +121,41 @@ def _find_changes_source(
                 chapter_text[paragraph_start:stripped_end].lstrip()
             )
             start = paragraph_start + leading
-            return tail, "trailing_json", ((start, start + len(tail)),)
-    return None, None, ()
+            json_span = (start, start + len(tail))
+
+    def span_for(name: str, match: re.Match[str]) -> tuple[int, int]:
+        start, end = match.span()
+        if name == "separator" and chapter_text[end:end + 3] == "---":
+            end += 3
+        return start, end
+
+    format_spans = [
+        span_for(name, match)
+        for name, matches in candidates.items()
+        for match in matches
+    ]
+    json_is_payload = json_span is not None and any(
+        start <= json_span[0] and json_span[1] <= end
+        for start, end in format_spans
+    )
+    detected = [name for name, matches in candidates.items() if matches]
+    if json_span is not None and not json_is_payload:
+        detected.append("trailing_json")
+    if len(detected) > 1:
+        return None, None, (), "mixed_changes_formats: 同一章节只能使用一种 CHANGES 容器格式"
+
+    if detected and detected[0] == "trailing_json":
+        return tail, "trailing_json", (json_span,), None  # type: ignore[arg-type]
+
+    for format_name, pattern in zip(format_names, CHANGE_PATTERNS):
+        matches = candidates[format_name]
+        if matches:
+            # Preserve the established priority and last-match selection. Remove
+            # every candidate of this winning format from the observation channel.
+            selected = matches[-1].group(1).strip()
+            spans = tuple(span_for(format_name, match) for match in matches)
+            return selected, format_name, spans, None
+    return None, None, (), None
 
 
 def _remove_source_spans(text: str, spans: tuple[tuple[int, int], ...]) -> str:
@@ -147,7 +171,15 @@ def parse_changes_document(chapter_text: str) -> ChangesDocument:
     containers, and repeated blocks in the winning format are all removed so an
     earlier draft cannot leak into the Data Agent channel.
     """
-    block, format_name, spans = _find_changes_source(chapter_text)
+    block, format_name, spans, protocol_error = _find_changes_source(chapter_text)
+    if protocol_error:
+        return ChangesDocument(
+            proposed_changes=None,
+            error=protocol_error,
+            format=None,
+            source_spans=(),
+            prose_only=chapter_text,
+        )
     prose_only = _remove_source_spans(chapter_text, spans)
     if block is None:
         return ChangesDocument(
@@ -178,7 +210,7 @@ def parse_changes_document(chapter_text: str) -> ChangesDocument:
 
 def extract_changes_block(chapter_text: str) -> str | None:
     """从章节文本中提取当前优先级下最后一个 CHANGES 候选块。"""
-    block, _, _ = _find_changes_source(chapter_text)
+    block, _, _, _ = _find_changes_source(chapter_text)
     return block
 
 

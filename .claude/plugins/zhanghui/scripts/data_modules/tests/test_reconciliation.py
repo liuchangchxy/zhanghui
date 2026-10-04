@@ -136,6 +136,65 @@ def test_data_agent_split_removes_proposed_金丹_from_input(tmp_path, format_na
     assert json.loads(changes.read_text(encoding="utf-8")) == proposal
 
 
+def mixed_chapter(formats):
+    import json
+
+    body = json.dumps(change(), ensure_ascii=False)
+    rendered = {
+        "xml": f"<chapter_changes>{body}</chapter_changes>",
+        "separator": f"---CHANGES---\n{body}\n---",
+        "heading": f"# CHANGES\n{body}",
+        "trailing_json": body,
+    }
+    return "\n\n".join(rendered[name] for name in formats)
+
+
+@pytest.mark.parametrize("formats", [
+    ("xml", "trailing_json"), ("separator", "trailing_json"),
+    ("xml", "heading"), ("separator", "heading"),
+    ("xml", "separator", "trailing_json"),
+])
+def test_split_rejects_mixed_changes_formats(formats):
+    with pytest.raises(ValueError, match="mixed_changes_formats"):
+        split_chapter_and_changes(mixed_chapter(formats))
+
+
+@pytest.mark.parametrize("formats", [
+    ("xml", "trailing_json"), ("separator", "trailing_json"),
+    ("xml", "heading"), ("separator", "heading"),
+    ("xml", "separator", "trailing_json"),
+])
+@pytest.mark.parametrize("outputs_exist", [False, True])
+def test_prepare_data_agent_input_mixed_format_failure_leaves_no_new_artifact(
+    tmp_path, formats, outputs_exist
+):
+    import subprocess
+    from pathlib import Path
+
+    chapter = tmp_path / "chapter.md"
+    chapter.write_text(mixed_chapter(formats), encoding="utf-8")
+    prose = tmp_path / "prose.md"
+    changes = tmp_path / "proposed.json"
+    if outputs_exist:
+        prose.write_text("previous prose", encoding="utf-8")
+        changes.write_text("previous proposal", encoding="utf-8")
+    scripts = Path(__file__).resolve().parents[2]
+
+    result = subprocess.run(
+        [sys.executable, str(scripts / "prepare_data_agent_input.py"),
+         "--chapter-file", str(chapter), "--prose-output", str(prose),
+         "--changes-output", str(changes)], capture_output=True, text=True,
+    )
+
+    assert result.returncode != 0
+    if outputs_exist:
+        assert prose.read_text(encoding="utf-8") == "previous prose"
+        assert changes.read_text(encoding="utf-8") == "previous proposal"
+    else:
+        assert not prose.exists()
+        assert not changes.exists()
+
+
 @pytest.mark.parametrize("format_name", ["xml", "separator", "heading", "trailing_json"])
 def test_proposal_format_does_not_change_reconciliation_semantics(format_name):
     import json

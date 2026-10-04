@@ -121,6 +121,44 @@ def test_negative_missing_field(test_db: Path):
     assert any("item_transfers" in f["message"] for f in result["failures"])
 
 
+@pytest.mark.parametrize("second_format", ["trailing_json", "heading"])
+@pytest.mark.parametrize("first_format", ["xml", "separator"])
+def test_gate_blocks_mixed_explicit_and_secondary_changes_formats(test_db, first_format, second_format):
+    proposal = {
+        "character_state_changes": [], "new_plot_points": [], "foreshadowing_actions": [],
+        "location_state_changes": [], "faction_state_changes": [], "time_progression": None,
+        "item_transfers": [], "unresolved_questions": [],
+    }
+    body = json.dumps(proposal, ensure_ascii=False)
+    first = (f"<chapter_changes>{body}</chapter_changes>" if first_format == "xml"
+             else f"---CHANGES---\n{body}\n---")
+    second = (f"# CHANGES\n{body}" if second_format == "heading" else body)
+    chapter = first + "\n\n" + second
+
+    result = run_gate(chapter, test_db)
+
+    assert result["passed"] is False
+    assert any("mixed_changes_formats" in failure["message"]
+               for failure in result["failures"])
+
+
+def test_gate_blocks_xml_separator_and_trailing_json_together(test_db):
+    proposal = {
+        "character_state_changes": [], "new_plot_points": [], "foreshadowing_actions": [],
+        "location_state_changes": [], "faction_state_changes": [], "time_progression": None,
+        "item_transfers": [], "unresolved_questions": [],
+    }
+    body = json.dumps(proposal, ensure_ascii=False)
+    chapter = (f"<chapter_changes>{body}</chapter_changes>\n\n"
+               f"---CHANGES---\n{body}\n---\n\n{body}")
+
+    result = run_gate(chapter, test_db)
+
+    assert result["passed"] is False
+    assert any("mixed_changes_formats" in failure["message"]
+               for failure in result["failures"])
+
+
 def test_negative_invalid_enum(test_db: Path):
     changes = {
         "character_state_changes": [{"importance": "very-important"}],

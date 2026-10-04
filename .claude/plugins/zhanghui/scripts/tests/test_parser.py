@@ -188,6 +188,87 @@ def test_multiple_xml_candidates_keep_gate_priority_and_strip_all_candidate_bloc
     assert "散文" in document.prose_only
 
 
+def test_same_format_separator_blocks_keep_last_proposal_and_strip_all_blocks():
+    first = json.dumps({"character_state_changes": [{"new": "筑基"}]})
+    last = json.dumps({"character_state_changes": [{"new": "金丹"}]})
+    chapter = f"正文\n---CHANGES---\n{first}\n---\n散文\n---CHANGES---\n{last}\n---"
+
+    document = parse_changes_document(chapter)
+
+    assert document.error is None
+    assert document.format == "separator"
+    assert document.proposed_changes == {"character_state_changes": [{"new": "金丹"}]}
+    assert "筑基" not in document.prose_only
+    assert "金丹" not in document.prose_only
+    assert "散文" in document.prose_only
+
+
+@pytest.mark.parametrize(
+    "chapter",
+    [
+        "<chapter_changes>{}</chapter_changes>\n\n" + json.dumps({key: [] for key in [
+            "character_state_changes", "new_plot_points", "foreshadowing_actions",
+            "location_state_changes", "faction_state_changes", "time_progression",
+            "item_transfers", "unresolved_questions",
+        ]}),
+        "---CHANGES---\n{}\n---\n\n" + json.dumps({key: [] for key in [
+            "character_state_changes", "new_plot_points", "foreshadowing_actions",
+            "location_state_changes", "faction_state_changes", "time_progression",
+            "item_transfers", "unresolved_questions",
+        ]}),
+        "<chapter_changes>{}</chapter_changes>\n\n# CHANGES\n{}",
+        "---CHANGES---\n{}\n---\n\n# CHANGES\n{}",
+        "<chapter_changes>{}</chapter_changes>\n\n---CHANGES---\n{}\n---\n\n" + json.dumps({key: [] for key in [
+            "character_state_changes", "new_plot_points", "foreshadowing_actions",
+            "location_state_changes", "faction_state_changes", "time_progression",
+            "item_transfers", "unresolved_questions",
+        ]}),
+    ],
+)
+def test_mixed_changes_formats_are_rejected(chapter):
+    document = parse_changes_document(chapter)
+    parsed, error = parse_changes(chapter)
+    assert document.error is not None
+    assert "mixed_changes_formats" in document.error
+    assert parsed is None
+    assert error == document.error
+    assert document.proposed_changes is None
+    assert document.format is None
+    assert document.source_spans == ()
+    assert document.prose_only == chapter
+
+
+def test_xml_changes_preserves_ordinary_json_prose():
+    chapter = '<chapter_changes>{}</chapter_changes>\n示例：{"name": "hero"}'
+    document = parse_changes_document(chapter)
+    assert document.error is None
+    assert document.format == "xml"
+    assert document.prose_only == '\n示例：{"name": "hero"}'
+
+
+def test_heading_changes_preserves_code_block_json():
+    proposal = json.dumps({"character_state_changes": []})
+    chapter = f"# CHANGES\n{proposal}\n\n# 正文示例\n```json\n{{\"name\": \"hero\"}}\n```"
+    document = parse_changes_document(chapter)
+    assert document.error is None
+    assert document.format == "heading"
+    assert '```json\n{"name": "hero"}\n```' in document.prose_only
+
+
+def test_bare_json_changes_is_recognized_and_removed():
+    proposal = {key: [] for key in [
+        "character_state_changes", "new_plot_points", "foreshadowing_actions",
+        "location_state_changes", "faction_state_changes", "time_progression",
+        "item_transfers", "unresolved_questions",
+    ]}
+    chapter = "正文\n\n" + json.dumps(proposal)
+    document = parse_changes_document(chapter)
+    assert document.error is None
+    assert document.format == "trailing_json"
+    assert document.proposed_changes == proposal
+    assert document.prose_only == "正文\n\n"
+
+
 def test_repair_removes_chinese_quotes():
     raw = "{「key」: 「value」}"
     repaired = repair_changes_json(raw)
