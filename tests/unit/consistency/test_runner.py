@@ -47,8 +47,10 @@ class CanonMutationPatch(Patch):
     name = "canon_mutation"
     description = "attempts to edit commit-owned state projections"
     depends_on = ()
+    def __init__(self): self.called = False
     def check(self, ctx): return []
     def apply(self, ctx):
+        self.called = True
         ctx.state["entity_state"]["hero"]["realm"] = "伪造境界"
         ctx.state["progress"]["current_chapter"] = 999
         ctx.state["plot_threads"]["foreshadowing"].append({"content": "绕过提交"})
@@ -195,6 +197,45 @@ def test_runner_apply_all_preserves_commit_owned_state_projections():
         assert saved["progress"] == original["progress"]
         assert saved["plot_threads"] == original["plot_threads"]
         assert saved["story_craft"]["volume_anchors"]["anchors"] == [{"volume": 2}]
+
+
+def test_story_system_apply_does_not_persist_any_patch_state(tmp_path):
+    story_root = tmp_path / ".story-system"
+    story_root.mkdir()
+    (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True)
+    original = {
+        "entity_state": {"hero": {"realm": "斗者"}},
+        "progress": {"current_chapter": 4},
+        "plot_threads": {"foreshadowing": []},
+        "story_craft": {"volume_anchors": {"anchors": [{"current_chapter": 4}]}, "foreshadow_chain": []},
+        "state": {"_revision": 7},
+    }
+    state_path.write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
+
+    patch = CanonMutationPatch()
+    ConsistencyRunner(tmp_path, patches=[patch]).apply_all(chapter=5)
+
+    assert json.loads(state_path.read_text(encoding="utf-8")) == original
+    assert patch.called is False
+
+
+def test_legacy_apply_still_persists_patch_mutations(tmp_path):
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True)
+    original = {
+        "entity_state": {"hero": {"realm": "斗者"}},
+        "progress": {"current_chapter": 4},
+        "plot_threads": {"foreshadowing": []},
+        "story_craft": {"volume_anchors": {"anchors": []}},
+    }
+    state_path.write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
+
+    ConsistencyRunner(tmp_path, patches=[CanonMutationPatch()]).apply_all(chapter=5)
+
+    saved = json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved["story_craft"]["volume_anchors"]["anchors"] == [{"volume": 2}]
 
 
 def test_runner_save_state_uses_atomic_when_available(monkeypatch):

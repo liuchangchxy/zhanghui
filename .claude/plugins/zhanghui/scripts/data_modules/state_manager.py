@@ -28,6 +28,7 @@ import filelock
 
 from .config import get_config
 from .observability import safe_append_perf_timing, safe_log_tool_call
+from .story_system_mode import is_story_system_project
 
 
 logger = logging.getLogger(__name__)
@@ -1121,11 +1122,10 @@ class StateManager:
 
         返回警告列表
         """
-        commits_dir = Path(self.config.project_root) / ".story-system" / "commits"
-        if commits_dir.is_dir() and any(commits_dir.glob("chapter_*.commit.json")):
+        if is_story_system_project(self.config.project_root):
             raise RuntimeError(
-                "legacy process_chapter_result cannot write story facts after Story System commits exist; "
-                "submit through chapter-commit and retry projections from the durable commit"
+                "project is in Story System canonical mode; legacy process_chapter_result cannot write story facts; "
+                "submit through chapter-commit or migrate/rebuild the project"
             )
 
         warnings = []

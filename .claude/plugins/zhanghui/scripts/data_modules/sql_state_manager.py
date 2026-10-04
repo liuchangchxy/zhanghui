@@ -26,6 +26,7 @@ from .index_manager import (
 )
 from .config import get_config
 from .observability import safe_log_tool_call
+from .story_system_mode import is_story_system_project
 
 
 @dataclass
@@ -305,6 +306,11 @@ class SQLStateManager:
 
         返回: 写入统计
         """
+        if is_story_system_project(self.config.project_root):
+            raise RuntimeError(
+                "project is in Story System canonical mode; legacy process_chapter_entities writes are disabled; "
+                "project the durable chapter commit or migrate/rebuild the project"
+            )
         stats = {
             "entities_updated": 0,
             "entities_created": 0,

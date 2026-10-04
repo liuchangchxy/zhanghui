@@ -52,10 +52,18 @@ def test_sql_state_manager_entity_and_alias(temp_project):
 
     resolved = manager.resolve_alias("炎帝")
     assert any(r["id"] == "xiaoyan" for r in resolved)
-
     assert manager.update_entity_current("xiaoyan", {"realm": "斗王"}) is True
     updated = manager.get_entity("xiaoyan")
     assert updated["current_json"]["realm"] == "斗王"
+
+
+def test_legacy_sql_chapter_writer_rejects_story_system_project(temp_project):
+    story_root = temp_project.project_root / ".story-system"
+    story_root.mkdir()
+    (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="legacy process_chapter_entities writes are disabled"):
+        SQLStateManager(temp_project).process_chapter_entities(1, [], [], [], [])
 
 
 def test_sql_state_manager_state_changes_and_relationships(temp_project):

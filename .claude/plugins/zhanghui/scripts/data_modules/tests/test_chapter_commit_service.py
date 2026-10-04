@@ -480,6 +480,7 @@ def test_failed_commit_persistence_runs_no_projection(tmp_path, monkeypatch):
 
 def test_projection_failure_does_not_mutate_durable_commit(tmp_path, monkeypatch):
     import json
+    from data_modules.projection_log import commit_hash
 
     service = ChapterCommitService(tmp_path)
     payload = service.build_commit(
@@ -494,6 +495,7 @@ def test_projection_failure_does_not_mutate_durable_commit(tmp_path, monkeypatch
         def apply(self, _payload):
             raise RuntimeError("projection unavailable")
 
+    original_factory = service._projection_writers
     monkeypatch.setattr(service, "_projection_writers", lambda: {"state": FailingWriter()})
     projected = service.apply_projections(payload)
     commit_path = tmp_path / ".story-system" / "commits" / "chapter_013.commit.json"
@@ -503,3 +505,10 @@ def test_projection_failure_does_not_mutate_durable_commit(tmp_path, monkeypatch
     saved = json.loads(commit_path.read_text(encoding="utf-8"))
     assert saved["meta"]["status"] == "accepted"
     assert "projection_status" not in saved
+    original_hash = commit_hash(saved)
+
+    monkeypatch.setattr(service, "_projection_writers", original_factory)
+    retried = service.apply_projection_writers(saved)
+    durable_after_retry = json.loads(commit_path.read_text(encoding="utf-8"))
+    assert retried["projection_status"]["state"] == "done"
+    assert commit_hash(durable_after_retry) == original_hash

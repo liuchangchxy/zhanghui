@@ -72,6 +72,13 @@ class StateProjectionWriter:
             progress = state.setdefault("progress", {})
             chapter_status = progress.setdefault("chapter_status", {})
 
+            current_chapter = self._safe_int(progress.get("current_chapter"))
+            if chapter < current_chapter:
+                raise RuntimeError(
+                    f"Out-of-order state projection refused: chapter {chapter} < "
+                    f"projected chapter {current_chapter}; replay must be rebuilt in order"
+                )
+
             protagonist_ids = self._collect_protagonist_ids(commit_payload, state)
 
             applied_count = 0

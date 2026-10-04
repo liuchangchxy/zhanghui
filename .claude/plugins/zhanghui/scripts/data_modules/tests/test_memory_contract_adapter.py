@@ -25,6 +25,7 @@ from data_modules.memory_contract import (
     TimelineEvent,
 )
 from data_modules.memory_contract_adapter import MemoryContractAdapter
+from data_modules.state_manager import StateManager
 
 
 def _make_project(tmp_path: Path) -> DataModulesConfig:
@@ -409,8 +410,22 @@ class TestCommitChapter:
             json.dumps({"meta": {"chapter": 1, "status": "accepted"}}), encoding="utf-8"
         )
 
-        with pytest.raises(RuntimeError, match="legacy chapter writes are disabled"):
+        with pytest.raises(RuntimeError, match="Story System canonical mode"):
             MemoryContractAdapter(cfg).commit_chapter(2, {"entities_new": []})
+
+    def test_story_system_contracts_reject_legacy_write_before_first_commit(self, tmp_path):
+        cfg = _make_project(tmp_path)
+        story_root = tmp_path / ".story-system"
+        story_root.mkdir()
+        (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+
+        with pytest.raises(RuntimeError, match="Story System canonical mode"):
+            MemoryContractAdapter(cfg).commit_chapter(1, {"entities_new": []})
+
+        manager = StateManager(cfg)
+        manager._load_state()
+        with pytest.raises(RuntimeError, match="Story System canonical mode"):
+            manager.process_chapter_result(1, {"entities_new": [{"id": "new_fact"}]})
 
     def test_commit_chapter_delegates_to_chapter_commit_mainline(self, tmp_path):
         cfg = _make_project(tmp_path)

@@ -10,6 +10,8 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from .story_system_mode import is_story_system_project
+
 
 class IndexChapterMixin:
     def add_chapter(self, meta: ChapterMeta):
@@ -249,6 +251,12 @@ class IndexChapterMixin:
         """
         from .index_manager import ChapterMeta, SceneMeta
 
+        if is_story_system_project(self.config.project_root):
+            raise RuntimeError(
+                "project is in Story System canonical mode; legacy chapter index writes are disabled; "
+                "project the durable chapter commit or migrate/rebuild the project"
+            )
+
         stats = {"chapters": 0, "scenes": 0, "appearances": 0}
 
         # 提取出场角色
@@ -299,4 +307,3 @@ class IndexChapterMixin:
         return stats
 
     # ==================== 辅助方法 ====================
-

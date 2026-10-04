@@ -99,6 +99,25 @@ class ChapterCommitService:
         target = self.project_root / ".story-system" / "commits"
         target.mkdir(parents=True, exist_ok=True)
         path = target / f"chapter_{int(payload['meta']['chapter']):03d}.commit.json"
+        if path.exists() and on_conflict == "overwrite":
+            raise ChapterCommitError(
+                f"Conflict policy rejected: overwrite is forbidden for canonical chapter commits: {path}"
+            )
+        if not path.exists():
+            higher = self._higher_commit_chapters(int(payload["meta"]["chapter"]))
+            if higher:
+                chapter = int(payload["meta"]["chapter"])
+                raise ChapterCommitError(
+                    f"Chapter commits must be created in increasing chapter order; "
+                    f"chapter {chapter} follows existing chapter {max(higher)}"
+                )
+            projected = self._projected_current_chapter()
+            chapter = int(payload["meta"]["chapter"])
+            if chapter < projected:
+                raise ChapterCommitError(
+                    f"Chapter commits must follow projected state in increasing order; "
+                    f"chapter {chapter} < projected chapter {projected}"
+                )
         # 守卫：chapter commit 是不可变的 point-in-time snapshot，不支持 append/ask
         try:
             resolve_conflict(exists=path.exists(), path=path, mode=on_conflict)
@@ -107,7 +126,7 @@ class ChapterCommitService:
             # 统一转 ChapterCommitError
             raise ChapterCommitError(f"Conflict policy rejected: {exc}") from exc
         # SKIP 短路守卫（per Lesson 1）：resolve_conflict 只打印 SKIP，必须显式返回
-        if on_conflict == "skip":
+        if on_conflict == "skip" and path.exists():
             return path
         write_json(path, payload)
         return path
@@ -247,6 +266,32 @@ class ChapterCommitService:
     def _commit_path(self, payload: Dict[str, Any]) -> Path:
         chapter = int((payload.get("meta") or {}).get("chapter") or 0)
         return self.project_root / ".story-system" / "commits" / f"chapter_{chapter:03d}.commit.json"
+
+    def _higher_commit_chapters(self, chapter: int) -> list[int]:
+        commits_dir = self.project_root / ".story-system" / "commits"
+        result = []
+        if not commits_dir.is_dir():
+            return result
+        for path in commits_dir.glob("chapter_*.commit.json"):
+            try:
+                existing = int(path.stem.split("_")[1].split(".")[0])
+            except (IndexError, ValueError):
+                continue
+            if existing > chapter:
+                result.append(existing)
+        return result
+
+    def _projected_current_chapter(self) -> int:
+        import json
+
+        state_path = self.project_root / ".webnovel" / "state.json"
+        if not state_path.is_file():
+            return 0
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            return max(0, int(((state.get("progress") or {}).get("current_chapter") or 0)))
+        except (OSError, ValueError, TypeError, AttributeError, json.JSONDecodeError):
+            return 0
 
     @staticmethod
     def _canonical_json(payload: Dict[str, Any]) -> str:

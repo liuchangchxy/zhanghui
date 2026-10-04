@@ -894,16 +894,17 @@ def test_write_skill_has_readonly_git_diff_change_surface_check():
 # B 类红线（写入所有权·prompt 层）：write/review 必须在文本层声明所有权，
 # 与 frontmatter（test_agent_write_ownership_matches_tools_frontmatter）+ behavior eval（artifact_ownership）三处互守。
 def test_write_review_skills_state_artifact_ownership():
-    """reviewer 返回 JSON、主流程落盘 review_results.json、data-agent 唯一写入者。"""
+    """reviewer 返回 JSON、主流程落盘 review_results.json、commit 写 projection。"""
     write_text = _read_text(SKILLS_DIR / "webnovel-write" / "SKILL.md")
     review_text = _read_text(SKILLS_DIR / "webnovel-review" / "SKILL.md")
     for name, text in (("webnovel-write", write_text), ("webnovel-review", review_text)):
         assert "主流程" in text and ".webnovel/tmp/review_results.json" in text, (
             f"{name}: 缺 reviewer→主流程落盘 review_results.json 的所有权说明"
         )
-    assert "唯一写入者" in write_text, "webnovel-write 缺 data-agent 唯一写入者说明"
+    assert "Data Agent 只生成临时提取产物" in write_text
+    assert "chapter-commit" in write_text and "projection writers" in write_text
     assert "主流程只检查文件存在与 schema" in write_text
-    assert "不直接写 state/index/summaries/memory/vectors/projection" in write_text
+    assert "不写这些持久化产物" in write_text
 
 
 # §9.3/§12.3：reviewer 删除 ReAct/思维链 元叙述后的正向守护（审查只给输出合同，不教它怎么想）。

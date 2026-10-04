@@ -4,6 +4,8 @@
 import json
 import sqlite3
 
+import pytest
+
 from data_modules.chapter_commit_service import ChapterCommitService
 from data_modules.config import DataModulesConfig
 from data_modules.index_manager import IndexManager
@@ -56,6 +58,30 @@ def test_state_projection_writer_applies_accepted_commit(tmp_path):
     assert payload["progress"]["chapter_status"]["3"] == "chapter_committed"
     assert payload["progress"]["current_chapter"] == 3
     assert payload["progress"]["last_updated"]
+
+
+def test_state_projection_writer_rejects_out_of_order_retry(tmp_path):
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True)
+    state_path.write_text(json.dumps({"progress": {"current_chapter": 12}}), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="Out-of-order state projection refused"):
+        StateProjectionWriter(tmp_path).apply(_commit_payload(chapter=11))
+
+    saved = json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved["progress"]["current_chapter"] == 12
+
+
+def test_legacy_chapter_index_writer_rejects_story_system_project(tmp_path):
+    from data_modules.config import DataModulesConfig
+
+    story_root = tmp_path / ".story-system"
+    story_root.mkdir()
+    (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+    manager = IndexManager(DataModulesConfig.from_project_root(tmp_path))
+
+    with pytest.raises(RuntimeError, match="legacy chapter index writes are disabled"):
+        manager.process_chapter_data(1, "标题", "地点", 100, [], [])
 
 
 def test_accepted_chapter_commits_advance_progress_and_word_count(tmp_path):

@@ -28,7 +28,7 @@ def main() -> None:
         "--on-conflict",
         choices=["overwrite", "skip"],
         default=None,
-        help="已存在 chapter commit 时如何处理: overwrite/skip；默认拒绝覆盖。"
+        help="已有 canonical chapter commit 时拒绝 overwrite；skip 只从磁盘上的既有 commit 重试投影。"
         "append/ask 不支持 (chapter commit 是不可变的 point-in-time snapshot)。",
     )
     args = parser.parse_args()

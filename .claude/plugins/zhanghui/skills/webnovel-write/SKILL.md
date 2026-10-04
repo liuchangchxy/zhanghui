@@ -549,6 +549,8 @@ Step 5 失败隔离规则：
 
 `chapter-commit` 是本章写作事实的提交入口，**取代旧的 state 流程（process-chapter / 同步落库链路）**。Step 5 必须经 `chapter-commit` 把本章事实落 `.story-system/commits/chapter_{NNN}.commit.json`，并刷新 `.story-system/` 下 contracts：
 
+Story System canonical mode 下，禁止用 `StateManager.process_chapter_result`、`IndexManager.process_chapter_data`、`SQLStateManager.process_chapter_entities` 或 `update_state` 的章节事实参数旁路写入；审查 checkpoint 等 workflow metadata 与规划配置仍可由各自入口维护。章节 commit 必须按递增章号执行；旧章 projection retry 若会倒退 state 会失败，历史全量 rebuild 属于 migration 流程。
+
 ```bash
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" chapter-commit \
   --chapter {chapter_num} \

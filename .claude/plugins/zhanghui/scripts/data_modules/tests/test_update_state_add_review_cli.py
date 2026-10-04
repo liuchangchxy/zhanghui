@@ -43,3 +43,58 @@ def test_update_state_cli_add_review_writes_checkpoint(tmp_path, monkeypatch):
     assert checkpoints[-1]["chapters"] == "1-2"
     assert checkpoints[-1]["report"] == report_file
 
+
+def test_update_state_rejects_canon_mutation_in_story_system_mode(tmp_path, monkeypatch):
+    import pytest
+    import update_state as update_state_module
+
+    webnovel_dir = tmp_path / ".webnovel"
+    webnovel_dir.mkdir(parents=True)
+    state = {
+        "project_info": {},
+        "progress": {"current_chapter": 1, "total_words": 0},
+        "protagonist_state": {"power": {"realm": "炼气", "layer": 1, "bottleneck": None}, "location": "村口"},
+        "relationships": {}, "world_settings": {}, "plot_threads": {}, "review_checkpoints": [],
+    }
+    state_file = webnovel_dir / "state.json"
+    original = json.dumps(state, ensure_ascii=False)
+    state_file.write_text(original, encoding="utf-8")
+    story_root = tmp_path / ".story-system"
+    story_root.mkdir()
+    (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(sys, "argv", [
+        "update_state", "--project-root", str(tmp_path), "--protagonist-power", "金丹", "2", "雷劫",
+    ])
+    with pytest.raises(SystemExit) as exc:
+        update_state_module.main()
+
+    assert exc.value.code == 2
+    assert state_file.read_text(encoding="utf-8") == original
+
+
+def test_update_state_allows_review_metadata_in_story_system_mode(tmp_path, monkeypatch):
+    import update_state as update_state_module
+
+    webnovel_dir = tmp_path / ".webnovel"
+    webnovel_dir.mkdir(parents=True)
+    state = {
+        "project_info": {},
+        "progress": {"current_chapter": 1, "total_words": 0},
+        "protagonist_state": {"power": {"realm": "炼气", "layer": 1, "bottleneck": None}, "location": "村口"},
+        "relationships": {}, "world_settings": {}, "plot_threads": {}, "review_checkpoints": [],
+    }
+    state_file = webnovel_dir / "state.json"
+    state_file.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    story_root = tmp_path / ".story-system"
+    story_root.mkdir()
+    (story_root / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(update_state_module.StateUpdater, "backup", lambda self: True)
+    monkeypatch.setattr(sys, "argv", [
+        "update_state", "--project-root", str(tmp_path), "--add-review", "1-2", "review/report.md",
+    ])
+
+    update_state_module.main()
+
+    updated = json.loads(state_file.read_text(encoding="utf-8"))
+    assert updated["review_checkpoints"][-1]["report"] == "review/report.md"

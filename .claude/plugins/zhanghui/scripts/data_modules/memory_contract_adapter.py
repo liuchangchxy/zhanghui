@@ -24,6 +24,7 @@ from .memory_contract import (
     TimelineEvent,
 )
 from .story_runtime_sources import load_runtime_sources
+from .story_system_mode import is_story_system_project
 from .urgency_utils import coerce_urgency
 
 logger = logging.getLogger(__name__)
@@ -64,11 +65,10 @@ class MemoryContractAdapter:
     # ------------------------------------------------------------------
 
     def commit_chapter(self, chapter: int, result: dict) -> CommitResult:
-        commits_dir = Path(self.config.project_root) / ".story-system" / "commits"
-        if commits_dir.is_dir() and any(commits_dir.glob("chapter_*.commit.json")) and not self._should_use_commit_mainline(result):
+        if is_story_system_project(self.config.project_root) and not self._should_use_commit_mainline(result):
             raise RuntimeError(
-                "legacy chapter writes are disabled after Story System commits exist; "
-                "provide the chapter commit artifacts and use chapter-commit"
+                "project is in Story System canonical mode; legacy chapter fact writes are disabled; "
+                "provide chapter commit artifacts or migrate/rebuild the project"
             )
         if self._should_use_commit_mainline(result):
             return self._commit_chapter_mainline(chapter, result)
