@@ -53,13 +53,11 @@ def _value(value: Any) -> str:
     return VALUE_ALIASES.get(normalized, normalized)
 
 
-def _strip_changes_blocks(chapter_text: str) -> str:
-    prose = re.sub(r"<chapter_changes\b[^>]*>.*?</chapter_changes\s*>", "", chapter_text,
-                   flags=re.IGNORECASE | re.DOTALL)
-    prose = re.sub(r"---CHANGES---.*?(?=---|\Z)", "", prose, flags=re.DOTALL | re.IGNORECASE)
-    prose = re.sub(r"^#\s*CHANGES\s*\n.*?(?=^#|\Z)", "", prose,
-                   flags=re.MULTILINE | re.DOTALL | re.IGNORECASE)
-    return prose
+def _changes_document(chapter_text: str):
+    # Parser owns format recognition and the corresponding removal spans.
+    from changes_gate import parse_changes_document
+
+    return parse_changes_document(chapter_text)
 
 
 def validate_proposed_changes(proposed: Any) -> dict[str, Any]:
@@ -81,14 +79,11 @@ def validate_proposed_changes(proposed: Any) -> dict[str, Any]:
 
 
 def split_chapter_and_changes(chapter_text: str) -> tuple[str, dict[str, Any]]:
-    """Parse the proposal and return prose with all XML CHANGES blocks removed."""
-    # Import lazily: changes_gate is the protocol parser used by the CLI as well.
-    from changes_gate import parse_changes
-
-    proposed, error = parse_changes(chapter_text)
-    if error or proposed is None:
-        raise ValueError(f"invalid CHANGES: {error or 'missing parsed value'}")
-    return _strip_changes_blocks(chapter_text), validate_proposed_changes(proposed)
+    """Parse the proposal and return prose with the parser-selected source removed."""
+    document = _changes_document(chapter_text)
+    if document.error or document.proposed_changes is None:
+        raise ValueError(f"invalid CHANGES: {document.error or 'missing parsed value'}")
+    return document.prose_only, validate_proposed_changes(document.proposed_changes)
 
 
 def _proposal_facts(proposed: dict[str, Any]) -> list[dict[str, Any]]:
@@ -235,13 +230,13 @@ def reconcile_changes(proposed_changes: Any, observed_changes: Any, *, chapter_t
         "accepted_payload": {key: observed[key] for key in ("accepted_events", "state_deltas", "entity_deltas")},
         "accepted_sources": [
             {"accepted": {"field": field, "index": index}, "observed": {"source": field, "index": index},
-             "prose_sha256": _digest(_strip_changes_blocks(chapter_text))}
+             "prose_sha256": _digest(_changes_document(chapter_text).prose_only)}
             for field in ("accepted_events", "state_deltas", "entity_deltas")
             for index, _ in enumerate(observed[field])
         ],
         "proposed_sha256": _digest(proposed),
         "observed_sha256": _digest(observed), "chapter_sha256": _digest(chapter_text),
-        "prose_sha256": _digest(_strip_changes_blocks(chapter_text)),
+        "prose_sha256": _digest(_changes_document(chapter_text).prose_only),
     }
 
 

@@ -86,24 +86,100 @@ class GateResult:
         }
 
 
-def extract_changes_block(chapter_text: str) -> str | None:
-    """从章节文本里识别 CHANGES 容器。
+@dataclass(frozen=True)
+class ChangesDocument:
+    """One parser result shared by validation and prose-only observation input."""
 
-    当 LLM 给出多个候选块时，采用最后一个（修正版）。
-    """
-    for pattern in CHANGE_PATTERNS:
-        matches = pattern.findall(chapter_text)
+    proposed_changes: dict[str, Any] | None
+    error: str | None
+    format: str | None
+    source_spans: tuple[tuple[int, int], ...]
+    prose_only: str
+
+
+def _find_changes_source(
+    chapter_text: str,
+) -> tuple[str | None, str | None, tuple[tuple[int, int], ...]]:
+    """Apply the existing format priority and expose the matching source ranges."""
+    format_names = ("xml", "separator", "heading")
+    for format_name, pattern in zip(format_names, CHANGE_PATTERNS):
+        matches = list(pattern.finditer(chapter_text))
         if matches:
-            # Use the LAST block (when LLM provides alternatives, the last is the corrected one)
-            return matches[-1].strip()
-    # 兜底：末尾 JSON
+            # Preserve the established priority and last-match selection. Remove
+            # every candidate of this winning format from the observation channel.
+            selected = matches[-1].group(1).strip()
+            spans = []
+            for match in matches:
+                start, end = match.span()
+                if format_name == "separator" and chapter_text[end:end + 3] == "---":
+                    end += 3
+                spans.append((start, end))
+            return selected, format_name, tuple(spans)
+
+    # Keep the existing bare-JSON heuristic exactly: only the final paragraph,
+    # braces at both ends, and at least four required-field key spellings.
     tail = chapter_text.rstrip().split("\n\n")[-1].strip()
     if tail.startswith("{") and tail.endswith("}"):
         candidate_keys = REQUIRED_TOP_LEVEL_FIELDS
         matched = sum(1 for k in candidate_keys if f'"{k}"' in tail)
         if matched >= 4:
-            return tail
-    return None
+            stripped_end = len(chapter_text.rstrip())
+            separator_start = chapter_text[:stripped_end].rfind("\n\n")
+            paragraph_start = separator_start + 2 if separator_start >= 0 else 0
+            leading = len(chapter_text[paragraph_start:stripped_end]) - len(
+                chapter_text[paragraph_start:stripped_end].lstrip()
+            )
+            start = paragraph_start + leading
+            return tail, "trailing_json", ((start, start + len(tail)),)
+    return None, None, ()
+
+
+def _remove_source_spans(text: str, spans: tuple[tuple[int, int], ...]) -> str:
+    for start, end in sorted(spans, reverse=True):
+        text = text[:start] + text[end:]
+    return text
+
+
+def parse_changes_document(chapter_text: str) -> ChangesDocument:
+    """Parse CHANGES once, returning its selected value and source-derived prose.
+
+    `parse_changes()` remains the compatibility API. Spans include the source
+    containers, and repeated blocks in the winning format are all removed so an
+    earlier draft cannot leak into the Data Agent channel.
+    """
+    block, format_name, spans = _find_changes_source(chapter_text)
+    prose_only = _remove_source_spans(chapter_text, spans)
+    if block is None:
+        return ChangesDocument(
+            proposed_changes=None,
+            error="未找到 CHANGES 容器（支持 <chapter_changes>、---CHANGES---、# CHANGES、末尾 JSON 兜底）",
+            format=None,
+            source_spans=(),
+            prose_only=chapter_text,
+        )
+    try:
+        proposed = json.loads(repair_changes_json(block))
+    except json.JSONDecodeError as exc:
+        return ChangesDocument(
+            proposed_changes=None,
+            error=f"CHANGES JSON 解析失败：{exc}",
+            format=format_name,
+            source_spans=spans,
+            prose_only=prose_only,
+        )
+    return ChangesDocument(
+        proposed_changes=proposed,
+        error=None,
+        format=format_name,
+        source_spans=spans,
+        prose_only=prose_only,
+    )
+
+
+def extract_changes_block(chapter_text: str) -> str | None:
+    """从章节文本中提取当前优先级下最后一个 CHANGES 候选块。"""
+    block, _, _ = _find_changes_source(chapter_text)
+    return block
 
 
 def repair_changes_json(raw: str) -> str:
@@ -212,15 +288,8 @@ def repair_changes_json(raw: str) -> str:
 
 def parse_changes(chapter_text: str) -> tuple[dict[str, Any] | None, str | None]:
     """返回 (parsed_dict, error_message)。"""
-    block = extract_changes_block(chapter_text)
-    if block is None:
-        return None, "未找到 CHANGES 容器（支持 <chapter_changes>、---CHANGES---、# CHANGES、末尾 JSON 兜底）"
-    repaired = repair_changes_json(block)
-    try:
-        parsed = json.loads(repaired)
-    except json.JSONDecodeError as e:
-        return None, f"CHANGES JSON 解析失败：{e}"
-    return parsed, None
+    document = parse_changes_document(chapter_text)
+    return document.proposed_changes, document.error
 
 
 # R1 + R2: 校验

@@ -104,13 +104,21 @@ def test_final_chapter_hash_binds_reconciliation_to_polished_text():
         verify_reconciliation_freshness(result, chapter_text="rewritten-after-reconciliation")
 
 
-def test_data_agent_split_removes_proposed_金丹_from_input(tmp_path):
+@pytest.mark.parametrize("format_name", ["xml", "separator", "heading", "trailing_json"])
+def test_data_agent_split_removes_proposed_金丹_from_input(tmp_path, format_name):
     import json
     from pathlib import Path
     from subprocess import run
 
     proposal = change("realm: 金丹")
-    chapter_text = "林玄仍在洞府中打坐，没有突破。\n<chapter_changes>" + json.dumps(proposal, ensure_ascii=False) + "</chapter_changes>"
+    body = json.dumps(proposal, ensure_ascii=False, indent=2)
+    formats = {
+        "xml": f"<chapter_changes>\n{body}\n</chapter_changes>",
+        "separator": f"---CHANGES---\n{body}\n---",
+        "heading": f"# CHANGES\n{body}",
+        "trailing_json": body,
+    }
+    chapter_text = "主角今天只是回到客栈。\n\n" + formats[format_name]
     chapter = tmp_path / "chapter.md"
     prose = tmp_path / "prose.md"
     changes = tmp_path / "proposed.json"
@@ -120,8 +128,33 @@ def test_data_agent_split_removes_proposed_金丹_from_input(tmp_path):
                   "--chapter-file", str(chapter), "--prose-output", str(prose),
                   "--changes-output", str(changes)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert "金丹" not in prose.read_text(encoding="utf-8")
+    prose_text = prose.read_text(encoding="utf-8")
+    assert prose_text.strip() == "主角今天只是回到客栈。"
+    assert "character_state_changes" not in prose_text
+    assert "realm" not in prose_text
+    assert "金丹" not in prose_text
     assert json.loads(changes.read_text(encoding="utf-8")) == proposal
+
+
+@pytest.mark.parametrize("format_name", ["xml", "separator", "heading", "trailing_json"])
+def test_proposal_format_does_not_change_reconciliation_semantics(format_name):
+    import json
+
+    proposal = change()
+    body = json.dumps(proposal, ensure_ascii=False)
+    documents = {
+        "xml": f"chapter prose\n<chapter_changes>{body}</chapter_changes>",
+        "separator": f"chapter prose\n---CHANGES---\n{body}\n---",
+        "heading": f"chapter prose\n# CHANGES\n{body}",
+        "trailing_json": f"chapter prose\n\n{body}",
+    }
+    results = [reconcile_changes(proposal, observation(), chapter_text=documents[format_name])
+               for format_name in ("xml", "separator", "heading", "trailing_json")]
+    for result in results[1:]:
+        assert result["status"] == results[0]["status"]
+        assert result["matched"] == results[0]["matched"]
+        assert result["conflicts"] == results[0]["conflicts"]
+        assert result["accepted_payload"] == results[0]["accepted_payload"]
 
 
 def test_entity_realm_delta_conflicts_with_character_state_proposal():
