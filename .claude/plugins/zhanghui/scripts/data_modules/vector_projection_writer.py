@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from .commit_artifacts import extraction_list, extraction_text
+from .durable_projection import require_durable_commit_match
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class VectorProjectionWriter:
         self.project_root = Path(project_root)
 
     def apply(self, commit_payload: dict) -> dict:
+        require_durable_commit_match(self.project_root, commit_payload)
         if commit_payload["meta"]["status"] != "accepted":
             return {"applied": False, "writer": "vector", "reason": "commit_rejected"}
 

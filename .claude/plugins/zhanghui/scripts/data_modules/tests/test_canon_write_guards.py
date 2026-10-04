@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -9,6 +10,10 @@ from data_modules.config import DataModulesConfig
 from data_modules.index_manager import ChapterMeta, IndexManager, RelationshipMeta, StateChangeMeta
 from data_modules.sql_state_manager import EntityData, SQLStateManager
 from data_modules.state_manager import EntityState, StateManager
+from data_modules.story_system_mode import (
+    canonical_projection_write_scope,
+    require_legacy_canon_write_allowed,
+)
 
 
 STORY_ROOT = ".story-system"
@@ -228,3 +233,39 @@ def test_legacy_state_manager_fact_writes_keep_existing_behavior(tmp_path):
     assert result["saved"] is True
     assert manager._sql_state_manager.get_entity("hero")["current_json"]["realm"] == "B"
     assert _state_change_count(config) == 1
+
+
+def test_projection_scope_is_root_bound_and_resets_after_nested_and_exceptional_use(tmp_path):
+    project_a = tmp_path / "a"
+    project_b = tmp_path / "b"
+    for root in (project_a, project_b):
+        (root / STORY_ROOT).mkdir(parents=True)
+        (root / STORY_ROOT / "MASTER_SETTING.json").write_text("{}", encoding="utf-8")
+
+    with canonical_projection_write_scope(project_a):
+        require_legacy_canon_write_allowed(project_a)
+        with pytest.raises(RuntimeError, match=CANON_ERROR):
+            require_legacy_canon_write_allowed(project_b)
+        with canonical_projection_write_scope(project_b):
+            require_legacy_canon_write_allowed(project_b)
+        require_legacy_canon_write_allowed(project_a)
+        with pytest.raises(LookupError):
+            with canonical_projection_write_scope(project_b):
+                raise LookupError("reset context")
+        require_legacy_canon_write_allowed(project_a)
+
+    for root in (project_a, project_b):
+        with pytest.raises(RuntimeError, match=CANON_ERROR):
+            require_legacy_canon_write_allowed(root)
+
+
+def test_projection_scope_production_usage_stays_in_index_projection_writer():
+    scripts_root = Path(__file__).resolve().parents[2]
+    production_uses = []
+    for source in scripts_root.rglob("*.py"):
+        if "tests" in source.parts or source.name == "story_system_mode.py":
+            continue
+        if "canonical_projection_write_scope" in source.read_text(encoding="utf-8"):
+            production_uses.append(source.name)
+
+    assert production_uses == ["index_projection_writer.py"]

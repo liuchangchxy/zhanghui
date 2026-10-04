@@ -58,7 +58,7 @@ def test_event_log_store_writes_per_chapter_file_and_sqlite_mirror(tmp_path):
 def test_event_log_store_rejects_events_without_a_durable_accepted_commit(tmp_path):
     store = EventLogStore(tmp_path)
 
-    with pytest.raises(ValueError, match="accepted chapter commit is required"):
+    with pytest.raises(RuntimeError, match="Durable chapter commit is missing"):
         store.write_events(
             3,
             [{"event_id": "evt-001", "event_type": "open_loop_created", "subject": "x", "payload": {}}],
@@ -71,7 +71,7 @@ def test_event_log_store_rejects_events_that_differ_from_the_commit(tmp_path):
         {"event_id": "evt-001", "event_type": "open_loop_created", "subject": "from-commit", "payload": {}}
     ])
 
-    with pytest.raises(ValueError, match="does not match accepted commit"):
+    with pytest.raises(RuntimeError, match="does not match durable chapter commit"):
         store.write_events(
             3,
             [{"event_id": "evt-002", "event_type": "open_loop_created", "subject": "other", "payload": {}}],

@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+from copy import deepcopy
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
 
 from .chapter_commit_schema import normalize_accepted_events
+from .durable_projection import DurableCommitError, read_durable_commit, require_durable_commit_match
 from .story_contracts import StoryContractPaths, read_json_if_exists, write_json
 
 
@@ -31,21 +33,29 @@ class EventLogStore:
         finally:
             conn.close()
 
-    def write_events(self, chapter: int, events: Any) -> Path:
-        normalized = self.normalize_events(chapter, events)
-        commit_path = self.paths.commit_json(chapter)
-        commit = read_json_if_exists(commit_path)
-        if not isinstance(commit, dict) or (commit.get("meta") or {}).get("status") != "accepted":
-            raise ValueError(
-                f"accepted chapter commit is required before projecting events: {commit_path}"
-            )
-        committed_events = self.normalize_events(
-            chapter,
-            ((commit.get("extraction_result") or {}).get("accepted_events") or []),
-        )
-        if normalized != committed_events:
-            raise ValueError(
-                f"event projection does not match accepted commit events: {commit_path}"
+    def write_events(self, commit_or_chapter: Dict[str, Any] | int, events: Any = None) -> Path:
+        if isinstance(commit_or_chapter, dict):
+            payload = commit_or_chapter
+            commit = require_durable_commit_match(self.project_root, payload)
+            chapter = int((payload.get("meta") or {}).get("chapter") or 0)
+            raw_events = ((payload.get("extraction_result") or {}).get("accepted_events") or [])
+            normalized = self.normalize_events(chapter, raw_events)
+        else:
+            chapter = int(commit_or_chapter)
+            # Normalize before checking provenance so malformed event input keeps
+            # its useful schema error and cannot trigger any write.
+            normalized = self.normalize_events(chapter, events)
+            commit = read_durable_commit(self.project_root, chapter)
+            payload = deepcopy(commit)
+            extraction = payload.setdefault("extraction_result", {})
+            if not isinstance(extraction, dict):
+                raise DurableCommitError("Durable chapter commit extraction_result is not an object")
+            extraction["accepted_events"] = normalized
+            require_durable_commit_match(self.project_root, payload)
+
+        if str((commit.get("meta") or {}).get("status") or "") != "accepted":
+            raise DurableCommitError(
+                f"Event projection requires a matching accepted chapter commit: {self.paths.commit_json(chapter)}"
             )
         path = self.paths.event_json(chapter)
         write_json(path, normalized)

@@ -11,12 +11,32 @@ entity_deltas 用 `entity_type` 而非 `type`，open_loop_created 事件 payload
 """
 
 import json
+import pytest
 
 from data_modules.config import DataModulesConfig
 from data_modules.memory.store import ScratchpadManager
 from data_modules.memory_projection_writer import MemoryProjectionWriter
 from data_modules.state_projection_writer import StateProjectionWriter
 from data_modules.vector_projection_writer import VectorProjectionWriter
+
+
+@pytest.fixture(autouse=True)
+def stage_schema_payloads_as_durable_commits(monkeypatch, tmp_path):
+    def wrap(writer_class):
+        original_apply = writer_class.apply
+
+        def apply_after_staging(writer, payload):
+            chapter = int(payload["meta"]["chapter"])
+            path = tmp_path / ".story-system" / "commits" / f"chapter_{chapter:03d}.commit.json"
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            return original_apply(writer, payload)
+
+        monkeypatch.setattr(writer_class, "apply", apply_after_staging)
+
+    wrap(StateProjectionWriter)
+    wrap(MemoryProjectionWriter)
 
 
 # ============================================================

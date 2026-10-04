@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .config import DataModulesConfig
+from .durable_projection import require_durable_commit_match
 from .memory.writer import MemoryWriter
 
 
@@ -13,6 +14,7 @@ class MemoryProjectionWriter:
         self.project_root = Path(project_root)
 
     def apply(self, commit_payload: dict) -> dict:
+        require_durable_commit_match(self.project_root, commit_payload)
         if commit_payload["meta"]["status"] != "accepted":
             return {"applied": False, "writer": "memory", "reason": "commit_rejected"}
         result = MemoryWriter(DataModulesConfig.from_project_root(self.project_root)).apply_commit_projection(

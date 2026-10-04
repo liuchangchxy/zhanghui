@@ -17,6 +17,13 @@ from .chapter_commit_schema import (
 )
 from .commit_artifacts import extraction_list
 from .config import DataModulesConfig
+from .durable_projection import (
+    DurableCommitError,
+    canonical_commit_json,
+    commit_path as durable_commit_path,
+    read_commit_file,
+    require_durable_commit_match,
+)
 from .event_log_store import EventLogStore
 from .event_projection_router import EventProjectionRouter
 from .story_contracts import write_json
@@ -165,11 +172,10 @@ class ChapterCommitService:
             return payload
 
         commit_path = self._commit_path(payload)
-        durable_payload = self._read_commit(commit_path)
-        if self._canonical_json(durable_payload) != self._canonical_json(payload):
-            raise ChapterCommitError(
-                f"Projection input does not match durable chapter commit: {commit_path}"
-            )
+        try:
+            require_durable_commit_match(self.project_root, payload)
+        except DurableCommitError as exc:
+            raise ChapterCommitError(str(exc)) from exc
 
         payload.setdefault("projection_status", {})
         if not isinstance(payload["projection_status"], dict):
@@ -265,7 +271,7 @@ class ChapterCommitService:
 
     def _commit_path(self, payload: Dict[str, Any]) -> Path:
         chapter = int((payload.get("meta") or {}).get("chapter") or 0)
-        return self.project_root / ".story-system" / "commits" / f"chapter_{chapter:03d}.commit.json"
+        return durable_commit_path(self.project_root, chapter)
 
     def _higher_commit_chapters(self, chapter: int) -> list[int]:
         commits_dir = self.project_root / ".story-system" / "commits"
@@ -295,24 +301,11 @@ class ChapterCommitService:
 
     @staticmethod
     def _canonical_json(payload: Dict[str, Any]) -> str:
-        import json
-
-        canonical = dict(payload)
-        canonical.pop("projection_status", None)
-        return json.dumps(
-            canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        )
+        return canonical_commit_json(payload)
 
     @staticmethod
     def _read_commit(path: Path) -> Dict[str, Any]:
-        import json
-
-        if not path.is_file():
-            raise ChapterCommitError(f"Durable chapter commit is missing: {path}")
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ChapterCommitError(f"Durable chapter commit cannot be read: {exc}") from exc
-        if not isinstance(payload, dict):
-            raise ChapterCommitError(f"Durable chapter commit is not an object: {path}")
-        return payload
+            return read_commit_file(path)
+        except DurableCommitError as exc:
+            raise ChapterCommitError(str(exc)) from exc

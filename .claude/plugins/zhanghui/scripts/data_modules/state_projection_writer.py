@@ -10,6 +10,7 @@ from typing import Any
 import filelock
 
 from .commit_artifacts import extraction_dict, extraction_list, extraction_text
+from .durable_projection import require_durable_commit_match
 from .story_contracts import read_json_if_exists
 
 try:
@@ -53,6 +54,7 @@ class StateProjectionWriter:
         self.lock_path = self.state_path.with_suffix(self.state_path.suffix + ".lock")
 
     def apply(self, commit_payload: dict) -> dict:
+        require_durable_commit_match(self.project_root, commit_payload)
         chapter = int(commit_payload.get("meta", {}).get("chapter") or 0)
         status = commit_payload["meta"]["status"]
 

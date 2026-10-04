@@ -10,9 +10,11 @@ except ImportError:  # pragma: no cover
     from scripts.security_utils import atomic_write_text
 
 from .commit_artifacts import extraction_text
+from .durable_projection import require_durable_commit_match
 
 
 def append_summary_projection(project_root: Path, commit_payload: dict) -> dict:
+    require_durable_commit_match(project_root, commit_payload)
     chapter = int(commit_payload.get("meta", {}).get("chapter") or 0)
     summary_text = extraction_text(commit_payload, "summary_text")
     if chapter <= 0 or not summary_text:
@@ -32,6 +34,7 @@ class SummaryProjectionWriter:
         self.project_root = Path(project_root)
 
     def apply(self, commit_payload: dict) -> dict:
+        require_durable_commit_match(self.project_root, commit_payload)
         if commit_payload["meta"]["status"] != "accepted":
             return {"applied": False, "writer": "summary", "reason": "commit_rejected"}
         return append_summary_projection(self.project_root, commit_payload)
