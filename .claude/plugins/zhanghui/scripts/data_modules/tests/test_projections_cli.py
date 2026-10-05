@@ -461,6 +461,64 @@ def test_rebuild_upgrades_unique_legacy_state_loop_row_to_event_identity(tmp_pat
     assert rows[0]["status"] == "active"
 
 
+def test_rebuild_upgrades_legacy_state_description_alias_for_structured_loop_content(tmp_path):
+    _make_accepted_intent_commit(tmp_path, 1, [{
+        "event_id": "typed-loop", "event_type": "open_loop_created", "chapter": 1,
+        "subject": "线索", "payload": {
+            "content": "身份悬疑：保人身份不明",
+            "loop_type": "身份悬疑", "description": "保人身份不明",
+        },
+    }])
+    _make_accepted_intent_commit(tmp_path, 2, [{
+        "event_id": "typed-close", "event_type": "open_loop_closed", "chapter": 2,
+        "subject": "线索", "payload": {"loop_id": "typed-loop", "content": "真相揭晓"},
+    }])
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({"plot_threads": {"foreshadowing": [{
+        "content": "保人身份不明", "status": "active", "planted_chapter": 1,
+    }]}}), encoding="utf-8")
+
+    report = rebuild_projections(tmp_path)
+
+    rows = json.loads(state_path.read_text(encoding="utf-8"))["plot_threads"]["foreshadowing"]
+    assert report["ok"] is True
+    assert len(rows) == 1
+    assert rows[0]["loop_id"] == "typed-loop"
+    assert rows[0]["content"] == "身份悬疑：保人身份不明"
+    assert rows[0]["status"] == "resolved"
+    assert rows[0]["resolution_event_id"] == "typed-close"
+
+
+def test_rebuild_upgrades_legacy_state_question_alias_for_structured_loop_content(tmp_path):
+    _make_accepted_intent_commit(tmp_path, 1, [{
+        "event_id": "question-loop", "event_type": "open_loop_created", "chapter": 1,
+        "subject": "线索", "payload": {
+            "content": "身份悬疑：保人身份不明",
+            "loop_type": "身份悬疑", "description": "保人身份不明",
+            "unanswered_question": "谁是保人？",
+        },
+    }])
+    _make_accepted_intent_commit(tmp_path, 2, [{
+        "event_id": "question-close", "event_type": "open_loop_closed", "chapter": 2,
+        "subject": "线索", "payload": {"loop_id": "question-loop", "content": "真相揭晓"},
+    }])
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({"plot_threads": {"foreshadowing": [{
+        "content": "谁是保人？", "status": "active", "planted_chapter": 1,
+    }]}}), encoding="utf-8")
+
+    report = rebuild_projections(tmp_path)
+
+    rows = json.loads(state_path.read_text(encoding="utf-8"))["plot_threads"]["foreshadowing"]
+    assert report["ok"] is True
+    assert len(rows) == 1
+    assert rows[0]["loop_id"] == "question-loop"
+    assert rows[0]["content"] == "身份悬疑：保人身份不明"
+    assert rows[0]["status"] == "resolved"
+
+
 def test_rebuild_keeps_unprovable_legacy_state_row_non_authoritative(tmp_path):
     _make_accepted_loop_commit(tmp_path, 1, "open_loop_created")
     _make_accepted_loop_commit(tmp_path, 2, "open_loop_created")

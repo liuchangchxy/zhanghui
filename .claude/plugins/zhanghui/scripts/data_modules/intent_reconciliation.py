@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 
-def _content(event: dict[str, Any]) -> str:
+def intent_event_content(event: dict[str, Any]) -> str:
     payload = event.get("payload")
     payload = payload if isinstance(payload, dict) else {}
     for key in ("content", "unanswered_question"):
@@ -18,6 +18,32 @@ def _content(event: dict[str, Any]) -> str:
     if description or loop_type:
         return description or loop_type
     return str(event.get("subject") or "").strip()
+
+
+def intent_event_content_candidates(event: dict[str, Any]) -> list[str]:
+    """Return canonical and exact legacy representations for safe row migration.
+
+    Lifecycle resolution itself uses only ``intent_event_content``. These aliases
+    are limited to fields historically used to store the same event content and
+    are used only for exact, chapter-qualified legacy projection upgrades.
+    """
+    payload = event.get("payload")
+    payload = payload if isinstance(payload, dict) else {}
+    candidates = [intent_event_content(event)]
+    for key in ("content", "unanswered_question"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            candidates.append(value.strip())
+    description = str(payload.get("description") or "").strip()
+    loop_type = str(payload.get("loop_type") or "").strip()
+    if description and loop_type:
+        candidates.append(f"{loop_type}：{description}")
+    candidates.extend(value for value in (description, loop_type) if value)
+    if not any(candidates):
+        subject = str(event.get("subject") or "").strip()
+        if subject:
+            candidates.append(subject)
+    return list(dict.fromkeys(candidate for candidate in candidates if candidate))
 
 
 def _link_id(event: dict[str, Any], keys: tuple[str, ...]) -> str:
@@ -45,7 +71,7 @@ def _resolve(
     rows: list[dict[str, Any]], event: dict[str, Any], *, explicit_keys: tuple[str, ...],
     close_type: str, diagnostics: list[dict[str, Any]], explicit_match_fields: tuple[str, ...] = (),
 ) -> None:
-    content = _content(event)
+    content = intent_event_content(event)
     explicit_id = _link_id(event, explicit_keys)
     if explicit_id:
         candidates = [
@@ -108,7 +134,7 @@ def reconcile_intent_events(
         if not isinstance(event, dict):
             continue
         event_type = str(event.get("event_type") or "").strip()
-        content = _content(event)
+        content = intent_event_content(event)
         event_id = str(event.get("event_id") or "")
         chapter = int(event.get("chapter") or 0)
         if event_type == "open_loop_created":

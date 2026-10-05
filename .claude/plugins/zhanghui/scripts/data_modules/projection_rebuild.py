@@ -11,7 +11,7 @@ from .durable_projection import DurableCommitError, discover_validated_chapter_c
 from .event_projection_router import EventProjectionRouter
 from .commit_artifacts import extraction_dict, extraction_list, extraction_text
 from .event_log_store import EventLogStore
-from .intent_reconciliation import reconcile_intent_events
+from .intent_reconciliation import intent_event_content_candidates, reconcile_intent_events
 from .projection_rebuild_context import _controlled_rebuild
 
 
@@ -113,7 +113,7 @@ def _reset_state(root: Path, commits: list[dict[str, Any]]) -> None:
                 planted = writer._safe_int(row.get("source_chapter") or row.get("planted_chapter"))
                 exact = [
                     event for event in canonical_loop_creates
-                    if str((event.get("payload") or {}).get("content") or (event.get("payload") or {}).get("description") or event.get("subject") or "").strip() == content
+                    if content in intent_event_content_candidates(event)
                 ] if content else []
                 exact_chapter = [event for event in exact if writer._safe_int(event.get("chapter")) == planted]
                 if len(exact_chapter) == 1:
