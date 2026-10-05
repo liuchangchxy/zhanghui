@@ -47,7 +47,7 @@ No automatic synchronization from Canon into Promise Ledger. A promise event rec
 
 **Promise memory**: deterministic identity derives from `promise_created.event_id`; store `source_event_id`, optional ledger `promise_id`, `resolution_event_id`, `source_chapter`, `resolved_chapter`, `lifecycle_status=active|paid_off`, and linkage status. `MemoryItem.status` active only for unresolved promises. A payoff references `promise_id` or `source_event_id`; legacy payoff can associate only by unique exact content against a prior unmatched creation, otherwise is unlinked diagnostic and does not create a promise item. `promise_paid_off` without a safe target never appears as active promise memory.
 
-**Promise Ledger**: preserve all current planning fields and methods. Add optional `source_event_id`, `resolution_event_id`, `source_chapter`, `resolved_chapter` fields backward-additively. These are provenance only; `id` remains planner-stable and statuses remain planner lifecycle. Projection must not set/advance/payoff/overdue the ledger based solely on Canon events. An explicitly referenced planner entry may receive provenance metadata in its read projection only; persistent update requires the ledger owner API and is out of the Phase 5A event projector.
+**Promise Ledger**: preserve the existing schema, planning fields and methods unchanged. Promise event provenance stays on the event-derived reader-promise Memory projection, where an explicitly supplied `promise_id` may be retained as a cross-reference. Projection must not set/advance/payoff/overdue the ledger based solely on Canon events. A planner's manual `paid_off` transition does not synthesize a Canon event.
 
 ### Rebuild and Context behavior
 

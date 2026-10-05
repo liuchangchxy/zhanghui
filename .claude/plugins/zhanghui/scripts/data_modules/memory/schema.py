@@ -36,7 +36,7 @@ CATEGORY_KEY_RULES: Dict[str, tuple[str, ...]] = {
     "story_fact": ("subject", "field"),
     "timeline": ("subject", "source_chapter"),
     "open_loop": ("id",),
-    "reader_promise": ("subject",),
+    "reader_promise": ("id",),
 }
 
 

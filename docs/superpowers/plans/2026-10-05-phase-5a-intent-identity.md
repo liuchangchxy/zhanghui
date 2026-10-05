@@ -108,8 +108,7 @@
 
 **Files:**
 - Modify: `.claude/plugins/zhanghui/scripts/data_modules/memory/writer.py`
-- Modify: `.claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py`
-- Modify: `.claude/plugins/zhanghui/scripts/data_modules/volume_state.py` only to backward-compatibly serialize optional provenance fields
+- Preserve without modifying: `.claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py` and `volume_state.py`; Canon projection must not call their mutation APIs
 - Test: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_memory_writer.py`
 - Test: `.claude/plugins/zhanghui/scripts/tests/unit/test_promise_ledger.py`
 - Test: `.claude/plugins/zhanghui/scripts/tests/unit/test_volume_state.py`
@@ -117,13 +116,13 @@
 **Interfaces:**
 - Consumes: Task 1 reader Promise lifecycle records.
 - Produces: Promise memory items keyed by create `event_id` with creation/resolution provenance and `active|paid_off` semantic lifecycle.
-- `ForeshadowEntry` gains only optional `source_event_id`, `resolution_event_id`, `source_chapter`, and `resolved_chapter`; its planner ID/status transitions remain unchanged.
+- The Promise Ledger schema and planner ID/status transitions remain unchanged; optional `promise_id` cross-reference stays only in event-derived Memory projection payload.
 
 - [ ] **Step 1: Add failing tests** proving create is active, linked payoff makes only the matching row paid off, payoff-only/unlinked payoff adds no active row, legacy exact-unique payoff resolves only its unique candidate, and explicit Promise Ledger upsert/read round-trips provenance while event projection does not mutate ledger status or create rows.
 - [ ] **Step 2: Run focused Promise/memory tests** and verify failures.
 - [ ] **Step 3: Implement Promise projection lifecycle** from Task 1 output. For existing rows with no safe link, retain current data conservatively and emit diagnostics; do not create a new active item from payoff.
-- [ ] **Step 4: Keep Promise Ledger planning-owned**; confirm existing manual `payoff_foreshadow()` only mutates the ledger and never emits a Canon event. Add optional provenance fields only if an explicit ID consumer requires them; do not serialize speculative fields.
-- [ ] **Step 5: Run focused Promise tests** and verify old ledger JSON without added fields loads and round-trips unchanged semantically.
+- [ ] **Step 4: Keep Promise Ledger planning-owned**; confirm event projection never invokes its mutation APIs and an explicit ledger row's status/bytes remain unchanged when its related Canon Promise projects.
+- [ ] **Step 5: Run the existing Promise Ledger and VolumeStateManager tests** to verify planner lifecycle behavior is unchanged and manual `paid_off` remains a planning-only transition.
 - [ ] **Step 6: Commit** as `feat: distinguish promise creation and payoff`.
 
 ### Task 5: Rebuild, regression, docs, and delivery

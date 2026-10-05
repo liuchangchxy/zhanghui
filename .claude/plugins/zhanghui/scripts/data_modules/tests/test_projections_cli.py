@@ -508,3 +508,62 @@ def test_rebuild_shadows_mixed_evidence_legacy_memory_row_when_canon_resolves_lo
     assert upgraded[0].status == "outdated"
     assert all(row.id != legacy_id for row in active)
     assert len([row for row in rows if row.subject == "同一条谜团"]) == 1
+
+
+def test_rebuild_keeps_payoff_only_diagnostic_without_creating_active_promise(tmp_path):
+    _make_accepted_promise_commit(tmp_path, 1, "promise_paid_off", "paid-only", "救下盟友", {})
+    report = rebuild_projections(tmp_path)
+    diagnostics = json.loads((tmp_path / ".story-system" / "projections" / "intent-diagnostics.json").read_text(encoding="utf-8"))
+    from data_modules.config import DataModulesConfig
+    from data_modules.memory.store import ScratchpadManager
+    active = ScratchpadManager(DataModulesConfig.from_project_root(tmp_path)).query(category="reader_promise", status="active")
+    assert report["ok"] is True
+    assert [row["reason"] for row in diagnostics["diagnostics"]] == ["unlinked_payoff"]
+    assert active == []
+
+
+def _make_accepted_promise_commit(project_root: Path, chapter: int, event_type: str, event_id: str, content: str, extra: dict) -> None:
+    service = ChapterCommitService(project_root)
+    payload = build_commit_with_reconciliation(
+        service,
+        chapter=chapter,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={
+            "state_deltas": [], "entity_deltas": [],
+            "accepted_events": [{
+                "event_id": event_id, "event_type": event_type, "chapter": chapter,
+                "subject": content, "payload": {"content": content, **extra},
+            }],
+        },
+    )
+    service.persist_commit(payload)
+
+
+def test_rebuild_upgrades_legacy_reader_promise_memory_without_duplicate_active_rows(tmp_path):
+    from data_modules.config import DataModulesConfig
+    from data_modules.memory.schema import MemoryItem
+    from data_modules.memory.store import ScratchpadManager
+
+    _make_accepted_promise_commit(tmp_path, 1, "promise_created", "promise-a", "守护村庄", {"type": "protection"})
+    _make_accepted_promise_commit(tmp_path, 2, "promise_paid_off", "paid-a", "守护村庄", {"source_event_id": "promise-a"})
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    store = ScratchpadManager(cfg)
+    store.upsert_item(MemoryItem(
+        id="old-reader-promise", layer="semantic", category="reader_promise",
+        subject="守护村庄", field="promise", value="守护村庄", status="active",
+        source_chapter=1, evidence=["memory_facts:reader_promise:1", "manual:review"],
+    ))
+
+    report = rebuild_projections(tmp_path)
+
+    rows = store.query(category="reader_promise", status=None)
+    assert report["ok"] is True
+    assert len(rows) == 1
+    assert rows[0].payload["promise_event_id"] == "promise-a"
+    assert rows[0].payload["resolution_event_id"] == "paid-a"
+    assert "manual:review" in rows[0].evidence
+    assert rows[0].status == "outdated"
+    assert store.query(category="reader_promise", status="active") == []

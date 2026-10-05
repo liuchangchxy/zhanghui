@@ -284,16 +284,31 @@ class MemoryWriter:
             content = str(row.get("content", "") or "").strip()
             if not content:
                 continue
+            identity_id = str(row.get("identity_id") or "").strip()
+            source_chapter = int(row.get("source_chapter") or chapter)
+            lifecycle_status = str(row.get("status") or "active")
             item = MemoryItem(
-                id=self._item_id("reader_promise", content, "promise", chapter),
+                id=self._item_id("reader_promise", identity_id or content, "event" if identity_id else "promise", source_chapter),
                 layer="semantic",
                 category="reader_promise",
                 subject=content,
                 field="promise",
                 value=content,
-                payload={"promise_type": row.get("type"), "target": row.get("target")},
-                source_chapter=int(chapter),
-                evidence=[f"memory_facts:reader_promise:{chapter}"],
+                payload={
+                    "promise_event_id": identity_id or None,
+                    "source_event_id": row.get("source_event_id"),
+                    "source_chapter": source_chapter,
+                    "promise_id": row.get("promise_id"),
+                    "resolution_event_id": row.get("resolution_event_id"),
+                    "resolved_chapter": row.get("resolved_chapter"),
+                    "link_status": row.get("link_status", "legacy" if not identity_id else "linked"),
+                    "lifecycle_status": lifecycle_status,
+                    "promise_type": row.get("promise_type") or row.get("type"),
+                    "target": row.get("target"),
+                },
+                status="active" if lifecycle_status == "active" else "outdated",
+                source_chapter=source_chapter,
+                evidence=[f"memory_facts:reader_promise:{source_chapter}"],
             )
             self._upsert(item, stats)
 
@@ -314,7 +329,7 @@ class MemoryWriter:
             for event in accepted_events
             if isinstance(event, dict)
             and str(event.get("event_type") or "").strip()
-            in {"open_loop_created", "open_loop_closed"}
+            in {"open_loop_created", "open_loop_closed", "promise_created", "promise_paid_off"}
         ]
         if intent_events:
             existing_loops = self.store.query(category="open_loop", status=None)
@@ -333,12 +348,38 @@ class MemoryWriter:
                     **({"resolution_event_id": item.payload["resolution_event_id"]} if item.payload.get("resolution_event_id") else {}),
                     **({"resolved_chapter": item.payload["resolved_chapter"]} if item.payload.get("resolved_chapter") else {}),
                 })
+            existing_promises = self.store.query(category="reader_promise", status=None)
+            initial_promises = []
+            for item in existing_promises:
+                promise_event_id = str(item.payload.get("promise_event_id") or item.payload.get("source_event_id") or "").strip()
+                if not promise_event_id:
+                    continue
+                initial_promises.append({
+                    "identity_id": promise_event_id,
+                    "source_event_id": str(item.payload.get("source_event_id") or promise_event_id),
+                    "source_chapter": int(item.payload.get("source_chapter") or item.source_chapter),
+                    "content": item.value,
+                    "status": str(item.payload.get("lifecycle_status") or ("active" if item.status == "active" else "paid_off")),
+                    "link_status": str(item.payload.get("link_status") or "linked"),
+                    "promise_id": item.payload.get("promise_id"),
+                    "promise_type": item.payload.get("promise_type"),
+                    "target": item.payload.get("target"),
+                    **({"resolution_event_id": item.payload["resolution_event_id"]} if item.payload.get("resolution_event_id") else {}),
+                    **({"resolved_chapter": item.payload["resolved_chapter"]} if item.payload.get("resolved_chapter") else {}),
+                })
             lifecycle_rows = reconcile_intent_events(
-                intent_events, initial_open_loops=initial_loops
-            )["open_loops"]
+                intent_events,
+                initial_open_loops=initial_loops,
+                initial_reader_promises=initial_promises,
+            )
             current_ids = {str(event.get("event_id") or "") for event in intent_events}
             memory_facts["open_loops"] = [
-                row for row in lifecycle_rows
+                row for row in lifecycle_rows["open_loops"]
+                if str(row.get("source_event_id") or "") in current_ids
+                or str(row.get("resolution_event_id") or "") in current_ids
+            ]
+            memory_facts["reader_promises"] = [
+                row for row in lifecycle_rows["reader_promises"]
                 if str(row.get("source_event_id") or "") in current_ids
                 or str(row.get("resolution_event_id") or "") in current_ids
             ]
@@ -374,20 +415,8 @@ class MemoryWriter:
                 # Lifecycle rows are derived together above so a close can update an earlier identity.
                 continue
             elif event_type in {"promise_created", "promise_paid_off"}:
-                content = str(
-                    payload.get("content")
-                    or payload.get("description")
-                    or event.get("subject")
-                    or ""
-                ).strip()
-                if content:
-                    memory_facts["reader_promises"].append(
-                        {
-                            "content": content,
-                            "type": payload.get("type") or event_type,
-                            "target": payload.get("target") or event.get("subject") or "",
-                        }
-                    )
+                # Promise lifecycle rows are derived together above; a payoff is never a create.
+                continue
 
         result = {
             "entities_new": [

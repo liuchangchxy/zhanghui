@@ -1011,3 +1011,67 @@ def test_memory_projection_orphan_close_does_not_resolve_an_unlinked_legacy_iden
     active = ScratchpadManager(cfg).query(category="open_loop", status="active")
     assert len(active) == 1
     assert active[0].payload["loop_id"] == "loop-a"
+
+
+def test_memory_projection_tracks_promise_create_and_linked_payoff_without_ledger_write(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger = [{"id": "planned-a", "status": "pending", "notes": "planner-owned"}]
+    state_path.write_text(json.dumps({"project_info": {"promise_ledger": ledger}}), encoding="utf-8")
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "promise-a", "event_type": "promise_created", "subject": "救下盟友",
+        "payload": {"content": "救下盟友", "promise_id": "planned-a", "type": "rescue"},
+    }]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[{
+        "event_id": "promise-b", "event_type": "promise_created", "subject": "救下盟友",
+        "payload": {"content": "救下盟友", "promise_id": "planned-b", "type": "rescue"},
+    }]))
+    writer.apply(_commit_payload(chapter=3, accepted_events=[{
+        "event_id": "paid-b", "event_type": "promise_paid_off", "subject": "盟友获救",
+        "payload": {"content": "盟友获救", "promise_id": "planned-b"},
+    }]))
+
+    store = ScratchpadManager(cfg)
+    rows = store.query(category="reader_promise", status=None)
+    by_identity = {row.payload.get("promise_event_id"): row for row in rows if row.payload.get("promise_event_id")}
+    assert len(by_identity) == 2
+    assert by_identity["promise-a"].status == "active"
+    assert by_identity["promise-b"].status == "outdated"
+    assert by_identity["promise-b"].payload["lifecycle_status"] == "paid_off"
+    assert by_identity["promise-b"].payload["resolution_event_id"] == "paid-b"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["project_info"]["promise_ledger"] == ledger
+    assert {row.payload.get("promise_event_id") for row in store.query(category="reader_promise", status="active")} == {"promise-a"}
+
+
+def test_payoff_only_event_does_not_create_reader_promise_memory(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "paid-only", "event_type": "promise_paid_off", "subject": "盟友获救",
+        "payload": {"content": "盟友获救", "promise_id": "missing-promise"},
+    }]))
+    assert ScratchpadManager(cfg).query(category="reader_promise", status="active") == []
+
+
+def test_promise_paid_off_with_legacy_exact_unique_content_updates_same_memory_identity(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "promise-a", "event_type": "promise_created", "subject": "守护村庄",
+        "payload": {"content": "守护村庄"},
+    }]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[{
+        "event_id": "paid-a", "event_type": "promise_paid_off", "subject": "守护村庄",
+        "payload": {"content": "守护村庄"},
+    }]))
+    rows = ScratchpadManager(cfg).query(category="reader_promise", status=None)
+    assert len(rows) == 1
+    assert rows[0].payload["promise_event_id"] == "promise-a"
+    assert rows[0].payload["resolution_event_id"] == "paid-a"
+    assert rows[0].payload["link_status"] == "legacy_exact_unique"
+    assert rows[0].status == "outdated"
