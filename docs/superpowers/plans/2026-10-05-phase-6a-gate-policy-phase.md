@@ -39,7 +39,7 @@ tags: ["phase-6a", "gate-policy"]
 ## Execution Order and Dependencies
 
 1. [Step 1](2026-10-05-phase-6a-gate-policy-step-1.md) defines shared models, deterministic IDs/fingerprints, and policy. Its public interfaces are consumed by all later steps.
-2. [Step 2](2026-10-05-phase-6a-gate-policy-step-2.md) stores decisions and enforces accepted/rejected/pending semantics. It depends on Step 1 types and policy.
+2. [Step 2](2026-10-05-phase-6a-gate-policy-step-2.md) stores immutable per-attempt decisions and separates transient workflow actions (including recovery and human pending) from terminal accepted/rejected chapter outcomes. RECOVER dispatches existing recovery, verifies, and reevaluates as a new attempt; it never commits directly. It depends on Step 1 types and policy.
 3. [Step 3](2026-10-05-phase-6a-gate-policy-step-3.md) adds legacy adapters, explicit user-contract metadata handling, P1–P7 mappings, and current caller integration. It depends on Steps 1 and 2.
 
 ## Phase Verification
