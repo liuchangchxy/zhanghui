@@ -74,10 +74,10 @@ Run: `pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistenc
 Expected: FAIL because the mapping contract is absent.
 
 - [ ] **Step 3: Implement the pure mapping table only.** Use exact `(patch, issue_code)` contract mappings and typed fixture fields only; never inspect `message` or `fix_hint`. Do not edit `Blocker`, P1–P7 producers, CLI output, or production callers. Preserve the approved mapping examples: P1 cycle/corruption to HARD_INTEGRITY, P1 overdue to ADVISORY, P7 stale derived view to RECOVERABLE. These tests prove adapter contracts, not ChapterCommit integration.
-- [ ] **Step 4: Run mapping tests plus current P1–P7 unit tests.**
+- [ ] **Step 4: Run the Phase 6A P1–P7 mapping contract and pure adapter tests only.** Do not run or include the production `tests/unit/consistency` tree as a Phase 6A acceptance requirement; production consistency convergence remains Phase 6B.
 
-Run: `pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py -q`
-Expected: PASS; these are pure adapter-contract tests only. P1–P7 production behavior and CLI outputs remain untouched.
+Run: `pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py -q`
+Expected: PASS; these are pure mapping/adapter-contract tests only. P1–P7 production behavior and CLI outputs remain untouched. The final file list and collected node IDs are recorded in `docs/superpowers/acceptance/2026-10-05-phase-6a-final-acceptance.md`.
 
 ## Task 3: Integrate outcome handling into current chapter commit callers
 

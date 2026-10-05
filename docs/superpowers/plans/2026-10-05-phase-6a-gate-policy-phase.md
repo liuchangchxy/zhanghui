@@ -44,15 +44,9 @@ tags: ["phase-6a", "gate-policy"]
 
 ## Phase Verification
 
-Run the focused test commands listed in each step after that step. At phase end run:
+Run the focused test commands listed in each step after that step. The final Phase 6A acceptance definition is the named-file manifest in `docs/superpowers/acceptance/2026-10-05-phase-6a-final-acceptance.md`. It defines Step 1, Step 2, Step 3, Step 1/2 regression, and pure P1–P7 adapter coverage by exact test files and collected node IDs; counts are recorded outcomes, never targets.
 
-```bash
-pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_decision_store.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_schema.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contracts.py -q
-pytest .claude/plugins/zhanghui/scripts/tests/unit/consistency -q
-pytest .claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_memory_contract_adapter.py -q
-```
-
-Expected: all targeted tests pass; rejected commits remain immutable audit records; REQUIRE_HUMAN produces a durable pending GateDecision and no commit file; later reevaluation can reach accepted/rejected without a pending attempt consuming the commit slot; no Phase 6B CLI/skill retirement has been introduced.
+Expected: every manifest command passes; rejected commits remain immutable audit records; REQUIRE_HUMAN produces a durable pending GateDecision and no commit file; later reevaluation can reach accepted/rejected without a pending attempt consuming the commit slot; no Phase 6B CLI/skill retirement has been introduced. Do not require any predetermined test count.
 
 ## Phase 6B handoff boundary
 
