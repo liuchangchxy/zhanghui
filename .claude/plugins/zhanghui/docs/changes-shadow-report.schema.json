@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zhanghui.local/schemas/changes-shadow-report.schema.json",
+  "title": "Read-only CHANGES shadow report",
+  "type": "object",
+  "required": ["schema_version", "policy_version", "status", "input_sha256", "denominators", "semantic_counts", "infrastructure_health"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "policy_version": {"type": "string"},
+    "status": {"enum": ["INSUFFICIENT", "DISCUSSION_GATE_REQUIRES_HUMAN_REVIEW"]},
+    "project_id": {"type": "string"},
+    "project_mode": {"enum": ["story_system", "legacy"]},
+    "chapter_id": {"type": "string"},
+    "input_sha256": {"type": "object", "properties": {"proposed": {"type": ["string", "null"]}, "observed": {"type": ["string", "null"]}, "reconciliation": {"type": ["string", "null"]}, "report_set": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false},
+    "denominators": {"type": "object", "required": ["proposed_claims", "observed_facts", "combined"], "properties": {"proposed_claims": {"type": "integer", "minimum": 0}, "observed_facts": {"type": "integer", "minimum": 0}, "combined": {"type": "integer", "minimum": 0}}, "additionalProperties": false},
+    "mapping_coverage": {"type": "object"},
+    "semantic_counts": {"type": "object", "required": ["matched", "proposed_only", "observed_only", "proposal_observation_conflict", "observed_internal_conflict", "opaque"], "additionalProperties": {"type": "integer", "minimum": 0}},
+    "categories": {"type": "object"},
+    "hard_conflict_adjudication": {"type": "object"},
+    "infrastructure_health": {"type": "object", "required": ["missing", "invalid", "stale", "extractor_failure"], "properties": {"missing": {"type": "integer", "minimum": 0}, "invalid": {"type": "integer", "minimum": 0}, "stale": {"type": "integer", "minimum": 0}, "extractor_failure": {"type": "integer", "minimum": 0}}, "additionalProperties": false},
+    "compatibility": {"type": "object"},
+    "sample_counts": {"type": "object"},
+    "per_mode_category": {"type": "object"},
+    "missing_required_cells": {"type": "array", "items": {"type": "string"}},
+    "retirement_discussion_threshold": {"type": "object"}
+  },
+  "additionalProperties": false
+}
