@@ -214,7 +214,8 @@ class ChapterCommitService:
             payload["projection_status"] = {}
 
         writers = self._projection_writers()
-        required_writers = set(EventProjectionRouter().required_writers(payload))
+        router = EventProjectionRouter()
+        required_writers = set(router.required_writers(payload))
         writer_results: dict[str, dict[str, Any]] = {}
 
         if status == "accepted":
@@ -248,7 +249,12 @@ class ChapterCommitService:
             except Exception as exc:
                 writer_results["amend_proposals"] = {"status": "failed", "error": str(exc)}
                 payload["projection_status"]["amend_proposals"] = f"failed:{exc}"
-        for name, writer in writers.items():
+        for name in getattr(router, "PROJECTION_ORDER", tuple(writers)):
+            if name == "events":
+                continue
+            if name not in writers:
+                continue
+            writer = writers[name]
             if name not in required_writers:
                 payload["projection_status"][name] = "skipped"
                 writer_results[name] = {"status": "skipped", "reason": "not_required"}

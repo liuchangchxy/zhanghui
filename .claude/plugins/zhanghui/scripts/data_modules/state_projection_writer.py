@@ -11,6 +11,7 @@ import filelock
 
 from .commit_artifacts import extraction_dict, extraction_list, extraction_text
 from .durable_projection import require_durable_commit_match
+from .projection_rebuild_context import is_controlled_rebuild
 from .story_contracts import read_json_if_exists
 
 try:
@@ -75,7 +76,7 @@ class StateProjectionWriter:
             chapter_status = progress.setdefault("chapter_status", {})
 
             current_chapter = self._safe_int(progress.get("current_chapter"))
-            if chapter < current_chapter:
+            if chapter < current_chapter and not is_controlled_rebuild(self.project_root):
                 raise RuntimeError(
                     f"Out-of-order state projection refused: chapter {chapter} < "
                     f"projected chapter {current_chapter}; replay must be rebuilt in order"

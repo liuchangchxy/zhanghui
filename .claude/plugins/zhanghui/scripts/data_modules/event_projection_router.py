@@ -8,6 +8,19 @@ from .commit_artifacts import extraction_list, extraction_text
 
 
 class EventProjectionRouter:
+    # Single topology source for incremental projection and full rebuild.
+    PROJECTION_MANIFEST = {
+        "events": {"writer": "EventLogStore", "reset": "events", "order": 10, "reproducibility": "strict"},
+        "state": {"writer": "StateProjectionWriter", "reset": "state", "order": 20, "reproducibility": "semantic"},
+        "index": {"writer": "IndexProjectionWriter", "reset": "index", "order": 30, "reproducibility": "strict"},
+        "summary": {"writer": "SummaryProjectionWriter", "reset": "summary", "order": 40, "reproducibility": "strict"},
+        "memory": {"writer": "MemoryProjectionWriter", "reset": "memory", "order": 50, "reproducibility": "semantic"},
+        "vector": {"writer": "VectorProjectionWriter", "reset": "vector", "order": 60, "reproducibility": "regenerable"},
+    }
+    PROJECTION_ORDER = tuple(
+        name for name, _ in sorted(PROJECTION_MANIFEST.items(), key=lambda row: row[1]["order"])
+    )
+
     TABLE = {
         "character_state_changed": ["state", "memory", "vector"],
         "power_breakthrough": ["state", "memory", "vector"],

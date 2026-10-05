@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .chapter_commit_service import ChapterCommitService
+from .projection_rebuild import rebuild_projections
 from .projection_log import latest_projection_run
 
 
@@ -111,6 +112,18 @@ def format_projection_report(report: dict[str, Any], output_format: str = "json"
     if output_format == "json":
         return json.dumps(report, ensure_ascii=False, indent=2)
     status = "OK" if report.get("ok") else "ERROR"
+    if report.get("action") == "rebuild":
+        error = report.get("error") or {}
+        lines = [
+            f"{status} projections rebuild",
+            f"chapters: {report.get('chapters') or []}",
+            f"error: {error.get('projection') or ''} chapter={error.get('chapter') or ''} {error.get('message') or ''}".rstrip(),
+        ]
+        for item in report.get("results") or []:
+            lines.append(
+                f"- chapter {item.get('chapter')}: {'OK' if item.get('ok') else 'ERROR'} {item.get('projection_status') or ''}"
+            )
+        return "\n".join(lines)
     if report.get("action") == "retry":
         return "\n".join(
             [
@@ -145,9 +158,16 @@ def main() -> None:
     replay.add_argument("--to-chapter", type=int, required=True)
     replay.add_argument("--format", choices=["json", "text"], default="json")
 
+    rebuild = sub.add_parser("rebuild")
+    rebuild.add_argument("--format", choices=["json", "text"], default="json")
+
     args = parser.parse_args()
     if args.action == "retry":
         report = retry_projection(args.project_root, chapter=args.chapter)
+        print(format_projection_report(report, args.format))
+        raise SystemExit(0 if report.get("ok") else 1)
+    if args.action == "rebuild":
+        report = rebuild_projections(args.project_root)
         print(format_projection_report(report, args.format))
         raise SystemExit(0 if report.get("ok") else 1)
     report = replay_projections(
