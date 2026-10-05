@@ -49,7 +49,7 @@ tags: ["phase-6a", "gate-policy", "chapter-commit"]
 1. [Phase plan: shared finding policy, audit persistence, and commit integration](2026-10-05-phase-6a-gate-policy-phase.md)
 2. [Step plan 1: finding schema, stable identity, and severity policy](2026-10-05-phase-6a-gate-policy-step-1.md)
 3. [Step plan 2: GateDecision persistence and ChapterCommitService outcomes](2026-10-05-phase-6a-gate-policy-step-2.md)
-4. [Step plan 3: legacy adapters and veto-relevant P1–P7 integration](2026-10-05-phase-6a-gate-policy-step-3.md)
+4. [Step plan 3: existing legacy veto migration](2026-10-05-phase-6a-gate-policy-step-3.md)
 
 ## Completion Gate
 

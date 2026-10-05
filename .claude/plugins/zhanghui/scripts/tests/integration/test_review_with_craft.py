@@ -18,7 +18,7 @@ from story_craft import (
     record_emotion_peak,
     set_chapter_meta,
 )
-from review_pipeline import run_craft_checks, _inject_craft_issues
+from review_pipeline import run_craft_checks, _inject_craft_issues, _craft_issue_to_review_issue
 from data_modules.review_schema import ReviewResult
 from data_modules.gate_finding_adapters import adapt_legacy_artifacts
 from data_modules.gate_findings import WorkflowAction
@@ -90,3 +90,25 @@ def test_craft_findings_have_stable_structured_identity_and_never_block(tmp_path
     )
     decision = GateSeverityPolicy().evaluate(findings, policy_version="v1", scope={"chapter": 5})
     assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+
+
+def test_craft_display_veto_words_never_change_policy_classification():
+    records = [
+        ("foreshadow_compliance: 定时锁逾期 BLOCKER", "story_craft.timed_lock", "timed_lock:lock-1"),
+        ("foreshadow_compliance: 节奏曲线 BLOCK", "story_craft.rhythm_curve", "chapter:8:rhythm_curve"),
+        ("foreshadow_compliance: hook_type 未声明", "story_craft.hook_type", "chapter:8:hook_type"),
+        ("beat_compliance: Scene-Sequel BLOCKER", "story_craft.scene_sequel", "chapter:8:scene_sequel"),
+    ]
+    result = ReviewResult(chapter=8)
+    for display, gate_id, subject_id in records:
+        result.issues.append(_craft_issue_to_review_issue(display, 8, {
+            "gate_id": gate_id, "subject_id": subject_id,
+            "evidence": [{"kind": "craft_observation", "identity": {"chapter": 8}}],
+        }))
+    findings = adapt_legacy_artifacts(
+        chapter=8, review={"issues": [issue.to_dict() for issue in result.issues]},
+        fulfillment={"missed_nodes": []}, disambiguation={"pending": []},
+    )
+    decision = GateSeverityPolicy().evaluate(findings, policy_version="v1", scope={"chapter": 8})
+    assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+    assert all(row.effective_severity.value == "ADVISORY" for row in decision.decisions)

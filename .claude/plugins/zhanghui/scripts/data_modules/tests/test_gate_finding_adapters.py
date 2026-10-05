@@ -22,7 +22,7 @@ def _by_gate(findings, gate_id):
 def test_legacy_review_blocking_is_candidate_only_and_text_does_not_classify():
     findings = adapt_legacy_artifacts(
         chapter=3,
-        review={"issues": [{"gate_id": "pacing", "checker_id": "llm_review", "blocking": True,
+        review={"issues": [{"gate_id": "pacing", "checker_id": "llm_review", "blocking": True, "severity": "critical",
                             "message": "HARD_CANON BLOCKER"}]},
         fulfillment={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
         disambiguation={"pending": []}, gate_registry=REGISTRY,
@@ -51,13 +51,15 @@ def test_planner_must_cover_miss_stays_advisory():
     findings = adapt_legacy_artifacts(
         chapter=5, review={"issues": []},
         fulfillment={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [
-            {"id": "node-1", "must_cover": True}
+            {"id": "node-1", "must_cover_nodes": ["node-1"], "source": "planner"},
+            {"id": "node-2", "must_cover_nodes": ["node-2"], "source": "author"},
         ], "extra_nodes": []},
         disambiguation={"pending": []}, gate_registry=REGISTRY,
     )
     from data_modules.gate_severity_policy import GateSeverityPolicy
     decision = GateSeverityPolicy().evaluate(findings, policy_version="v1", scope={"chapter": 5})
     assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+    assert {finding.authority.value for finding in findings} == {"PLANNER_GENERATED", "AUTHOR_PLAN"}
 
 
 def test_only_fully_validated_user_constraint_can_become_hard_user():
@@ -133,7 +135,7 @@ def test_same_structured_gate_different_prose_has_same_classification():
 def test_changes_gate_deterministic_failures_are_structured_integrity_findings():
     from data_modules.gate_severity_policy import GateSeverityPolicy
     findings = adapt_changes_gate_result({"passed": False, "failures": [
-        {"rule_id": "R1", "severity": "blocking", "message": "arbitrary display text"},
+        {"rule_id": "R1", "severity": "blocking", "location": "top_level.importance", "message": "arbitrary display text"},
     ]}, chapter=8)
     decision = GateSeverityPolicy().evaluate(findings, policy_version="v1", scope={"chapter": 8})
     assert decision.aggregate_action == WorkflowAction.REJECT
@@ -144,3 +146,17 @@ def test_changes_gate_deterministic_failures_are_structured_integrity_findings()
     ]}, chapter=8)
     unknown_decision = GateSeverityPolicy().evaluate(unknown, policy_version="v1", scope={"chapter": 8})
     assert unknown_decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+
+
+def test_changes_gate_advisory_or_unrecognized_severity_never_becomes_hard():
+    from data_modules.gate_severity_policy import GateSeverityPolicy
+
+    advisory = adapt_changes_gate_result({"passed": False, "failures": [
+        {"rule_id": "R0", "severity": "advisory", "location": "db"},
+        {"rule_id": "R8", "severity": "advisory", "location": "time_progression.elapsed_time"},
+        {"rule_id": "R1", "severity": "unexpected", "location": "top_level.test"},
+        {"rule_id": "R2", "location": "top_level.test"},
+    ]}, chapter=8)
+    decision = GateSeverityPolicy().evaluate(advisory, policy_version="v1", scope={"chapter": 8})
+    assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+    assert all(row.effective_severity == EffectiveSeverity.ADVISORY for row in decision.decisions)

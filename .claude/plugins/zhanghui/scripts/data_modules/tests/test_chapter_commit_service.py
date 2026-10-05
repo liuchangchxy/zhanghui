@@ -712,12 +712,21 @@ def test_apply_projections_updates_state_for_rejected_commit(tmp_path):
     assert state["progress"]["chapter_status"]["7"] == "chapter_rejected"
 
 
-def test_chapter_commit_cli_builds_and_persists_commit(tmp_path, monkeypatch):
+def test_chapter_commit_cli_ignores_consistency_fields_and_preserves_changes_advisories(tmp_path, monkeypatch):
+    import subprocess
+
     review_path = tmp_path / "review.json"
     fulfillment_path = tmp_path / "fulfillment.json"
     disambiguation_path = tmp_path / "disambiguation.json"
     extraction_path = tmp_path / "extraction.json"
-    review_path.write_text('{"blocking_count": 0}', encoding="utf-8")
+    review_path.write_text(json.dumps({
+        "blocking_count": 0,
+        "consistency_findings": [
+            {"patch": "foreshadow_dag", "issue_code": "overdue", "subject_id": "fs-1"},
+            {"patch": "pacing_tracker", "issue_code": "consecutive_fast", "subject_id": "chapter:3"},
+            {"patch": "reader_contract", "issue_code": "broken_promise", "subject_id": "promise-1"},
+        ],
+    }), encoding="utf-8")
     fulfillment_path.write_text(
         '{"planned_nodes": ["发现陷阱"], "covered_nodes": ["发现陷阱"], "missed_nodes": [], "extra_nodes": []}',
         encoding="utf-8",
@@ -741,6 +750,17 @@ def test_chapter_commit_cli_builds_and_persists_commit(tmp_path, monkeypatch):
         sys.path.insert(0, str(scripts_dir))
 
     from chapter_commit import main
+    monkeypatch.setattr(
+        "chapter_commit.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 0,
+            stdout=json.dumps({"passed": False, "failures": [
+                {"rule_id": "R0", "severity": "advisory", "location": "db"},
+                {"rule_id": "R8", "severity": "advisory", "location": "time_progression.elapsed_time"},
+            ]}),
+            stderr="",
+        ),
+    )
 
     monkeypatch.setattr(
         sys,
@@ -767,7 +787,15 @@ def test_chapter_commit_cli_builds_and_persists_commit(tmp_path, monkeypatch):
     )
     main()
 
-    assert (tmp_path / ".story-system" / "commits" / "chapter_003.commit.json").is_file()
+    commit_path = tmp_path / ".story-system" / "commits" / "chapter_003.commit.json"
+    assert commit_path.is_file()
+    payload = json.loads(commit_path.read_text(encoding="utf-8"))
+    assert payload["gate_decision_binding"]["final_action"] == "ALLOW_WITH_ADVISORY"
+    decision_ref = payload["gate_decision_binding"]["gate_decision_ref"]
+    decision_record = json.loads((tmp_path / decision_ref).read_text(encoding="utf-8"))
+    decisions = decision_record["decision_set"]["decisions"]
+    assert len(decisions) == 2
+    assert all(row["effective_severity"] == "ADVISORY" for row in decisions)
 
 
 def test_apply_projections_writes_events_and_amend_proposals(tmp_path):

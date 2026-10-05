@@ -145,7 +145,11 @@ Adapters normalize known legacy structures into `DetectedFinding` before policy 
 
 The gate registry is keyed by stable checker/gate identity and artifact type. It records the mapping, evidence extractor, default authority/category, and policy rule. Unknown gate IDs become an audit diagnostic with `LEGACY_UNKNOWN`; they do not become human decisions just because their prose sounds severe. Only a registered legacy gate whose known function can affect Canon or transaction integrity and whose structured data is insufficient to decide receives conservative `HUMAN_DECISION`.
 
-Phase 6A provides the P1–P7 consistency mapping contract and adapter table. It migrates only consistency paths that currently feed review/commit veto. It does not rewrite the consistency CLI, every patch output format, or every skill consumer.
+Phase 6A provides the P1–P7 consistency mapping contract and pure adapter table only. The current ChapterCommit production policy inputs do not include the P1–P7 consistency runner. Phase 6A must not connect it to `ChapterCommitService`, add consistency findings as commit inputs, or make consistency CLI output a new commit prerequisite. These adapter tests prove mapping contracts, not production integration.
+
+The actual existing Craft veto path is `run_craft_checks(...) → craft strings/findings → _craft_issue_to_review_issue(...) → ReviewIssue → review artifact → ChapterCommit policy`. Craft/timed-lock/pacing/hook/Scene-Sequel/Style heuristics default to `ADVISORY` or `SCORE`; display words such as `BLOCKER`, `BLOCK`, `未声明`, and `逾期` never grant veto authority. Minimal stable gate/subject/evidence metadata may be added only to this real review path.
+
+Changes Gate mappings preserve the producer's structured severity: only registered `blocking` rows with stable location/evidence can map to `HARD_INTEGRITY`; `advisory`, missing severity, and unknown severity remain non-vetoing. R8 is an advisory heuristic even though it has a registered rule ID. In particular, missing-DB R0 and R8 heuristic advisories cannot become commit blockers.
 
 ## Canonical commit veto and flow
 
@@ -184,14 +188,16 @@ The aggregate workflow action is derived from recomputed GateDecisions. `REJECT`
 - Define and version the shared finding envelope, controlled category/authority enums, deterministic policy, decision audit artifact, stable logical finding identity, and separate evidence/input fingerprints.
 - Add contract-node metadata for explicit user constraints after validation that current master/chapter/volume/review contracts can carry it.
 - Add P1–P7 structured consistency mapping contracts and deterministic adapters.
-- Migrate the current review, fulfillment, disambiguation, and highest-risk consistency paths that feed chapter review/commit veto.
+- Migrate the existing review/Craft, fulfillment, disambiguation, and changes/reconciliation findings that feed the current ChapterCommit policy input.
+- Keep P1–P7 at mapping-contract and pure-adapter-test scope; do not add a consistency-runner production call path to chapter commit.
 - Make `ChapterCommitService` the sole final veto, recomputing the canonical policy from normalized findings.
 - Persist immutable per-attempt GateDecision audit data as its sole authoritative owner, with effective severity/action, policy version, reason/rule ID, scope, evidence fingerprint and input fingerprint. A chapter commit stores only the decision reference and binding fields.
 - Keep compatibility input support while making legacy values non-authoritative.
 
 ### Phase 6B
 
-- Migrate all consistency producers to native shared findings.
+- Decide whether consistency findings should reach skill, CLI, or workflow consumers, and through which entry points. Shared severity semantics do not force all checker execution through `ChapterCommitService`.
+- Reconsider P1 producer-native typed metadata (`issue_code`, `subject_id`, structured `evidence`) together with that consumer architecture; it is deferred in 6A because no current review/commit production caller consumes it.
 - Converge consistency CLI exit behavior and all skill consumers.
 - Retire legacy `Blocker` compatibility after consumers migrate.
 - Complete conversion of remaining consistency patch output formats.

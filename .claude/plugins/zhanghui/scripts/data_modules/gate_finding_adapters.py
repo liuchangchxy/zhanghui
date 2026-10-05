@@ -216,12 +216,13 @@ def adapt_legacy_artifacts(*, chapter: int, review: dict[str, Any], fulfillment:
 
 
 def adapt_changes_gate_result(gate_result: dict[str, Any], *, chapter: int) -> list[DetectedFinding]:
-    """Normalize deterministic CHANGES rule failures; ignore prose and severity labels."""
+    """Normalize CHANGES failures from registered rules and structured severity."""
     findings: list[DetectedFinding] = []
     failures = gate_result.get("failures") if isinstance(gate_result, dict) else None
     if not isinstance(failures, list):
         return findings
     deterministic_rules = {"R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"}
+    hard_rules = {"R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7"}
     for row in failures:
         item = _obj(row)
         rule_id = item.get("rule_id")
@@ -237,8 +238,24 @@ def adapt_changes_gate_result(gate_result: dict[str, Any], *, chapter: int) -> l
                 explicitness=Explicitness.UNKNOWN, subject_id=None,
                 evidence=[EvidenceRef(kind="unsupported_rule_diagnostic", identity={"rule_id": rule_id})]))
             continue
+        severity = item.get("severity")
+        location = item.get("location")
+        subject = f"changes-rule:{rule_id}:{location}" if isinstance(location, str) and location.strip() else None
+        if severity != "blocking" or rule_id not in hard_rules:
+            # Only registered blocking rules can establish hard integrity;
+            # advisory, missing, and unknown values remain non-authoritative.
+            is_r8_advisory = rule_id == "R8"
+            findings.append(_finding(chapter=chapter, checker_id="changes_gate",
+                gate_id=f"changes_gate.{rule_id}.advisory" if severity == "advisory" else f"changes_gate.{rule_id}.unclassified",
+                category=FindingCategory.CRAFT if is_r8_advisory else FindingCategory.WORKFLOW,
+                authority=FindingAuthority.CRAFT_HEURISTIC if is_r8_advisory else FindingAuthority.LEGACY_UNKNOWN,
+                explicitness=Explicitness.UNKNOWN, subject_id=subject,
+                evidence=[EvidenceRef(kind="advisory_observation" if severity == "advisory" else "legacy_diagnostic",
+                    identity={"rule_id": rule_id, "location": location} if isinstance(location, str) else {"rule_id": rule_id})]))
+            continue
         findings.append(_finding(chapter=chapter, checker_id="changes_gate", gate_id=f"changes_gate.{rule_id}",
             category=FindingCategory.INTEGRITY, authority=FindingAuthority.SYSTEM_INTEGRITY,
-            explicitness=Explicitness.UNKNOWN, subject_id=f"changes-rule:{rule_id}",
-            evidence=[EvidenceRef(kind="deterministic_validation", identity={"valid": False, "rule_id": rule_id})]))
+            explicitness=Explicitness.UNKNOWN, subject_id=subject,
+            evidence=[EvidenceRef(kind="deterministic_validation", identity={"valid": False, "rule_id": rule_id,
+                **({"location": location} if isinstance(location, str) else {})})]))
     return findings
