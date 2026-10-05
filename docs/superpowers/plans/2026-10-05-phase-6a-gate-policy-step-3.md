@@ -14,7 +14,7 @@ tags: ["legacy-adapter", "consistency", "integration"]
 
 **Goal:** Convert only existing veto-relevant legacy review, fulfillment, disambiguation, and consistency inputs to normalized findings without rewriting every producer or CLI.
 
-**Architecture:** A registry keyed by checker/gate and artifact type maps structured legacy values to findings. P1–P7 get a complete mapping contract; only paths currently reaching review/commit veto are wired in Phase 6A. User constraints are read from existing Story System contract node metadata.
+**Architecture:** A registry keyed by checker/gate and artifact type maps structured legacy values to findings. P1–P7 get a complete mapping contract; only paths currently reaching review/commit veto are wired in Phase 6A. For only those veto-relevant P1–P7 producers, extend the existing `Blocker` compatibly with optional machine-authored `issue_code`, `subject_id`, and structured `evidence`; preserve `patch`, `chapter`, `message`, and `fix_hint`. Producers report what/rule/subject/evidence only, never severity/authority/blocking. User constraints are read from existing Story System contract node metadata.
 
 **Tech Stack:** Python 3, Pydantic, pytest, existing consistency `Patch` records and Story System JSON contracts.
 
@@ -56,26 +56,30 @@ Expected: PASS; text-only differences do not change classification.
 ## Task 2: Define and test P1–P7 consistency mapping contract
 
 **Files:**
-- Modify: `.claude/plugins/zhanghui/scripts/consistency/core/patch_base.py` only to expose stable patch identity/evidence fields if currently absent
+- Modify: `.claude/plugins/zhanghui/scripts/consistency/core/patch_base.py` to add backward-compatible optional `issue_code`, `subject_id`, and structured `evidence` fields to the existing `Blocker`; keep the four legacy fields unchanged
+- Modify only veto-relevant producer sites in `.claude/plugins/zhanghui/scripts/consistency/patches/p1_foreshadow_dag.py` through `p7_derived_views.py` to supply those typed fields; non-veto consumers and outputs remain compatible
 - Create: `.claude/plugins/zhanghui/scripts/data_modules/consistency_finding_adapters.py`
 - Create: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py`
 - Read: `.claude/plugins/zhanghui/scripts/consistency/patches/p1_foreshadow_dag.py` through `p7_derived_views.py`
 
 **Interfaces:**
-- `P1_P7_MAPPING` has exactly seven entries keyed by stable patch IDs; each declares category, source authority, evidence extractor, and policy rule ID.
-- `adapt_consistency_patch(patch_result, chapter_scope) -> list[DetectedFinding]` emits structured findings from patch IDs and structured patch evidence.
+- `Blocker.issue_code`, `subject_id`, and `evidence` are optional and producer-authored. They contain no severity, blocking, authority, or explicitness fields.
+- `issue_code` is a stable rule key; `subject_id` identifies the logical object (for example a foreshadow/timed-lock/debt/volume/revision/view key) or an explicit checker-defined stable chapter subject. Neither is inferred from `message` or `fix_hint`.
+- `P1_P7_MAPPING` has exactly seven entries keyed by stable patch IDs; each declares issue-code→gate-ID mapping, category/authority/explicitness mapping, structured evidence extractor, and policy rule ID. Gate IDs are granular (stable patch name + issue_code), not just `P1` and not prose.
+- `adapt_consistency_patch(patch_result, chapter_scope) -> list[DetectedFinding]` emits findings only from typed issue code, stable subject ID, and structured evidence. `finding_id` uses shared stable identity (gate + subject + chapter/workflow scope); evidence values only affect `evidence_fingerprint` / attempt fingerprint.
+- If a veto-relevant blocker lacks a known issue code, stable subject, or structured evidence required by its registered mapping, emit a non-deduplicable diagnostic/advisory compatibility finding; it cannot hard-veto, identify overrides, or drive rewrite-loop identity.
 
-- [ ] **Step 1: Add failing mapping contract tests** asserting P1–P7 completeness, unique gate IDs, stable evidence identity, and representative clean/finding results for each patch type.
+- [ ] **Step 1: Add failing mapping contract tests** asserting P1–P7 completeness, granular unique gate IDs, backward compatibility of the four legacy Blocker fields, optional structured fields, no producer severity fields, stable subject identity, evidence changes updating fingerprints but not finding_id, multiple subjects in one patch/chapter receiving distinct IDs, and representative clean/finding results for each patch type. Assert missing structured identity is diagnostic/advisory only.
 - [ ] **Step 2: Run and verify the tests fail.**
 
 Run: `pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py -q`
 Expected: FAIL because the mapping contract is absent.
 
-- [ ] **Step 3: Implement the mapping table.** Use the seven patch modules' structured IDs/data only; keep CLI output and patch output formats intact. Map pacing-only quality observations to CRAFT/SCORE/ADVISORY, integrity failures to INTEGRITY, projection issues to PROJECTION_HEALTH, and user constraints only when contract provenance proves it.
+- [ ] **Step 3: Implement minimal typed producer metadata and the mapping table.** Add optional fields to `Blocker`; update only P1–P7 producer branches that currently feed review/commit veto and can derive a stable issue code, subject, and structured evidence from existing typed inputs. Do not add severity/authority/blocking to producers. Use exact `(patch, issue_code)` registry mappings and structured fields only; never inspect `message` or `fix_hint`. Keep all four old Blocker fields, CLI output, and non-veto output formats intact. Follow the approved category/authority/severity contract; quality observations remain CRAFT/SCORE/ADVISORY, integrity findings require deterministic proof, and user findings become HARD_USER only when existing contract metadata proves every explicit-user binding. Emit diagnostics/advisories where stable identity cannot be derived; do not invent subject IDs.
 - [ ] **Step 4: Run mapping tests plus current P1–P7 unit tests.**
 
 Run: `pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py .claude/plugins/zhanghui/scripts/tests/unit/consistency/test_p1_foreshadow_dag.py .claude/plugins/zhanghui/scripts/tests/unit/consistency/test_p2_volume_anchor.py .claude/plugins/zhanghui/scripts/tests/unit/consistency/test_p3_event_matrix.py .claude/plugins/zhanghui/scripts/tests/unit/consistency/test_p4_pacing_tracker.py .claude/plugins/zhanghui/scripts/tests/unit/consistency/test_p5_state_revision.py .claude/plugins/zhanghui/scripts/tests/unit/consistency/test_p6_reader_contract.py .claude/plugins/zhanghui/scripts/tests/unit/consistency/test_p7_derived_views.py -q`
-Expected: PASS; existing producer behavior and CLI formats remain unchanged.
+Expected: PASS; legacy Blocker consumers and CLI formats remain compatible. Only typed metadata on veto-relevant rows is additive; no prose-based classification or producer-owned severity is introduced.
 
 ## Task 3: Integrate outcome handling into current chapter commit callers
 
@@ -122,9 +126,17 @@ Expected: PASS; no caller derives veto from blocker counts or cached severity.
 Run: `pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_decision_store.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py .claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py -k 'pending or human or score or mismatch or rejected' -q`
 Expected: FAIL only for the new integration assertions before wiring or on uncovered edge cases.
 
-- [ ] **Step 3: Fix only Phase 6A gaps revealed by the cross-layer tests.** Do not migrate every consistency producer, CLI exit code, skill consumer, or legacy `Blocker` type.
+- [ ] **Step 3: Fix only Phase 6A gaps revealed by the cross-layer tests.** Do not migrate every consistency producer, CLI exit code, skill consumer, or legacy `Blocker` type. Optional typed Blocker fields and the minimum veto-relevant P1–P7 producer annotations above are the only producer changes in scope.
 - [ ] **Step 4: Run the full focused Phase 6A suite** exactly as listed in `2026-10-05-phase-6a-gate-policy-phase.md` and confirm all tests pass.
 - [ ] **Step 5: Inspect the final diff and commit the completed phase** as `feat: enforce shared deterministic chapter gate policy`.
+
+## Acceptance criteria
+
+- P1–P7 each has a stable mapping contract; only veto-relevant producers emit optional typed issue_code/subject_id/evidence in Phase 6A. Legacy fields and consumers remain valid.
+- No adapter or policy classification reads message/fix_hint. Producer outputs do not choose severity, authority, explicitness, or blocking.
+- Same patch/chapter can produce multiple distinct logical findings; evidence can change across attempts without changing finding_id when logical subject/scope are stable. Missing identity is diagnostic/advisory only.
+- LLM blockers, ordinary planner misses, timed-lock/Craft/Style heuristics, and unknown legacy rows retain the approved non-hard behavior. Hard paths remain limited to explicit validated USER constraints and deterministic Canon/Integrity proof under the shared policy.
+- Step 3 caller integration respects Step 2 action/outcome semantics and all Step 1/2 regression suites pass. No Phase 6B migration or Phase 0/1/2/3/4/5A boundary change.
 
 ## Step-level commit boundary
 
