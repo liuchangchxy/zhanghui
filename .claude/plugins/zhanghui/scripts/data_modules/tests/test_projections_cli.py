@@ -396,3 +396,84 @@ def test_full_rebuild_validates_index_field_values(tmp_path, monkeypatch):
     assert report["error"]["projection"] == "index"
     assert report["error"]["chapter"] == 4
     assert "appearances index rows differ" in report["error"]["message"]
+
+
+def test_rebuild_regenerates_intent_diagnostics_and_clears_stale_rows(tmp_path):
+    _make_accepted_loop_commit(tmp_path, 1, "open_loop_closed")
+    first = rebuild_projections(tmp_path)
+    diagnostic_path = tmp_path / ".story-system" / "projections" / "intent-diagnostics.json"
+    assert first["ok"] is True
+    first_bytes = diagnostic_path.read_bytes()
+    first_data = json.loads(first_bytes)
+    assert [row["reason"] for row in first_data["diagnostics"]] == ["orphan_close"]
+
+    second = rebuild_projections(tmp_path)
+    assert second["ok"] is True
+    assert diagnostic_path.read_bytes() == first_bytes
+
+    diagnostic_path.write_text(
+        json.dumps({"schema_version": "intent-diagnostics/v1", "diagnostics": [{"event_id": "stale", "reason": "stale"}]}),
+        encoding="utf-8",
+    )
+    third = rebuild_projections(tmp_path)
+    assert third["ok"] is True
+    assert diagnostic_path.read_bytes() == first_bytes
+
+
+def test_rebuild_writes_empty_intent_diagnostics_projection(tmp_path):
+    _make_accepted_empty_commit(tmp_path, 1)
+    report = rebuild_projections(tmp_path)
+    diagnostic_path = tmp_path / ".story-system" / "projections" / "intent-diagnostics.json"
+    assert report["ok"] is True
+    assert json.loads(diagnostic_path.read_text(encoding="utf-8")) == {
+        "schema_version": "intent-diagnostics/v1",
+        "diagnostics": [],
+    }
+
+
+def _make_accepted_empty_commit(project_root: Path, chapter: int) -> None:
+    service = ChapterCommitService(project_root)
+    payload = build_commit_with_reconciliation(
+        service,
+        chapter=chapter,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+    )
+    service.persist_commit(payload)
+
+
+def test_rebuild_upgrades_unique_legacy_state_loop_row_to_event_identity(tmp_path):
+    _make_accepted_loop_commit(tmp_path, 1, "open_loop_created")
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({"plot_threads": {"foreshadowing": [{
+        "content": "同一条谜团", "status": "active", "planted_chapter": 1,
+    }]}}), encoding="utf-8")
+
+    report = rebuild_projections(tmp_path)
+
+    rows = json.loads(state_path.read_text(encoding="utf-8"))["plot_threads"]["foreshadowing"]
+    assert report["ok"] is True
+    assert len(rows) == 1
+    assert rows[0]["loop_id"] == "evt-loop-1"
+    assert rows[0]["status"] == "active"
+
+
+def test_rebuild_keeps_unprovable_legacy_state_row_non_authoritative(tmp_path):
+    _make_accepted_loop_commit(tmp_path, 1, "open_loop_created")
+    _make_accepted_loop_commit(tmp_path, 2, "open_loop_created")
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({"plot_threads": {"foreshadowing": [{
+        "content": "同一条谜团", "status": "active", "planted_chapter": 99,
+    }]}}), encoding="utf-8")
+
+    report = rebuild_projections(tmp_path)
+
+    rows = json.loads(state_path.read_text(encoding="utf-8"))["plot_threads"]["foreshadowing"]
+    legacy = [row for row in rows if "loop_id" not in row]
+    assert report["ok"] is True
+    assert len(legacy) == 1
+    assert legacy[0]["status"] == "legacy_unlinked"

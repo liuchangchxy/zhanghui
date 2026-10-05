@@ -73,15 +73,20 @@ def _resolve(
     target["link_status"] = link_status
 
 
-def reconcile_intent_events(events: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def reconcile_intent_events(
+    events: list[dict[str, Any]],
+    *,
+    initial_open_loops: list[dict[str, Any]] | None = None,
+    initial_reader_promises: list[dict[str, Any]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Return Open Loop and reader Promise lifecycles plus unlinked diagnostics.
 
     Caller supplies accepted events in canonical chapter/event order. This function
     uses only explicit IDs and exact-content unique legacy compatibility; it performs
     no semantic matching and never mutates source events.
     """
-    open_loops: list[dict[str, Any]] = []
-    reader_promises: list[dict[str, Any]] = []
+    open_loops: list[dict[str, Any]] = [dict(row) for row in (initial_open_loops or [])]
+    reader_promises: list[dict[str, Any]] = [dict(row) for row in (initial_reader_promises or [])]
     diagnostics: list[dict[str, Any]] = []
 
     for event in events:
@@ -94,6 +99,8 @@ def reconcile_intent_events(events: list[dict[str, Any]]) -> dict[str, list[dict
         if event_type == "open_loop_created":
             if not event_id:
                 diagnostics.append(_diagnostic(event, "missing_source_event_id", []))
+                continue
+            if any(row["identity_id"] == event_id for row in open_loops):
                 continue
             open_loops.append({
                 "identity_id": event_id,
@@ -119,6 +126,8 @@ def reconcile_intent_events(events: list[dict[str, Any]]) -> dict[str, list[dict
                 diagnostics.append(_diagnostic(event, "missing_source_event_id", []))
                 continue
             payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            if any(row["identity_id"] == event_id for row in reader_promises):
+                continue
             reader_promises.append({
                 "identity_id": event_id,
                 "source_event_id": event_id,

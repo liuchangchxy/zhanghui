@@ -865,10 +865,12 @@ def test_memory_projection_writer_maps_open_loop_event_into_scratchpad(tmp_path)
     assert any("三年之约" in x.subject for x in loops)
 
 
-def _loop_event(event_type, content, chapter=None, **payload_extra):
+def _loop_event(event_type, content, chapter=None, event_id=None, **payload_extra):
     payload = {"content": content}
     payload.update(payload_extra)
     event = {"event_type": event_type, "subject": "narrator", "payload": payload}
+    if event_id:
+        event["event_id"] = event_id
     if chapter is not None:
         event["chapter"] = chapter
     return event
@@ -888,7 +890,7 @@ def test_state_writer_aggregates_foreshadowing_from_open_loop_events(tmp_path):
         _commit_payload(
             chapter=5,
             accepted_events=[
-                _loop_event("open_loop_created", "三年之约提及", target_chapter=30, tier="major")
+                _loop_event("open_loop_created", "三年之约提及", event_id="loop-create", target_chapter=30, tier="major")
             ],
         )
     )
@@ -904,7 +906,7 @@ def test_state_writer_aggregates_foreshadowing_from_open_loop_events(tmp_path):
     writer.apply(
         _commit_payload(
             chapter=28,
-            accepted_events=[_loop_event("open_loop_closed", "三年之约提及")],
+            accepted_events=[_loop_event("open_loop_closed", "三年之约提及", event_id="loop-close", loop_id="loop-create")],
         )
     )
     rows = _read_state(tmp_path)["plot_threads"]["foreshadowing"]
@@ -921,7 +923,7 @@ def test_state_writer_foreshadowing_replay_is_idempotent(tmp_path):
     writer = StateProjectionWriter(tmp_path)
     payload = _commit_payload(
         chapter=7,
-        accepted_events=[_loop_event("open_loop_created", "黑色棺材的来历")],
+        accepted_events=[_loop_event("open_loop_created", "黑色棺材的来历", event_id="loop-replay")],
     )
     writer.apply(payload)
     writer.apply(payload)
@@ -930,21 +932,31 @@ def test_state_writer_foreshadowing_replay_is_idempotent(tmp_path):
     assert rows[0]["planted_chapter"] == 7
 
 
-def test_state_writer_foreshadowing_orphan_close_keeps_record(tmp_path):
-    """closed 事件找不到对应 active 条目时保留为 resolved 记录，不丢数据。"""
+def test_state_writer_foreshadowing_orphan_close_does_not_fabricate_loop(tmp_path):
+    """Orphan close must be diagnosed elsewhere and must not fabricate a resolved State row."""
     (tmp_path / ".webnovel").mkdir(parents=True, exist_ok=True)
     (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
     writer = StateProjectionWriter(tmp_path)
     writer.apply(
         _commit_payload(
             chapter=9,
-            accepted_events=[_loop_event("open_loop_closed", "从未登记过的旧约")],
+            accepted_events=[_loop_event("open_loop_closed", "从未登记过的旧约", event_id="loop-orphan")],
         )
     )
     rows = _read_state(tmp_path)["plot_threads"]["foreshadowing"]
-    assert len(rows) == 1
-    assert rows[0]["status"] == "resolved"
-    assert rows[0]["resolved_chapter"] == 9
+    assert rows == []
+
+
+def test_state_writer_keeps_identical_content_loops_distinct_and_closes_by_id(tmp_path):
+    (tmp_path / ".webnovel").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
+    writer = StateProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[_loop_event("open_loop_created", "同一句", event_id="loop-a")]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[_loop_event("open_loop_created", "同一句", event_id="loop-b")]))
+    writer.apply(_commit_payload(chapter=3, accepted_events=[_loop_event("open_loop_closed", "改写后的表述", event_id="close-b", loop_id="loop-b")]))
+    rows = _read_state(tmp_path)["plot_threads"]["foreshadowing"]
+    assert [(row["loop_id"], row["status"]) for row in rows] == [("loop-a", "active"), ("loop-b", "resolved")]
+    assert rows[1]["resolution_event_id"] == "close-b"
 
 
 def test_router_routes_open_loop_events_to_state(tmp_path):

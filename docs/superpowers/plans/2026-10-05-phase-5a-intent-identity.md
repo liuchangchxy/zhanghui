@@ -55,6 +55,7 @@
 ### Task 2: Project identity-aware Open Loop lifecycle into State
 
 **Files:**
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/intent_reconciliation.py` to seed resolution from previously projected identity rows during incremental apply
 - Modify: `.claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py`
 - Modify: `.claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py`
 - Runtime output: `.story-system/projections/intent-diagnostics.json` (generated per project; do not check in runtime data)
