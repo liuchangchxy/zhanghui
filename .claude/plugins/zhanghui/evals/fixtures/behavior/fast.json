@@ -13,8 +13,8 @@
       "skill": "webnovel-init",
       "description": "/webnovel-init keeps the deep collection gate and avoids writing canon before confirmation.",
       "required": [
-        "未过充分性闸门，不执行 `webnovel.py init`",
-        "用户确认前不得写入",
+        "未过充分性闸门，不执行 `init_project.py`",
+        "用户确认前",
         "python3 -X utf8"
       ]
     },
@@ -57,9 +57,9 @@
       "skill": "webnovel-review",
       "description": "/webnovel-review relies on reviewer output and preserves blocking issue handling.",
       "required": [
-        "必须通过 `Agent` 工具调用 `reviewer`",
+        "必须通过 Agent 工具调用 `webnovel-writer:reviewer`",
         "review-pipeline",
-        "blocking=true"
+        "有 blocking 问题且用户未选择处理策略"
       ]
     },
     {
@@ -120,6 +120,16 @@
       "id": "artifact_ownership",
       "type": "artifact_ownership",
       "description": "reviewer returns JSON while main flow writes review_results.json; data-agent writes only tmp artifacts."
+    },
+    {
+      "id": "consistency_action_matrix",
+      "type": "consistency_action_matrix",
+      "description": "Write, plan and review consume the shared consistency action contract."
+    },
+    {
+      "id": "consistency_cli_contract",
+      "type": "consistency_cli_contract",
+      "description": "A real finding exits successfully while state read failure is reported separately."
     },
     {
       "id": "commit_drives_projection",

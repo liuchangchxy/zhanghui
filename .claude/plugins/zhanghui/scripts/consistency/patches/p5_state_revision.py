@@ -3,7 +3,7 @@
 Source: 借鉴 oh-story-claudecode/skills/story-import/references/state-tracking.md 的 state_revision 防 stale 机制
 Path in references: references/01-ai-webnovel-repos/upstream/02-skills/oh-story-claudecode/skills/story-import/references/state-tracking.md
 """
-from ..core.patch_base import Patch, CheckContext, ApplyContext, Blocker
+from ..core.patch_base import Patch, CheckContext, ApplyContext, PatchFinding
 
 
 class P5StateRevision(Patch):
@@ -11,7 +11,7 @@ class P5StateRevision(Patch):
     description = "state_revision 防 stale：提交时验证 revision 匹配"
     depends_on = ()
 
-    def check(self, ctx: CheckContext) -> list[Blocker]:
+    def check(self, ctx: CheckContext) -> list[PatchFinding]:
         expected_rev = ctx.state.get("_expected_revision")
         if expected_rev is None:
             return []  # caller 没传 expected = 跳过
@@ -19,11 +19,20 @@ class P5StateRevision(Patch):
         current_rev = ctx.state.get("state", {}).get("_revision", 0)
 
         if expected_rev != current_rev:
-            return [Blocker(
+            if (not isinstance(expected_rev, int) or isinstance(expected_rev, bool) or
+                    not isinstance(current_rev, int) or isinstance(current_rev, bool)):
+                raise ValueError("revision values must be integers")
+            return [PatchFinding(
                 patch=self.name,
                 chapter=ctx.chapter_num,
+                issue_code="revision_mismatch",
                 message=f"state_revision 不匹配：期望 {expected_rev}，实际 {current_rev}",
-                fix_hint="重新读取 state.json 后重试"
+                fix_hint="重新读取 state.json 后重试",
+                subject_id="state:_revision",
+                evidence={"expected_revision": expected_rev, "observed_revision": current_rev},
+                checker_id=self.name,
+                checker_version="1",
+                input_ref={"source": "state._revision", "expected_source": "_expected_revision"},
             )]
         return []
 

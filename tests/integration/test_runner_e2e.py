@@ -21,10 +21,11 @@ FIXTURES = Path(__file__).parent.parent / "fixtures" / "cross_volume"
 ])
 def test_runner_with_fixture(fixture_name, chapter, expected_patch, expected_keyword):
     runner = ConsistencyRunner(FIXTURES / fixture_name)
-    blockers = runner.run_all(chapter=chapter)
+    evaluation = runner.run_all(chapter=chapter)
+    assert evaluation.status == "evaluated"
     if expected_patch is None:
-        assert blockers == []
+        assert evaluation.findings == []
     else:
-        matching = [b for b in blockers if b.patch == expected_patch]
+        matching = [b for b in evaluation.findings if b.patch == expected_patch]
         assert any(expected_keyword in b.message for b in matching), \
-            f"Expected '{expected_keyword}' in {expected_patch} blockers, got: {[b.message for b in matching]}"
+            f"Expected '{expected_keyword}' in {expected_patch} findings, got: {[b.message for b in matching]}"

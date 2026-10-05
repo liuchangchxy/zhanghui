@@ -6,6 +6,8 @@ Path in references: N/A
 from scripts.consistency.patches.p2_volume_anchor import P2VolumeAnchor
 from scripts.consistency.core.patch_base import CheckContext, ApplyContext
 from pathlib import Path
+from copy import deepcopy
+from scripts.consistency.core.patch_base import PatchFinding
 
 CLEAN_STATE = {
     "story_craft": {
@@ -37,28 +39,28 @@ def _ctx(state, chapter=8, chapter_text=None):
 def test_clean_anchor_passes():
     p = P2VolumeAnchor()
     # At chapter 8 with current_chapter 0 (i.e., 0% actual vs 80% expected) — but with no current_chapter anchor yet, won't check
-    blockers = p.check(_ctx(CLEAN_STATE, chapter=8))
+    findings = p.check(_ctx(CLEAN_STATE, chapter=8))
     # Actually current_chapter=0 means no chapters written → no deviation check fires (skipped)
-    assert blockers == []
+    assert findings == []
 
 
 def test_anchor_progress_deviation_blocks():
     p = P2VolumeAnchor()
     # At chapter 8: expected progress 8/10=80%, actual current_chapter=5 → 50%. Deviation = 30% > 15% threshold
-    blockers = p.check(_ctx(OVERRUN_STATE, chapter=8))
-    assert any("进度偏离" in b.message or "进度" in b.message for b in blockers)
+    findings = p.check(_ctx(OVERRUN_STATE, chapter=8))
+    assert any("进度偏离" in b.message or "进度" in b.message for b in findings)
 
 
 def test_anchor_must_not_reveal_blocks():
     p = P2VolumeAnchor()
-    blockers = p.check(_ctx(OVERRUN_STATE, chapter=8, chapter_text="主角揭露了秘密身份"))
-    assert any("must_not_reveal" in b.message or "秘密身份" in b.message for b in blockers)
+    findings = p.check(_ctx(OVERRUN_STATE, chapter=8, chapter_text="主角揭露了秘密身份"))
+    assert any("must_not_reveal" in b.message or "秘密身份" in b.message for b in findings)
 
 
 def test_missing_anchor_field_fails():
     p = P2VolumeAnchor()
-    blockers = p.check(_ctx({}, chapter=5))
-    assert any("未初始化" in b.message or "volume_anchors" in b.message for b in blockers)
+    findings = p.check(_ctx({}, chapter=5))
+    assert any("未初始化" in b.message or "volume_anchors" in b.message for b in findings)
 
 
 def test_apply_advances_current_chapter():
@@ -94,8 +96,8 @@ def test_must_not_reveal_wrong_type_blocks():
             }
         }
     }
-    blockers = p.check(_ctx(state, chapter=8, chapter_text="主角揭露了秘密身份"))
-    assert any("must_not_reveal 必须是 list" in b.message for b in blockers)
+    findings = p.check(_ctx(state, chapter=8, chapter_text="主角揭露了秘密身份"))
+    assert any("must_not_reveal 必须是 list" in b.message for b in findings)
 
 
 def test_anchor_as_non_dict_does_not_crash():
@@ -112,12 +114,36 @@ def test_anchor_as_non_dict_does_not_crash():
             }
         }
     }
-    blockers = p.check(_ctx(state, chapter=8))
-    assert any("不是 dict" in b.message for b in blockers)
+    findings = p.check(_ctx(state, chapter=8))
+    assert any("不是 dict" in b.message for b in findings)
 
 
-def test_load_error_reports_blocker():
+def test_load_error_reports_finding():
     p = P2VolumeAnchor()
     state = {"_load_error": "OSError: locked"}
-    blockers = p.check(_ctx(state, chapter=5))
-    assert any("无法读取 state.json" in b.message for b in blockers)
+    findings = p.check(_ctx(state, chapter=5))
+    assert any("无法读取 state.json" in b.message for b in findings)
+
+
+def test_p2_findings_are_typed_evidenced_and_read_only():
+    cases = [
+        ({}, 5, None, "missing_anchor", None, {"source_field"}),
+        ({"story_craft": {"volume_anchors": {"anchors": "bad"}}}, 5, None,
+         "malformed_anchor", None, {"source_field", "reason", "actual_type"}),
+        (OVERRUN_STATE, 8, "主角揭露了秘密身份", "progress_deviation", "volume:1",
+         {"volume", "actual_progress", "expected_progress", "deviation", "threshold"}),
+        (OVERRUN_STATE, 8, "主角揭露了秘密身份", "must_not_reveal", "volume:1",
+         {"volume", "rule_index", "present"}),
+        ({"_load_error": "ignored display detail"}, 5, None, "invalid_state", None,
+         {"source", "error_type"}),
+    ]
+    patch = P2VolumeAnchor()
+    for state, chapter, text, code, subject, evidence_keys in cases:
+        before = deepcopy(state)
+        findings = patch.check(_ctx(state, chapter=chapter, chapter_text=text))
+        finding = next(item for item in findings if item.issue_code == code)
+        assert isinstance(finding, PatchFinding)
+        assert finding.subject_id == subject
+        assert evidence_keys <= finding.evidence.keys()
+        assert finding.checker_id == "volume_anchor"
+        assert state == before

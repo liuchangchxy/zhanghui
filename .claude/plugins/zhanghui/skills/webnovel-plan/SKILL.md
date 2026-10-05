@@ -21,7 +21,7 @@ argument-hint: "[卷号，如 1]"
 
 - 项目根不合法或总纲缺失。
 - 总纲缺少卷名 / 章节范围 / 核心冲突 / 卷末高潮 → 阻断并请求用户补全。
-- Step 2 / Step 8 发现设定冲突 → 标记 `BLOCKER`，等待用户裁决。
+- Step 2 / Step 8 发现设定冲突 → 按一致性 CLI 的 `policy_action` 处理；`REQUIRE_HUMAN` 等待用户裁决，`REJECT` 只停止当前规划步骤。
 - 批量拆章时时间回跳且未标注闪回 → 阻断当前批次。
 - Step 9 验证失败 → 只重做失败批次，不覆盖整卷。
 
@@ -289,15 +289,17 @@ BLOCKER 处理：
 
 ```bash
 # PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
-# Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
+# --output-version v1 返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
-sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
+sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}', '--output-version', 'v1']))
 "
 ```
 
-如有 BLOCKER：用户改章纲后再跑，直到通过。退出码非 0 表示有 blocker。
+依据 JSON 的 `policy_action` 处理：`ALLOW_WITH_ADVISORY` 记录建议后继续；`RECOVER` 交由投影恢复 owner 修复并重跑；`REQUIRE_HUMAN` 暂停当前规划步骤并请用户裁决；`REJECT` 停止当前规划步骤并修正输入后重跑。退出码 1/2 是执行或输入错误，没有可用的策略结论。任何本地步骤停止都不代表章节已被拒绝；最终提交判断由 `ChapterCommitService` 独占。
+
+用既有结果推进人工裁决、恢复或流程转换前，重新运行检查并比较 `source_input_fingerprint`；若改变，将旧结果保留为过期上下文，只采用新结果。本阶段不保证跨进程持久化响应尝试。
 
 ### Step 8：把新增设定写回现有设定集
 

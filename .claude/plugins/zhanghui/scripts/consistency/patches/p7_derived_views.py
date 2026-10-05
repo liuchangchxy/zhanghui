@@ -7,7 +7,7 @@ import re
 import sys
 from pathlib import Path
 
-from ..core.patch_base import Patch, CheckContext, ApplyContext, Blocker
+from ..core.patch_base import Patch, CheckContext, ApplyContext, PatchFinding
 from .p1_foreshadow_dag import _get_dag
 
 
@@ -32,35 +32,55 @@ class P7DerivedViews(Patch):
     description = "派生视图与 state 一致性"
     depends_on = ("state_revision",)
 
-    def check(self, ctx: CheckContext) -> list[Blocker]:
+    def _finding(self, ctx, foreshadow_id):
+        evidence = {"view": "foreshadow_table.md", "foreshadow_id": foreshadow_id, "present": False}
+        state_meta = ctx.state.get("state", {})
+        source_generation = state_meta.get("_revision") if isinstance(state_meta, dict) else None
+        if isinstance(source_generation, int) and not isinstance(source_generation, bool):
+            evidence["source_generation"] = source_generation
+        view_path = ctx.project_root / ".webnovel" / "views" / "foreshadow_table.md"
+        return PatchFinding(
+            patch=self.name, chapter=ctx.chapter_num, issue_code="missing_foreshadow_view_row",
+            message=f"派生视图 foreshadow_table.md 缺少伏笔 {foreshadow_id}",
+            fix_hint="运行 consistency apply 重新生成 views/",
+            subject_id=f"foreshadow:{foreshadow_id}", evidence=evidence,
+            checker_id=self.name, checker_version="1",
+            input_ref={"source": str(view_path), "source_generation": source_generation},
+        )
+
+    def check(self, ctx: CheckContext) -> list[PatchFinding]:
         if "_load_error" in ctx.state:
-            return [Blocker(patch=self.name, chapter=ctx.chapter_num,
-                            message=f"无法读取 state.json: {ctx.state['_load_error']}",
-                            fix_hint="修复 state.json 后重试")]
+            return [PatchFinding(
+                patch=self.name, chapter=ctx.chapter_num, issue_code="invalid_state",
+                message="无法读取 state.json", fix_hint="修复 state.json 后重试",
+                evidence={"source": "state.json", "error_type": "load_error"},
+                checker_id=self.name, checker_version="1",
+                input_ref={"source": "state.story_craft.foreshadow_chain"},
+            )]
 
         views_dir = ctx.project_root / ".webnovel" / "views"
-        if not views_dir.exists():
-            return []
-
-        blockers = []
+        findings: list[PatchFinding] = []
         fs_table = views_dir / "foreshadow_table.md"
-        if fs_table.exists():
-            content = fs_table.read_text(encoding="utf-8")
-            dag, _fmt = _get_dag(ctx.state)
-            if not isinstance(dag, list):
-                dag = []
-            for fs in dag:
-                if fs.get("id"):
-                    pattern = r'\b' + re.escape(fs["id"]) + r'\b'
-                    if not re.search(pattern, content):
-                        blockers.append(Blocker(
-                            patch=self.name,
-                            chapter=ctx.chapter_num,
-                            message=f"派生视图 foreshadow_table.md 缺少伏笔 {fs.get('id')}",
-                            fix_hint="运行 consistency apply 重新生成 views/",
-                        ))
+        captured = ctx.external_inputs.get("foreshadow_table.md")
+        if isinstance(captured, dict) and "read_error" in captured:
+            return []
+        if isinstance(captured, dict) and "content" in captured:
+            content = captured["content"] if isinstance(captured["content"], str) else ""
+        else:
+            content = fs_table.read_text(encoding="utf-8") if fs_table.exists() else ""
+        dag, _fmt = _get_dag(ctx.state)
+        if not isinstance(dag, list):
+            dag = []
+        for fs in dag:
+            if not isinstance(fs, dict):
+                continue
+            foreshadow_id = fs.get("id")
+            if isinstance(foreshadow_id, str) and foreshadow_id:
+                pattern = r'\b' + re.escape(foreshadow_id) + r'\b'
+                if not re.search(pattern, content):
+                    findings.append(self._finding(ctx, foreshadow_id))
 
-        return blockers
+        return findings
 
     def apply(self, ctx: ApplyContext) -> None:
         views_dir = ctx.project_root / ".webnovel" / "views"

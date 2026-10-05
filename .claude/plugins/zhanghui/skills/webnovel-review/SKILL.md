@@ -97,15 +97,17 @@ Review 阶段额外输出"一致性"维度：
 
 ```bash
 # PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
-# Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
+# --output-version v1 返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
-sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
+sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}', '--output-version', 'v1']))
 "
 ```
 
-把所有 BLOCKER 列在 review 报告里（patch + message + fix_hint）。
+在 review 报告中用 `observations` 的 patch、message、fix_hint 展示原始检查事实，用 `findings` 与 `policy_action` 展示共享策略结果。`ALLOW_WITH_ADVISORY` 列作建议；`RECOVER` 转交投影恢复 owner；`REQUIRE_HUMAN` 标为待用户裁决；`REJECT` 报告为硬问题并停止当前审查步骤。退出码 1/2 仅表示执行或输入错误。局部的 `REJECT` 不等于章节拒绝，最终提交结论仍由 `ChapterCommitService` 决定。
+
+在根据既有结果完成人工裁决、恢复或流程转换前，重新运行检查并比较 `source_input_fingerprint`；若改变，将旧结果标记为过期上下文，只采用新结果。本阶段不保证跨进程持久化响应尝试。
 
 ## Step 3: 调用统一 reviewer（unified pipeline）
 

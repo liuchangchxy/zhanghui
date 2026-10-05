@@ -264,15 +264,17 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 
 ```bash
 # PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
-# Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
+# --output-version v1 返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
-sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
+sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}', '--output-version', 'v1']))
 "
 ```
 
-如有 BLOCKER，必须先解决再写。
+读取 JSON 的 `policy_action`：`ALLOW_WITH_ADVISORY` 记录建议后继续；`RECOVER` 先调用投影恢复 owner 修复派生视图并重跑；`REQUIRE_HUMAN` 暂停当前写作步骤并请用户裁决；`REJECT` 可停止当前写作步骤并报告硬问题。`REJECT` 不是章节拒绝，最终章节接受/拒绝只由 `ChapterCommitService` 决定。退出码 1/2 表示本次没有完整策略结论，修复执行或输入问题后重试，不得当作故事问题。
+
+在使用旧评估结果作人工裁决、恢复或流程转换前，重新运行检查并比较 `source_input_fingerprint`；若改变，将旧结果保留为过期上下文，只按新结果行动。本阶段不保证跨进程持久化这些响应尝试。
 
 ### Step 2A：正文起草
 
@@ -496,13 +498,15 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 
 ```bash
 # PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
-# Exit 0 = applied。Exit 1 = BLOCKER。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
+# apply 输出逐 patch outcomes；退出码 0 表示全部适用操作成功，1 表示部分失败，2 表示输入无效。
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
 sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
 "
 ```
+
+检查每个 patch 的 outcome；出现 `failed` 时按结果中的错误类型修复并重试。apply 的失败属于执行/投影维护问题，不标成一致性 BLOCKER，也不代替 `ChapterCommitService` 的章节提交判断。
 
 ### Step 5：Data Agent + reconciliation + chapter-commit 提交（事实回写主链）
 

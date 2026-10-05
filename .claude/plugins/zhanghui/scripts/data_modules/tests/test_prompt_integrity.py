@@ -228,6 +228,27 @@ def test_review_schema_consistency():
     assert "issues_count" in reviewer_text
 
 
+def test_consistency_consumers_use_shared_actions_and_preserve_commit_owner():
+    for skill_name in ("webnovel-write", "webnovel-plan", "webnovel-review"):
+        text = _read_text(SKILLS_DIR / skill_name / "SKILL.md")
+        assert "--output-version', 'v1'" in text
+        assert "policy_action" in text
+        assert "source_input_fingerprint" in text
+        assert "过期上下文" in text
+        for action in ("ALLOW_WITH_ADVISORY", "RECOVER", "REQUIRE_HUMAN", "REJECT"):
+            assert action in text
+        assert "ChapterCommitService" in text
+        assert "退出码 1/2" in text
+
+    write = _read_text(SKILLS_DIR / "webnovel-write" / "SKILL.md")
+    assert "apply 输出逐 patch outcomes" in write
+    assert "REJECT` 不是章节拒绝" in write
+    plan = _read_text(SKILLS_DIR / "webnovel-plan" / "SKILL.md")
+    assert "任何本地步骤停止都不代表章节已被拒绝" in plan
+    review = _read_text(SKILLS_DIR / "webnovel-review" / "SKILL.md")
+    assert "局部的 `REJECT` 不等于章节拒绝" in review
+
+
 # ---------------------------------------------------------------------------
 # 6. 无残留引用（已删文件）
 # ---------------------------------------------------------------------------
@@ -546,7 +567,7 @@ def test_webnovel_write_skill_routes_step2_through_writing_brief():
     text = (SKILLS_DIR / "webnovel-write" / "SKILL.md").read_text(encoding="utf-8")
     assert "写作任务书" in text
     assert "context-agent" in text
-    assert "Step 0.5" not in text
+    assert "Step 0.5: Pre-Write Gate Check" in text
     assert 'cat "${SKILL_ROOT}/../../references/shared/core-constraints.md"' not in text
     assert 'cat "${SKILL_ROOT}/references/anti-ai-guide.md"' not in text
 
