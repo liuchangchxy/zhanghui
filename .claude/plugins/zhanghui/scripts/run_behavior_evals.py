@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
+import io
 import json
 import re
 import sys
@@ -109,7 +111,7 @@ def _eval_write_blocking_gate(root: Path, case: dict[str, Any]) -> dict[str, Any
     path = _plugin_root(root) / "skills" / "webnovel-write" / "SKILL.md"
     text = _read(path)
     required = [
-        "blocking=true",
+        "blocking 命中",
         "write-gate --chapter {chapter_num} --stage prewrite",
         "write-gate --chapter {chapter_num} --stage precommit",
         "write-gate --chapter {chapter_num} --stage postcommit",
@@ -181,6 +183,69 @@ def _eval_artifact_ownership(root: Path, case: dict[str, Any]) -> dict[str, Any]
         reason="artifact ownership matches tools and prompts" if not missing else "artifact ownership drifted",
         evidence=missing or ["reviewer→主流程 review_results.json；data-agent→tmp artifacts"],
     )
+
+
+def _eval_consistency_action_matrix(root: Path, case: dict[str, Any]) -> dict[str, Any]:
+    plugin_root = _plugin_root(root)
+    requirements = {
+        "webnovel-write": ("ALLOW_WITH_ADVISORY", "RECOVER", "REQUIRE_HUMAN", "REJECT", "ChapterCommitService"),
+        "webnovel-plan": ("ALLOW_WITH_ADVISORY", "RECOVER", "REQUIRE_HUMAN", "REJECT", "ChapterCommitService"),
+        "webnovel-review": ("ALLOW_WITH_ADVISORY", "RECOVER", "REQUIRE_HUMAN", "REJECT", "ChapterCommitService"),
+    }
+    missing = []
+    for name, required in requirements.items():
+        text = _read(plugin_root / "skills" / name / "SKILL.md")
+        missing.extend(f"{name}: {token}" for token in required if token not in text)
+        if "--output-version" in text or "默认返回结构化评估" not in text:
+            missing.append(f"{name}: default structured CLI output")
+        if "source_input_fingerprint" not in text or "过期上下文" not in text:
+            missing.append(f"{name}: stale source fingerprint guard")
+    write_text = _read(plugin_root / "skills" / "webnovel-write" / "SKILL.md")
+    if "apply 输出逐 patch outcomes" not in write_text:
+        missing.append("write: per-patch apply outcomes")
+    ok = not missing
+    return _result(case, passed=ok,
+                   reason="all consistency consumers interpret shared policy actions" if ok else "consumer action matrix drifted",
+                   evidence=missing or ["write/plan/review action matrix"])
+
+
+def _eval_consistency_cli_contract(root: Path, case: dict[str, Any]) -> dict[str, Any]:
+    plugin_root = _plugin_root(root)
+    if str(plugin_root) not in sys.path:
+        sys.path.insert(0, str(plugin_root))
+    from scripts.consistency.cli import main
+
+    with tempfile.TemporaryDirectory() as tmp:
+        project = Path(tmp)
+        webnovel_dir = project / ".webnovel"
+        webnovel_dir.mkdir()
+        state_path = webnovel_dir / "state.json"
+        state_path.write_text(json.dumps({"story_craft": {"foreshadow_chain": {"dag": [
+            {"id": "F1", "depends_on": ["F2"]}, {"id": "F2", "depends_on": ["F1"]},
+        ]}}}), encoding="utf-8")
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            finding_exit = main(["check", "--project-root", str(project), "--chapter", "5"])
+        finding_response = json.loads(output.getvalue())
+
+        state_path.write_text("{broken", encoding="utf-8")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            infrastructure_exit = main(["check", "--project-root", str(project), "--chapter", "5"])
+        infrastructure_response = json.loads(output.getvalue())
+
+    ok = (
+        finding_exit == 0 and finding_response.get("status") == "evaluated"
+        and finding_response.get("policy_action") == "REJECT"
+        and any(row.get("gate_id") == "consistency.foreshadow_dag.cycle"
+                for row in finding_response.get("findings", []))
+        and infrastructure_exit == 1 and infrastructure_response.get("status") == "execution_error"
+        and infrastructure_response.get("findings") == []
+    )
+    return _result(case, passed=ok,
+                   reason="finding and infrastructure exits remain distinct" if ok else "CLI result/exit contract drifted",
+                   evidence=[] if ok else [str(finding_response), str(infrastructure_response)])
 
 
 def _eval_commit_projection_runtime(root: Path, case: dict[str, Any]) -> dict[str, Any]:
@@ -420,6 +485,8 @@ EVALUATORS = {
     "write_blocking_gate": _eval_write_blocking_gate,
     "data_agent_boundary": _eval_data_agent_boundary,
     "artifact_ownership": _eval_artifact_ownership,
+    "consistency_action_matrix": _eval_consistency_action_matrix,
+    "consistency_cli_contract": _eval_consistency_cli_contract,
     "commit_projection_runtime": _eval_commit_projection_runtime,
     "dashboard_read_only": _eval_dashboard_read_only,
     "user_report_probe": _eval_user_report_probe,

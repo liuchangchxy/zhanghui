@@ -97,7 +97,7 @@ Review 阶段额外输出"一致性"维度：
 
 ```bash
 # PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
-# Exit 0 = clean。Exit 1 = BLOCKER（必须解决）。Exit 2 = env error（按未应用处理，重试或查 .webnovel/logs/run_last.log）
+# 默认返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
@@ -105,7 +105,9 @@ sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 "
 ```
 
-把所有 BLOCKER 列在 review 报告里（patch + message + fix_hint）。
+在 review 报告中用 `observations` 的 patch、message、fix_hint 展示原始检查事实，用 `findings` 与 `policy_action` 展示共享策略结果。`ALLOW_WITH_ADVISORY` 列作建议；`RECOVER` 转交投影恢复 owner；`REQUIRE_HUMAN` 标为待用户裁决；`REJECT` 报告为硬问题并停止当前审查步骤。退出码 1/2 仅表示执行或输入错误。局部的 `REJECT` 不等于章节拒绝，最终提交结论仍由 `ChapterCommitService` 决定。
+
+在根据既有结果完成人工裁决、恢复或流程转换前，重新运行检查并比较 `source_input_fingerprint`；若改变，将旧结果标记为过期上下文，只采用新结果。本阶段不保证跨进程持久化响应尝试。
 
 ## Step 3: 调用统一 reviewer（unified pipeline）
 
@@ -312,7 +314,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
 异常分类：
 - 已自动处理：自动重跑失败 sub-agent、自动重生成 metrics、自动补 checkpoint 记录。
 - 建议确认：人物小传细节、微世界观表述、节拍微调、伏笔登记需要作者看一眼。
-- 必须处理：有 blocking 问题且用户未选择处理策略（最终状态为“需要你处理”）、`BLOCKER` 未裁决、关键产物缺失。
+- 必须处理：需要用户选择处理策略的问题（最终状态为“需要你处理”）、尚未裁决的规划前置问题、关键产物缺失。
 
 下一步建议必须使用任务化语言 + 可复制命令，例如：
 

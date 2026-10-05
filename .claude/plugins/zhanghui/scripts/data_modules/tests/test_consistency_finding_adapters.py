@@ -1,18 +1,21 @@
-from dataclasses import fields
+import pytest
 
-from consistency.core.patch_base import Blocker
+from pathlib import Path
+
+from scripts.consistency.core.patch_base import CheckContext, PatchFinding
+from scripts.consistency.patches.p1_foreshadow_dag import P1ForeshadowDAG
+from scripts.consistency.patches.p5_state_revision import P5StateRevision
+from scripts.consistency.patches.p7_derived_views import P7DerivedViews
 from data_modules.consistency_finding_adapters import P1_P7_MAPPING, adapt_consistency_patch
 from data_modules.gate_severity_policy import GateSeverityPolicy
 from data_modules.gate_findings import WorkflowAction
 
 
-def test_mapping_contract_covers_exactly_p1_through_p7_and_legacy_blocker_shape():
+def test_mapping_contract_covers_exactly_p1_through_p7():
     assert set(P1_P7_MAPPING) == {
         "foreshadow_dag", "volume_anchor", "event_matrix", "pacing_tracker",
         "state_revision", "reader_contract", "derived_views",
     }
-    assert {field.name for field in fields(Blocker)} == {"patch", "chapter", "message", "fix_hint"}
-    assert not {"severity", "authority", "blocking"} & {field.name for field in fields(Blocker)}
     gates = [f"consistency.{patch}.{code}" for patch, codes in P1_P7_MAPPING.items() for code in codes]
     assert len(gates) == len(set(gates))
 
@@ -35,10 +38,34 @@ def test_subject_scoped_identity_survives_evidence_change_and_separates_subjects
 def test_missing_identity_and_unknown_code_are_diagnostic_only():
     findings = adapt_consistency_patch([
         {"patch": "state_revision", "chapter": 2, "message": "revision mismatch", "issue_code": "revision_mismatch", "subject_id": "state", "evidence": {"expected_revision": 1}},
-        {"patch": "state_revision", "chapter": 2, "message": "ignore prose"},
+        {"patch": "state_revision", "chapter": 2, "message": "unknown typed observation",
+         "issue_code": "future_issue_code"},
     ], {"chapter": 2})
     decision = GateSeverityPolicy().evaluate(findings, policy_version="v1", scope={"chapter": 2})
+    assert findings[1].authority.value == "LEGACY_UNKNOWN"
+    assert findings[1].checker_id == "consistency.unmapped_typed"
+    assert findings[1].evidence[0].kind == "unmapped_typed_issue"
     assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+
+
+def test_adapter_rejects_untyped_legacy_rows():
+    with pytest.raises(ValueError, match="typed patch and issue_code"):
+        adapt_consistency_patch(
+            {"patch": "foreshadow_dag", "chapter": 2, "message": "legacy prose only"},
+            {"chapter": 2},
+        )
+
+
+def test_diagnostic_findings_keep_runner_source_fingerprint():
+    for row in (
+        {"patch": "foreshadow_dag", "issue_code": "future_issue_code", "input_ref": {"source_input_fingerprint": "abc123"}},
+        PatchFinding(patch="foreshadow_dag", chapter=2, issue_code="cycle", message="cycle",
+                     input_ref={"source_input_fingerprint": "def456"}),
+    ):
+        finding = adapt_consistency_patch(row, {"chapter": 2})[0]
+        fingerprint = finding.evidence[0].identity["source_input_fingerprint"]
+        assert fingerprint in {"abc123", "def456"}
+        assert finding.authority.value == "LEGACY_UNKNOWN"
 
 
 def test_every_patch_has_representative_registered_mapping():
@@ -93,3 +120,91 @@ def test_p7_stale_derived_view_is_adapter_contract_recovery_mapping():
     }, {"chapter": 4})[0]
     decision = GateSeverityPolicy().evaluate([finding], policy_version="v1", scope={"chapter": 4})
     assert decision.aggregate_action == WorkflowAction.RECOVER
+
+
+def test_unknown_typed_issue_code_is_diagnostic_and_never_policy_authority():
+    finding = adapt_consistency_patch({
+        "patch": "foreshadow_dag", "chapter": 2, "issue_code": "future_cycle_variant",
+        "message": "display only", "fix_hint": "inspect typed observation",
+    }, {"chapter": 2})[0]
+    decision = GateSeverityPolicy().evaluate([finding], policy_version="v1", scope={"chapter": 2})
+    assert finding.authority.value == "LEGACY_UNKNOWN"
+    assert finding.checker_id == "consistency.unmapped_typed"
+    assert finding.evidence[0].kind == "unmapped_typed_issue"
+    assert finding.gate_id.endswith("diagnostic")
+    assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+
+
+@pytest.mark.parametrize(
+    ("patch", "issue_code", "evidence"),
+    [
+        ("volume_anchor", "progress_deviation", {"expected": 2, "observed": 3}),
+        ("event_matrix", "gentle_quota", {"count": 1, "minimum": 2}),
+        ("pacing_tracker", "slow_quota", {"count": 0, "minimum": 1}),
+    ],
+)
+def test_craft_finding_with_evidence_and_no_subject_keeps_typed_mapping(patch, issue_code, evidence):
+    finding = adapt_consistency_patch(
+        PatchFinding(patch=patch, chapter=3, issue_code=issue_code, message="display only", evidence=evidence),
+        {"chapter": 3},
+    )[0]
+    decision = GateSeverityPolicy().evaluate([finding], policy_version="v1", scope={"chapter": 3})
+    assert finding.authority.value == "CRAFT_HEURISTIC"
+    assert finding.category.value == "CRAFT"
+    assert finding.stable_subject_key is None
+    assert finding.subject_id is None
+    assert decision.decisions[0].effective_severity.value in {"ADVISORY", "SCORE"}
+    assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+
+
+def test_real_p1_cycle_output_flows_through_adapter_and_shared_policy():
+    ctx = CheckContext(
+        project_root=Path("/tmp"), chapter_num=5,
+        state={"story_craft": {"foreshadow_chain": [
+            {"id": "A", "depends_on": ["B"]}, {"id": "B", "depends_on": ["A"]},
+        ]}},
+        chapter_outline=None, previous_chapters=[], chapter_text=None,
+    )
+    producer_rows = P1ForeshadowDAG().check(ctx)
+    cycle = next(row for row in producer_rows if row.issue_code == "cycle")
+    finding = adapt_consistency_patch(producer_rows, {"chapter": 5})[0]
+    decision = GateSeverityPolicy().evaluate([finding], policy_version="v1", scope={"chapter": 5})
+    assert cycle.subject_id == "cycle:A,B"
+    assert finding.gate_id == "consistency.foreshadow_dag.cycle"
+    assert decision.decisions[0].effective_severity.value == "HARD_INTEGRITY"
+
+
+def test_real_p5_revision_output_requires_subject_and_maps_through_policy():
+    ctx = CheckContext(
+        project_root=Path("/tmp"), chapter_num=5,
+        state={"state": {"_revision": 3}, "_expected_revision": 2},
+        chapter_outline=None, previous_chapters=[], chapter_text=None,
+    )
+    row = P5StateRevision().check(ctx)[0]
+    finding = adapt_consistency_patch(row, {"chapter": 5})[0]
+    decision = GateSeverityPolicy().evaluate([finding], policy_version="v1", scope={"chapter": 5})
+    assert row.issue_code == "revision_mismatch"
+    assert finding.subject_id == "state:_revision"
+    assert decision.decisions[0].effective_severity.value == "HARD_INTEGRITY"
+
+
+def test_real_p7_projection_output_maps_to_recovery_without_commit_policy():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        views = root / ".webnovel" / "views"
+        views.mkdir(parents=True)
+        (views / "foreshadow_table.md").write_text("| fs-present |\n", encoding="utf-8")
+        ctx = CheckContext(
+            project_root=root, chapter_num=5,
+            state={"state": {"_revision": 9}, "story_craft": {"foreshadow_chain": {"dag": [{"id": "fs-missing"}]}}},
+            chapter_outline=None, previous_chapters=[], chapter_text=None,
+        )
+        row = P7DerivedViews().check(ctx)[0]
+        finding = adapt_consistency_patch(row, {"chapter": 5})[0]
+        decision = GateSeverityPolicy().evaluate([finding], policy_version="v1", scope={"chapter": 5})
+        assert row.issue_code == "missing_foreshadow_view_row"
+        assert finding.category.value == "PROJECTION_HEALTH"
+        assert finding.subject_id == "foreshadow:fs-missing"
+        assert decision.aggregate_action == WorkflowAction.RECOVER

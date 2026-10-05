@@ -1,6 +1,8 @@
 from scripts.consistency.patches.p3_event_matrix import P3EventMatrix
 from scripts.consistency.core.patch_base import CheckContext
+from scripts.consistency.core.patch_base import PatchFinding
 from pathlib import Path
+from copy import deepcopy
 
 
 CLEAN_STATE = {
@@ -57,32 +59,56 @@ def _ctx(state, chapter=5):
 
 def test_clean_history_passes():
     p = P3EventMatrix()
-    blockers = p.check(_ctx(CLEAN_STATE, chapter=4))
-    assert blockers == []
+    findings = p.check(_ctx(CLEAN_STATE, chapter=4))
+    assert findings == []
 
 
 def test_consecutive_fast_overlimit_blocks():
     p = P3EventMatrix()
     # At chapter 5 with 5 consecutive conflict_thrill → max_consecutive_fast=2 violated
-    blockers = p.check(_ctx(BREAK_STATE, chapter=5))
-    assert any("连续" in b.message and "快档" in b.message for b in blockers)
+    findings = p.check(_ctx(BREAK_STATE, chapter=5))
+    assert any("连续" in b.message and "快档" in b.message for b in findings)
 
 
 def test_gentle_quota_missing_blocks():
     p = P3EventMatrix()
     # The 5 most recent chapters all fast → no soft → gentle quota violation
-    blockers = p.check(_ctx(BREAK_STATE, chapter=5))
-    assert any("soft" in b.message or "gentle" in b.message for b in blockers)
+    findings = p.check(_ctx(BREAK_STATE, chapter=5))
+    assert any("soft" in b.message or "gentle" in b.message for b in findings)
 
 
 def test_empty_history_passes():
     p = P3EventMatrix()
     state = {"story_craft": {"event_matrix_state": {"history": [], "gentle_window": 5, "max_consecutive_fast": 2}}}
-    blockers = p.check(_ctx(state, chapter=5))
-    assert blockers == []
+    findings = p.check(_ctx(state, chapter=5))
+    assert findings == []
 
 
 def test_missing_field_fails():
     p = P3EventMatrix()
-    blockers = p.check(_ctx({}, chapter=5))
-    assert any("未初始化" in b.message or "event_matrix_state" in b.message for b in blockers)
+    findings = p.check(_ctx({}, chapter=5))
+    assert any("未初始化" in b.message or "event_matrix_state" in b.message for b in findings)
+
+
+def test_p3_findings_are_typed_evidenced_and_read_only():
+    cases = [
+        ({"_load_error": "ignored display detail"}, "invalid_state", None, {"source", "error_type"}),
+        ({}, "invalid_state", None, {"source_field", "reason"}),
+        ({"story_craft": {"event_matrix_state": {"history": [], "gentle_window": "many"}}},
+         "invalid_state", None, {"source_field", "reason", "actual_type"}),
+        ({"story_craft": {"event_matrix_state": {"history": "bad"}}}, "malformed_history", None,
+         {"source_field", "reason", "actual_type"}),
+        ({"story_craft": {"event_matrix_state": {"history": [{"primary": []}]}}}, "malformed_history", None,
+         {"source_field", "reason", "entry_index", "actual_type"}),
+        (BREAK_STATE, "consecutive_fast", None, {"observed", "maximum", "window_size"}),
+        (BREAK_STATE, "gentle_quota", None, {"window_size", "observed_soft_count", "required_soft_count"}),
+    ]
+    patch = P3EventMatrix()
+    for state, code, subject, evidence_keys in cases:
+        before = deepcopy(state)
+        finding = next(item for item in patch.check(_ctx(state, chapter=5)) if item.issue_code == code)
+        assert isinstance(finding, PatchFinding)
+        assert finding.subject_id == subject
+        assert evidence_keys <= finding.evidence.keys()
+        assert finding.checker_id == "event_matrix"
+        assert state == before

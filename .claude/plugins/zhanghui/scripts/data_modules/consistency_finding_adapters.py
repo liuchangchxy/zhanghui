@@ -1,4 +1,4 @@
-"""Phase 6A stable mapping contract for P1–P7 Blocker rows."""
+"""Stable mapping contract from consistency observations to shared findings."""
 from __future__ import annotations
 
 from typing import Any
@@ -32,6 +32,23 @@ def _get(row: Any, name: str, default: Any = None) -> Any:
     return getattr(row, name, default) if not isinstance(row, dict) else row.get(name, default)
 
 
+def _unmapped_typed_finding(row: Any, patch: str, code: str, chapter_scope: dict[str, Any],
+                            input_ref: Any, reason: str) -> DetectedFinding:
+    source_fingerprint = input_ref.get("source_input_fingerprint") if isinstance(input_ref, dict) else None
+    diagnostic_identity = {"patch": patch, "issue_code": code, "reason": reason}
+    if isinstance(source_fingerprint, str) and source_fingerprint:
+        diagnostic_identity["source_input_fingerprint"] = source_fingerprint
+    return DetectedFinding(
+        gate_id=f"consistency.{patch}.{code}.diagnostic",
+        category=FindingCategory.WORKFLOW, authority=FindingAuthority.LEGACY_UNKNOWN,
+        explicitness=Explicitness.UNKNOWN, scope=dict(chapter_scope), evidence=[
+            EvidenceRef(kind="unmapped_typed_issue", identity=diagnostic_identity)
+        ], checker_id="consistency.unmapped_typed", checker_version="adapter-v1",
+        source_ref=(input_ref.get("source") if isinstance(input_ref, dict)
+                    and isinstance(input_ref.get("source"), str) else None),
+    )
+
+
 def adapt_consistency_patch(patch_result: Any, chapter_scope: dict[str, Any]) -> list[DetectedFinding]:
     rows = patch_result if isinstance(patch_result, list) else [patch_result]
     findings: list[DetectedFinding] = []
@@ -39,21 +56,30 @@ def adapt_consistency_patch(patch_result: Any, chapter_scope: dict[str, Any]) ->
     for row in rows:
         patch = _get(row, "patch")
         code = _get(row, "issue_code")
+        if (not isinstance(patch, str) or patch not in P1_P7_MAPPING
+                or not isinstance(code, str) or not code.strip()):
+            raise ValueError("consistency adapter requires a typed patch and issue_code")
         subject = _get(row, "subject_id")
         raw_evidence = _get(row, "evidence", {})
-        mapping = P1_P7_MAPPING.get(patch, {}).get(code) if isinstance(patch, str) and isinstance(code, str) else None
+        mapping = P1_P7_MAPPING[patch].get(code)
+        input_ref = _get(row, "input_ref", {})
+        source_fingerprint = input_ref.get("source_input_fingerprint") if isinstance(input_ref, dict) else None
         if not mapping:
-            findings.append(DetectedFinding(
-                gate_id=f"consistency.{patch or 'unknown'}.diagnostic",
-                category=FindingCategory.WORKFLOW, authority=FindingAuthority.LEGACY_UNKNOWN,
-                explicitness=Explicitness.UNKNOWN, scope=dict(chapter_scope), evidence=[
-                    EvidenceRef(kind="legacy_diagnostic", identity={"patch": patch, "issue_code": code})
-                ], checker_id="consistency.legacy", checker_version="adapter-v1",
+            findings.append(_unmapped_typed_finding(
+                row, patch, code, chapter_scope, input_ref, "unmapped_issue_code",
             ))
             continue
         structured_subject = subject if isinstance(subject, str) and subject.strip() else None
-        evidence_identity = raw_evidence if isinstance(raw_evidence, dict) else {}
-        evidence_is_sufficient = bool(evidence_identity) and structured_subject is not None
+        evidence_identity = dict(raw_evidence) if isinstance(raw_evidence, dict) else {}
+        has_structured_evidence = bool(evidence_identity)
+        if isinstance(source_fingerprint, str) and source_fingerprint:
+            evidence_identity["source_input_fingerprint"] = source_fingerprint
+        # Craft observations with concrete evidence remain typed without an
+        # invented identity. Integrity/recovery mappings require a stable
+        # subject before they can carry their stronger policy semantics.
+        evidence_is_sufficient = has_structured_evidence and (
+            structured_subject is not None or mapping["category"] == FindingCategory.CRAFT
+        )
         if patch == "state_revision":
             expected = evidence_identity.get("expected_revision")
             observed = evidence_identity.get("observed_revision")
@@ -80,14 +106,10 @@ def adapt_consistency_patch(patch_result: Any, chapter_scope: dict[str, Any]) ->
                 and evidence_identity.get("present") is False
                 and isinstance(evidence_identity.get("foreshadow_id"), str)
                 and structured_subject == f"foreshadow:{evidence_identity.get('foreshadow_id')}"
-            )
+        )
         if not evidence_is_sufficient:
-            findings.append(DetectedFinding(
-                gate_id=f"consistency.{patch}.{code}.diagnostic",
-                category=FindingCategory.WORKFLOW, authority=FindingAuthority.LEGACY_UNKNOWN,
-                explicitness=Explicitness.UNKNOWN, scope=dict(chapter_scope), evidence=[
-                    EvidenceRef(kind="legacy_diagnostic", identity={"patch": patch, "issue_code": code})
-                ], checker_id=f"consistency.{patch}", checker_version="adapter-v1",
+            findings.append(_unmapped_typed_finding(
+                row, patch, code, chapter_scope, input_ref, "insufficient_typed_evidence",
             ))
             continue
         if mapping["evidence_kind"] == "deterministic_validation":
@@ -98,6 +120,9 @@ def adapt_consistency_patch(patch_result: Any, chapter_scope: dict[str, Any]) ->
             explicitness=mapping["explicitness"], scope=dict(chapter_scope),
             evidence=[EvidenceRef(kind=mapping["evidence_kind"], identity=evidence_identity)],
             subject_id=structured_subject,
-            checker_id=f"consistency.{patch}", checker_version="adapter-v1",
+            source_ref=(input_ref.get("source") if isinstance(input_ref, dict)
+                        and isinstance(input_ref.get("source"), str) else None),
+            checker_id=_get(row, "checker_id") or f"consistency.{patch}",
+            checker_version=_get(row, "checker_version") or "adapter-v1",
         ))
     return findings

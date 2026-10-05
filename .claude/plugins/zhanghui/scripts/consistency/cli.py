@@ -3,7 +3,13 @@
 Source: 原創（參考 webnovel.py 的 argparse 風格）
 """
 import argparse
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
+import json
+
+from .core.runner import ConsistencyRunner
+from ..data_modules.consistency_finding_adapters import adapt_consistency_patch
+from ..data_modules.gate_severity_policy import GateSeverityPolicy
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--patch", type=str, default=None, help="Run only this patch")
 
     # list
-    lst = subparsers.add_parser("list", help="List blockers for a chapter")
+    lst = subparsers.add_parser("list", help="List consistency findings for a chapter")
     lst.add_argument("--project-root", type=str, default=None)
     lst.add_argument("--chapter", type=int, required=True)
 
@@ -27,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--volume", type=int, required=True)
 
     # override
-    override = subparsers.add_parser("override", help="Force-bypass blockers (emergency)")
+    override = subparsers.add_parser("override", help="Append an override audit record")
     override.add_argument("--project-root", type=str, default=None)
     override.add_argument("--chapter", type=int, required=True)
     override.add_argument("--reason", type=str, required=True)
@@ -53,20 +59,42 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    from pathlib import Path
-    from .core.runner import ConsistencyRunner
-    import json
-
     if args.command in ("check", "list"):
         rc = _require_project_root(args, sys.stderr)
         if rc != 0:
             return rc
-        runner = ConsistencyRunner(project_root=Path(args.project_root))
-        blockers = runner.run_all(chapter=args.chapter)
+        project_root = Path(args.project_root)
+        if not project_root.is_dir() or not (project_root / ".webnovel").is_dir():
+            response = _evaluation_response("invalid_input", args.chapter, None, [], [], None)
+            print(json.dumps(response, ensure_ascii=False, indent=2))
+            return 2
+        runner = ConsistencyRunner(project_root=project_root)
         if args.command == "check" and args.patch:
-            blockers = [b for b in blockers if b.patch == args.patch]
-        print(json.dumps([b.__dict__ for b in blockers], ensure_ascii=False, indent=2))
-        return 1 if blockers else 0
+            available_patches = runner.patches or runner._default_patches()
+            if args.patch not in {patch.name for patch in available_patches}:
+                print(json.dumps(_evaluation_response("invalid_input", args.chapter, None, [], [], None),
+                                 ensure_ascii=False, indent=2))
+                return 2
+        evaluation = runner.run_all(
+            chapter=args.chapter,
+            patch_names={args.patch} if args.command == "check" and args.patch else None,
+        )
+        findings = evaluation.findings
+        if evaluation.status != "evaluated":
+            print(json.dumps(_evaluation_response(
+                "execution_error", args.chapter, evaluation.source_input_fingerprint,
+                [], evaluation.diagnostics, None,
+            ), ensure_ascii=False, indent=2))
+            return 1
+        normalized = adapt_consistency_patch(findings, {"chapter": args.chapter})
+        decisions = GateSeverityPolicy().evaluate(
+            normalized, policy_version="consistency-v1", scope={"chapter": args.chapter},
+        )
+        print(json.dumps(_evaluation_response(
+            "evaluated", args.chapter, evaluation.source_input_fingerprint,
+            normalized, evaluation.diagnostics, decisions, observations=evaluation.findings,
+        ), ensure_ascii=False, indent=2))
+        return 0
 
     elif args.command == "init":
         rc = _require_project_root(args, sys.stderr)
@@ -115,12 +143,33 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     elif args.command == "apply":
-        runner = ConsistencyRunner(project_root=Path(args.project_root))
-        runner.apply_all(chapter=args.chapter)
-        print(f"Applied all patches for chapter {args.chapter}")
-        return 0
+        project_root = Path(args.project_root)
+        if not project_root.is_dir() or not (project_root / ".webnovel").is_dir():
+            print(json.dumps({"status": "invalid_input", "outcomes": []}, ensure_ascii=False, indent=2))
+            return 2
+        runner = ConsistencyRunner(project_root=project_root)
+        outcomes = runner.apply_all(chapter=args.chapter)
+        rows = [asdict(item) if is_dataclass(item) else item for item in outcomes]
+        failed = any(row.get("status") == "failed" for row in rows)
+        print(json.dumps({"status": "partial_failure" if failed else "applied", "outcomes": rows},
+                         ensure_ascii=False, indent=2))
+        return 1 if failed else 0
 
     return 1  # unknown command
+
+
+def _evaluation_response(status, chapter, fingerprint, findings, diagnostics, decisions, observations=()):
+    return {
+        "version": 1,
+        "status": status,
+        "chapter": chapter,
+        "source_input_fingerprint": fingerprint,
+        "findings": [finding.model_dump(mode="json") for finding in findings],
+        "observations": [asdict(item) if is_dataclass(item) else item for item in observations],
+        "decisions": [decision.model_dump(mode="json") for decision in decisions.decisions] if decisions else [],
+        "policy_action": decisions.aggregate_action.value if decisions else None,
+        "diagnostics": [asdict(item) if is_dataclass(item) else item for item in diagnostics],
+    }
 
 
 if __name__ == "__main__":

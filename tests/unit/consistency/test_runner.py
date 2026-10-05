@@ -8,7 +8,8 @@ import tempfile
 from pathlib import Path
 
 from scripts.consistency.core.runner import ConsistencyRunner
-from scripts.consistency.core.patch_base import Patch, CheckContext, ApplyContext, Blocker
+from scripts.consistency.core.patch_base import Patch, CheckContext, ApplyContext, PatchFinding
+from copy import deepcopy
 
 
 class CleanPatch(Patch):
@@ -23,7 +24,9 @@ class FailingPatch(Patch):
     name = "failing"
     description = "always fails"
     depends_on = ()
-    def check(self, ctx): return [Blocker(patch="failing", chapter=ctx.chapter_num, message="bad", fix_hint="fix")]
+    def check(self, ctx): return [PatchFinding(patch="failing", chapter=ctx.chapter_num,
+                                               issue_code="unknown_test_issue", message="bad",
+                                               evidence={"reason": "test"})]
     def apply(self, ctx): pass
 
 
@@ -59,20 +62,41 @@ class CanonMutationPatch(Patch):
 
 def test_runner_with_clean_patches():
     runner = ConsistencyRunner(project_root=Path("/tmp"), patches=[CleanPatch()])
-    assert runner.run_all(chapter=1) == []
+    result = runner.run_all(chapter=1)
+    assert result.findings == []
+    assert result.status == "evaluated"
+    assert result.source_input_fingerprint
+
+
+def test_runner_source_fingerprint_includes_checker_version():
+    patch = StaticFindingPatch()
+    runner = ConsistencyRunner(project_root=Path("/tmp"), patches=[patch])
+    first = runner.run_all(chapter=1)
+    patch.checker_version = "2"
+    second = runner.run_all(chapter=1)
+    assert first.source_input_fingerprint != second.source_input_fingerprint
+    assert second.findings[0].checker_version == "2"
+
+
+def test_runner_can_execute_only_the_requested_patch():
+    runner = ConsistencyRunner(project_root=Path("/tmp"), patches=[CrashingPatch(), CleanPatch()])
+    result = runner.run_all(chapter=1, patch_names={"clean"})
+    assert result.status == "evaluated"
+    assert result.findings == []
+    assert result.diagnostics == []
 
 
 def test_runner_with_failing_patch():
     runner = ConsistencyRunner(project_root=Path("/tmp"), patches=[FailingPatch()])
-    blockers = runner.run_all(chapter=1)
-    assert len(blockers) == 1
-    assert blockers[0].patch == "failing"
+    result = runner.run_all(chapter=1)
+    assert len(result.findings) == 1
+    assert result.findings[0].patch == "failing"
 
 
 def test_runner_runs_all_patches():
     runner = ConsistencyRunner(project_root=Path("/tmp"), patches=[CleanPatch(), FailingPatch(), CleanPatch()])
-    blockers = runner.run_all(chapter=1)
-    assert len(blockers) == 1
+    result = runner.run_all(chapter=1)
+    assert len(result.findings) == 1
 
 
 def test_runner_uses_default_patches_when_none_given():
@@ -100,13 +124,14 @@ def test_runner_default_patches_have_valid_dependencies():
 
 
 def test_runner_wraps_patch_check_exception():
-    """Fix D: a crashing patch.check should not kill the whole runner."""
+    """A patch crash is incomplete infrastructure status, not a story finding."""
     runner = ConsistencyRunner(project_root=Path("/tmp"), patches=[CrashingPatch()])
-    blockers = runner.run_all(chapter=1)
-    assert len(blockers) == 1
-    assert blockers[0].patch == "crashing"
-    assert "crashed" in blockers[0].message
-    assert "RuntimeError" in blockers[0].message
+    result = runner.run_all(chapter=1)
+    assert result.status == "incomplete"
+    assert result.findings == []
+    assert result.diagnostics[0].checker_id == "crashing"
+    assert result.diagnostics[0].error_type == "RuntimeError"
+    assert not hasattr(result, "policy_action")
 
 
 def test_runner_continues_after_patch_crash():
@@ -114,12 +139,11 @@ def test_runner_continues_after_patch_crash():
         project_root=Path("/tmp"),
         patches=[CleanPatch(), CrashingPatch(), FailingPatch()],
     )
-    blockers = runner.run_all(chapter=1)
-    # CrashingPatch becomes 1 Blocker, FailingPatch becomes 1, CleanPatch is silent
-    assert len(blockers) == 2
-    patches_in_blockers = {b.patch for b in blockers}
-    assert "crashing" in patches_in_blockers
-    assert "failing" in patches_in_blockers
+    result = runner.run_all(chapter=1)
+    assert result.status == "incomplete"
+    assert len(result.findings) == 1
+    assert result.findings[0].patch == "failing"
+    assert {diagnostic.checker_id for diagnostic in result.diagnostics} == {"crashing"}
 
 
 def test_runner_load_state_handles_corrupt_json():
@@ -131,16 +155,19 @@ def test_runner_load_state_handles_corrupt_json():
         state_path.write_text("this is not valid json {{{", encoding="utf-8")
         runner = ConsistencyRunner(project_root=root, patches=[CleanPatch()])
         # Should not raise
-        blockers = runner.run_all(chapter=1)
-        assert blockers == []  # CleanPatch returns [] regardless of state
+        result = runner.run_all(chapter=1)
+        assert result.status == "incomplete"
+        assert result.findings == []
+        assert result.diagnostics[0].error_type == "JSONDecodeError"
 
 
 def test_runner_load_state_handles_missing_file():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         runner = ConsistencyRunner(project_root=root, patches=[CleanPatch()])
-        blockers = runner.run_all(chapter=1)
-        assert blockers == []
+        result = runner.run_all(chapter=1)
+        assert result.status == "evaluated"
+        assert result.findings == []
 
 
 def test_runner_apply_all_pops_expected_revision():
@@ -172,10 +199,25 @@ def test_runner_apply_all_continues_after_apply_crash():
             patches=[CleanPatch(), CrashingApplyPatch(), CleanPatch()],
         )
         # Should not raise
-        runner.apply_all(chapter=1)
+        outcomes = runner.apply_all(chapter=1)
         saved = json.loads(state_path.read_text(encoding="utf-8"))
         assert "_apply_errors" in saved
         assert any("crashing_apply" in err for err in saved["_apply_errors"])
+        assert [(item.patch, item.status, item.error_type) for item in outcomes] == [
+            ("clean", "applied", None), ("crashing_apply", "failed", "ValueError"), ("clean", "applied", None),
+        ]
+
+
+def test_runner_apply_corrupt_state_reports_failure_without_overwriting(tmp_path):
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True)
+    original = "{bad state"
+    state_path.write_text(original, encoding="utf-8")
+    outcomes = ConsistencyRunner(tmp_path, patches=[CleanPatch()]).apply_all(chapter=1)
+    assert [(item.patch, item.status, item.error_type) for item in outcomes] == [
+        ("consistency.runner", "failed", "JSONDecodeError"),
+    ]
+    assert state_path.read_text(encoding="utf-8") == original
 
 
 def test_runner_apply_all_preserves_commit_owned_state_projections():
@@ -259,3 +301,83 @@ def test_runner_save_state_uses_atomic_when_available(monkeypatch):
         assert called["count"] == 1
         assert called["lock"] is True
         assert called["backup"] is True
+
+
+class StaticFindingPatch(Patch):
+    name = "foreshadow_dag"
+    description = "returns a stable observation for fingerprint tests"
+    depends_on = ()
+    def check(self, ctx):
+        return [PatchFinding(patch=self.name, chapter=ctx.chapter_num, issue_code="missing_id",
+                             message="same", evidence={"missing_indices": [0], "count": 1})]
+    def apply(self, ctx): pass
+
+
+def test_source_fingerprint_tracks_actual_patch_inputs_not_findings_or_unused_context():
+    runner = ConsistencyRunner(Path("/tmp"), patches=[StaticFindingPatch()])
+    state_a = {"story_craft": {"foreshadow_chain": [{"description": "source A"}]}, "unused": "A"}
+    state_b = {"story_craft": {"foreshadow_chain": [{"description": "source B"}]}, "unused": "A"}
+    first = runner.run_all(1, state=state_a, chapter_outline={"unused": 1}, previous_chapters=[{"unused": 1}])
+    same_inputs = runner.run_all(1, state={**state_a, "unused": "B"}, chapter_outline={"unused": 2}, previous_chapters=[])
+    changed_source = runner.run_all(1, state=state_b)
+    changed_chapter = runner.run_all(2, state=state_a)
+    assert first.findings[0].evidence == changed_source.findings[0].evidence
+    assert first.source_input_fingerprint == same_inputs.source_input_fingerprint
+    assert first.source_input_fingerprint != changed_source.source_input_fingerprint
+    assert first.source_input_fingerprint != changed_chapter.source_input_fingerprint
+    assert first.findings[0].input_ref["source_input_fingerprint"] == first.source_input_fingerprint
+
+
+def test_runner_fingerprints_chapter_text_and_external_view_content_when_read(tmp_path):
+    from scripts.consistency.patches.p2_volume_anchor import P2VolumeAnchor
+    from scripts.consistency.patches.p7_derived_views import P7DerivedViews
+
+    state = {"story_craft": {"volume_anchors": {"anchors": []},
+                             "foreshadow_chain": {"dag": [{"id": "F1"}]}}}
+    p2_runner = ConsistencyRunner(tmp_path, patches=[P2VolumeAnchor()])
+    first_text = p2_runner.run_all(1, state=state, chapter_text="text A")
+    second_text = p2_runner.run_all(1, state=state, chapter_text="text B")
+    assert first_text.source_input_fingerprint != second_text.source_input_fingerprint
+
+    view = tmp_path / ".webnovel" / "views" / "foreshadow_table.md"
+    view.parent.mkdir(parents=True)
+    view.write_text("F1", encoding="utf-8")
+    p7_runner = ConsistencyRunner(tmp_path, patches=[P7DerivedViews()])
+    first_view = p7_runner.run_all(1, state=state)
+    view.write_text("F1 F2", encoding="utf-8")
+    second_view = p7_runner.run_all(1, state=state)
+    assert first_view.source_input_fingerprint != second_view.source_input_fingerprint
+
+
+def test_runner_normalizes_all_default_producers_and_binds_source_fingerprint(tmp_path):
+    from scripts.consistency.patches.p1_foreshadow_dag import P1ForeshadowDAG
+    from scripts.consistency.patches.p2_volume_anchor import P2VolumeAnchor
+    from scripts.consistency.patches.p3_event_matrix import P3EventMatrix
+    from scripts.consistency.patches.p4_pacing_tracker import P4PacingTracker
+    from scripts.consistency.patches.p5_state_revision import P5StateRevision
+    from scripts.consistency.patches.p6_reader_contract import P6ReaderContract
+    from scripts.consistency.patches.p7_derived_views import P7DerivedViews
+
+    state = {
+        "_expected_revision": 1,
+        "state": {"_revision": 2},
+        "story_craft": {
+            "foreshadow_chain": {"dag": [{"id": "A", "depends_on": ["B"]}, {"id": "B", "depends_on": ["A"]}]},
+            "volume_anchors": {"anchors": [{"volume": 1, "total_chapters": 10, "current_chapter": 1}]},
+            "event_matrix_state": {"history": [{"primary": "conflict_thrill"}] * 5},
+            "pacing_history": {"history": [{"tier": "fast"}] * 4},
+            "reader_contract": {"expectation_debt": [{"satisfied_chapter": None}] * 11},
+        },
+    }
+    before = deepcopy(state)
+    view = tmp_path / ".webnovel" / "views" / "foreshadow_table.md"
+    view.parent.mkdir(parents=True)
+    view.write_text("", encoding="utf-8")
+    patches = [P1ForeshadowDAG(), P2VolumeAnchor(), P3EventMatrix(), P4PacingTracker(),
+               P5StateRevision(), P6ReaderContract(), P7DerivedViews()]
+    result = ConsistencyRunner(tmp_path, patches=patches).run_all(100, state=state, chapter_text="unused")
+    assert result.status == "evaluated"
+    assert {finding.patch for finding in result.findings} == {patch.name for patch in patches}
+    assert all(finding.input_ref["source_input_fingerprint"] == result.source_input_fingerprint
+               for finding in result.findings)
+    assert state == before
