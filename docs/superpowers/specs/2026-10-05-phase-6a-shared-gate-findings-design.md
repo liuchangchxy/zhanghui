@@ -71,10 +71,11 @@ policy_reason
 rule_id
 decision_scope
 evaluated_at
+evidence_fingerprint
 input_fingerprint
 ```
 
-`GateDecision` is Workflow / Infrastructure audit data, not Canon. It is stored in a versioned chapter workflow decision artifact adjacent to the review/commit artifacts (under `.story-system/reviews/` through `StoryContractPaths`), keyed by chapter and decision attempt. The artifact is append-only per attempt; a retry adds a new attempt and does not rewrite the previous explanation. The rejected/accepted decision reference and effective decisions may also be copied into the durable commit envelope for convenient audit, without changing Canon fact payload semantics. The original checker finding remains separately available as `DetectedFinding`.
+`GateDecision` is Workflow / Infrastructure audit data, not Canon. The **sole authoritative owner** is a versioned per-attempt workflow decision artifact adjacent to the review/commit artifacts (under `.story-system/reviews/` through `StoryContractPaths`). It is append-only per attempt; a retry adds a new artifact and does not rewrite the previous explanation. `CHAPTER_COMMIT` contains only a reference to this record and its binding fields (`gate_decision_ref`, `input_fingerprint`, `policy_version`, `final_action`). It never duplicates the full effective decisions and is not a second GateDecision owner. The original checker findings remain separately available as `DetectedFinding` input records.
 
 Changing the active policy version affects new evaluations only. Historical `GateDecision` records remain interpretable under the exact saved `policy_version`, `rule_id`, input fingerprint and reason; replaying a newer policy creates a new decision attempt rather than silently redefining an old one.
 
@@ -87,7 +88,7 @@ category + authority + explicitness + structured evidence
     → effective severity + effective action + rule_id + reason
 ```
 
-`effective_severity` is one of `HARD_INTEGRITY`, `HARD_CANON`, `HARD_USER`, `HARD_WORKFLOW`, `HUMAN_DECISION`, `RECOVERABLE`, or `ADVISORY`. The aggregate action is one of `REJECT`, `REQUIRE_HUMAN`, `RECOVER`, or `ALLOW_WITH_ADVISORY`.
+`effective_severity` is one of `HARD_INTEGRITY`, `HARD_CANON`, `HARD_USER`, `HUMAN_DECISION`, `RECOVERABLE`, `ADVISORY`, or `SCORE`. `SCORE` carries a numeric value and score kind (for example pacing, hook, style, or satisfaction); it is a continuous quality signal and never a veto by itself. The aggregate action is one of `REJECT`, `REQUIRE_HUMAN`, `RECOVER`, or `ALLOW_WITH_ADVISORY`.
 
 Policy rules, in precedence order:
 
@@ -95,30 +96,28 @@ Policy rules, in precedence order:
 2. `HARD_CANON` requires all of: category `CANON_CONTRADICTION`; authority `ACCEPTED_CANON`; deterministic linkage to accepted Canon identity; and deterministic contradiction evidence produced by a trusted validator. `LLM_REVIEW` alone can never produce `HARD_CANON`, even if it supplies category, evidence text, or suggested severity. Without a deterministic contradiction validator, an LLM candidate is `HUMAN_DECISION` when it is material and unresolved, otherwise `ADVISORY`.
 3. `USER_CONSTRAINT` can produce `HARD_USER` / `REJECT` only when `USER_EXPLICIT`, `EXPLICIT`, and evidence points to an existing contract node carrying a stable `constraint_id` and `source_ref`. Implicit or unproven user standing cannot create a hard veto.
 4. Unresolved disambiguation with a stable subject/evidence reference is `HUMAN_DECISION` / `REQUIRE_HUMAN`; a completed resolution removes it from the current finding set.
-5. Missed planned nodes map to `INTENT_FULFILLMENT`. `AUTHOR_PLAN`/`PLANNER_GENERATED` findings are evaluated by explicit plan policy and evidence; a plan miss is not silently promoted to Canon or user authority.
-6. Craft/style findings, including legacy pacing blockers without stronger verified authority, default to `ADVISORY`. LLM suggested severity cannot raise this.
+5. `INTENT_FULFILLMENT` with `AUTHOR_PLAN` or `PLANNER_GENERATED` authority always maps to `ADVISORY` or `SCORE`. Ordinary intent misses can never produce `REJECT`, `HARD_USER`, or `HUMAN_DECISION`. A missed node may be treated as a `USER_CONSTRAINT` finding with `HARD_USER` only when deterministic linkage proves all of: `authority=USER_EXPLICIT`, `explicitness=EXPLICIT`, stable `constraint_id`, and present `source_ref`. A field name such as `must_cover_nodes` does not grant authority; planner-generated “must” remains planner Intent.
+6. Craft/style findings default to `ADVISORY`; numeric pacing, hook, style, and satisfaction assessments may be `SCORE`. Legacy pacing blockers map to `ADVISORY`. LLM suggested severity cannot raise either result to a hard severity.
 7. A recoverable integrity/projection condition starts at `RECOVERABLE` / `RECOVER`. Transition is explicit: `RECOVERABLE → run existing recovery → verify → resolved`. If recovery fails, re-evaluate the failure evidence and classify it as `HARD_INTEGRITY` when safe processing is demonstrably compromised, or `HUMAN_DECISION` when the evidence is ambiguous and requires an accountable choice. It cannot remain indefinitely `RECOVERABLE` after a failed attempt.
-8. Unknown or unsupported combinations are handled by an explicit conservative rule table; they do not inherit checker severity or blocker flags.
+8. There is no `HARD_WORKFLOW` catch-all. A workflow condition that compromises artifact or transaction integrity maps to `HARD_INTEGRITY`; an unresolved choice requiring an accountable person maps to `HUMAN_DECISION`; otherwise it is `ADVISORY` or `SCORE`. Craft, Style, and ordinary Intent cannot use workflow labeling to gain veto power.
+9. Unknown or unsupported combinations are handled by an explicit conservative rule table; they do not inherit checker severity or blocker flags.
 
 The policy is a pure function over normalized inputs and a pinned policy version. Same inputs and version produce byte-equivalent decisions apart from operational timestamp; timestamps are excluded from the decision fingerprint.
 
 ## Stable finding identity
 
-`finding_id` is deterministic and independent of message wording, list order, timestamps, and random UUIDs. The canonical identity tuple is:
+`finding_id` identifies the logical problem, not a particular observation of its evidence. It is deterministic and independent of message wording, evidence excerpts, artifact digests, source spans, list order, timestamps, and random UUIDs. The canonical identity tuple is:
 
 ```text
 identity_version
 + gate_id
-+ normalized category
-+ authority identity class
-+ subject_id or constraint_id (when present)
-+ scoped evidence identity
++ stable subject_id or constraint_id
 + chapter/workflow scope
 ```
 
-The tuple is serialized with canonical JSON (sorted keys, normalized strings, explicit nulls) and hashed with SHA-256; the public ID is `gf1_` plus the full lowercase hex digest. Evidence identity uses stable typed pointers such as `constraint_id`, Canon `event_id`, planned node ID, artifact identity plus digest, or deterministic source span. Evidence excerpts and free-form messages are excluded. If a checker cannot produce stable evidence identity, it must use a checker-defined stable subject key; otherwise it emits a non-deduplicable diagnostic and cannot drive a hard veto.
+The tuple is serialized with canonical JSON (sorted keys, normalized strings, explicit nulls) and hashed with SHA-256; the public ID is `gf1_` plus the full lowercase hex digest. Authority/category are policy attributes, not identity dimensions, so policy reclassification does not fork logical identity. `evidence_fingerprint` represents the evidence state for this observation and may include artifact digests, source spans, expected/observed values, and typed evidence pointers. `input_fingerprint` binds the entire normalized policy input set for a decision attempt. These fingerprints can change after a rewrite while `finding_id` remains stable.
 
-The same gate/subject/evidence/scope recurring after a rewrite retains the same ID. A material change to the evidence identity creates a new finding. Policy-version changes do not change the finding ID. Override, retry, repeated-finding suppression and rewrite-loop counters reference `finding_id` and maintain attempt history; suppression never removes a hard finding from `ChapterCommitService` evaluation.
+The same gate/subject/scope recurring after a rewrite retains the same ID even when evidence changes. Policy-version changes do not change the finding ID. Override, retry, repeated-finding suppression and rewrite-loop counters reference `finding_id` and maintain evidence/attempt history; suppression never removes a hard finding from `ChapterCommitService` evaluation. If a checker cannot produce a stable logical subject identity or checker-defined stable subject key, it may emit only a non-deduplicable diagnostic. Such a diagnostic cannot drive a hard veto, override identity, or rewrite-loop identity.
 
 ## Legacy compatibility adapters
 
@@ -160,18 +159,22 @@ ChapterCommitService final veto
 
 It never trusts LLM `blocking`, `blocking_count`, checker strings, an external `effective_hard_count`, or any precomputed severity as an independent veto. `effective_hard_count` may be saved as a cache/audit summary, but the service recomputes it from findings and policy and rejects the artifact as inconsistent when it disagrees. Missing decision artifact is regenerated from inputs within the commit attempt; missing source findings needed to prove a legacy blocker are handled through the registered adapter mapping, not by trusting the count.
 
-The aggregate workflow action is derived from recomputed GateDecisions. `REJECT` creates a rejected workflow decision and no Canon commit; `REQUIRE_HUMAN` records a pending workflow decision and no accepted Canon commit; `RECOVER` runs only the existing recovery mechanism, verifies the result, and then reevaluates; `ALLOW_WITH_ADVISORY` may proceed to the existing reconciliation and durable commit sequence. Existing reconciliation authority remains unchanged and remains independently required.
+The aggregate workflow action is derived from recomputed GateDecisions. `REJECT` creates a durable `CHAPTER_COMMIT` with `meta.status=rejected`, preserving the current Phase 0/1 rejection boundary. That record is an immutable workflow audit of the attempted chapter decision; it contains no accepted Canon facts and triggers no accepted event/state/index/summary/memory/vector projections (the existing projection path marks these skipped for rejected commits). Introducing GateDecision does not remove or replace this rejected commit record.
+
+`REQUIRE_HUMAN` also creates a durable `CHAPTER_COMMIT` with `meta.status=rejected`, plus the pending human-action state in workflow metadata. This follows the existing chapter-level decision contract: an unresolved disambiguation currently rejects the attempt, and there must be one durable chapter outcome without implying accepted history. It does not write accepted Canon facts or accepted story-fact projections; the existing rejection-status projection may still record `chapter_rejected`. Under the current immutable one-commit-per-chapter boundary, resolving the pending item does not rewrite or replace that rejected commit. Any later accepted outcome for the same chapter requires a separately designed amend/supersede or retry identity protocol and is outside Phase 6A. The prior rejected audit remains unchanged.
+
+`RECOVER` runs only the existing recovery mechanism, verifies the result, and then reevaluates; a failed recovery is reclassified before the chapter outcome is persisted. `ALLOW_WITH_ADVISORY` may proceed to the existing reconciliation and durable accepted commit sequence. Existing reconciliation authority remains unchanged and independently required. Before a `CHAPTER_COMMIT` is persisted, the authoritative per-attempt GateDecision artifact must be durable; the commit stores only its reference and binding fields.
 
 ## Phase boundary
 
 ### Phase 6A
 
-- Define and version the shared finding envelope, controlled category/authority enums, deterministic policy, decision audit artifact, and stable identity contract.
+- Define and version the shared finding envelope, controlled category/authority enums, deterministic policy, decision audit artifact, stable logical finding identity, and separate evidence/input fingerprints.
 - Add contract-node metadata for explicit user constraints after validation that current master/chapter/volume/review contracts can carry it.
 - Add P1–P7 structured consistency mapping contracts and deterministic adapters.
 - Migrate the current review, fulfillment, disambiguation, and highest-risk consistency paths that feed chapter review/commit veto.
 - Make `ChapterCommitService` the sole final veto, recomputing the canonical policy from normalized findings.
-- Persist immutable per-attempt GateDecision audit data with effective severity/action, policy version, reason/rule ID, scope and input fingerprint.
+- Persist immutable per-attempt GateDecision audit data as its sole authoritative owner, with effective severity/action, policy version, reason/rule ID, scope, evidence fingerprint and input fingerprint. A chapter commit stores only the decision reference and binding fields.
 - Keep compatibility input support while making legacy values non-authoritative.
 
 ### Phase 6B
@@ -186,13 +189,13 @@ Explicit non-goals for 6A: a unified GateService; a complete deterministic Canon
 ## Acceptance criteria
 
 1. Category and authority are distinct validated enums; policy inputs include category, authority, explicitness, structured evidence and pinned policy version.
-2. Same normalized findings under the same policy version produce the same effective severity/action/rule/reason and fingerprint.
+2. Same normalized findings under the same policy version produce the same effective severity/action/rule/reason and fingerprints.
 3. Every actual commit decision has a durable per-attempt GateDecision record with effective severity, effective action, policy version, reason/rule ID and input fingerprint.
-4. Historical GateDecision records remain unchanged and retain their original policy explanation after policy upgrades.
+4. Historical GateDecision records remain unchanged and retain their original policy explanation after policy upgrades; CHAPTER_COMMIT references them without duplicating their effective decisions.
 5. `ChapterCommitService` recomputes policy from structured findings and is the only rejection authority; a false external hard count cannot pass, and a misleading high count cannot independently reject.
 6. LLM `CANON_CONTRADICTION` cannot yield `HARD_CANON`; hard Canon requires accepted Canon provenance, deterministic identity/linkage and deterministic contradiction evidence.
 7. User hard veto requires an explicit existing contract node with stable constraint identity and source reference.
-8. Stable finding IDs survive repeated detection after rewrite and do not depend on prose messages, ordering, time, or random identifiers.
+8. Stable finding IDs survive repeated detection after rewrite even when evidence changes; evidence/input fingerprints record the changing observation separately. IDs do not depend on prose messages, ordering, time, or random identifiers.
 9. Legacy pacing blockers map deterministically to advisory; known unresolved disambiguation maps to human decision; no mapping uses message text.
 10. Unknown legacy blockers do not all become human decisions. Only identified material Canon/integrity risk with insufficient structured evidence gets conservative human review.
 11. Recovery has an explicit run/verify/resolve transition; failed recovery is reclassified and cannot remain stuck in `RECOVERABLE`.
@@ -203,12 +206,17 @@ Explicit non-goals for 6A: a unified GateService; a complete deterministic Canon
 
 - **Placeholder scan:** no TODO/TBD placeholders remain.
 - **Dimension separation:** `category`, `authority`, `explicitness`, evidence and suggested severity are separate fields; messages are display-only.
+- **Rejected outcomes:** both `REJECT` and `REQUIRE_HUMAN` preserve a durable `meta.status=rejected` CHAPTER_COMMIT audit with no accepted Canon facts or accepted story-fact projections; the existing rejection-status projection remains allowed, and human pending status remains workflow metadata.
+- **Audit ownership:** the per-attempt GateDecision artifact is the only authoritative full decision record; commits hold only reference and binding fields.
 - **Veto authority:** the service recomputes from normalized findings, checks cached decisions, and does not treat any external count as authority.
 - **Canon safety:** LLM review cannot self-assert `HARD_CANON`; deterministic validator evidence and accepted Canon linkage are explicit prerequisites.
 - **Audit semantics:** GateDecision is workflow/infrastructure data, stored per attempt with a pinned policy version and preserved historical record.
-- **Identity:** identity inputs exclude mutable prose and timestamps; the same evidence/scope maps to the same ID after rewrite.
+- **Identity:** logical identity uses stable gate/subject/scope; changing evidence is captured by separate evidence/input fingerprints.
 - **Legacy fallback:** mappings are keyed by gate/artifact identity; no prose classification or blanket `LEGACY_UNKNOWN → HUMAN_DECISION` rule exists.
 - **Scope consistency:** P1–P7 mapping contract is included in 6A while full consistency producer, CLI, skills and Blocker retirement remain 6B.
 - **User constraints:** existing Story System contracts are the primary carrier; no global registry is proposed.
 - **Recovery:** successful and failed recovery transitions terminate in resolved, hard integrity, or human decision states.
+- **Severity taxonomy:** no `HARD_WORKFLOW` catch-all remains; `SCORE` models continuous craft/style/satisfaction results without veto authority.
+- **Intent boundary:** ordinary planner/author Intent miss is only Advisory/Score; only explicitly linked `USER_EXPLICIT` constraints may map to `HARD_USER`.
+- **Question 9:** no Phase 6A architecture question remains undecided. Same-chapter acceptance after a rejected immutable commit remains unsupported by the existing one-commit-per-chapter boundary; changing that requires a separate amend/supersede or retry-identity design and is explicitly outside this phase.
 - **Scope:** one coherent architecture slice: shared finding/policy and final commit veto, with broader producer/consumer convergence deferred to 6B.
