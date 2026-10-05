@@ -20,6 +20,7 @@ def test_story_contract_paths_resolve_expected_locations(tmp_path):
     assert paths.master_json == paths.root / "MASTER_SETTING.json"
     assert paths.anti_patterns_json == paths.root / "anti_patterns.json"
     assert paths.chapter_json(7) == paths.root / "chapters" / "chapter_007.json"
+    assert paths.gate_decision_json(7, "attempt-1") == paths.root / "reviews" / "gate-decisions" / "chapter_007" / "attempt-1.json"
 
 
 def test_merge_contract_layers_preserves_locked_and_merges_append_only():

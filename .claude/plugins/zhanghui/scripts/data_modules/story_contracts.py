@@ -68,6 +68,25 @@ class StoryContractPaths:
     def review_json(self, chapter: int) -> Path:
         return self.reviews_dir / f"chapter_{chapter:03d}.review.json"
 
+    def gate_decision_json(self, chapter: int, attempt_id: str) -> Path:
+        if chapter < 1:
+            raise ValueError("chapter must be positive")
+        if not attempt_id or not attempt_id.strip() or any(c in attempt_id for c in "/\\"):
+            raise ValueError("attempt_id must be a non-empty path-safe value")
+        return self.reviews_dir / "gate-decisions" / f"chapter_{chapter:03d}" / f"{attempt_id}.json"
+
+    def gate_workflow_event_json(self, chapter: int, event_id: str) -> Path:
+        if chapter < 1:
+            raise ValueError("chapter must be positive")
+        if not event_id or not event_id.strip() or any(c in event_id for c in "/\\"):
+            raise ValueError("event_id must be a non-empty path-safe value")
+        return self.reviews_dir / "gate-decisions" / f"chapter_{chapter:03d}" / "workflow-events" / f"{event_id}.json"
+
+    def gate_response_json(self, chapter: int, attempt_id: str, response_id: str) -> Path:
+        if not response_id or not response_id.strip() or any(c in response_id for c in "/\\"):
+            raise ValueError("response_id must be a non-empty path-safe value")
+        return self.reviews_dir / "gate-decisions" / f"chapter_{chapter:03d}" / f"{attempt_id}.responses" / f"{response_id}.json"
+
     def commit_json(self, chapter: int) -> Path:
         return self.commits_dir / f"chapter_{chapter:03d}.commit.json"
 

@@ -11,6 +11,40 @@ from data_modules.tests.commit_helpers import build_commit_with_reconciliation
 from data_modules.chapter_commit_service import ChapterCommitService
 from data_modules.config import DataModulesConfig
 from data_modules.index_manager import IndexManager
+from data_modules.gate_findings import (
+    DetectedFinding, EvidenceRef, FindingAuthority, FindingCategory,
+    GateDecisionSet, WorkflowAction,
+)
+from data_modules.gate_decision_store import GateDecisionStore
+
+
+def _gate_finding(category, authority, *, key, evidence):
+    return DetectedFinding(
+        gate_id="step2.test", stable_subject_key=key, category=category,
+        authority=authority, scope={"chapter": 3}, evidence=evidence,
+        checker_id="step2-test", checker_version="1",
+    )
+
+
+def _attempt_kwargs():
+    from data_modules.tests.commit_helpers import EMPTY_PROPOSAL
+    extraction = {"state_deltas": [], "entity_deltas": [], "accepted_events": []}
+    return {
+        "review_result": {"blocking_count": 0},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []}, "extraction_result": extraction,
+        "chapter_text": "final prose\n<chapter_changes>" + json.dumps(EMPTY_PROPOSAL) + "</chapter_changes>",
+        "proposed_changes": EMPTY_PROPOSAL,
+    }
+
+
+def _evaluate(service, findings, attempt_id, **overrides):
+    kwargs = _attempt_kwargs()
+    kwargs.update(overrides)
+    return service.evaluate_attempt(
+        3, findings, attempt_id=attempt_id, policy_version="gate-policy/v1",
+        scope={"chapter": 3}, **kwargs,
+    )
 
 
 def test_commit_service_rejects_when_missed_nodes_exist(tmp_path):
@@ -114,6 +148,221 @@ def test_service_recomputes_and_rejects_forged_passed_artifact(tmp_path):
             reconciliation_result={"schema_version": "story-reconciliation/v1", "status": "passed",
                                    "observed_sha256": "forged", "accepted_payload": {"state_deltas": []}},
         )
+
+
+def test_require_human_persists_pending_attempt_without_consuming_commit_slot(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    monkeypatch.setattr(service, "apply_projection_writers", lambda payload: payload)
+    finding = _gate_finding(
+        FindingCategory.DISAMBIGUATION, FindingAuthority.SYSTEM_INTEGRITY, key="identity-choice",
+        evidence=[EvidenceRef(kind="identity_choice", identity={"required": True})],
+    )
+    outcome = _evaluate(service, [finding], "attempt-human")
+    commit = tmp_path / ".story-system/commits/chapter_003.commit.json"
+    record = GateDecisionStore(tmp_path).read_record(3, "attempt-human")
+    assert outcome.action == WorkflowAction.REQUIRE_HUMAN
+    assert outcome.chapter_outcome is None
+    assert outcome.attempt_status == "pending_human"
+    assert record["workflow_status"] == "pending_human"
+    assert not commit.exists()
+    GateDecisionStore(tmp_path).append_human_response(
+        3, "attempt-human", "response-human-1", finding_id=finding.finding_id,
+        choice="resolve-as-accepted", actor_ref="user:reviewer",
+    )
+
+    resolved = _gate_finding(
+        FindingCategory.CRAFT, FindingAuthority.CRAFT_HEURISTIC, key="resolved-advisory",
+        evidence=[EvidenceRef(kind="resolution_recorded", identity={"response_id": "r1"})],
+    )
+    accepted = _evaluate(service, [resolved], "attempt-after-human")
+    assert accepted.action == WorkflowAction.ALLOW_WITH_ADVISORY
+    assert accepted.chapter_outcome.chapter_outcome == "accepted"
+    assert commit.exists()
+
+
+def test_reject_keeps_immutable_rejected_commit_and_binding_only(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    (tmp_path / ".webnovel").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
+    finding = _gate_finding(
+        FindingCategory.INTEGRITY, FindingAuthority.SYSTEM_INTEGRITY, key="bad-integrity",
+        evidence=[EvidenceRef(kind="deterministic_validation", identity={"valid": False})],
+    )
+    outcome = _evaluate(service, [finding], "attempt-reject")
+    commit_path = tmp_path / ".story-system/commits/chapter_003.commit.json"
+    payload = json.loads(commit_path.read_text(encoding="utf-8"))
+    assert outcome.action == WorkflowAction.REJECT
+    assert outcome.chapter_outcome.chapter_outcome == "rejected"
+    assert payload["meta"]["status"] == "rejected"
+    assert payload["extraction_result"]["accepted_events"] == []
+    assert payload["extraction_result"]["state_deltas"] == []
+    state = json.loads((tmp_path / ".webnovel" / "state.json").read_text(encoding="utf-8"))
+    assert state["progress"]["chapter_status"]["3"] == "chapter_rejected"
+    assert set(payload["gate_decision_binding"]) == {
+        "gate_decision_ref", "input_fingerprint", "policy_version", "final_action"
+    }
+    assert "decisions" not in payload
+    from data_modules.durable_projection import DurableCommitError, read_validated_chapter_commit
+    assert read_validated_chapter_commit(commit_path)["gate_decision_binding"]["final_action"] == "REJECT"
+    payload["gate_decision_binding"]["final_action"] = "ALLOW_WITH_ADVISORY"
+    commit_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(DurableCommitError, match="does not match status"):
+        read_validated_chapter_commit(commit_path)
+
+
+def test_service_recomputes_policy_and_records_cached_count_mismatch(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    monkeypatch.setattr(service, "apply_projection_writers", lambda payload: payload)
+    finding = _gate_finding(
+        FindingCategory.CRAFT, FindingAuthority.CRAFT_HEURISTIC, key="soft-quality",
+        evidence=[EvidenceRef(kind="review", identity={"value": "advisory"})],
+    )
+    # An external count cannot turn an advisory into a hard veto.
+    result = _evaluate(service, [finding], "attempt-count", effective_hard_count=88)
+    assert result.action == WorkflowAction.ALLOW_WITH_ADVISORY
+    assert result.inconsistency_diagnostic == {"effective_hard_count_mismatch": {"supplied": 88, "recomputed": 0}}
+    stored = GateDecisionStore(tmp_path).read_record(3, "attempt-count")
+    assert stored["inconsistency_diagnostic"] == result.inconsistency_diagnostic
+
+
+def test_stale_cached_decision_and_false_external_count_cannot_suppress_reject(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    monkeypatch.setattr(service, "apply_projection_writers", lambda payload: payload)
+    finding = _gate_finding(
+        FindingCategory.INTEGRITY, FindingAuthority.SYSTEM_INTEGRITY, key="hard-integrity",
+        evidence=[EvidenceRef(kind="deterministic_validation", identity={"valid": False})],
+    )
+    stale = GateDecisionSet(decisions=[], aggregate_action=WorkflowAction.ALLOW_WITH_ADVISORY)
+    result = _evaluate(
+        service, [finding], "attempt-stale-cache", cached_decision_set=stale,
+        effective_hard_count=0,
+    )
+    assert result.action == WorkflowAction.REJECT
+    assert result.inconsistency_diagnostic == {
+        "cached_decision_mismatch": True,
+        "effective_hard_count_mismatch": {"supplied": 0, "recomputed": 1},
+    }
+    assert result.chapter_outcome.chapter_outcome == "rejected"
+
+
+def test_recover_success_creates_two_attempts_and_only_then_commits(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    monkeypatch.setattr(service, "apply_projection_writers", lambda payload: payload)
+    report = {
+        "schema_version": "webnovel-projections/v1", "action": "rebuild", "ok": True,
+        "error": None, "results": [{"chapter": 1, "ok": True}], "chapters": [1],
+    }
+    import data_modules.projection_rebuild as rebuild_module
+    calls = []
+    def rebuild(_root):
+        calls.append(True)
+        assert not (tmp_path / ".story-system/commits/chapter_003.commit.json").exists()
+        return report
+    monkeypatch.setattr(rebuild_module, "rebuild_projections", rebuild)
+    finding = _gate_finding(
+        FindingCategory.PROJECTION_HEALTH, FindingAuthority.SYSTEM_INTEGRITY, key="state-projection",
+        evidence=[EvidenceRef(kind="recovery_required", identity={"projection": "state"})],
+    )
+    refreshed = _gate_finding(
+        FindingCategory.CRAFT, FindingAuthority.CRAFT_HEURISTIC, key="fresh-review-after-rebuild",
+        evidence=[EvidenceRef(kind="refreshed_review", identity={"version": 2})],
+    )
+    result = _evaluate(service, [finding], "attempt-recover", refresh_findings=lambda _report: [refreshed])
+    attempts = sorted((tmp_path / ".story-system/reviews/gate-decisions/chapter_003").glob("*.json"))
+    assert calls == [True]
+    assert len(attempts) == 2
+    assert GateDecisionStore(tmp_path).read_record(3, "attempt-recover")["workflow_status"] == "recovery_pending"
+    assert result.attempt_id == "attempt-recover.recovery-1"
+    assert result.action == WorkflowAction.ALLOW_WITH_ADVISORY
+    assert result.chapter_outcome.chapter_outcome == "accepted"
+    assert (tmp_path / ".story-system/commits/chapter_003.commit.json").is_file()
+    events = list((tmp_path / ".story-system/reviews/gate-decisions/chapter_003/workflow-events").glob("*.json"))
+    assert {json.loads(path.read_text())["event_type"] for path in events} == {"recovery_pending", "recovery_succeeded"}
+
+
+def test_recovery_success_requires_fresh_policy_result_before_terminal_commit(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    monkeypatch.setattr(service, "apply_projection_writers", lambda payload: payload)
+    report = {
+        "schema_version": "webnovel-projections/v1", "action": "rebuild", "ok": True,
+        "error": None, "results": [{"chapter": 1, "ok": True}], "chapters": [1],
+    }
+    import data_modules.projection_rebuild as rebuild_module
+    monkeypatch.setattr(rebuild_module, "rebuild_projections", lambda _root: report)
+    recover = _gate_finding(
+        FindingCategory.PROJECTION_HEALTH, FindingAuthority.SYSTEM_INTEGRITY, key="recover-before-hard",
+        evidence=[EvidenceRef(kind="recovery_required", identity={"projection": "state"})],
+    )
+    fresh_hard = _gate_finding(
+        FindingCategory.INTEGRITY, FindingAuthority.SYSTEM_INTEGRITY, key="fresh-hard-after-rebuild",
+        evidence=[EvidenceRef(kind="deterministic_validation", identity={"valid": False})],
+    )
+    result = _evaluate(service, [recover], "attempt-recover-hard", refresh_findings=lambda _report: [fresh_hard])
+    assert result.attempt_id == "attempt-recover-hard.recovery-1"
+    assert result.action == WorkflowAction.REJECT
+    assert result.chapter_outcome.chapter_outcome == "rejected"
+    assert GateDecisionStore(tmp_path).read_record(3, result.attempt_id)["workflow_status"] == "rejected"
+
+
+def test_missing_recovery_finding_refresher_reevaluates_as_pending_human(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    report = {
+        "schema_version": "webnovel-projections/v1", "action": "rebuild", "ok": True,
+        "error": None, "results": [{"chapter": 1, "ok": True}], "chapters": [1],
+    }
+    import data_modules.projection_rebuild as rebuild_module
+    monkeypatch.setattr(rebuild_module, "rebuild_projections", lambda _root: report)
+    recover = _gate_finding(
+        FindingCategory.PROJECTION_HEALTH, FindingAuthority.SYSTEM_INTEGRITY, key="recover-no-refresher",
+        evidence=[EvidenceRef(kind="recovery_required", identity={"projection": "state"})],
+    )
+
+    result = _evaluate(service, [recover], "attempt-recover-no-refresher")
+
+    assert result.attempt_id == "attempt-recover-no-refresher.recovery-1"
+    assert result.action == WorkflowAction.REQUIRE_HUMAN
+    assert result.attempt_status == "pending_human"
+    assert result.chapter_outcome is None
+    assert not (tmp_path / ".story-system/commits/chapter_003.commit.json").exists()
+    store = GateDecisionStore(tmp_path)
+    assert store.read_record(3, "attempt-recover-no-refresher")["workflow_status"] == "recovery_pending"
+    assert store.read_record(3, result.attempt_id)["workflow_status"] == "pending_human"
+    events = list((tmp_path / ".story-system/reviews/gate-decisions/chapter_003/workflow-events").glob("*.json"))
+    assert {json.loads(path.read_text())["event_type"] for path in events} == {
+        "recovery_pending", "recovery_succeeded"
+    }
+
+
+@pytest.mark.parametrize(
+    ("report", "expected_action", "expected_status"),
+    [
+        ({"schema_version": "webnovel-projections/v1", "action": "rebuild", "ok": False,
+          "error": {"projection": "index", "chapter": 1, "message": "failed"}, "results": []},
+         WorkflowAction.REJECT, "rejected"),
+        ({"schema_version": "webnovel-projections/v1", "action": "rebuild", "ok": False,
+          "error": {"projection": "coordinator", "chapter": None, "message": "unclear"}, "results": []},
+         WorkflowAction.REQUIRE_HUMAN, "pending_human"),
+    ],
+)
+def test_recover_failure_is_structured_and_reevaluated(tmp_path, monkeypatch, report, expected_action, expected_status):
+    service = ChapterCommitService(tmp_path)
+    monkeypatch.setattr(service, "apply_projection_writers", lambda payload: payload)
+    import data_modules.projection_rebuild as rebuild_module
+    monkeypatch.setattr(rebuild_module, "rebuild_projections", lambda _root: report)
+    finding = _gate_finding(
+        FindingCategory.PROJECTION_HEALTH, FindingAuthority.SYSTEM_INTEGRITY, key="failed-projection",
+        evidence=[EvidenceRef(kind="recovery_required", identity={"projection": "index"})],
+    )
+    result = _evaluate(service, [finding], "attempt-failed-recover", refresh_findings=lambda _report: [])
+    assert result.attempt_id == "attempt-failed-recover.recovery-1"
+    assert result.action == expected_action
+    assert result.attempt_status == expected_status
+    if expected_action == WorkflowAction.REJECT:
+        payload = json.loads((tmp_path / ".story-system/commits/chapter_003.commit.json").read_text())
+        assert payload["meta"]["status"] == "rejected"
+    else:
+        assert result.chapter_outcome is None
+        assert not (tmp_path / ".story-system/commits/chapter_003.commit.json").exists()
 
 
 def test_service_detects_stale_prose_and_proposal_against_audit(tmp_path):
