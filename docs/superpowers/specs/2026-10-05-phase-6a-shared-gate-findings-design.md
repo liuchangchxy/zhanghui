@@ -73,7 +73,19 @@ decision_scope
 evaluated_at
 evidence_fingerprint
 input_fingerprint
+score (present only when effective_severity = SCORE)
 ```
+
+The optional `score` object has this schema:
+
+```yaml
+score:
+  kind: pacing # registered score kind, e.g. pacing, hook, style, satisfaction
+  value: 0.72
+  scale: [0.0, 1.0]
+```
+
+When `effective_severity` is not `SCORE`, `score` is absent. A SCORE contributes zero to every hard count, cannot produce `REJECT`, and cannot be promoted to a hard severity by crossing a numeric threshold. A hard result based on a score is permitted only as a separate `USER_CONSTRAINT`/`HARD_USER` decision that references an explicit `USER_EXPLICIT` constraint with `EXPLICIT`, stable `constraint_id`, and `source_ref`; the score remains a score observation and the policy records the separately evaluated constraint finding.
 
 `GateDecision` is Workflow / Infrastructure audit data, not Canon. The **sole authoritative owner** is a versioned per-attempt workflow decision artifact adjacent to the review/commit artifacts (under `.story-system/reviews/` through `StoryContractPaths`). It is append-only per attempt; a retry adds a new artifact and does not rewrite the previous explanation. `CHAPTER_COMMIT` contains only a reference to this record and its binding fields (`gate_decision_ref`, `input_fingerprint`, `policy_version`, `final_action`). It never duplicates the full effective decisions and is not a second GateDecision owner. The original checker findings remain separately available as `DetectedFinding` input records.
 
@@ -161,7 +173,7 @@ It never trusts LLM `blocking`, `blocking_count`, checker strings, an external `
 
 The aggregate workflow action is derived from recomputed GateDecisions. `REJECT` creates a durable `CHAPTER_COMMIT` with `meta.status=rejected`, preserving the current Phase 0/1 rejection boundary. That record is an immutable workflow audit of the attempted chapter decision; it contains no accepted Canon facts and triggers no accepted event/state/index/summary/memory/vector projections (the existing projection path marks these skipped for rejected commits). Introducing GateDecision does not remove or replace this rejected commit record.
 
-`REQUIRE_HUMAN` also creates a durable `CHAPTER_COMMIT` with `meta.status=rejected`, plus the pending human-action state in workflow metadata. This follows the existing chapter-level decision contract: an unresolved disambiguation currently rejects the attempt, and there must be one durable chapter outcome without implying accepted history. It does not write accepted Canon facts or accepted story-fact projections; the existing rejection-status projection may still record `chapter_rejected`. Under the current immutable one-commit-per-chapter boundary, resolving the pending item does not rewrite or replace that rejected commit. Any later accepted outcome for the same chapter requires a separately designed amend/supersede or retry identity protocol and is outside Phase 6A. The prior rejected audit remains unchanged.
+`REQUIRE_HUMAN` is a **pre-commit pending workflow state**. It persists the authoritative per-attempt GateDecision artifact and pending workflow metadata, but creates **no `CHAPTER_COMMIT`** and does not consume the chapter's immutable commit slot. Once the human choice is recorded, workflow appends a resolution/next-attempt record, reruns `GateSeverityPolicy`, and only then proceeds to either `REJECT` (which creates the existing rejected commit) or `ALLOW_WITH_ADVISORY` followed by reconciliation and an accepted commit. A pending human decision is not a final rejected chapter outcome.
 
 `RECOVER` runs only the existing recovery mechanism, verifies the result, and then reevaluates; a failed recovery is reclassified before the chapter outcome is persisted. `ALLOW_WITH_ADVISORY` may proceed to the existing reconciliation and durable accepted commit sequence. Existing reconciliation authority remains unchanged and independently required. Before a `CHAPTER_COMMIT` is persisted, the authoritative per-attempt GateDecision artifact must be durable; the commit stores only its reference and binding fields.
 
@@ -190,15 +202,17 @@ Explicit non-goals for 6A: a unified GateService; a complete deterministic Canon
 
 1. Category and authority are distinct validated enums; policy inputs include category, authority, explicitness, structured evidence and pinned policy version.
 2. Same normalized findings under the same policy version produce the same effective severity/action/rule/reason and fingerprints.
-3. Every actual commit decision has a durable per-attempt GateDecision record with effective severity, effective action, policy version, reason/rule ID and input fingerprint.
+3. Every actual commit decision has a durable per-attempt GateDecision record with effective severity, effective action, policy version, reason/rule ID and input fingerprint. A `REQUIRE_HUMAN` pending attempt also has a durable GateDecision record, but no CHAPTER_COMMIT.
 4. Historical GateDecision records remain unchanged and retain their original policy explanation after policy upgrades; CHAPTER_COMMIT references them without duplicating their effective decisions.
 5. `ChapterCommitService` recomputes policy from structured findings and is the only rejection authority; a false external hard count cannot pass, and a misleading high count cannot independently reject.
+5a. `REJECT` preserves the existing durable rejected CHAPTER_COMMIT behavior; `REQUIRE_HUMAN` persists a pending workflow decision without creating or occupying a CHAPTER_COMMIT.
 6. LLM `CANON_CONTRADICTION` cannot yield `HARD_CANON`; hard Canon requires accepted Canon provenance, deterministic identity/linkage and deterministic contradiction evidence.
 7. User hard veto requires an explicit existing contract node with stable constraint identity and source reference.
 8. Stable finding IDs survive repeated detection after rewrite even when evidence changes; evidence/input fingerprints record the changing observation separately. IDs do not depend on prose messages, ordering, time, or random identifiers.
 9. Legacy pacing blockers map deterministically to advisory; known unresolved disambiguation maps to human decision; no mapping uses message text.
 10. Unknown legacy blockers do not all become human decisions. Only identified material Canon/integrity risk with insufficient structured evidence gets conservative human review.
 11. Recovery has an explicit run/verify/resolve transition; failed recovery is reclassified and cannot remain stuck in `RECOVERABLE`.
+11a. `SCORE` decisions carry `score.kind`, numeric `score.value`, and `score.scale`; score is absent for other severities, contributes zero to hard counts, never rejects or auto-escalates by threshold, and can inform a hard outcome only through a separate explicit `HARD_USER` constraint evaluation.
 12. Phase 6A defines all P1–P7 mappings but migrates only veto-relevant current paths; full producer, CLI, skill and Blocker retirement work remains in 6B.
 13. Existing story contracts carry user constraint metadata without introducing a global registry; if a particular existing contract node cannot be extended safely, the smallest Workflow-owned artifact is scoped to that contract and justified by the incompatibility.
 
@@ -206,7 +220,7 @@ Explicit non-goals for 6A: a unified GateService; a complete deterministic Canon
 
 - **Placeholder scan:** no TODO/TBD placeholders remain.
 - **Dimension separation:** `category`, `authority`, `explicitness`, evidence and suggested severity are separate fields; messages are display-only.
-- **Rejected outcomes:** both `REJECT` and `REQUIRE_HUMAN` preserve a durable `meta.status=rejected` CHAPTER_COMMIT audit with no accepted Canon facts or accepted story-fact projections; the existing rejection-status projection remains allowed, and human pending status remains workflow metadata.
+- **Rejected/pending outcomes:** `REJECT` preserves the durable `meta.status=rejected` CHAPTER_COMMIT audit with no accepted Canon facts or accepted story-fact projections; `REQUIRE_HUMAN` stores durable GateDecision plus pending workflow metadata and consumes no chapter commit slot.
 - **Audit ownership:** the per-attempt GateDecision artifact is the only authoritative full decision record; commits hold only reference and binding fields.
 - **Veto authority:** the service recomputes from normalized findings, checks cached decisions, and does not treat any external count as authority.
 - **Canon safety:** LLM review cannot self-assert `HARD_CANON`; deterministic validator evidence and accepted Canon linkage are explicit prerequisites.
@@ -217,6 +231,8 @@ Explicit non-goals for 6A: a unified GateService; a complete deterministic Canon
 - **User constraints:** existing Story System contracts are the primary carrier; no global registry is proposed.
 - **Recovery:** successful and failed recovery transitions terminate in resolved, hard integrity, or human decision states.
 - **Severity taxonomy:** no `HARD_WORKFLOW` catch-all remains; `SCORE` models continuous craft/style/satisfaction results without veto authority.
+- **SCORE payload:** the structured score object is present only for `SCORE`; it does not count as hard, reject, or auto-escalate.
 - **Intent boundary:** ordinary planner/author Intent miss is only Advisory/Score; only explicitly linked `USER_EXPLICIT` constraints may map to `HARD_USER`.
-- **Question 9:** no Phase 6A architecture question remains undecided. Same-chapter acceptance after a rejected immutable commit remains unsupported by the existing one-commit-per-chapter boundary; changing that requires a separate amend/supersede or retry-identity design and is explicitly outside this phase.
+- **Pending versus rejected:** pending human decisions do not write a chapter commit; explicit `REJECT` remains a terminal rejected chapter decision under the existing immutable one-commit-per-chapter boundary. No amend/supersede protocol is added in this phase.
+- **Question 9:** no Phase 6A architecture question remains undecided.
 - **Scope:** one coherent architecture slice: shared finding/policy and final commit veto, with broader producer/consumer convergence deferred to 6B.
