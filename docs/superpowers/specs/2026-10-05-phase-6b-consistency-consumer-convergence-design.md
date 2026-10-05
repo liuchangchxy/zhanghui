@@ -38,7 +38,7 @@ Every patch currently accepts CheckContext and returns list[Blocker]. Blocker co
 | P7 derived_views | filesystem views and craft rows | missing_foreshadow_view_row | Check plus apply rebuilding view files. Projection health/recovery. |
 | Runner failure wrapper | patch.check exception | generic message embeds exception type/text and repair hint | Converts crash into ordinary Blocker; loses distinction between infrastructure failure and content finding. |
 
-Target model: producer facts carry checker_id/version, issue_code, scope, optional stable subject_id, typed evidence, input reference and display message/fix_hint. Producers never set effective severity/action. P1 cycle should lead with canonical node IDs/edges. P5 revision mismatch carries integer expected/observed values. P2–P7 define evidence per issue code; do not force every patch into identical subject semantics. P7 identifies view, missing row and source generation where available. Checker exceptions and incomplete runs are evaluation/infrastructure status with separate diagnostics, outside the story-finding list and outside GateSeverityPolicy input. They must never be fabricated as an ordinary story Blocker or DetectedFinding.
+Target model: producer facts carry checker_id/version, issue_code, scope, optional stable subject_id, typed evidence, input reference and display message/fix_hint. Producers never set effective severity/action. `subject_id` is present only for a real, stable logical subject; it is never fabricated to satisfy the schema or unlock a mapping. Missing subject alone does not make a finding unknown: a known patch + issue_code + structured evidence retains its category/authority mapping, while the separate identity/policy contract decides whether it is veto-capable. Advisory/Score craft findings may therefore be typed without a veto-capable subject. P1 cycle requires deterministic stable cycle identity from canonical node IDs/edges. P5 revision mismatch requires a real stable revision subject (the affected state/revision record with stable provenance); absent that identity it cannot receive deterministic hard/recovery semantics. P7 requires a stable projection/view subject. P2/P3/P4 aggregate craft findings such as quota deviations remain typed Craft findings with no subject where no real entity exists. P2–P7 define evidence per issue code; do not force identical subject semantics. P7 identifies view, missing row and source generation where available. Checker exceptions and incomplete runs are evaluation/infrastructure status with separate diagnostics, outside the story-finding list and outside GateSeverityPolicy input. They must never be fabricated as an ordinary story Blocker or DetectedFinding.
 
 ## 4. Consumer inventory and current dataflow
 
@@ -111,17 +111,18 @@ Consistency does not enter ChapterCommitService by default. Shared severity sema
 - Missing/corrupt inputs or checker crashes are infrastructure failures; retry/escalate through the owning workflow, not Canon contradiction.
 - Only a future explicit architecture decision may admit an exact, deterministic finding whose evidence is relevant to the current chapter acceptance. If admitted, it is normalized and passed as a finding input; ChapterCommitService recomputes the final policy and persists its attempt decision. It never accepts another consumer's precomputed veto conclusion.
 
-Consumer classes. These are consumer-specific actions over one shared policy result, not independent severity policies:
+Consumer behavior matrix. Each cell describes permitted behavior from the shared `policy_action`; consumers do not recalculate severity. A consumer may stop its own step or request repair/human review without declaring the chapter rejected. Only ChapterCommitService makes the final chapter acceptance/rejection decision.
 
-| Class | Allowed action |
-|---|---|
-| Diagnostic display | Show code/evidence/repair guidance; no workflow mutation. |
-| Advisory | Continue with visible guidance; never hard stop from finding count. |
-| Workflow transition | Use explicit deterministic action and the named workflow owner. |
-| Recovery | Use owning repair mechanism; verify by rerunning and bind to input generation. |
-| Human decision | Persist response to finding/attempt, refresh stale findings, append a new evaluation. |
-| Final commit veto | ChapterCommitService only. |
-| CLI exit | Invalid input/execution status only, not severity or chapter outcome. |
+| Consumer | ALLOW_WITH_ADVISORY | RECOVER | REQUIRE_HUMAN | REJECT |
+|---|---|---|---|---|
+| write | Show advisory and continue its step. | Ask the owning recovery path to repair/rerun; pause dependent writing while recovery is pending. | Pause the current write step and request a human choice. | Stop the current write step for a real hard finding; do not label the chapter rejected or persist a veto. |
+| plan | Show advice and continue planning. | Request owner-managed repair/rerun; pause dependent plan transition. | Pause the affected plan transition for a human choice. | Stop the current planning step on a real hard finding; do not reject a chapter or bypass commit ownership. |
+| review | Display finding/evidence as advisory. | Route to projection/recovery owner and report status. | Mark review as awaiting human decision. | Report policy REJECT as a hard finding/evidence and stop review completion; cannot announce final chapter rejection. |
+| CLI | Serialize findings and policy result; successful evaluation exits 0. | Serialize `policy_action`; successful evaluation exits 0. | Serialize `policy_action`; successful evaluation exits 0. | Serialize `policy_action`; successful evaluation exits 0. |
+| projection/recovery owner | Report no recovery required (and any advisory). | Perform its authorized repair, then rerun against current input fingerprint. | Escalate to the designated human; do not mutate without authorization. | Stop that recovery workflow and report the policy result; no chapter decision. |
+| ChapterCommitService | Apply its own commit contract to its inputs. | Not a default route for consistency recovery; preserve existing commit behavior. | Apply its existing human-gate contract to its own attempt. | Sole authority to convert its own recomputed policy result into final chapter rejection. |
+
+`GateSeverityPolicy == REJECT` means the finding has a rejecting policy action. For write/plan/review it permits stopping or withholding completion of that consumer's current workflow step when the finding is genuinely hard; it is never itself a final chapter rejection. Skill consumers do not create a Canon/chapter veto record, raise severity, or bypass ChapterCommitService. Phase 6B does not add persistence for consistency human-response attempts; stale handling is limited to the current consumer workflow/evaluation envelope and its diagnostic log. A response cannot be claimed durable or protected across process restarts under this design.
 
 ## 9. Typed migration contract
 
@@ -141,23 +142,25 @@ Sequence: compatibility converter + typed model; migrate P1 first; add real prod
 | Invalid command/arguments/chapter/project input | 2 |
 | Read/parse failure, incomplete checker execution, serialization failure | 1 |
 
-Return a versioned JSON envelope with status (evaluated / invalid_input / execution_error), findings, optional consumer_action and diagnostics. Separate successful evaluation with rejecting result from inability to evaluate. Operational errors go to stderr. apply reports per-patch outcomes and partial failure; do not claim success if isolated exceptions occurred. override currently appends a record but runner does not read it; do not describe it as authority to bypass severity without a real audited consumer.
+Return a versioned JSON envelope with status (evaluated / invalid_input / execution_error), findings, `policy_action` (the aggregate action returned by GateSeverityPolicy), and diagnostics. Do not call this field `consumer_action`: consumers decide behavior after reading the policy result. Separate successful evaluation with rejecting result from inability to evaluate. Operational errors go to stderr. apply reports per-patch outcomes and partial failure; do not claim success if isolated exceptions occurred. override currently appends a record but runner does not read it; do not describe it as authority to bypass severity without a real audited consumer.
 
 ## 11. Skill contract
 
 Consume structured actions and evidence. Never infer authority from exit status, finding count, message text or “BLOCKER”. No local threshold may promote a finding.
 
-- Write: show craft findings; continue unless an independent prerequisite fails or ChapterCommitService returns its final rejection/pending-human state.
-- Plan: show chapter findings as advice or explicit human decision; no universal hard stop.
-- Review: include typed findings as evidence; reviewer opinion cannot promote severity.
+- Write: show craft findings and continue on ALLOW_WITH_ADVISORY; for RECOVER/REQUIRE_HUMAN/REJECT, apply the behavior matrix to the current write step without creating final chapter rejection or persistence. Independent write prerequisites retain their own authority.
+- Plan: show chapter findings as advice on ALLOW_WITH_ADVISORY; for RECOVER/REQUIRE_HUMAN/REJECT, apply the matrix to the current planning step without a universal chapter veto.
+- Review: include typed findings as evidence and apply the matrix to review completion; reviewer opinion cannot promote severity or announce final chapter rejection.
 - Resume/query/init: no new consumer needed; correct stale path claims only when verified.
 - Apply/recovery prose must distinguish state/view maintenance from check severity and state what it mutates.
 
-## 12. Failure, retry, stale evidence and observability
+## 12. Failure, retry, source binding and observability
 
-Bind each evaluation to input fingerprint, chapter scope and checker version. If inputs change before human response/workflow transition, retain old attempt, mark it stale, rerun checks and reevaluate; never reuse ALLOW/REJECT for changed inputs. Patch crashes make evaluation incomplete, not a story finding, GateSeverityPolicy input, or clean result; record them only in the separate infrastructure diagnostics. Retry only through the existing owner. Recovery must be idempotent and verified by rerunning the relevant check.
+Each evaluation envelope carries a deterministic `source_input_fingerprint` computed by the runner over the exact normalized snapshot the selected checkers read, plus chapter scope and checker id/version. The canonical serialization includes chapter identity/text when read, relevant state fields, outline inputs, previous-chapter inputs, and any external view/projection inputs actually read by a checker; absent inputs are represented explicitly. The fingerprint is over source inputs, not findings or policy output, so changed source cannot appear unchanged merely because it produces the same finding payload. The runner binds every normalized finding and evaluation result to this fingerprint; individual patches do not repeat the full state.
 
-Log checker id/version, issue code, subject, input/evidence fingerprints, duration, completeness, recovery result, consumer and action. Avoid full prose/secrets. Track unknown legacy conversions for retirement readiness. GateDecision records remain only for actual commit workflow attempts; do not invent commit attempts for diagnostics.
+Before a consumer acts on a human response, recovery result, or workflow transition, it compares the current source fingerprint with the evaluation's fingerprint. On mismatch it retains the old envelope for the lifetime of that current workflow context, marks it stale, reruns, and evaluates only the new result; old ALLOW/REJECT/RECOVER is unusable. Phase 6B introduces no persistent consistency human-response attempt store and no second GateDecision store. The persistence boundary is the in-memory consumer workflow envelope plus ordinary diagnostic logging; there is no guarantee across process restarts or for a response submitted later in another process. Acceptance criteria must test this within the live workflow and must not claim durable stale-response protection. Durable human-response attempts require a future architecture decision. Reevaluation is appended to the current workflow's evaluation history/log, not to GateDecision. Ordinary consistency diagnostics never become chapter commit decisions.
+
+Patch crashes make evaluation incomplete, not a story finding, GateSeverityPolicy input, or clean result; record them only in separate infrastructure diagnostics. Retry only through the existing owner. Recovery must be idempotent and verified by rerunning the relevant check. Log checker id/version, issue code, subject, source/evidence fingerprints, duration, completeness, recovery result, consumer and policy action. Avoid full prose/secrets. Track unknown legacy conversions for retirement readiness. GateDecision records remain only for actual commit workflow attempts; do not invent commit attempts for diagnostics.
 
 ## 13. Non-goals
 
@@ -174,4 +177,9 @@ No universal GateService, registry or global constraint registry; no forced Chap
 7. Runtime selection is verified from .claude-plugin/marketplace.json; canonical plugin root is selected and nested 6.4.0/ is excluded from runtime migration.
 8. No active Blocker dependency remains before its final removal task.
 9. Targeted consistency/CLI/adapter/skill/commit tests plus Phase 0–6A regression pass.
-10. Crash, partial evaluation, retry, stale evidence, unknown code and compatibility are covered.
+10. Crash, partial evaluation, retry, source-fingerprint staleness within the live consumer workflow, unknown code and compatibility are covered; no durable consistency human-response persistence is claimed.
+
+11. Optional-subject semantics preserve known typed Craft mappings without granting veto-capable identity; P1 cycle, P5 revision mismatch and P7 projection recovery each state their stable identity prerequisite.
+12. Source fingerprint binds the actual checker input snapshot; stale inputs invalidate prior policy results and require rerun within the live workflow.
+13. One explicit runner → adapter → GateSeverityPolicy → CLI policy_action composition is used, with no CLI severity mapping.
+14. The write/plan/review/CLI/projection-recovery-owner/ChapterCommitService behavior matrix is tested, including the distinction between stopping a consumer step and final chapter rejection.

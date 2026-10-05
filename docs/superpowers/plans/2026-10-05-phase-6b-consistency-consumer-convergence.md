@@ -30,6 +30,10 @@
 - A human response must not reuse a finding after its source input changes. Test stale fingerprint detection and append-only reevaluation.
 - A projection repair finding must not veto chapter acceptance. Test P7 maps to recovery and stays outside commit inputs.
 - P1 cycle evidence must be deterministic and stable across ordering changes. Test normalized node/edge order, subject identity and evidence fingerprint.
+- Known issue_code + structured evidence with no subject must keep typed Craft mapping while lacking hard-veto-capable identity.
+- All producer observations must be bound to a source snapshot fingerprint; changed inputs invalidate old actions within the active workflow.
+- The only policy composition is runner → adapter → GateSeverityPolicy → CLI serialization; runner and CLI do not implement action mapping.
+- Verify the explicit write/plan/review/CLI/projection-recovery-owner/ChapterCommitService behavior matrix and distinguish local step stops from final chapter rejection.
 
 ---
 
@@ -42,13 +46,14 @@
 - Test: .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py
 
 **Interfaces:**
-- Produces: PatchFinding(patch: str, chapter: int, issue_code: str, message: str, fix_hint: str = "", subject_id: str | None = None, evidence: dict[str, object] via a dataclass default_factory).
+- Produces: PatchFinding(patch: str, chapter: int, issue_code: str, message: str, fix_hint: str = "", subject_id: str | None = None, evidence: dict[str, object] via a dataclass default_factory). `subject_id` is optional and may identify only a real stable logical subject; it must never be invented to pass validation or obtain a typed mapping.
+- Identity contract: known patch + issue_code + sufficient structured evidence maps to its known category/authority even when `subject_id` is absent. Veto-capable identity is evaluated separately. Advisory/Score findings may remain typed without such identity. P1 `cycle` requires deterministic stable cycle identity; P5 `revision_mismatch` requires a real, stable revision-record/state subject with provenance; P7 `missing_foreshadow_view_row` requires a stable projection/view subject. If those prerequisites are absent, preserve the typed observation but do not grant the mapping's hard/recovery semantics. P2/P3/P4 aggregate quota/craft findings without a real entity keep typed Craft semantics and no subject.
 - Consumes: Existing P1_P7_MAPPING and adapt_consistency_patch(patch_result, chapter_scope) -> list[DetectedFinding].
 - Compatibility: adapt_consistency_patch continues accepting Blocker rows as display-only LEGACY_UNKNOWN diagnostics. It never parses message or fix_hint.
 
 - [ ] **Step 1: Write failing contract tests**
 
-Test PatchFinding dataclass fields and validation for missing issue_code, optional subject and structured evidence. Add an adapter test proving a legacy Blocker without typed fields yields LEGACY_UNKNOWN plus advisory-only action, regardless of wording such as “BLOCKER”.
+Test PatchFinding dataclass fields and validation for missing issue_code, optional subject and structured evidence. Add an adapter test proving a legacy Blocker without typed fields yields LEGACY_UNKNOWN plus advisory-only action, regardless of wording such as “BLOCKER”. Add a known P2/P3/P4 Craft issue_code + structured evidence + no `subject_id` case and assert it does not become LEGACY_UNKNOWN and does not receive hard-veto-capable identity/action.
 
 - [ ] **Step 2: Run the focused tests and verify failure**
 
@@ -194,7 +199,7 @@ P5/P6/P7 format changes remain compatible with the old runner boundary. Revert a
 
 - [ ] **Step 1: Add runner tests**
 
-Test all seven typed patch outputs pass unchanged through normalization, an unknown legacy producer becomes diagnostic-only, and a raising patch marks evaluation incomplete rather than clean. Assert check remains read-only.
+Test all seven typed patch outputs pass through normalization bound to the source fingerprint; assert identical findings from different source snapshots receive different fingerprints. Cover chapter, relevant state, outline, previous-chapter inputs, and chapter text/external view inputs only when actually read. An unknown legacy producer becomes diagnostic-only, and a raising patch marks evaluation incomplete rather than clean. Assert check remains read-only and runner never produces a policy action.
 
 - [ ] **Step 2: Run runner tests and verify failure**
 
@@ -221,7 +226,9 @@ Keep compatibility conversion enabled. Reverting runner normalization returns ca
 - Test: tests/unit/consistency/test_cli.py
 
 **Interfaces:**
-- JSON output is a versioned envelope containing status, findings, optional consumer_action and diagnostics.
+- JSON output is a versioned envelope containing status, source_input_fingerprint, findings, `policy_action` (GateSeverityPolicy aggregate result), and diagnostics. Do not use ambiguous `consumer_action`; consumer behavior is downstream of the shared policy result.
+- The sole production composition is P1–P7 producers → PatchFinding → ConsistencyRunner evaluation envelope → `adapt_consistency_patch` → DetectedFinding → `GateSeverityPolicy.evaluate` → policy decisions/aggregate policy action → CLI structured response → skill consumer behavior.
+- Runner executes, collects facts, reports completeness/diagnostics and binds source input; it does not own severity. Adapter only normalizes producer facts to DetectedFinding and does not choose consumer behavior. GateSeverityPolicy alone maps findings to effective severity/action. CLI explicitly invokes adapter then GateSeverityPolicy and serializes the result; it contains no severity mapping.
 - check/list successful evaluation returns 0 whether findings are empty, advisory, recoverable, pending-human or policy REJECT.
 - Invalid invocation/input returns 2; execution/incomplete evaluation returns 1.
 - The structured action, not process status, expresses REJECT / REQUIRE_HUMAN / RECOVER. Any future shell/CI domain-failure exit mapping belongs to an explicit wrapper contract, not the base CLI.
@@ -238,7 +245,7 @@ Expected: FAIL where current any-finding exit 1 and output is a bare list.
 
 - [ ] **Step 3: Implement the response envelope and process contract**
 
-Have CLI map runner status/action without changing GateSeverityPolicy. Keep override described as an append-only record; do not make it a severity bypass.
+Have CLI explicitly call the existing adapter and GateSeverityPolicy after receiving a complete runner evaluation, then serialize the returned policy result without local action mapping. Keep override described as an append-only record; do not make it a severity bypass.
 
 - [ ] **Step 4: Run CLI tests**
 
@@ -267,7 +274,7 @@ CLI can retain a temporary output version option for existing callers. Do not sh
 
 - [ ] **Step 1: Add skill contract assertions**
 
-Assert active skills document structured results, retain ChapterCommitService ownership, classify craft feedback as advisory/human-consumed, separate P7 recovery and do not claim CLI exit 1 equals BLOCKER. Add behavior-eval cases for finding present with exit 0 and infrastructure failure.
+Add write/plan/review consumer behavior matrix tests for ALLOW_WITH_ADVISORY, RECOVER, REQUIRE_HUMAN and REJECT. Assert active skills document structured results, retain ChapterCommitService ownership, classify craft feedback as advisory/human-consumed, separate P7 recovery and do not claim CLI exit 1 equals BLOCKER. Include real HARD_INTEGRITY: write/plan may stop their current step/request repair, but cannot call the chapter rejected, write a Canon/chapter veto, raise severity or bypass ChapterCommitService. Add behavior-eval cases for finding present with exit 0 and infrastructure failure.
 
 - [ ] **Step 2: Run skill contract tests and verify failure**
 
@@ -298,10 +305,12 @@ Verify .claude-plugin/marketplace.json still selects ./.claude/plugins/zhanghui.
 **Interfaces:**
 - No consistency finding is passed to ChapterCommitService by default.
 - Only a future explicit architecture decision may admit a deterministic finding relevant to the current chapter acceptance. The service receives normalized findings and recomputes GateSeverityPolicy; no CLI/skill result or precomputed external veto is trusted.
+- Consistency evaluation does not create or persist GateDecision. Phase 6B adds no durable consistency human-response attempt store. Before response/recovery/workflow transition, compare current source fingerprint; on mismatch keep the prior envelope in the active workflow history, mark stale, rerun and use only the new policy result. Do not claim this protects responses across process restarts.
+- `GateSeverityPolicy == REJECT` can stop a write/plan/review step for a true hard finding, but only ChapterCommitService can produce final chapter acceptance/rejection.
 
 - [ ] **Step 1: Add end-to-end tests**
 
-Run one P1 typed finding through producer, runner, adapter, policy and CLI. Verify P1 craft/Intent actions do not veto commit. Verify P1 cycle/P5 integrity mapping remains a tested policy mapping but cannot affect commit unless explicitly wired. Verify P7 maps to recovery and projection maintenance. Verify prior GateDecision records are not changed by another evaluation.
+Run one P1 typed finding through producer, runner, adapter, GateSeverityPolicy and CLI; assert the CLI serializes the shared policy result without a second mapping. Verify no-subject P2/P3/P4 Craft remains typed and lacks veto identity. Verify P1 craft/Intent actions do not veto commit. Verify P1 cycle/P5 integrity mapping remains a tested policy mapping but cannot affect commit unless explicitly wired. Verify P7 maps to recovery and projection maintenance. Verify a same-payload finding over changed source gets a new fingerprint; a changed fingerprint marks the old result stale, triggers rerun, and prevents reusing old ALLOW/REJECT/RECOVER before human/recovery/workflow transition. Verify ordinary consistency reevaluation creates no GateDecision and does not change prior GateDecision records. Assert matrix behavior for write/plan/review on every policy action and assert local stop is not final chapter rejection.
 
 - [ ] **Step 2: Run focused integration tests and verify failure**
 
@@ -387,7 +396,11 @@ Run the exact Step 1/2 command in the same acceptance manifest, including the 9 
 | CLI | All five successful finding outcomes exit 0; invalid input exits 2; execution/incomplete evaluation exits 1. |
 | Skills | Write, plan and review consume typed actions; no generic BLOCKER/exit rule. |
 | Chapter commit | No default consistency wire; ChapterCommitService remains sole commit veto and preserves durable boundary. |
-| Recovery/staleness | Retry is owner-specific; stale inputs trigger new evaluation; prior audit is retained. |
+| Optional subject | Known Craft issue + evidence + no subject remains typed, does not become LEGACY_UNKNOWN, and lacks hard-veto-capable identity; P1/P5/P7 deterministic mappings state real stable identity prerequisites. |
+| Source fingerprint / stale | Runner fingerprints the actual input snapshot independently of findings; changed inputs stale old results and trigger rerun in the active workflow before response/recovery/transition. No durable cross-process human-response attempt guarantee is claimed. |
+| Unique policy composition | Runner → adapter → GateSeverityPolicy → CLI `policy_action`; no runner/CLI action mapping or consumer-specific severity mapping. |
+| Consumer behavior matrix | Write/plan/review/CLI/projection-recovery owner/ChapterCommitService behavior for all four actions is tested; local step stop cannot become chapter rejection. |
+| Recovery/staleness | Retry is owner-specific; stale inputs trigger new evaluation; prior envelope is retained in active workflow history. No fake GateDecision persistence. |
 | Package copies | Manifest selects canonical plugin root; nested 6.4.0 snapshot is not a runtime consumer. |
 | Retirement | Blocker definition, construction, imports, tests and live prose consumers are gone; compatibility removal is last. |
 | Regression | Targeted tests, canonical Phase 6A suite, Step 1/2 suite, independent review and diff check pass. |
