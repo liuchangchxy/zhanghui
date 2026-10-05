@@ -23,7 +23,10 @@ class P5StateRevision(Patch):
                 patch=self.name,
                 chapter=ctx.chapter_num,
                 message=f"state_revision 不匹配：期望 {expected_rev}，实际 {current_rev}",
-                fix_hint="重新读取 state.json 后重试"
+                fix_hint="重新读取 state.json 后重试",
+                issue_code="revision_mismatch",
+                subject_id=f"chapter:{ctx.chapter_num}:state_revision",
+                evidence={"expected_revision": expected_rev, "observed_revision": current_rev},
             )]
         return []
 

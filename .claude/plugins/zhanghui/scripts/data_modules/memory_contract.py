@@ -29,6 +29,9 @@ class CommitResult:
     memory_items_added: int = 0
     summary_path: str = ""
     warnings: List[str] = field(default_factory=list)
+    gate_action: str | None = None
+    gate_decision_ref: str | None = None
+    chapter_outcome: str | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

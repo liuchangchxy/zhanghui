@@ -4,8 +4,9 @@ Source: 原創（設計參考 oh-story-claudecode 的 Patch 概念）
 Path in references: N/A
 """
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -31,6 +32,11 @@ class Blocker:
     chapter: int
     message: str
     fix_hint: str
+    # Optional machine-authored Phase 6A identity/evidence. Legacy fields stay
+    # intact and remain the only fields used by existing CLI renderers.
+    issue_code: str | None = None
+    subject_id: str | None = None
+    evidence: dict[str, Any] = field(default_factory=dict)
 
 
 class Patch(ABC):

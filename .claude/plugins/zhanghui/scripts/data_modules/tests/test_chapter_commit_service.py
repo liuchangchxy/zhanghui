@@ -47,7 +47,7 @@ def _evaluate(service, findings, attempt_id, **overrides):
     )
 
 
-def test_commit_service_rejects_when_missed_nodes_exist(tmp_path):
+def test_planner_missed_node_does_not_veto_commit(tmp_path):
     service = ChapterCommitService(tmp_path)
     payload = build_commit_with_reconciliation(service,
         chapter=3,
@@ -61,7 +61,7 @@ def test_commit_service_rejects_when_missed_nodes_exist(tmp_path):
         disambiguation_result={"pending": []},
         extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
     )
-    assert payload["meta"]["status"] == "rejected"
+    assert payload["meta"]["status"] == "accepted"
 
 
 def test_commit_service_accepts_when_all_checks_pass(tmp_path):
@@ -331,6 +331,29 @@ def test_missing_recovery_finding_refresher_reevaluates_as_pending_human(tmp_pat
     assert {json.loads(path.read_text())["event_type"] for path in events} == {
         "recovery_pending", "recovery_succeeded"
     }
+
+
+def test_human_response_is_appended_then_policy_is_reevaluated_as_new_attempt(tmp_path, monkeypatch):
+    service = ChapterCommitService(tmp_path)
+    pending = _gate_finding(
+        FindingCategory.DISAMBIGUATION, FindingAuthority.SYSTEM_INTEGRITY,
+        key="entity:pending-human", evidence=[EvidenceRef(kind="unresolved_identity", identity={"entity_id": "entity-1"})],
+    )
+    first = service.evaluate_attempt(
+        3, [pending], attempt_id="attempt-pending", policy_version="v1", scope={"chapter": 3},
+        **_attempt_kwargs(),
+    )
+    assert first.attempt_status == "pending_human"
+    second = service.evaluate_after_human_response(
+        3, [], prior_attempt_id="attempt-pending", response_id="attempt-after-human",
+        finding_id=pending.finding_id, choice="resolved-to-entity-1", actor_ref="user:test",
+        policy_version="v1", scope={"chapter": 3}, **_attempt_kwargs(),
+    )
+    assert second.action == WorkflowAction.ALLOW_WITH_ADVISORY
+    record = GateDecisionStore(tmp_path).read_record(3, "attempt-after-human")
+    assert record["workflow_status"] == "accepted"
+    response_path = next((tmp_path / ".story-system/reviews/gate-decisions/chapter_003/attempt-pending.responses").glob("*.json"))
+    assert json.loads(response_path.read_text())["choice"] == "resolved-to-entity-1"
 
 
 @pytest.mark.parametrize(
@@ -673,20 +696,16 @@ def test_apply_projections_updates_state_for_rejected_commit(tmp_path):
     (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
 
     service = ChapterCommitService(tmp_path)
-    payload = build_commit_with_reconciliation(service,
-        chapter=7,
-        review_result={"blocking_count": 1},
-        fulfillment_result={
-            "planned_nodes": ["进入坊市"],
-            "covered_nodes": ["进入坊市"],
-            "missed_nodes": [],
-            "extra_nodes": [],
-        },
-        disambiguation_result={"pending": []},
-        extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+    hard = _gate_finding(
+        FindingCategory.INTEGRITY, FindingAuthority.SYSTEM_INTEGRITY,
+        key="reject-projection", evidence=[EvidenceRef(kind="deterministic_validation", identity={"valid": False})],
     )
-
-    projected = service.apply_projections(payload)
+    kwargs = _attempt_kwargs()
+    attempt = service.evaluate_attempt(
+        7, [hard], attempt_id="reject-projection-attempt", policy_version="gate-policy/v1",
+        scope={"chapter": 7}, **kwargs,
+    )
+    projected = attempt.chapter_outcome.commit_payload
 
     state = json.loads((tmp_path / ".webnovel" / "state.json").read_text(encoding="utf-8"))
     assert projected["projection_status"]["state"] == "done"

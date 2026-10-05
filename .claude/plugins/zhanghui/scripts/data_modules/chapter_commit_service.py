@@ -73,6 +73,21 @@ class ChapterCommitService:
     def __init__(self, project_root: Path):
         self.project_root = Path(project_root)
 
+    def evaluate_after_human_response(
+        self, chapter: int, findings: list[DetectedFinding], *,
+        prior_attempt_id: str, response_id: str, finding_id: str,
+        choice: str, actor_ref: str, **attempt_kwargs: Any,
+    ) -> WorkflowAttemptResult:
+        """Append a human choice to its pending attempt, then evaluate a new attempt."""
+        GateDecisionStore(self.project_root).append_human_response(
+            chapter, prior_attempt_id, response_id, finding_id=finding_id,
+            choice=choice, actor_ref=actor_ref,
+        )
+        attempt_kwargs.pop("attempt_id", None)
+        return self.evaluate_attempt(
+            chapter, findings, attempt_id=response_id, **attempt_kwargs,
+        )
+
     def evaluate_attempt(
         self,
         chapter: int,
@@ -319,10 +334,9 @@ class ChapterCommitService:
         # Derived audit data is deliberately calculated here. Caller supplied JSON
         # can only be compared for freshness; it cannot grant commit authority.
         reconciliation_result = expected_reconciliation
-        rejected = bool(review.blocking_count) or bool(
-            fulfillment.missed_nodes
-        ) or bool(disambiguation.pending)
-        status = "rejected" if rejected else "accepted"
+        # This is only the canonical payload builder. Final status/veto comes
+        # from evaluate_attempt() after service-owned policy recomputation.
+        status = "accepted"
         volume = volume_num_for_chapter_from_state(self.project_root, chapter) or 1
         accepted_events = EventLogStore(self.project_root).normalize_events(
             chapter, accepted_payload["accepted_events"]

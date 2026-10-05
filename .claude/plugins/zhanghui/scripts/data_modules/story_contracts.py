@@ -19,6 +19,50 @@ MARKER_BEGIN = "<!-- STORY-SYSTEM:BEGIN -->"
 MARKER_END = "<!-- STORY-SYSTEM:END -->"
 
 
+def validated_user_constraint_metadata(node: dict[str, Any]) -> dict[str, str] | None:
+    """Return a normalized explicit-user binding only when every required field exists."""
+    metadata = node.get("metadata") if isinstance(node, dict) else None
+    if not isinstance(metadata, dict):
+        return None
+    authority = metadata.get("authority")
+    explicitness = metadata.get("explicitness")
+    constraint_id = metadata.get("constraint_id")
+    source_ref = metadata.get("source_ref")
+    if (authority != "USER_EXPLICIT" or explicitness != "EXPLICIT"
+            or not isinstance(constraint_id, str) or not constraint_id.strip()
+            or not isinstance(source_ref, str) or not source_ref.strip()):
+        return None
+    return {
+        "authority": authority,
+        "explicitness": explicitness,
+        "constraint_id": constraint_id.strip(),
+        "source_ref": source_ref.strip(),
+    }
+
+
+def collect_user_constraint_bindings(contract_payloads: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Build a request-local lookup from the existing contract layers, not a registry."""
+    candidates: dict[str, list[dict[str, str]]] = {}
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            binding = validated_user_constraint_metadata(value)
+            if binding:
+                candidates.setdefault(binding["constraint_id"], []).append(binding)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(contract_payloads)
+    # Conflicting sources for one identity are ambiguous and therefore unusable.
+    return {
+        key: rows[0] for key, rows in candidates.items()
+        if all(row == rows[0] for row in rows)
+    }
+
+
 @dataclass(frozen=True)
 class StoryContractPaths:
     project_root: Path
@@ -108,8 +152,13 @@ def _merge_append_only(master: Dict[str, Any], chapter: Dict[str, Any]) -> Dict[
 
 def merge_contract_layers(master: Dict[str, Any], chapter: Dict[str, Any] | None) -> Dict[str, Any]:
     chapter = chapter or {}
+    locked = dict(master.get("locked") or {})
+    for node_id, node in (chapter.get("locked") or {}).items():
+        # Keep master-owned locked nodes authoritative while retaining chapter
+        # scoped nodes (including their optional provenance metadata).
+        locked.setdefault(node_id, node)
     return {
-        "locked": dict(master.get("locked") or {}),
+        "locked": locked,
         "append_only": _merge_append_only(
             master.get("append_only") or {},
             chapter.get("append_only") or {},

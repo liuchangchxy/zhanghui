@@ -58,6 +58,9 @@ class P7DerivedViews(Patch):
                             chapter=ctx.chapter_num,
                             message=f"派生视图 foreshadow_table.md 缺少伏笔 {fs.get('id')}",
                             fix_hint="运行 consistency apply 重新生成 views/",
+                            issue_code="missing_foreshadow_view_row",
+                            subject_id=f"foreshadow:{fs['id']}",
+                            evidence={"view": "foreshadow_table.md", "foreshadow_id": fs["id"], "present": False},
                         ))
 
         return blockers

@@ -64,6 +64,10 @@ class P1ForeshadowDAG(Patch):
             )]
 
         blockers: list[Blocker] = []
+        graph = {
+            fs["id"]: [d for d in (fs.get("depends_on") or []) if isinstance(d, str)]
+            for fs in dag if isinstance(fs.get("id"), str) and fs.get("id")
+        }
 
         # 0. missing id guard
         missing_id = [i for i, fs in enumerate(dag) if not fs.get("id")]
@@ -93,12 +97,20 @@ class P1ForeshadowDAG(Patch):
                 ))
 
         # 1. 无环检测（DFS）
-        if self._has_cycle(dag):
+        for cycle_ids in self._cyclic_components(graph):
+            cycle_edges = sorted(
+                (source, target)
+                for source in cycle_ids for target in graph.get(source, [])
+                if target in cycle_ids
+            )
             blockers.append(Blocker(
                 patch=self.name,
                 chapter=ctx.chapter_num,
                 message="伏笔 DAG 存在循环引用",
-                fix_hint="检查伏笔的 depends_on 是否形成回环"
+                fix_hint="检查伏笔的 depends_on 是否形成回环",
+                issue_code="cycle",
+                subject_id=f"cycle:{','.join(cycle_ids)}",
+                evidence={"cycle_ids": cycle_ids, "cycle_edges": cycle_edges},
             ))
 
         # 2. 有向：planted < paid_off
@@ -125,7 +137,11 @@ class P1ForeshadowDAG(Patch):
                     patch=self.name,
                     chapter=ctx.chapter_num,
                     message=f"伏笔 {fs.get('id')} 超期未收：应在第 {paid_off} 章回收但仍未回收（已过 {ctx.chapter_num - paid_off} 章）",
-                    fix_hint=f"在本章或前 {self.OVERDUE_TOLERANCE} 章内回收 fs {fs.get('id')}，或更新 paid_off_chapter"
+                    fix_hint=f"在本章或前 {self.OVERDUE_TOLERANCE} 章内回收 fs {fs.get('id')}，或更新 paid_off_chapter",
+                    issue_code="overdue",
+                    subject_id=f"foreshadow:{fs['id']}",
+                    evidence={"foreshadow_id": fs["id"], "paid_off_chapter": paid_off,
+                              "current_chapter": ctx.chapter_num, "tolerance": self.OVERDUE_TOLERANCE},
                 ))
 
         return blockers
@@ -165,3 +181,44 @@ class P1ForeshadowDAG(Patch):
             return False
 
         return any(dfs(fs["id"]) for fs in dag if fs.get("id") and fs["id"] not in visited)
+
+    def _cyclic_components(self, graph: dict[str, list[str]]) -> list[list[str]]:
+        """Return canonical strongly connected components that contain a cycle."""
+        index = 0
+        indexes: dict[str, int] = {}
+        lowlinks: dict[str, int] = {}
+        stack: list[str] = []
+        on_stack: set[str] = set()
+        components: list[list[str]] = []
+
+        def visit(node: str) -> None:
+            nonlocal index
+            indexes[node] = lowlinks[node] = index
+            index += 1
+            stack.append(node)
+            on_stack.add(node)
+            for target in sorted(set(graph.get(node, []))):
+                if target not in graph:
+                    continue
+                if target not in indexes:
+                    visit(target)
+                    lowlinks[node] = min(lowlinks[node], lowlinks[target])
+                elif target in on_stack:
+                    lowlinks[node] = min(lowlinks[node], indexes[target])
+            if lowlinks[node] == indexes[node]:
+                component: list[str] = []
+                while True:
+                    member = stack.pop()
+                    on_stack.remove(member)
+                    component.append(member)
+                    if member == node:
+                        break
+                members = sorted(component)
+                has_self_loop = len(members) == 1 and members[0] in graph.get(members[0], [])
+                if len(members) > 1 or has_self_loop:
+                    components.append(members)
+
+        for node in sorted(graph):
+            if node not in indexes:
+                visit(node)
+        return sorted(components)

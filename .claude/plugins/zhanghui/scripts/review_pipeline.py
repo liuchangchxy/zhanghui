@@ -186,11 +186,13 @@ def _craft_category_to_review_category(craft_category: str) -> str:
     return "other"
 
 
-def _craft_issue_to_review_issue(issue_str: str, chapter: int):
+def _craft_issue_to_review_issue(issue_str: str, chapter: int, structured: dict | None = None):
     """Convert a run_craft_checks string into a ReviewIssue."""
     from data_modules.review_schema import ReviewIssue
 
-    is_blocker = "BLOCKER" in issue_str or "BLOCK" in issue_str or "未声明" in issue_str or "逾期" in issue_str
+    # Display labels remain unchanged, but heuristic provenance never carries
+    # blocking authority into the shared gate policy.
+    is_blocker = False
 
     # Split "category: description" prefix
     if ":" in issue_str:
@@ -209,6 +211,12 @@ def _craft_issue_to_review_issue(issue_str: str, chapter: int):
         evidence="",
         fix_hint="",
         blocking=is_blocker,
+        checker_id="story_craft",
+        gate_id=(structured or {}).get("gate_id", "story_craft.heuristic"),
+        authority="CRAFT_HEURISTIC",
+        explicitness="UNKNOWN",
+        subject_id=(structured or {}).get("subject_id"),
+        structured_evidence=(structured or {}).get("evidence", []),
     )
 
 
@@ -229,10 +237,9 @@ def _inject_craft_issues(project_root: Path, result, chapter: int) -> None:
     if not state:
         return
     craft = run_craft_checks(state, chapter)
-    for blocker in craft.get("blockers", []):
-        result.issues.append(_craft_issue_to_review_issue(blocker, chapter))
-    for warning in craft.get("warnings", []):
-        result.issues.append(_craft_issue_to_review_issue(warning, chapter))
+    for record in craft.get("findings", []):
+        if isinstance(record, dict) and isinstance(record.get("display"), str):
+            result.issues.append(_craft_issue_to_review_issue(record["display"], chapter, record))
 
 
 def chapter_to_volume(state: dict, chapter: int) -> int:
@@ -263,7 +270,14 @@ def chapter_to_volume(state: dict, chapter: int) -> int:
 
 def run_craft_checks(state: dict, chapter: int) -> dict:
     """Run all story_craft checks for a given chapter. Return issues dict."""
-    issues: dict[str, list[str]] = {"blockers": [], "warnings": []}
+    issues: dict[str, list[str]] = {"blockers": [], "warnings": [], "findings": []}
+
+    def record(bucket: str, display: str, gate_id: str, subject_id: str, evidence: dict) -> None:
+        issues[bucket].append(display)
+        issues["findings"].append({
+            "display": display, "gate_id": gate_id, "subject_id": subject_id,
+            "evidence": [{"kind": "craft_observation", "identity": evidence}],
+        })
 
     # C3: sibling-aware read for V2+ (volume_beats) with V1 fallback (volume_beat).
     craft = state.get("story_craft", {})
@@ -291,30 +305,34 @@ def run_craft_checks(state: dict, chapter: int) -> dict:
         vol = active_volume_beat.get("volume")
         if isinstance(vol, int) and vol == chapter_to_volume(state, chapter):
             vol_issues = check_volume_beat(state, volume=vol)
-            for issue in vol_issues:
-                if "BLOCKER" in issue:
-                    issues["blockers"].append(f"beat_compliance: {issue}")
-                else:
-                    issues["warnings"].append(f"beat_compliance: {issue}")
+            for index, issue in enumerate(vol_issues):
+                record(
+                    "blockers" if "BLOCKER" in issue else "warnings",
+                    f"beat_compliance: {issue}", "story_craft.volume_beat",
+                    f"chapter:{chapter}:volume:{vol}:beat_observation",
+                    {"volume": vol, "rule_index": index},
+                )
 
     # Rhythm
     if "rhythm_curve" in state.get("story_craft", {}):
         rhythm_status = check_rhythm_status(state)
         if rhythm_status == "block":
             n = state["story_craft"]["rhythm_curve"]["chapters_since_peak"]
-            issues["blockers"].append(
-                f"foreshadow_compliance: 节奏曲线 BLOCK：chapters_since_peak={n}"
-            )
+            record("blockers", f"foreshadow_compliance: 节奏曲线 BLOCK：chapters_since_peak={n}",
+                   "story_craft.rhythm_curve", f"chapter:{chapter}:rhythm_curve",
+                   {"chapters_since_peak": n})
         elif rhythm_status == "warning":
-            issues["warnings"].append("foreshadow_compliance: 节奏曲线 WARNING")
+            record("warnings", "foreshadow_compliance: 节奏曲线 WARNING",
+                   "story_craft.rhythm_curve", f"chapter:{chapter}:rhythm_curve",
+                   {"status": "warning"})
 
     # Timed locks
     if "timed_locks" in state.get("story_craft", {}):
         overdue = check_timed_lock_deadlines(state, current_chapter=chapter)
         for lock in overdue:
-            issues["blockers"].append(
-                f"foreshadow_compliance: 定时锁逾期：{lock['id']} deadline={lock['deadline_chapter']}"
-            )
+            record("blockers", f"foreshadow_compliance: 定时锁逾期：{lock['id']} deadline={lock['deadline_chapter']}",
+                   "story_craft.timed_lock", f"timed_lock:{lock['id']}",
+                   {"lock_id": lock["id"], "deadline_chapter": lock["deadline_chapter"], "observed_chapter": chapter})
 
     # Scene-Sequel
     cm_raw = state.get("chapter_meta")
@@ -326,17 +344,16 @@ def run_craft_checks(state: dict, chapter: int) -> dict:
     cm = cm_entry
     if cm:
         ss_issues = check_scene_sequel(cm)
-        for issue in ss_issues:
-            if issue.startswith("BLOCKER"):
-                issues["blockers"].append(f"beat_compliance: Scene-Sequel: {issue}")
-            else:
-                issues["warnings"].append(f"beat_compliance: Scene-Sequel: {issue}")
+        for index, issue in enumerate(ss_issues):
+            record("blockers" if issue.startswith("BLOCKER") else "warnings",
+                   f"beat_compliance: Scene-Sequel: {issue}", "story_craft.scene_sequel",
+                   f"chapter:{chapter}:scene_sequel", {"chapter": chapter, "rule_index": index})
 
         # Hook type
         if not cm.get("hook_type"):
-            issues["blockers"].append(
-                "foreshadow_compliance: 章末 hook_type 未声明"
-            )
+            record("blockers", "foreshadow_compliance: 章末 hook_type 未声明",
+                   "story_craft.hook_type", f"chapter:{chapter}:hook_type",
+                   {"hook_type_present": False})
 
     return issues
 
