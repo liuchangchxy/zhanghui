@@ -1,0 +1,145 @@
+# Phase 6A Merge Closure Acceptance Record
+
+- Final tested committed HEAD: `c86b68fba221df9fd9f85d25634d221034cbee47`
+- Origin main after merge: `c86b68fba221df9fd9f85d25634d221034cbee47`
+- Phase 6A PR: #3; merge method: GitHub merge commit (`--merge`)
+- PR head was the accepted SHA `5d6e70e1aa8d07ecf47ab6593fb13dbf6527501b`; merge tree equals accepted tree `b8d20d1e4fd67149da58be818fc921c8a98cf14a`.
+- Canonical acceptance command: `PYTHONPATH=.claude/plugins/zhanghui/scripts pytest` plus the 13 exact files listed in `docs/superpowers/acceptance/2026-10-05-phase-6a-final-acceptance.md`, then `-q`.
+- Collection command: the same exact files with `--collect-only -q`.
+- Canonical: **125 collected, 125 passed, 0 failed** on the merge HEAD.
+- Step 1/2 regression command: manifest A+B files plus `test_memory_contract_adapter.py`; **121 passed, 0 failed** on the merge HEAD.
+- Independent final review: PASS at the accepted PR HEAD (same tree); A–K PASS.
+- Scope: no Phase 6B changes; no consistency→ChapterCommit path or second veto authority.
+- `git diff --check`: PASS. Target worktree: clean.
+- Checks: GitHub reported no check runs; main is unprotected and its only workflow path-filters unrelated installation files. No applicable required CI checks.
+- PR #2 closed as superseded by PR #3; design commits appear once in PR #3 ancestry.
+- Issue #1: Phase 6A completion summary appended; issue remains open for later phases.
+- Phase 6B: not started.
+
+## Collected canonical node IDs (125)
+
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_enum_dimensions_are_separate_and_unknown_values_rejected`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_evidence_is_structured_and_extra_policy_fields_are_rejected`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_score_payload_required_only_for_score_and_scale_validated`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_stable_finding_id_uses_only_logical_identity`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_finding_identity_scope_is_deeply_immutable_after_id_creation`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_unstable_subject_cannot_produce_identity_or_veto`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_evidence_and_input_fingerprints_change_independently_of_identity`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_fingerprints_ignore_finding_order_but_bind_policy_version`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_policy_empty_and_action_precedence`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_llm_canon_candidate_never_self_asserts_hard_canon`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_hard_canon_requires_accepted_linkage_and_deterministic_contradiction`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_hard_user_requires_all_explicit_contract_bindings`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_author_plan_and_planner_misses_are_only_advisory_or_score`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_craft_and_style_heuristics_never_hard_veto[CRAFT]`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_craft_and_style_heuristics_never_hard_veto[STYLE]`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_score_is_advisory_at_all_threshold_values_and_not_hard_counted[0.0]`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_score_is_advisory_at_all_threshold_values_and_not_hard_counted[0.42]`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_score_is_advisory_at_all_threshold_values_and_not_hard_counted[1.0]`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_recoverable_and_workflow_findings_have_explicit_transitions`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py::test_decisions_are_deterministic_and_include_distinct_fingerprints`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_decision_store.py::test_attempt_round_trip_and_unique_append_only`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_decision_store.py::test_malformed_score_attempt_fails_validation`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_decision_store.py::test_workflow_events_and_human_responses_are_append_only`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_planner_missed_node_does_not_veto_commit`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_accepts_when_all_checks_pass`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_missing_original_reconciliation_inputs_even_with_no_artifact`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_conflicted_reconciliation`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_service_recomputes_and_rejects_forged_passed_artifact`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_require_human_persists_pending_attempt_without_consuming_commit_slot`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_reject_keeps_immutable_rejected_commit_and_binding_only`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_service_recomputes_policy_and_records_cached_count_mismatch`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_stale_cached_decision_and_false_external_count_cannot_suppress_reject`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_recover_success_creates_two_attempts_and_only_then_commits`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_recovery_success_requires_fresh_policy_result_before_terminal_commit`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_missing_recovery_finding_refresher_reevaluates_as_pending_human`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_human_response_is_appended_then_policy_is_reevaluated_as_new_attempt`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_recover_failure_is_structured_and_reevaluated[report0-REJECT-rejected]`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_recover_failure_is_structured_and_reevaluated[report1-REQUIRE_HUMAN-pending_human]`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_service_detects_stale_prose_and_proposal_against_audit`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_service_detects_stale_extraction_against_audit`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_includes_volume_ref_and_write_fact_provenance`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_malformed_gate_artifacts`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_nested_extraction_result_shape`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_extraction_wrapper_even_with_empty_core_fields`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_extraction_result_missing_core_fields`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_non_object_extraction_items`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_non_object_accepted_event_items`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_normalizes_accepted_events_before_projection`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_apply_projections_normalizes_events_before_router_inspection`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_apply_projections_updates_state_for_rejected_commit`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_chapter_commit_cli_ignores_consistency_fields_and_preserves_changes_advisories`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_apply_projections_writes_events_and_amend_proposals`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_is_durable_before_any_projection_side_effect`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_failed_commit_persistence_runs_no_projection`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_projection_failure_does_not_mutate_durable_commit`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_schema.py::test_artifact_models_preserve_valid_top_level_payloads`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_schema.py::test_artifact_models_reject_nested_wrappers_and_missing_core_fields`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_schema.py::test_accepted_event_model_normalizes_aliases_before_story_event_validation`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_schema.py::test_accepted_event_model_rejects_malformed_event_collections`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_schema.py::test_accepted_event_model_rejects_blank_subject_and_unknown_type`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contracts.py::test_story_contract_paths_resolve_expected_locations`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contracts.py::test_merge_contract_layers_preserves_locked_and_merges_append_only`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contracts.py::test_merge_anti_patterns_deduplicates_by_text`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contracts.py::test_read_json_if_exists_returns_none_for_missing_file`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contracts.py::test_read_json_if_exists_raises_value_error_with_path`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contracts.py::test_read_json_if_exists_loads_valid_json`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contracts.py::test_user_constraint_metadata_is_validated_and_preserved_across_contract_layers`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contract_schema.py::test_master_setting_and_chapter_brief_accept_phase1_seed_shape`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contract_schema.py::test_volume_brief_requires_selected_fields`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_story_contract_schema.py::test_review_contract_requires_blocking_rules_list`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_default_rejects_overwrite`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_apply_projections_does_not_overwrite_existing_commit_by_default`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_overwrite_rejects_existing_canonical_commit`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_skip_keeps_existing`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_skip_projection_uses_existing_durable_commit`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_skip_without_existing_commit_creates_new_commit`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_rejected_commit_conflict_also_forbids_overwrite`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_new_commit_cannot_be_created_behind_higher_chapter`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_new_commit_cannot_be_created_behind_projected_state`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_default_writes_when_no_existing`
+- `.claude/plugins/zhanghui/scripts/tests/test_chapter_commit_conflict.py::TestPersistCommitConflictGuard::test_append_mode_rejected_as_unsupported`
+- `.claude/plugins/zhanghui/scripts/tests/test_rejection_contract.py::test_build_contract_from_reviewer_output_keeps_blocking_only_by_default`
+- `.claude/plugins/zhanghui/scripts/tests/test_rejection_contract.py::test_build_contract_with_include_advisory_includes_low`
+- `.claude/plugins/zhanghui/scripts/tests/test_rejection_contract.py::test_validate_contract_rejects_empty`
+- `.claude/plugins/zhanghui/scripts/tests/test_rejection_contract.py::test_validate_contract_rejects_unknown_category`
+- `.claude/plugins/zhanghui/scripts/tests/test_rejection_contract.py::test_validate_contract_rejects_missing_required_field`
+- `.claude/plugins/zhanghui/scripts/tests/test_rejection_contract.py::test_merge_contracts_concatenates_issues`
+- `.claude/plugins/zhanghui/scripts/tests/test_rejection_contract.py::test_targets_text_groups_by_location`
+- `.claude/plugins/zhanghui/scripts/tests/test_rejection_contract.py::test_merge_contracts_source_is_sorted`
+- `.claude/plugins/zhanghui/scripts/tests/test_rejection_contract.py::test_rejection_contract_accepts_do_not_copy_violation`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py::test_legacy_review_blocking_is_candidate_only_and_text_does_not_classify`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py::test_pending_disambiguation_maps_to_human_decision`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py::test_planner_must_cover_miss_stays_advisory`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py::test_only_fully_validated_user_constraint_can_become_hard_user`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py::test_review_user_constraint_requires_existing_contract_binding_even_with_registered_gate`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py::test_count_only_and_unknown_review_rows_are_diagnostics`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py::test_same_structured_gate_different_prose_has_same_classification`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py::test_changes_gate_deterministic_failures_are_structured_integrity_findings`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py::test_changes_gate_advisory_or_unrecognized_severity_never_becomes_hard`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_review_issue_blocking_defaults`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_review_issue_non_critical_not_blocking`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_review_result_counts`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_review_result_no_issues`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_review_result_to_dict_roundtrip`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_parse_review_output_from_dict`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_parse_review_output_tolerates_missing_fields`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_review_result_to_metrics_dict`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_ai_flavor_review_issue_added_to_anti_patterns`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_ai_flavor_review_feedback_dedupes_evidence`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py::test_do_not_copy_violation_category_is_preserved`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_author_view.py::test_review_author_view_marks_blocking_as_must_fix`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_author_view.py::test_review_author_view_limits_actions_to_three_and_prioritizes_severity`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_author_view.py::test_review_author_view_allows_clean_chapter_to_continue`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_review_author_view.py::test_review_author_view_render_has_author_section`
+- `.claude/plugins/zhanghui/scripts/tests/integration/test_review_with_craft.py::test_run_craft_checks_flags_missing_hook`
+- `.claude/plugins/zhanghui/scripts/tests/integration/test_review_with_craft.py::test_run_craft_checks_flags_overdue_timed_lock`
+- `.claude/plugins/zhanghui/scripts/tests/integration/test_review_with_craft.py::test_run_craft_checks_flags_rhythm_block`
+- `.claude/plugins/zhanghui/scripts/tests/integration/test_review_with_craft.py::test_craft_findings_have_stable_structured_identity_and_never_block`
+- `.claude/plugins/zhanghui/scripts/tests/integration/test_review_with_craft.py::test_craft_display_veto_words_never_change_policy_classification`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py::test_mapping_contract_covers_exactly_p1_through_p7_and_legacy_blocker_shape`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py::test_subject_scoped_identity_survives_evidence_change_and_separates_subjects`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py::test_missing_identity_and_unknown_code_are_diagnostic_only`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py::test_every_patch_has_representative_registered_mapping`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py::test_p1_cycle_and_overdue_are_adapter_contract_mappings`
+- `.claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py::test_p7_stale_derived_view_is_adapter_contract_recovery_mapping`
