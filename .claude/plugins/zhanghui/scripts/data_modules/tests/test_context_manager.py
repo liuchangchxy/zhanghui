@@ -71,6 +71,11 @@ def test_context_manager_build_and_filter(temp_project):
     assert not any(c.get("entity_id") == "bad" for c in characters)
     assert payload["preferences"].get("tone") == "热血"
     assert "long_term_memory" in payload
+    assert "canon" in payload and "intent" in payload and "craft" in payload and "reference" in payload
+    assert payload["meta"]["context_snapshot"]["latest_commit"] is None
+    assert payload["meta"]["writer_authority_sections"] == ["canon", "intent", "craft", "reference"]
+    assert payload["meta"]["compatibility_sections_are_non_authoritative"] is True
+    assert any(x["type"] == "missing_canonical_source" for x in payload["context_diagnostics"])
 
 
 def test_context_manager_uses_memory_orchestrator_for_working_when_enabled(temp_project, monkeypatch):

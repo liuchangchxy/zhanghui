@@ -57,7 +57,7 @@ allowed-tools: Read Write Edit Grep Bash Agent
 ### 根目录
 
 - `../../references/shared/core-constraints.md`
-  - 用途：Step 2A 写作硬约束（大纲即法律 / 设定即物理 / 发明需识别）。
+  - 用途：Step 2A 写作约束（章纲是本章 Intent 目标 / 已发生事实以 Canon commit 为准 / 发明需识别）。
   - 触发：Step 2A 必读。
 - `references/writing/typesetting.md`
   - 用途：Step 4 移动端阅读排版与发布前速查。
