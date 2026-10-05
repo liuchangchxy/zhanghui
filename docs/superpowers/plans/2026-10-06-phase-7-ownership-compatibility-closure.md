@@ -23,7 +23,8 @@ tags: ["phase-7", "ownership", "compatibility", "tdd"]
 ## Execution rules
 
 - Baseline is `e9156f57fe79da63731cbc69c1e5f716c4feb577`. Reconfirm branch, HEAD, clean state, and the preserved stash before implementation.
-- Keep implementation changes in `.claude/plugins/zhanghui/`, with only the scoped compatibility update to `docs/architecture/phase-2-reconciliation.md` if needed, plus the specifically named Phase 7 acceptance manifest. Do not modify `.claude/plugins/zhanghui/6.4.0/`.
+- Keep implementation changes in `.claude/plugins/zhanghui/`, with only the scoped compatibility update to `docs/architecture/phase-2-reconciliation.md` if needed, the specifically named Phase 7 acceptance manifest, and (only if existing release/version policy requires a bump) `.claude-plugin/marketplace.json` plus `.claude/plugins/zhanghui/.claude-plugin/plugin.json` to keep release identity aligned. Never modify `.claude/plugins/zhanghui/6.4.0/**`. Do not invent a version; inspect repository convention first.
+- Keep five version axes distinct: canonical source-tree path/Git identity; source-tree package version; marketplace catalog version; installed host plugin version; project data schema version. A repository manifest cannot prove installed-plugin adoption.
 - Follow RED → run and observe failure → GREEN → run and observe pass for each testable step. For documentation steps, first add a failing active-doc assertion, then correct the document and rerun it.
 - Runtime guard work is conditional. Reproduce a real bypass through the actual production API/CLI against a valid Story System project before editing a guard. If no bypass reproduces, add regression coverage only and record “no runtime guard change”.
 - Never treat a direct write as invalid solely because it targets `state.json` or `index.db`; preserve Intent, Craft, Workflow, setup, migration, and legacy compatibility owners as specified by inventory.
@@ -35,9 +36,9 @@ tags: ["phase-7", "ownership", "compatibility", "tdd"]
 
 **Files:** Create `.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py`.
 
-1. **RED:** Write tests for missing required fields, unknown domain/status values, duplicate writer IDs, unresolved module/API coordinates, absent mode behavior, missing consumers/replacement/retirement criterion, and missing evidence.
+1. **RED:** Write tests for missing required fields, unknown domain/status values, duplicate IDs in each record family, unresolved module/API coordinates, absent mode behavior, missing consumers/replacement/retirement criterion, missing evidence, reader sources/authority/fallback, and migration safety fields.
 2. **Run → verify FAIL:** Run the new test file; it must fail because the inventory/schema are not present.
-3. **GREEN:** Keep validation dependency-free using standard-library JSON plus a repository-owned validator.
+3. **GREEN:** Keep validation dependency-free using standard-library JSON plus a repository-owned validator. Model separate `writers[]`, `readers[]`, and `migrations[]`; `writer.active_consumers` is not reader inventory.
 4. **Run → verify PASS:** Run the focused file and confirm each invalid fixture is rejected for the intended reason.
 5. **REFACTOR:** Keep fixtures small and failure messages pointing to a writer ID/field.
 
@@ -45,9 +46,9 @@ tags: ["phase-7", "ownership", "compatibility", "tdd"]
 
 **Files:** Create `.claude/plugins/zhanghui/docs/ownership-inventory.schema.json`; update `scripts/tests/architecture/test_ownership_inventory.py`.
 
-1. **RED:** Add schema assertions for Draft 2020-12, required top-level keys, controlled data-domain and lifecycle enums, and required per-mode objects.
+1. **RED:** Add schema assertions for Draft 2020-12, required top-level `writers`, `readers`, and `migrations` arrays, controlled data-domain/lifecycle/authority enums, and mode-specific reader source, authority, condition, and fallback objects.
 2. **Run → verify FAIL:** Run the focused tests and confirm they fail without the schema.
-3. **GREEN:** Add the normative schema from design §3.1. Require stable IDs, exact implementation coordinates, owner, both mode behaviors, active consumers, replacement/null, retirement criterion, and source evidence.
+3. **GREEN:** Add the normative schema from design §3.1. Require stable IDs, exact implementation coordinates, per-mode behavior/source/authority/fallback, active consumers, replacement/null, retirement criterion, and source evidence.
 4. **Run → verify PASS:** Validate a good minimal record and reject one malformed record per required/enum group.
 5. **REFACTOR:** Keep schema validation independent from plugin runtime imports.
 
@@ -57,18 +58,18 @@ tags: ["phase-7", "ownership", "compatibility", "tdd"]
 
 1. **RED:** Add assertions that all required domains appear, including `CANON_COMMIT`, `EVENTS`, every projection domain, `INTENT`, `CRAFT`, `WORKFLOW_METADATA`, `MIGRATION`, and `COMPATIBILITY`.
 2. **Run → verify FAIL:** Confirm the tests fail before inventory data exists.
-3. **GREEN:** Seed one or more justified records per domain from the verified Phase 7 source audit. Record Story System and legacy behavior independently. Include StateManager, IndexManager, SQLStateManager, `update_state.py`, Story Craft, VolumeState/PromiseLedger, consistency apply, EventLogStore, init, and migration paths.
+3. **GREEN:** Seed justified writer, reader, and migration records from the verified Phase 7 source audit. Cover Context/runtime source assembly; query/resume; write/plan/review; state/index/summary/memory/vector; Story System commit/projection; legacy fallback. Record mode-specific source, authority, fallback, consumers, and retirement evidence. Include StateManager, IndexManager, SQLStateManager, `update_state.py`, Story Craft, VolumeState/PromiseLedger, consistency apply, EventLogStore, init, and migration paths.
 4. **Run → verify PASS:** Assert every inventory path/symbol resolves and every source anchor exists.
 5. **REFACTOR:** Split a record when one API writes data with different owners or runtime behavior.
 
-### Step 4: Add a fail-first candidate-writer scanner
+### Step 4: Add fail-first writer and reader coverage scanners
 
 **Files:** Create `.claude/plugins/zhanghui/scripts/tests/architecture/ownership_inventory_guard.py`; update `test_ownership_inventory.py`.
 
-1. **RED:** Add a synthetic in-scope state/projection writer not present in the inventory and assert coverage fails with its module and symbol.
+1. **RED:** Add synthetic unregistered writer and reader fixtures. The reader fixture reads legacy state and claims Canon authority. Assert writer and reader coverage fail with path/symbol/authority diagnostics; assert production runtime importing/loading inventory is rejected.
 2. **Run → verify FAIL:** Run the test and capture the unregistered-writer diagnostic.
-3. **GREEN:** Scan all canonical production source for protected sink calls, resolve constant/simple aliases, and report unresolved targets. Compare each resolved candidate with exact implementation coordinates; require an exact reason-coded exception and test for dynamic targets.
-4. **Run → verify PASS:** Add an explicit test inventory record for the synthetic writer and confirm it passes. Confirm a reason-coded log/cache/test-fixture exclusion is not treated as a story writer.
+3. **GREEN:** Scan canonical production source for protected writes and known reads, resolve constant/simple aliases, and report unresolved targets. Compare candidates with exact writer/reader coordinates and required reader families. Add a separate static isolation check forbidding shipped runtime imports/reads and runtime decisions based on inventory fields; runtime authority stays in actual services/guards/contracts. Require exact reason-coded exceptions and tests for dynamic targets.
+4. **Run → verify PASS:** Add explicit inventory records for synthetic candidates and confirm they pass. Confirm the false Canon reader remains rejected, a Story System divergent legacy sentinel is not returned as Canon, and a legacy-mode fallback reports legacy compatibility. Confirm a reason-coded log/cache/test-fixture exclusion is not treated as a story writer.
 5. **REFACTOR:** Keep the sink family registry narrow and explicit; reject broad directory exclusions.
 
 ### Step 5: Prove legitimate writer classes remain distinct
@@ -90,6 +91,16 @@ tags: ["phase-7", "ownership", "compatibility", "tdd"]
 3. **GREEN (reproduction only):** Add the narrowest pre-side-effect guard at the owning boundary; keep Intent/Craft/Workflow/migration pathways available.
 4. **Run → verify PASS:** Re-run the exact reproduction and relevant projection/workflow regression tests. If no bypass reproduced, run all guard-coverage tests and verify no production source changed.
 5. **REFACTOR:** No source-wide write prohibition and no guard based only on filename/extension.
+
+### Step 5A: Add reader-family coverage and authority regressions
+
+**Files:** Reader coverage helper and `test_ownership_inventory.py`; focused Context/query/resume/projection/legacy reader fixtures.
+
+1. **RED:** Omit each required reader family in turn and add an unregistered legacy-state reader claiming `CANON_AUTHORITY`; assert both fail. Add a Story System fixture with divergent durable-commit and legacy-state sentinels.
+2. **Run → verify FAIL:** Confirm family omissions and authority mismatch are reported.
+3. **GREEN:** Inventory each reader's mode-specific source, authority, condition, fallback, active consumers, replacement, and retirement criterion. Story System Canon reads resolve to accepted commit or commit-verified projections; legacy source cannot be silently promoted.
+4. **Run → verify PASS:** Confirm all required families are covered, false Canon authority fails, mode behavior is correct, and production code has no inventory dependency.
+5. **REFACTOR:** Keep reader coverage, writer coverage, and active-document drift independently reported.
 
 ## Phase B — Active-document drift guard (still before document edits)
 
@@ -181,21 +192,21 @@ tags: ["phase-7", "ownership", "compatibility", "tdd"]
 
 **Files:** Shadow report schema/module/tests; `docs/architecture/phase-2-reconciliation.md` or a linked Phase 7 compatibility section.
 
-1. **RED:** Add report assertions for per-mode/category coverage, matches, one-sided changes, conflict adjudication, opaque items, stale/schema failures, and migration compatibility.
+1. **RED:** Add report assertions for per-mode/category coverage, frozen proposal and observation denominators, matches, one-sided changes, conflict adjudication, opaque/unmapped items, stale/schema failures, and migration compatibility.
 2. **Run → verify FAIL:** Confirm incomplete reports do not claim full coverage or eligibility to discuss retirement.
-3. **GREEN:** Record the pilot protocol (target 60 chapters/3 opted-in projects or report insufficient corpus), category-level ≥95% structured coverage gate, full adjudication of conflict candidates, zero known false hard blocks, and rollback/migration evidence from the spec.
+3. **GREEN:** Record the pilot protocol (target 60 chapters/3 opted-in projects; below either target or missing mode/category cell is `INSUFFICIENT`), frozen denominators that retain opaque/unmapped items, category-level ≥95% coverage only to open retirement discussion, full adjudication of conflict candidates, zero known false hard blocks, and rollback/migration evidence from the spec.
 4. **Run → verify PASS:** Test threshold boundaries and the “insufficient sample” result.
 5. **REFACTOR:** Treat thresholds as eligibility to discuss a separate decision, never as automatic deletion or policy change.
 
 ## Phase E — Plugin/version compatibility and final acceptance
 
-### Step 16: Add source-resolution and mode-matrix tests
+### Step 16: Add source-resolution, version-axis, and mode-matrix tests
 
-**Files:** `.claude-plugin/marketplace.json`; `.claude/plugins/zhanghui/.claude-plugin/plugin.json`; update `test_ownership_inventory.py` and `test_ownership_documentation.py`; compatibility documentation.
+**Files:** Update `.claude-plugin/marketplace.json` and `.claude/plugins/zhanghui/.claude-plugin/plugin.json` only if existing release/version policy requires a bump; update `test_ownership_inventory.py` and `test_ownership_documentation.py`; compatibility documentation. Never modify `.claude/plugins/zhanghui/6.4.0/**`.
 
-1. **RED:** Test that marketplace source resolves to `.claude/plugins/zhanghui`, marketplace/plugin version fields agree, the nested `6.4.0` snapshot is not an active source, and project modes distinguish new Story System, existing Story System, legacy, and mixed/partial projects.
+1. **RED:** Test that marketplace source resolves to `.claude/plugins/zhanghui`, canonical source-tree identity/path, package version, marketplace version, installed host version, and project schema version are not conflated, the nested `6.4.0` snapshot is not active, and project modes distinguish new Story System, existing Story System, legacy, and mixed/partial projects.
 2. **Run → verify FAIL:** Confirm unverified source/version or implicit mixed-mode selection is rejected.
-3. **GREEN:** Document installed-plugin update/reload checks and a non-destructive existing-project upgrade/migration contract.
+3. **GREEN:** First inspect repository version policy; do not guess a version. If required, update exactly the two named manifests and test their agreement. Document installed-plugin update/reload checks and a non-destructive existing-project upgrade/migration contract.
 4. **Run → verify PASS:** Validate canonical source, snapshot exclusion, and all supported-mode fixtures.
 5. **REFACTOR:** Do not claim the repository can know the user's installed plugin version without a host-side check.
 
@@ -209,15 +220,18 @@ tags: ["phase-7", "ownership", "compatibility", "tdd"]
 4. **Run → verify PASS:** Test a complete record and reject each missing safety/evidence field.
 5. **REFACTOR:** Distinguish source-tree version selection, installed plugin update, and project data migration as separate compatibility axes.
 
-### Step 18: Create the Phase 7 final acceptance manifest
+### Step 18: Bind acceptance without a self-referential SHA
 
 **Files:** Create `docs/superpowers/acceptance/2026-10-06-phase-7-final-acceptance.md`.
 
-1. **RED:** Add manifest completeness tests/checklist for baseline SHA, exact commands, focused inventory/drift suites, real-bypass verdicts, CHANGES corpus counts/limitations, source/mode matrix, reviewer verdict, diff/worktree state, and known limits.
+1. **RED:** Add manifest completeness tests/checklist for baseline SHA, exact commands, focused inventory/drift suites, real-bypass verdicts, CHANGES denominators/corpus counts/limitations, source/mode matrix, reviewer verdict, and known limits. Results and `tested_implementation_head` are absent from the implementation template.
 2. **Run → verify FAIL:** Confirm the manifest is incomplete before results are recorded.
-3. **GREEN:** Record exact commands and collected node IDs from final Phase 7 implementation HEAD; report insufficient shadow cohort as insufficient, not pass.
-4. **Run → verify PASS:** Re-run required acceptance commands on the exact committed implementation SHA; independently review every acceptance item and run `git diff --check`.
-5. **REFACTOR:** Keep final acceptance results separate from the plan and bind them to the immutable tested HEAD.
+3. **GREEN/H1:** Commit all implementation, tests, docs, inventory, any policy-required two-manifest version update, and a result-free acceptance template as immutable implementation commit H1.
+4. **Test H1:** Run complete acceptance on H1. Record exact commands, node IDs, corpus denominators and limitations (`INSUFFICIENT` where applicable), reviewer evidence, and results outside the tracked record while validating.
+5. **Record/H2:** Update only the acceptance record with `tested_implementation_head: H1` and results; commit that file alone as record-only H2. Verify `git diff H1 H2 -- production/runtime paths` is empty and H1/H2 production/runtime trees are identical.
+6. **Bind final result:** Use a Git note or Issue/PR completion record to record H2 or later merge SHA and any required final-head verification. Never claim a tracked file contains its own commit SHA.
+7. **Verify:** Check manifest completeness, exact H1 binding, H2 record-only scope, acceptance results, and `git diff --check`.
+8. **REFACTOR:** Keep the acceptance record separate from implementation state and avoid self-reference.
 
 ## Required verification commands (final values fixed when implementation starts)
 

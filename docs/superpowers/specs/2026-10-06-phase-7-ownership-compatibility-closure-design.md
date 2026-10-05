@@ -26,18 +26,20 @@ No finding in this design assumes that all direct `state.json` writes are Canon 
 4. Converge the canonical active plugin documentation while preserving accurate projection-success checks and historically useful compatibility instructions.
 5. Define a read-only CHANGES shadow-measurement protocol and evidence gates for a future decision to discuss retirement.
 6. Define the canonical plugin/version and existing-project upgrade contract without editing or synchronizing the historical `6.4.0` snapshot.
-7. Produce an exact Phase 7 acceptance manifest bound to the final implementation commit.
+7. Produce Phase 7 acceptance evidence using a non-self-referential implementation-commit / record-commit sequence.
 
 ## 3. Authority model and inventory contract
 
-### 3.1 Inventory files
+### 3.1 Inventory files and record types
 
 Use these canonical files, under the active plugin's architecture documentation:
 
 - `.claude/plugins/zhanghui/docs/ownership-inventory.schema.json`
 - `.claude/plugins/zhanghui/docs/ownership-inventory.json`
 
-The JSON Schema is Draft 2020-12. The inventory has a required `schema_version`, `baseline`, and `writers` array. Every writer record has:
+The JSON Schema is Draft 2020-12. The inventory has required `schema_version`, `baseline`, `writers`, `readers`, and `migrations` arrays. Keep these arrays separate: writer, read-authority, and migration records answer different questions and should not be forced into one generic edge object. Shared evidence and lifecycle vocabulary is validated by the inventory tests.
+
+Every writer record has:
 
 | Field | Required meaning |
 |---|---|
@@ -48,14 +50,33 @@ The JSON Schema is Draft 2020-12. The inventory has a required `schema_version`,
 | `story_system_mode` | `allowed`, `guarded`, `rejected`, `projection_only`, or `not_applicable`, plus a short behavior description. |
 | `legacy_mode` | Same shape, stating the supported old-project behavior. |
 | `lifecycle_status` | `allowed`, `guarded`, `deprecated`, or `compatibility_only`. This is a policy label, separate from runtime mode behavior. |
-| `active_consumers` | Active skills, commands, runtime services, or projection/recovery coordinators. |
+| `active_consumers` | Active skills, commands, runtime services, or projection/recovery coordinators that invoke this writer. |
 | `replacement` | Exact replacement writer/API, or `null` when still current. |
 | `retirement_criterion` | Observable evidence required before changing this writer's lifecycle status. “When no longer needed” is invalid. |
 | `evidence` | Source path and symbol/section anchors supporting the entry. |
 
-Schema and inventory tests use only standard-library JSON parsing and repository-owned validation helpers; no new runtime dependency is required. The schema remains the normative field/type/enum contract. Tests validate schema well-formedness, every inventory record, enum values, unique IDs, resolvable implementation coordinates, evidence references, and required mode/lifecycle/retirement fields.
+Every reader record has:
+
+| Field | Required meaning |
+|---|---|
+| `reader_id` | Stable unique ID for the read capability. |
+| `implementation` | Exact canonical repo-relative module/API/CLI or active consumer section. |
+| `read_edges` | One record per logical resource/read channel, including `data_domain`, resource/path/table, and mode-specific source details. |
+| per-mode source details | For each of Story System and legacy mode: `primary_source`, `authority_claim`, `condition`, and `fallback` (source plus authority, or explicit `null`). Allowed claims are `CANON_AUTHORITY`, `VERIFIED_PROJECTION`, `LEGACY_COMPATIBILITY`, `INTENT`, `CRAFT`, `WORKFLOW`, `REFERENCE`, `PRESERVE_ONLY`, or `UNKNOWN`. The claim describes how the reader treats a value, not a policy grant. |
+| `active_consumers` | Skills, agents, commands, or services receiving the read result. |
+| `replacement`, `retirement_criterion`, `evidence` | Same observable replacement, retirement, and source-evidence rules as writer records. |
+
+Every migration record has a stable `migration_id`, exact implementation coordinate, source and target format/domain, supported project modes, preflight, backup, idempotency, postcondition, rollback behavior, ambiguity handling, lifecycle status, consumers, replacement/retirement criterion, and source evidence. A migration that has not yet been implemented is recorded as required/planned only when the compatibility matrix makes it mandatory; it is not represented as an active writer.
+
+`authority_claim` values are precise: only a schema-validated accepted durable chapter commit may claim `CANON_AUTHORITY`; a projection may claim `VERIFIED_PROJECTION` only after matching that commit; legacy stores may claim `LEGACY_COMPATIBILITY` in legacy mode and may not silently promote that value to Story System Canon. `PRESERVE_ONLY` means a read-modify-write path preserves fields it does not own and does not treat them as current story truth.
+
+Schema and inventory tests use only standard-library JSON parsing and repository-owned validation helpers; no new runtime dependency is required. The schema remains the normative field/type/enum contract. Tests validate schema well-formedness, every record in all three arrays, enum values, unique IDs, resolvable implementation coordinates, evidence references, per-mode source/authority/fallback, and required lifecycle/retirement fields.
 
 ### 3.2 Inventory scope and owner distinctions
+
+`writers`, `readers`, and `migrations` are independent inventories: `writer.active_consumers` is a caller list, not reader coverage. Reader records identify each consumer's mode-specific source, authority claim, condition, and compatibility fallback. Required reader families are Context/runtime source assembly; query and resume; write/plan/review consumers; state/index/summary/memory/vector readers; Story System commit and projection readers; and legacy fallback readers. A family may have multiple records where sources or authority differ.
+
+This inventory is an architecture-governance and test artifact only. Production runtime must not load it or use it to decide write permission, Canon authority, gate severity, or ChapterCommit acceptance. Runtime authority remains defined by actual services, guards, and contracts. Add a test rejecting production imports/reads of the inventory and runtime decisions derived from it.
 
 One file or database may contain several domains. The inventory records the write capability and its domains, not merely the file extension. In particular:
 
@@ -91,14 +112,19 @@ The inventory will also include writers for Workflow metadata and non-story comp
 
 ### 4.1 Runtime writer coverage guard
 
-Implement a repository test helper, proposed as `scripts/tests/architecture/ownership_inventory_guard.py`, with two checks:
+Implement a repository test helper, proposed as `scripts/tests/architecture/ownership_inventory_guard.py`, with three checks:
 
 1. **Entry integrity:** every inventoried `implementation` coordinate resolves to the expected module/API/CLI selector and has a testable source anchor.
 2. **Candidate write coverage:** scan the canonical active plugin's production modules for writes to protected story stores and known write boundaries: calls to the state atomic-write helper targeting `.webnovel/state.json`; mutating `index.db` SQL/API calls; event-store writes; commit/projection writer entrypoints; summary/memory/vector write APIs; and migration entrypoints touching those stores. Resolve constant and simple local-variable aliases for protected targets; unresolved writes in a protected module are reported for explicit classification, not silently ignored. Compare discovered candidates to inventory coordinates. An unregistered candidate fails with the path and symbol so it can be classified before merge.
+3. **Inventory runtime isolation:** fail if production imports, opens, or parses either inventory file, or derives runtime authorization, authority, severity, or acceptance from inventory fields. Inventory tests may read these files; shipped runtime modules may not.
 
 The scanner is scoped to the listed protected stores and their known helper APIs; it does not claim whole-program proof for arbitrary dynamically constructed filesystem writes. It enumerates all calls to protected persistence sinks under the canonical production source tree, not only currently inventoried modules. Writes routed through wrappers must expose their protected target at the wrapper boundary; a dynamic/unresolved target requires an explicit, reason-coded inventory exception and test. A small exception list covers non-story artifacts such as observability logs, RAG caches, plugin-owned templates, and test fixtures. Each exception identifies the exact target, domain, and owner; broad directory exclusions are disallowed. Tests add synthetic new writers that use the existing sink APIs and prove each fails until inventoried, then passes after an explicit inventory record. A synthetic unresolved target fails pending classification. Tests also prove migration/setup, workflow, and projection writers are not misclassified as Canon bypasses.
 
-### 4.2 Active-document ownership guard
+### 4.2 Reader coverage and authority drift guard
+
+Maintain a required-family manifest in architecture tests, independent of `active_consumers`. Discover read candidates from protected-source adapters and known APIs for commits/events, state/index, summaries, memory, vectors, Intent/Craft, and workflow metadata; scan active skills/agents/references for declared source and authority claims. Every discovered candidate must resolve to a reader record, and every required family must have a mode-aware record. Unknown or dynamically selected sources fail pending explicit classification. Include a regression where a synthetic reader reads legacy `state.json` and labels it `CANON_AUTHORITY`: validation rejects it; in Story System mode a divergent legacy sentinel must never be returned as Canon. A legacy-mode fixture may return that sentinel only while declaring legacy compatibility. Reader coverage is reported separately from writer coverage and document drift.
+
+### 4.3 Active-document ownership guard
 
 Implement an architecture test over an explicit active-path manifest generated from the marketplace-selected plugin root. It checks:
 
@@ -145,11 +171,11 @@ Reconciliation v1 deterministically maps character-state proposals to `state_del
 
 Add an opt-in, read-only shadow report tool/mode. It consumes existing final chapter text, parsed ProposedChanges, extraction artifacts, and reconciliation output; it never changes the chapter, blocks a commit, updates ledgers, or writes Canon. Reports are project-local under a diagnostics/shadow directory or explicitly exported by the operator; no telemetry or prose upload is introduced. Bind each row to schema/policy version and hashes, and store category-level counts rather than unnecessary full prose.
 
-Pilot sample: target at least 60 completed chapters across at least three opted-in projects, including Story System and legacy projects, multiple genres, short/long chapters, explicit and implicit changes, and each currently supported CHANGES category. If fewer projects/chapters are available, analyze all available material and report the limitation; do not claim population-level adoption evidence. Adjudicate every deterministic conflict candidate, review a stratified random 20% of matched and one-sided rows per category, and include an author-reviewed selection of opaque/unmapped categories.
+Pilot sample: target at least 60 completed chapters across at least three opted-in projects, including Story System and legacy projects, multiple genres, short/long chapters, explicit and implicit changes, and each currently supported CHANGES category. If fewer than 60 chapters or three projects are available, or a required mode/category cell is absent, status is explicitly `INSUFFICIENT`; analyze all available material but do not claim population-level adoption evidence or pass the adoption discussion gate. Adjudicate every deterministic conflict candidate, review a stratified random 20% of matched and one-sided rows per category, and include an author-reviewed selection of opaque/unmapped categories.
 
-Report these measures per category and per project mode:
+Freeze categories and parsing rules before sampling. Use separate denominators: all schema-valid atomic ProposedChanges claims and all schema-valid atomic ObservedChanges facts in sampled chapters; publish both and their combined total. Unknown, opaque, unsupported, and unmappable items stay in their denominator and count as uncovered. Do not narrow the denominator by redefining “in scope.” Missing, invalid, stale artifacts and extraction failures are separately reported infrastructure failures and make evidence `INSUFFICIENT`, rather than silently dropping affected chapters. Report these measures per category and project mode:
 
-- **mapping coverage:** deterministically comparable proposal/extraction items divided by all eligible structured items; report opaque/unscorable separately, never silently remove them from the denominator;
+- **mapping coverage:** deterministically comparable items divided by the frozen proposal-claim and observation-fact denominators, reported separately and combined; opaque/unscorable/unsupported items remain uncovered denominator entries, never excluded;
 - **match and disagreement:** matched, proposed-only, observed-only, proposal/observation conflict, observed-internal conflict, and opaque counts/rates;
 - **hard-conflict precision:** author-confirmed true conflicts divided by adjudicated hard-conflict candidates; include false-block and unresolved counts;
 - **artifact health:** missing, invalid, stale/hash-mismatch, and extractor failure counts, separate from semantic disagreement;
@@ -160,7 +186,7 @@ Report these measures per category and per project mode:
 Retirement may only be put up for discussion (not enacted automatically) when all of these are met:
 
 1. The pilot sample and category/mode matrix above is complete, versioned, reproducible, and reviewed by the project owner.
-2. Every category proposed for a changed policy has at least 95% mapping coverage among its structured, in-scope items; excluded/opaque items are explicitly listed and have a named owner/path.
+2. The complete target cohort is present, and every category proposed for a changed policy has at least 95% mapping coverage using the frozen denominator above. Opaque/unmapped items remain denominator misses and are listed with a named owner/path; 95% only permits a separately reviewed retirement discussion and never automatically retires a gate or file.
 3. Every proposed hard conflict in the pilot is adjudicated; no unresolved candidate is silently converted into a hard block, and the reviewed hard-conflict set has no known false block. Any observed false block resets the affected category's adoption decision until the rule or evidence is corrected and remeasured.
 4. The chosen replacement preserves proposal auditability and provides a project migration report, backup, and tested rollback. Existing commits and CHANGES are not rewritten or deleted.
 5. A release/cohort policy says which installed plugin/project versions remain supported and how many migrations have completed. Repository fixtures alone cannot establish installed-user adoption.
@@ -170,7 +196,7 @@ Only then can a separate design decide whether to retire any portion of the inde
 ## 8. Plugin and existing-project compatibility
 
 - **Canonical source:** `.claude/plugins/zhanghui/`; `.claude-plugin/marketplace.json` selects `./.claude/plugins/zhanghui` and currently declares version `6.4.0`.
-- **Release identity:** the canonical root's `.claude-plugin/plugin.json` also declares `6.4.0`. Phase 7 must define the active package version/bump rule and test marketplace/plugin manifest agreement. If Phase 7 changes shipped active instructions or CLI behavior, implementation must use the next version required by that rule; do not assume a Git merge updates already-installed plugins. The exact version is selected at implementation time from the current canonical manifests, not guessed in this design.
+- **Version axes:** keep distinct (1) canonical source-tree identity/path and Git commit, (2) source-tree plugin package version in `.claude/plugins/zhanghui/.claude-plugin/plugin.json`, (3) marketplace catalog version in `.claude-plugin/marketplace.json`, (4) version installed on a user's host, and (5) project data schema version. These answer different questions and must not be conflated. The two repository manifests currently declare `6.4.0`. During implementation, read the existing release/version policy first; do not guess a version. If policy requires a bump, change only those two manifests. If no unambiguous policy exists, record the unresolved release decision instead of inventing a number. A Git/source update does not update an installed plugin or project schema.
 - **Nested snapshot:** `.claude/plugins/zhanghui/6.4.0/` is a historical/versioned snapshot, not a second active plugin source. Phase 7 does not copy active changes there. The drift guard derives the active root from the marketplace manifest and proves the nested snapshot is excluded.
 - **Installed plugin upgrade:** repository metadata cannot prove what a user's already-installed plugin runs. Document an explicit host/plugin update procedure, active plugin version/source check, restart/reload requirement where applicable, and a support matrix; never infer adoption from a Git checkout alone.
 - **Existing project modes:**
@@ -196,7 +222,8 @@ Phase 7 acceptance requires:
 6. CHANGES remains enabled. The shadow report is read-only, freshness-bound, separates opaque coverage and infrastructure failures, and meets the specified cohort protocol or records why the available corpus is insufficient. No retirement is claimed without the §7.3 evidence.
 7. Marketplace source resolution selects the canonical root; the nested snapshot remains untouched; compatibility and migration contracts are documented and tested with fixtures.
 8. No chapter commit schema/major version, existing commit bytes, or user project state is changed by Phase 7.
-9. `docs/superpowers/acceptance/2026-10-06-phase-7-final-acceptance.md` binds the exact implementation HEAD, commands, collected test IDs, corpus/report summary, review, workspace/diff checks, and inventory/drift results.
+9. Acceptance uses a non-self-referential two-commit binding. First commit all implementation, tests, docs, inventory, and a manifest template without results as immutable implementation commit H1. Run acceptance on H1 and collect exact commands, node IDs, corpus limits, and reviewer evidence. Then create record-only H2 updating `docs/superpowers/acceptance/2026-10-06-phase-7-final-acceptance.md` with `tested_implementation_head: H1`. Verify H2 changes only the acceptance record and its production/runtime tree is identical to H1. Record H2 or a later PR/merge SHA through a Git note or Issue/PR completion record, with any required final-head verification; no tracked manifest may claim to contain its own commit SHA.
+10. Reader-family coverage passes for all required families; a synthetic legacy-reader-as-Canon mutation fails; production code does not load or consult the inventory for runtime decisions.
 
 ## 10. Non-goals
 
