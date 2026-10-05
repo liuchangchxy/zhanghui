@@ -8,13 +8,17 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from .chapter_commit_schema import ExtractionResult
+from .reconciliation import (
+    REQUIRED_CHANGE_FIELDS,
+    _observed_facts,
+    _proposal_facts,
+    reconcile_changes,
+    validate_proposed_changes,
+)
+
 SCHEMA_VERSION = 1
 POLICY_VERSION = "changes-shadow-v1"
-CATEGORIES = {
-    "character_state", "character_state_changes", "realm", "power_breakthrough",
-    "new_plot_points", "foreshadowing_actions", "location_state_changes",
-    "faction_state_changes", "time_progression", "item_transfers", "unresolved_questions",
-}
 REQUIRED_CATEGORIES = {
     "character_state_changes", "new_plot_points", "foreshadowing_actions",
     "location_state_changes", "faction_state_changes", "time_progression",
@@ -22,118 +26,171 @@ REQUIRED_CATEGORIES = {
 }
 
 
-def _load(path: Path):
-    raw = path.read_bytes()
-    return json.loads(raw), hashlib.sha256(raw).hexdigest()
+def _canonical_digest(value: Any) -> str:
+    raw = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _validated(artifact: dict, kind: str):
-    if artifact.get("schema_version") != SCHEMA_VERSION or artifact.get("kind") != kind:
-        raise ValueError(f"invalid {kind} artifact schema or kind")
-    if artifact.get("project_mode") not in {"story_system", "legacy"}:
-        raise ValueError(f"invalid {kind} project_mode")
-    if not artifact.get("chapter_id") or not isinstance(artifact.get("items"), list):
-        raise ValueError(f"invalid {kind} chapter/items")
-    for item in artifact["items"]:
-        if not isinstance(item, dict) or not isinstance(item.get("category"), str) or not item.get("key") or "value" not in item:
-            raise ValueError(f"invalid atomic item in {kind}")
+def _proposal_atoms(proposed: dict[str, Any]):
+    atoms = []
+    for field in REQUIRED_CHANGE_FIELDS:
+        value = proposed[field]
+        if isinstance(value, list):
+            atoms.extend((field, index, item) for index, item in enumerate(value))
+        elif isinstance(value, dict):
+            atoms.append((field, 0, value))
+    for field, value in proposed.items():
+        if field in REQUIRED_CHANGE_FIELDS:
+            continue
+        rows = value if isinstance(value, list) else [value]
+        atoms.extend((field, index, row) for index, row in enumerate(rows) if row not in (None, [], {}))
+    return atoms
 
 
-def analyze_files(proposed_path, observed_path, reconciliation_path, *, project_id="unknown", extractor_failed=False):
-    """Read three explicit artifacts and return an aggregate-only report; never writes inputs."""
-    paths = [Path(proposed_path), Path(observed_path), Path(reconciliation_path)]
-    health = {"missing": 0, "invalid": 0, "stale": 0, "extractor_failure": int(extractor_failed)}
-    loaded, hashes = [], []
-    for path in paths:
-        try:
-            artifact, digest = _load(path)
-            loaded.append(artifact); hashes.append(digest)
-        except FileNotFoundError:
-            health["missing"] += 1; loaded.append(None); hashes.append(None)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            health["invalid"] += 1; loaded.append(None); hashes.append(None)
-    if any(item is None for item in loaded):
-        return _empty_report(project_id, health, hashes)
-    proposal, observed, reconciliation = loaded
-    try:
-        _validated(proposal, "proposed"); _validated(observed, "observed")
-        _validated(reconciliation, "reconciliation")
-    except ValueError:
-        health["invalid"] += 1
-        return _empty_report(project_id, health, hashes)
-    identity = (proposal["chapter_id"], proposal["project_mode"])
-    if any((row["chapter_id"], row["project_mode"]) != identity for row in loaded[1:]):
-        health["stale"] += 1
-    expected_hashes = reconciliation.get("source_sha256")
-    if expected_hashes and expected_hashes != {"proposed": hashes[0], "observed": hashes[1]}:
-        health["stale"] += 1
-    if health["stale"] or health["invalid"] or health["extractor_failure"]:
-        return _empty_report(project_id, health, hashes, proposal, observed)
+def _extraction_atoms(extraction: dict[str, Any]):
+    atoms = []
+    list_fields = ("accepted_events", "state_deltas", "entity_deltas", "entities_appeared", "scenes")
+    for field in list_fields:
+        atoms.extend((field, index, row) for index, row in enumerate(extraction.get(field, [])))
+    for field in ("chapter_meta", "dominant_strand", "summary_text"):
+        value = extraction.get(field)
+        if value not in (None, "", {}):
+            atoms.append((field, 0, value))
+    for field, value in extraction.items():
+        if field in list_fields or field in {"chapter_meta", "dominant_strand", "summary_text"}:
+            continue
+        rows = value if isinstance(value, list) else [value]
+        atoms.extend((field, index, row) for index, row in enumerate(rows) if row not in (None, [], {}))
+    return atoms
 
-    proposed_items, observed_items = proposal["items"], observed["items"]
-    opaque_p = [x for x in proposed_items if x.get("category") not in CATEGORIES]
-    opaque_o = [x for x in observed_items if x.get("category") not in CATEGORIES]
-    pmap, omap = _item_map(proposed_items, opaque_p), _item_map(observed_items, opaque_o)
-    matched = conflicts = 0
-    for key in pmap.keys() & omap.keys():
-        if pmap[key] == omap[key]: matched += 1
-        else: conflicts += 1
-    comparable_p = len(pmap)
-    comparable_o = len(omap)
-    p_only = len(pmap.keys() - omap.keys())
-    o_only = len(omap.keys() - pmap.keys())
-    internal = sum(1 for key, values in _value_sets(observed_items, opaque_o).items() if len(values) > 1)
-    categories = sorted({x.get("category", "opaque") for x in proposed_items + observed_items})
-    category_counts = {}
-    for category in categories:
-        p_items = [x for x in proposed_items if x.get("category") == category]
-        o_items = [x for x in observed_items if x.get("category") == category]
-        p_comparable = sum(1 for x in p_items if category in CATEGORIES)
-        o_comparable = sum(1 for x in o_items if category in CATEGORIES)
-        category_counts[category] = {"proposed": len(p_items), "observed": len(o_items),
-                                     "proposed_comparable": p_comparable, "observed_comparable": o_comparable}
-    adjudication_rows = reconciliation.get("conflict_adjudication", [])
-    true_count = sum(1 for row in adjudication_rows if row.get("decision") == "true_conflict")
-    false_count = sum(1 for row in adjudication_rows if row.get("decision") == "false_block")
-    unresolved_count = max(0, conflicts - true_count - false_count)
+
+def _blank_report(project_id, project_mode, chapter_id, hashes, health, proposal=None, extraction=None):
+    proposals = _proposal_atoms(proposal) if proposal else []
+    observations = _extraction_atoms(extraction) if extraction else []
     return {
-        "schema_version": SCHEMA_VERSION, "policy_version": POLICY_VERSION,
-        "status": "INSUFFICIENT", "project_id": project_id, "project_mode": identity[1],
-        "chapter_id": identity[0], "input_sha256": {"proposed": hashes[0], "observed": hashes[1], "reconciliation": hashes[2]},
-        "denominators": {"proposed_claims": len(proposed_items), "observed_facts": len(observed_items), "combined": len(proposed_items)+len(observed_items)},
-        "mapping_coverage": {"proposed_comparable": comparable_p, "proposed_denominator": len(proposed_items), "observed_comparable": comparable_o, "observed_denominator": len(observed_items), "combined_comparable": comparable_p+comparable_o, "combined_denominator": len(proposed_items)+len(observed_items)},
-        "semantic_counts": {"matched": matched, "proposed_only": p_only, "observed_only": o_only, "proposal_observation_conflict": conflicts, "observed_internal_conflict": internal, "opaque": len(opaque_p)+len(opaque_o)},
-        "categories": category_counts,
-        "hard_conflict_adjudication": {"candidates": conflicts, "confirmed_true": true_count, "false_block": false_count, "unresolved": unresolved_count},
-        "infrastructure_health": health,
-        "compatibility": {"sampled_chapters": 1, "parseable_current_and_legacy": 0},
+        "schema_version": SCHEMA_VERSION, "policy_version": POLICY_VERSION, "status": "INSUFFICIENT",
+        "project_id": project_id, "project_mode": project_mode, "chapter_id": chapter_id,
+        "input_sha256": hashes,
+        "denominators": {"proposed_claims": len(proposals), "observed_facts": len(observations),
+                         "combined": len(proposals) + len(observations)},
+        "mapping_coverage": {"proposed_comparable": 0, "proposed_denominator": len(proposals),
+                             "observed_comparable": 0, "observed_denominator": len(observations),
+                             "combined_comparable": 0, "combined_denominator": len(proposals) + len(observations)},
+        "semantic_counts": {"matched": 0, "proposed_only": 0, "observed_only": 0,
+                             "proposal_observation_conflict": 0, "observed_internal_conflict": 0, "opaque": 0},
+        "opaque_counts": {"proposed": len(proposals), "observed": len(observations),
+                          "combined": len(proposals) + len(observations)},
+        "categories": {}, "hard_conflict_adjudication": {"candidates": 0, "confirmed_true": 0,
+        "false_block": 0, "unresolved": 0}, "infrastructure_health": health,
     }
 
 
-def _item_map(items, opaque):
-    opaque_ids = {id(row) for row in opaque}
-    result = {}
-    for row in items:
-        if id(row) in opaque_ids: continue
-        result[(row["category"], row["key"])] = row.get("value")
-    return result
+def analyze_phase2_files(chapter_path, extraction_path, reconciliation_path, *, project_id, project_mode,
+                         extractor_failed=False):
+    """Measure existing Phase 2 artifacts through their production parsers and validators."""
+    paths = {"chapter": Path(chapter_path), "extraction": Path(extraction_path),
+             "reconciliation": Path(reconciliation_path)}
+    hashes: dict[str, str | None] = {key: None for key in paths}
+    health = {"missing": 0, "invalid": 0, "stale": 0, "extractor_failure": int(extractor_failed)}
+    raw = {}
+    for key, path in paths.items():
+        try:
+            data = path.read_bytes()
+            raw[key] = data
+            hashes[key] = hashlib.sha256(data).hexdigest()
+        except FileNotFoundError:
+            health["missing"] += 1
+        except OSError:
+            health["invalid"] += 1
+    if project_mode not in {"story_system", "legacy"}:
+        health["invalid"] += 1
+        return _blank_report(project_id, None, None, hashes, health)
+    chapter_text = None
+    proposed = None
+    extraction = None
+    reconciliation = None
+    chapter_id = Path(chapter_path).stem
+    if "chapter" in raw:
+        try:
+            chapter_text = raw["chapter"].decode("utf-8")
+            from changes_gate import check_r01_protocol, check_r02_enums, parse_changes_document
+            document = parse_changes_document(chapter_text)
+            if document.error or document.proposed_changes is None:
+                raise ValueError(document.error or "CHANGES is missing")
+            proposed = validate_proposed_changes(document.proposed_changes)
+            failures = check_r01_protocol(proposed) + check_r02_enums(proposed)
+            if failures:
+                raise ValueError("ProposedChanges violates Phase 2 validation: " + "; ".join(f.message for f in failures))
+            hashes["proposed"] = _canonical_digest(proposed)
+        except (UnicodeDecodeError, ValueError, TypeError):
+            health["invalid"] += 1
+    if "extraction" in raw:
+        try:
+            extraction_json = json.loads(raw["extraction"])
+            extraction = ExtractionResult.model_validate(extraction_json).model_dump()
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError):
+            health["invalid"] += 1
+    if "reconciliation" in raw:
+        try:
+            reconciliation = json.loads(raw["reconciliation"])
+            if not isinstance(reconciliation, dict):
+                raise ValueError("reconciliation must be an object")
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError):
+            health["invalid"] += 1
+    if chapter_text is None or proposed is None or extraction is None or reconciliation is None:
+        return _blank_report(project_id, project_mode, chapter_id, hashes, health, proposed, extraction)
 
-
-def _value_sets(items, opaque):
-    opaque_ids = {id(row) for row in opaque}; result = defaultdict(set)
-    for row in items:
-        if id(row) not in opaque_ids: result[(row["category"], row["key"])].add(json.dumps(row.get("value"), sort_keys=True))
-    return result
-
-
-def _empty_report(project_id, health, hashes, proposal=None, observed=None):
-    proposal_items = proposal.get("items", []) if proposal else []
-    observed_items = observed.get("items", []) if observed else []
-    return {"schema_version": SCHEMA_VERSION, "policy_version": POLICY_VERSION, "status": "INSUFFICIENT", "project_id": project_id,
-            "input_sha256": {"proposed": hashes[0], "observed": hashes[1], "reconciliation": hashes[2]},
-            "denominators": {"proposed_claims": len(proposal_items), "observed_facts": len(observed_items), "combined": len(proposal_items)+len(observed_items)},
-            "semantic_counts": {"matched": 0, "proposed_only": 0, "observed_only": 0, "proposal_observation_conflict": 0, "observed_internal_conflict": 0, "opaque": 0},
-            "infrastructure_health": health}
+    expected = reconcile_changes(proposed, extraction, chapter_text=chapter_text)
+    if reconciliation != expected:
+        health["stale"] += 1
+    proposal_atoms = _proposal_atoms(proposed)
+    extraction_atoms = _extraction_atoms(extraction)
+    proposal_fact_indexes = {fact["source_index"] for fact in _proposal_facts(proposed)}
+    observed_facts = _observed_facts(extraction)
+    observed_fact_refs = {(fact["source_type"], fact["source_index"]) for fact in observed_facts}
+    proposed_comparable = sum(field == "character_state_changes" and index in proposal_fact_indexes
+                              for field, index, _value in proposal_atoms)
+    observed_comparable = min(len(extraction_atoms), len(observed_facts))
+    conflicts = expected["conflicts"]
+    counts = {
+        "matched": len(expected["matched"]),
+        "proposed_only": len(expected["proposed_not_observed"]),
+        "observed_only": len(expected["unproposed_observed"]),
+        "proposal_observation_conflict": sum(row.get("type") == "proposal_observed_conflict" for row in conflicts),
+        "observed_internal_conflict": sum(row.get("type") == "observed_internal_conflict" for row in conflicts),
+        "opaque": max(0, len(proposal_atoms) - proposed_comparable) + max(0, len(extraction_atoms) - observed_comparable),
+    }
+    opaque_proposed = max(0, len(proposal_atoms) - proposed_comparable)
+    opaque_observed = max(0, len(extraction_atoms) - observed_comparable)
+    category_counts: dict[str, dict[str, int]] = {}
+    for category in sorted({row[0] for row in proposal_atoms} | {row[0] for row in extraction_atoms}):
+        p_count = sum(row[0] == category for row in proposal_atoms)
+        o_count = sum(row[0] == category for row in extraction_atoms)
+        p_map = sum(field == category and index in proposal_fact_indexes for field, index, _value in proposal_atoms)
+        o_map = sum(field == category and (field, index) in observed_fact_refs
+                    for field, index, _value in extraction_atoms)
+        category_counts[category] = {"proposed": p_count, "observed": o_count,
+                                     "proposed_comparable": p_map, "observed_comparable": o_map}
+    report = _blank_report(project_id, project_mode, chapter_id, hashes, health, proposed, extraction)
+    report.update({
+        "denominators": {"proposed_claims": len(proposal_atoms), "observed_facts": len(extraction_atoms),
+                         "combined": len(proposal_atoms) + len(extraction_atoms)},
+        "mapping_coverage": {"proposed_comparable": proposed_comparable, "proposed_denominator": len(proposal_atoms),
+                             "observed_comparable": observed_comparable, "observed_denominator": len(extraction_atoms),
+                             "combined_comparable": proposed_comparable + observed_comparable,
+                             "combined_denominator": len(proposal_atoms) + len(extraction_atoms)},
+        "semantic_counts": counts,
+        "opaque_counts": {"proposed": opaque_proposed, "observed": opaque_observed,
+                          "combined": opaque_proposed + opaque_observed},
+        "categories": category_counts,
+        "hard_conflict_adjudication": {"candidates": len(conflicts), "confirmed_true": 0,
+                                       "false_block": 0, "unresolved": len(conflicts)},
+        "source_contract": {"proposal_parser": "changes_gate.parse_changes_document",
+                            "proposal_validator": "reconciliation.validate_proposed_changes + R1/R2",
+                            "observation_validator": "ExtractionResult",
+                            "reconciliation": "reconciliation.reconcile_changes"},
+    })
+    return report
 
 
 def aggregate_reports(reports, *, migration_evidence_complete=False, release_cohort_policy_present=False):

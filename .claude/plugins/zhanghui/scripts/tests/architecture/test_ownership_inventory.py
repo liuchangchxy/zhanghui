@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.architecture.ownership_inventory_guard import (
+    reader_coverage,
     reader_family_coverage,
     runtime_inventory_references,
     validate_inventory,
@@ -82,19 +83,39 @@ def test_inventory_records_resolve_and_cover_required_reader_families():
     inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
     assert validate_inventory(inventory, ROOT)
     assert writer_coverage(inventory, ROOT / ".claude/plugins/zhanghui") == []
+    assert reader_coverage(inventory, ROOT / ".claude/plugins/zhanghui") == []
     assert reader_family_coverage(inventory) == []
 
 
-def test_unregistered_protected_writer_candidate_fails_until_classified(monkeypatch):
+def test_reader_inventory_coordinate_removal_exposes_protected_read():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    source = next(item for row in inventory["readers"] for item in row.get("source_coordinates", [])
+                  if item["data_domain"] == "STATE_JSON")
+    broken = copy.deepcopy(inventory)
+    for row in broken["readers"]:
+        row["source_coordinates"] = [item for item in row.get("source_coordinates", []) if item != source]
+    assert (source["path"].removeprefix(".claude/plugins/zhanghui/"), source["symbol"], source["data_domain"]) in reader_coverage(
+        broken, ROOT / ".claude/plugins/zhanghui")
+
+
+def test_unregistered_protected_writer_candidate_fails_until_classified():
     import tests.architecture.ownership_inventory_guard as guard
 
-    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
-    candidate = ("scripts/new_writer.py", "write_story_state")
-    monkeypatch.setattr(guard, "discovered_writer_coordinates", lambda _root: {candidate})
-    assert guard.writer_coverage(inventory, PLUGIN) == [candidate]
-    inventory["writers"].append({"implementation": {"path": ".claude/plugins/zhanghui/scripts/new_writer.py",
-                                                       "symbol": "write_story_state"}})
-    assert guard.writer_coverage(inventory, PLUGIN) == []
+    fixture_root = PLUGIN / "writer-coordinate-fixture"
+    (fixture_root / "scripts").mkdir(parents=True)
+    (fixture_root / "scripts/new_writer.py").write_text(
+        "def write_story_state(state_path, payload):\n"
+        "    atomic_write_json(state_path, payload)\n", encoding="utf-8")
+    try:
+        candidate = ("scripts/new_writer.py", "write_story_state", "STATE_JSON")
+        inventory = {"writers": [], "writer_exceptions": []}
+        assert guard.writer_coverage(inventory, fixture_root) == [candidate]
+        inventory["writers"].append({"implementation": {"path": candidate[0], "symbol": candidate[1]},
+                                     "data_domains": [candidate[2]]})
+        assert guard.writer_coverage(inventory, fixture_root) == []
+    finally:
+        import shutil
+        shutil.rmtree(fixture_root)
 
 
 def test_ast_scanner_discovers_new_state_writer_in_source(tmp_path):
@@ -116,6 +137,102 @@ def test_ast_scanner_finds_actual_archive_and_memory_writers():
     found = discovered_writer_coordinates(PLUGIN)
     assert ("scripts/archive_manager.py", "ArchiveManager") in found
     assert ("scripts/project_memory.py", "add_pattern") in found
+
+
+def test_reader_scanner_detects_new_protected_file_reader():
+    from tests.architecture.ownership_inventory_guard import reader_coverage
+
+    scripts = PLUGIN / "scripts"
+    fixture_root = PLUGIN / "reader-scan-fixture"
+    fixture_root.mkdir()
+    (fixture_root / "scripts").mkdir()
+    (fixture_root / "scripts" / "new_state_reader.py").write_text(
+        "def read_state(project_root):\n"
+        "    state_path = project_root / '.webnovel' / 'state.json'\n"
+        "    return json.loads(state_path.read_text(encoding='utf-8'))\n",
+        encoding="utf-8",
+    )
+    try:
+        assert ("scripts/new_state_reader.py", "read_state", "STATE_JSON") in reader_coverage(
+            {"readers": [], "reader_exceptions": []}, fixture_root
+        )
+    finally:
+        import shutil
+        shutil.rmtree(fixture_root)
+
+
+def test_unresolved_protected_reader_source_requires_exact_classification():
+    from tests.architecture.ownership_inventory_guard import reader_coverage
+
+    fixture_root = PLUGIN / "reader-dynamic-fixture"
+    (fixture_root / "scripts" / "data_modules").mkdir(parents=True)
+    (fixture_root / "scripts" / "data_modules" / "dynamic_reader.py").write_text(
+        "def read_state(source):\n"
+        "    return load_json(source)\n",
+        encoding="utf-8",
+    )
+    try:
+        candidate = ("scripts/data_modules/dynamic_reader.py", "read_state", "STATE_JSON")
+        inventory = {"readers": [], "reader_exceptions": []}
+        assert candidate in reader_coverage(inventory, fixture_root)
+        inventory["reader_exceptions"].append({
+            "family": "reader", "path": candidate[0], "symbol": candidate[1], "domain": candidate[2],
+            "sink": "load_json", "target_expression": "source",
+            "reason_code": "DYNAMIC_TARGET_REVIEWED",
+            "rationale": "fixture source is explicitly reviewed as a non-Canon compatibility read",
+        })
+        assert candidate not in reader_coverage(inventory, fixture_root)
+    finally:
+        import shutil
+        shutil.rmtree(fixture_root)
+
+
+def test_writer_scanner_detects_new_protected_sql_mutator():
+    from tests.architecture.ownership_inventory_guard import writer_coverage
+
+    fixture_root = PLUGIN / "writer-scan-fixture"
+    fixture_root.mkdir()
+    (fixture_root / "scripts").mkdir()
+    (fixture_root / "scripts" / "new_index_writer.py").write_text(
+        "def persist_entity(conn, entity):\n"
+        "    sql = 'INSERT INTO entities (id) VALUES (?)'\n"
+        "    conn.execute(sql, (entity,))\n",
+        encoding="utf-8",
+    )
+    try:
+        assert ("scripts/new_index_writer.py", "persist_entity", "INDEX_DB") in writer_coverage(
+            {"writers": [], "writer_exceptions": []}, fixture_root
+        )
+    finally:
+        import shutil
+        shutil.rmtree(fixture_root)
+
+
+def test_unresolved_protected_writer_target_requires_exact_reason_coded_exception():
+    from tests.architecture.ownership_inventory_guard import writer_coverage
+
+    fixture_root = PLUGIN / "writer-dynamic-fixture"
+    fixture_root.mkdir()
+    (fixture_root / "scripts" / "data_modules").mkdir(parents=True)
+    (fixture_root / "scripts" / "data_modules" / "dynamic_writer.py").write_text(
+        "def write_state(target, payload):\n"
+        "    atomic_write_json(target, payload)\n",
+        encoding="utf-8",
+    )
+    try:
+        inventory = {"writers": [], "writer_exceptions": []}
+        candidate = ("scripts/data_modules/dynamic_writer.py", "write_state", "STATE_JSON")
+        assert candidate in writer_coverage(inventory, fixture_root)
+        inventory["writer_exceptions"].append({
+            "family": "writer", "path": candidate[0], "symbol": candidate[1], "domain": candidate[2],
+            "sink": "atomic_write_json", "reason_code": "DYNAMIC_TARGET_REVIEWED",
+            "target_expression": "target",
+            "rationale": "fixture proves this parameter is outside protected roots",
+        })
+        assert candidate not in writer_coverage(inventory, fixture_root)
+    finally:
+        import shutil
+        shutil.rmtree(fixture_root)
 
 
 def test_production_runtime_does_not_consult_inventory():

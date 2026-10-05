@@ -18,8 +18,11 @@ def _ensure_scripts_on_path() -> None:
 _ensure_scripts_on_path()
 
 from data_modules.tests.commit_helpers import build_commit_with_reconciliation
+from data_modules.tests.commit_helpers import EMPTY_PROPOSAL
 from data_modules.chapter_commit_service import ChapterCommitService  # noqa: E402
 from data_modules.projection_log import commit_hash, read_projection_runs  # noqa: E402
+from data_modules.gate_findings import DetectedFinding, EvidenceRef, FindingAuthority, FindingCategory
+from data_modules.reconciliation import reconcile_changes
 from data_modules.projections import (  # noqa: E402
     rebuild_projections,
     replay_projections,
@@ -31,14 +34,36 @@ def _make_rejected_commit(project_root: Path, chapter: int) -> None:
     (project_root / ".webnovel").mkdir(parents=True, exist_ok=True)
     (project_root / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
     service = ChapterCommitService(project_root)
-    payload = build_commit_with_reconciliation(service,
-        chapter=chapter,
-        review_result={"blocking_count": 1},
-        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
-        disambiguation_result={"pending": []},
-        extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+    extraction = {"state_deltas": [], "entity_deltas": [], "accepted_events": []}
+    chapter_text = "test final prose\n<chapter_changes>" + json.dumps(
+        EMPTY_PROPOSAL, ensure_ascii=False
+    ) + "</chapter_changes>"
+    finding = DetectedFinding(
+        gate_id="projection-fixture.integrity",
+        stable_subject_key=f"invalid-integrity-proof:{chapter}",
+        category=FindingCategory.INTEGRITY,
+        authority=FindingAuthority.SYSTEM_INTEGRITY,
+        scope={"chapter": chapter},
+        evidence=[EvidenceRef(kind="deterministic_validation", identity={"valid": False})],
+        checker_id="projection-fixture", checker_version="1",
     )
-    service.persist_commit(payload)
+    service.evaluate_attempt(
+        chapter, [finding], attempt_id=f"projection-fixture-{chapter}",
+        policy_version="test-v1", scope={"chapter": chapter},
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []}, extraction_result=extraction,
+        chapter_text=chapter_text, proposed_changes=EMPTY_PROPOSAL,
+        reconciliation_result=reconcile_changes(EMPTY_PROPOSAL, extraction, chapter_text=chapter_text),
+    )
+
+
+def test_rejected_projection_fixture_is_bound_to_a_service_owned_hard_veto(tmp_path):
+    _make_rejected_commit(tmp_path, chapter=8)
+    payload = json.loads((tmp_path / ".story-system/commits/chapter_008.commit.json").read_text(encoding="utf-8"))
+    assert payload["meta"]["status"] == "rejected"
+    assert payload["gate_decision_binding"]["final_action"] == "REJECT"
+    assert payload["gate_decision_binding"]["policy_version"] == "test-v1"
 
 
 def _make_accepted_commit_with_event(project_root: Path, chapter: int) -> None:

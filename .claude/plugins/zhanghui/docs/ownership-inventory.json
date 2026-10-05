@@ -39,7 +39,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
           "anchor": "ChapterCommitService"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "event-log",
@@ -70,6 +71,176 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
           "anchor": "write_events"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:foreshadowing"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:timeline"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "symbol": "ChapterCommitService",
+          "data_domain": "EVENTS",
+          "sink": "write_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "symbol": "EventLogStore",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:story_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chase_debt"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:debt_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:override_contracts"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:invalid_facts"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:tool_call_stats"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapter_reading_power"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:review_metrics"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:writing_checklist_scores"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "ensure_override_ledger_columns",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:override_contracts"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "persist_amend_proposals",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:override_contracts"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_events",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:story_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/style_sampler.py",
+          "symbol": "StyleSampler",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:samples"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "symbol": "_sqlite_lock",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:locks"
         }
       ]
     },
@@ -102,7 +273,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/event_projection_router.py",
           "anchor": "EventProjectionRouter"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "state-projection",
@@ -133,7 +305,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
           "anchor": "StateProjectionWriter"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "index-projection",
@@ -164,7 +337,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
           "anchor": "IndexProjectionWriter"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "summary-projection",
@@ -195,7 +369,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/summary_projection_writer.py",
           "anchor": "SummaryProjectionWriter"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "memory-projection",
@@ -226,7 +401,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
           "anchor": "MemoryProjectionWriter"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "vector-projection",
@@ -256,6 +432,62 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/vector_projection_writer.py",
           "anchor": "VectorProjectionWriter"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "VECTORS",
+          "sink": "SQL:rag_query_log"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:bm25_index"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:bm25_index"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:rag_schema_meta"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors_migrating"
         }
       ]
     },
@@ -289,6 +521,26 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
           "anchor": "StateManager"
         }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "symbol": "StateManager",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "symbol": "StateManager",
+          "data_domain": "STATE_JSON",
+          "sink": "process_chapter_entities"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "process_chapter_result"
+        }
       ]
     },
     {
@@ -320,6 +572,14 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
           "anchor": "SQLStateManager"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "SQLStateManager",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities"
         }
       ]
     },
@@ -353,7 +613,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
           "anchor": "IndexManager"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "story-craft",
@@ -385,7 +646,8 @@
           "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
           "anchor": "StoryCraftFieldError"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "webnovel-story-craft",
@@ -417,7 +679,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
           "anchor": "cmd_story_craft"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "volume-state",
@@ -448,7 +711,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
           "anchor": "VolumeStateManager"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "promise-ledger",
@@ -479,7 +743,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py",
           "anchor": "PromiseLedger"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "consistency-apply",
@@ -511,6 +776,26 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
           "anchor": "apply_all"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
+          "data_domain": "STATE_JSON",
+          "sink": "open"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
+          "data_domain": "STATE_JSON",
+          "sink": "write_text"
         }
       ]
     },
@@ -545,7 +830,8 @@
           "path": ".claude/plugins/zhanghui/scripts/init_project.py",
           "anchor": "init_project"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "story-craft-migration",
@@ -578,7 +864,8 @@
           "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
           "anchor": "migrate_state_json"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "state-sqlite-migration",
@@ -611,6 +898,14 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
           "anchor": "migrate_state_to_sqlite"
         }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+          "symbol": "migrate_state_to_sqlite",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json"
+        }
       ]
     },
     {
@@ -642,6 +937,14 @@
           "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
           "anchor": "atomic_write_json"
         }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "symbol": "build_review_artifacts",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "atomic_write_json"
+        }
       ]
     },
     {
@@ -672,6 +975,14 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/gate_decision_store.py",
           "anchor": "atomic_write_json"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/gate_decision_store.py",
+          "symbol": "GateDecisionStore",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "atomic_write_json"
         }
       ]
     },
@@ -705,6 +1016,14 @@
           "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
           "anchor": "main"
         }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/patches/p7_derived_views.py",
+          "symbol": "P7DerivedViews",
+          "data_domain": "INTENT",
+          "sink": "write_text"
+        }
       ]
     },
     {
@@ -737,7 +1056,15 @@
           "anchor": "main"
         }
       ],
-      "selector": "canon-state-options"
+      "selector": "canon-state-options",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "symbol": "StateUpdater",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json"
+        }
+      ]
     },
     {
       "writer_id": "update-state-foreshadowing-strand",
@@ -771,7 +1098,8 @@
           "anchor": "main"
         }
       ],
-      "selector": "foreshadowing-and-strand-options"
+      "selector": "foreshadowing-and-strand-options",
+      "source_coordinates": []
     },
     {
       "writer_id": "update-state-volume-planning",
@@ -804,7 +1132,8 @@
           "anchor": "main"
         }
       ],
-      "selector": "volume-planning-options"
+      "selector": "volume-planning-options",
+      "source_coordinates": []
     },
     {
       "writer_id": "update-state-review-metadata",
@@ -836,7 +1165,8 @@
           "anchor": "main"
         }
       ],
-      "selector": "review-metadata-option"
+      "selector": "review-metadata-option",
+      "source_coordinates": []
     },
     {
       "writer_id": "archive-save-state",
@@ -867,6 +1197,68 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
           "anchor": "ArchiveManager"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "symbol": "ArchiveManager",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/cli.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "write_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "symbol": "ChapterCommitService",
+          "data_domain": "STATE_JSON",
+          "sink": "apply_projection_writers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "rebuild_projections",
+          "data_domain": "STATE_JSON",
+          "sink": "apply_projection_writers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projections.py",
+          "symbol": "retry_projection",
+          "data_domain": "STATE_JSON",
+          "sink": "apply_projection_writers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "symbol": "generate_volume_blueprints",
+          "data_domain": "STATE_JSON",
+          "sink": "write_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "symbol": "init_project",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/run_behavior_evals.py",
+          "symbol": "_eval_commit_projection_runtime",
+          "data_domain": "STATE_JSON",
+          "sink": "write_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/run_behavior_evals.py",
+          "symbol": "_eval_consistency_cli_contract",
+          "data_domain": "STATE_JSON",
+          "sink": "write_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "symbol": "_run_self_tests",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json"
         }
       ]
     },
@@ -901,7 +1293,8 @@
           "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
           "anchor": "ConsistencyRunner"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "index-cli-entry",
@@ -931,6 +1324,14 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
           "anchor": "main"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+          "symbol": "main",
+          "data_domain": "INDEX_DB",
+          "sink": "process_chapter_data"
         }
       ]
     },
@@ -964,6 +1365,14 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
           "anchor": "MemoryContractAdapter"
         }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "symbol": "MemoryContractAdapter",
+          "data_domain": "STATE_JSON",
+          "sink": "process_chapter_result"
+        }
       ]
     },
     {
@@ -994,6 +1403,14 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
           "anchor": "main"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "process_chapter_entities"
         }
       ]
     },
@@ -1026,7 +1443,8 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
           "anchor": "main"
         }
-      ]
+      ],
+      "source_coordinates": []
     },
     {
       "writer_id": "state-locked-write",
@@ -1056,6 +1474,14 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
           "anchor": "_LockedState"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+          "symbol": "_LockedState",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json"
         }
       ]
     },
@@ -1089,6 +1515,14 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
           "anchor": "_save_state_via_atomic"
         }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "symbol": "_save_state_via_atomic",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json"
+        }
       ]
     },
     {
@@ -1119,6 +1553,14 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
           "anchor": "add_pattern"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+          "symbol": "add_pattern",
+          "data_domain": "MEMORY",
+          "sink": "atomic_write_json"
         }
       ]
     },
@@ -1154,7 +1596,8 @@
           "path": ".claude/plugins/zhanghui/scripts/update_state.py",
           "anchor": "StateUpdater"
         }
-      ]
+      ],
+      "source_coordinates": []
     }
   ],
   "readers": [
@@ -1194,7 +1637,93 @@
         }
       ],
       "reader_family": "Story System commit and projection readers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "symbol": "ChapterCommitService",
+          "data_domain": "CANON_COMMIT",
+          "sink": "glob"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_provenance.py",
+          "symbol": "build_governed_context",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_provenance.py",
+          "symbol": "classify_rag_hit",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_provenance.py",
+          "symbol": "load_commit_fact_items",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_bytes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "symbol": "discover_validated_chapter_commits",
+          "data_domain": "CANON_COMMIT",
+          "sink": "iterdir"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "symbol": "discover_validated_chapter_commits",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_validated_chapter_commit"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "symbol": "read_durable_commit",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_validated_chapter_commit"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "symbol": "require_durable_commit_match",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "symbol": "EventLogStore",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "symbol": "MemoryContractAdapter",
+          "data_domain": "CANON_COMMIT",
+          "sink": "glob"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_phase.py",
+          "symbol": "_scan_commits",
+          "data_domain": "CANON_COMMIT",
+          "sink": "glob"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_runtime_sources.py",
+          "symbol": "load_runtime_sources",
+          "data_domain": "CANON_COMMIT",
+          "sink": "_load_latest_accepted_commit"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_runtime_sources.py",
+          "symbol": "load_runtime_sources",
+          "data_domain": "CANON_COMMIT",
+          "sink": "_load_latest_commit"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_system_mode.py",
+          "symbol": "is_story_system_project",
+          "data_domain": "CANON_COMMIT",
+          "sink": "glob"
+        }
+      ]
     },
     {
       "reader_id": "event-reader",
@@ -1232,7 +1761,21 @@
         }
       ],
       "reader_family": "Story System commit and projection readers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "EVENTS",
+          "sink": "read_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_events.py",
+          "symbol": "main",
+          "data_domain": "EVENTS",
+          "sink": "read_events"
+        }
+      ]
     },
     {
       "reader_id": "context-assembly",
@@ -1270,7 +1813,8 @@
         }
       ],
       "reader_family": "context/runtime source assembly",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": []
     },
     {
       "reader_id": "query-reader",
@@ -1308,7 +1852,8 @@
         }
       ],
       "reader_family": "query and resume",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": []
     },
     {
       "reader_id": "resume-reader",
@@ -1346,7 +1891,15 @@
         }
       ],
       "reader_family": "query and resume",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/gate_decision_store.py",
+          "symbol": "GateDecisionStore",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "read_text"
+        }
+      ]
     },
     {
       "reader_id": "write-reader",
@@ -1384,7 +1937,8 @@
         }
       ],
       "reader_family": "write/plan/review consumers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": []
     },
     {
       "reader_id": "plan-reader",
@@ -1422,7 +1976,27 @@
         }
       ],
       "reader_family": "write/plan/review consumers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
+          "data_domain": "INTENT",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/patches/p7_derived_views.py",
+          "symbol": "P7DerivedViews",
+          "data_domain": "INTENT",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INTENT",
+          "sink": "read_text"
+        }
+      ]
     },
     {
       "reader_id": "review-reader",
@@ -1460,7 +2034,15 @@
         }
       ],
       "reader_family": "write/plan/review consumers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "symbol": "build_review_artifacts",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "read_text"
+        }
+      ]
     },
     {
       "reader_id": "state-reader",
@@ -1498,7 +2080,165 @@
         }
       ],
       "reader_family": "state/index/summary/memory/vector readers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "symbol": "ArchiveManager",
+          "data_domain": "STATE_JSON",
+          "sink": "open"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_overdue_foreshadow",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/chapter_outline_loader.py",
+          "symbol": "volume_num_for_chapter_from_state",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/cli.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
+          "data_domain": "STATE_JSON",
+          "sink": "open"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "symbol": "ChapterCommitService",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/orchestrator.py",
+          "symbol": "MemoryOrchestrator",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+          "symbol": "migrate_state_to_sqlite",
+          "data_domain": "STATE_JSON",
+          "sink": "open"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/prewrite_validator.py",
+          "symbol": "PrewriteValidator",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_status.py",
+          "symbol": "_project_title",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_prepare_targets",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_state",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_runtime_health.py",
+          "symbol": "_resolve_chapter",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+          "symbol": "extract_state_summary",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "symbol": "generate_volume_blueprints",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "symbol": "init_project",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+          "symbol": "_current_chapter",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "symbol": "_load_story_state",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/run_behavior_evals.py",
+          "symbol": "_eval_commit_projection_runtime",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "symbol": "_run_self_tests",
+          "data_domain": "STATE_JSON",
+          "sink": "open"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/status_reporter.py",
+          "symbol": "StatusReporter",
+          "data_domain": "STATE_JSON",
+          "sink": "open"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/tracking_query.py",
+          "symbol": "load_foreshadow_index",
+          "data_domain": "STATE_JSON",
+          "sink": "open"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "symbol": "StateUpdater",
+          "data_domain": "STATE_JSON",
+          "sink": "open"
+        }
+      ]
     },
     {
       "reader_id": "index-reader",
@@ -1536,7 +2276,339 @@
         }
       ],
       "reader_family": "state/index/summary/memory/vector readers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_check_db_readable",
+          "data_domain": "INDEX_DB",
+          "sink": "open"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_entity_lookup",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_entity_lookup",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_foreshadowing_state",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:foreshadowing"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_item_state",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_timeline",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:timeline"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:foreshadowing"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:timeline"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "symbol": "EventLogStore",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:story_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chase_debt"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:debt_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:override_contracts"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapter_reading_power"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chase_debt"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:invalid_facts"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:override_contracts"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:review_metrics"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:tool_call_stats"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+          "symbol": "IndexProjectionWriter",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapter_reading_power"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:review_metrics"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:writing_checklist_scores"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/knowledge_query.py",
+          "symbol": "KnowledgeQuery",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/knowledge_query.py",
+          "symbol": "KnowledgeQuery",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "ensure_override_ledger_columns",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:override_contracts"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "persist_amend_proposals",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:override_contracts"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_events",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:story_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:story_events"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "SQLStateManager",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "SQLStateManager",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/style_sampler.py",
+          "symbol": "StyleSampler",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:samples"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "symbol": "_sqlite_lock",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:locks"
+        }
+      ]
     },
     {
       "reader_id": "summary-reader",
@@ -1574,7 +2646,57 @@
         }
       ],
       "reader_family": "state/index/summary/memory/vector readers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/bootstrap.py",
+          "symbol": "bootstrap_from_index",
+          "data_domain": "SUMMARIES",
+          "sink": "glob"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/orchestrator.py",
+          "symbol": "MemoryOrchestrator",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "symbol": "MemoryContractAdapter",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_summaries",
+          "data_domain": "SUMMARIES",
+          "sink": "glob"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "main",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+          "symbol": "_load_summary_file",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text"
+        }
+      ]
     },
     {
       "reader_id": "memory-reader",
@@ -1612,7 +2734,21 @@
         }
       ],
       "reader_family": "state/index/summary/memory/vector readers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "symbol": "MemoryContractAdapter",
+          "data_domain": "MEMORY",
+          "sink": "read_text"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_prepare_targets",
+          "data_domain": "MEMORY",
+          "sink": "read_text"
+        }
+      ]
     },
     {
       "reader_id": "vector-reader",
@@ -1650,7 +2786,63 @@
         }
       ],
       "reader_family": "state/index/summary/memory/vector readers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "VECTORS",
+          "sink": "SQL:rag_query_log"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:bm25_index"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:bm25_index"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:rag_schema_meta"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors_migrating"
+        }
+      ]
     },
     {
       "reader_id": "craft-reader",
@@ -1688,7 +2880,15 @@
         }
       ],
       "reader_family": "state/index/summary/memory/vector readers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/style_fingerprint.py",
+          "symbol": "generate_baseline",
+          "data_domain": "CRAFT",
+          "sink": "glob"
+        }
+      ]
     },
     {
       "reader_id": "reference-reader",
@@ -1726,7 +2926,8 @@
         }
       ],
       "reader_family": "legacy fallback readers",
-      "lifecycle_status": "allowed"
+      "lifecycle_status": "allowed",
+      "source_coordinates": []
     }
   ],
   "migrations": [
@@ -1810,5 +3011,624 @@
       "chapter_facts": "no implicit Canon source selection",
       "migration": "diagnose and stop pending explicit repair"
     }
-  }
+  },
+  "writer_exceptions": [
+    {
+      "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+      "symbol": "ArchiveManager",
+      "domain": "COMPATIBILITY",
+      "sink": "atomic_write_json",
+      "target_expression": "archive_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "anchor": "ArchiveManager"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+      "symbol": "ScratchpadManager",
+      "domain": "MEMORY",
+      "sink": "atomic_write_json",
+      "target_expression": "self.path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "anchor": "ScratchpadManager"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+      "symbol": "append_projection_run",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "open",
+      "target_expression": "'a'",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+          "anchor": "append_projection_run"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/review_schema.py",
+      "symbol": "_write_json",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "atomic_write_json",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/review_schema.py",
+          "anchor": "_write_json"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+      "symbol": "migrate_state_json",
+      "domain": "CRAFT",
+      "sink": "atomic_write_json",
+      "target_expression": "str(p)",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+      "symbol": "migrate_state_json",
+      "domain": "STATE_JSON",
+      "sink": "atomic_write_json",
+      "target_expression": "str(p)",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+      "symbol": "main",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "atomic_write_json",
+      "target_expression": "out_path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/revise_chapter.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "write_text",
+      "target_expression": "out_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/revise_chapter.py",
+          "anchor": "main"
+        }
+      ]
+    }
+  ],
+  "reader_exceptions": [
+    {
+      "path": ".claude/plugins/zhanghui/scripts/_shared/text_humanizer.py",
+      "symbol": "_load_chapter",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/_shared/text_humanizer.py",
+          "anchor": "_load_chapter"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+      "symbol": "ArchiveManager",
+      "domain": "COMPATIBILITY",
+      "sink": "open",
+      "target_expression": "archive_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "anchor": "ArchiveManager"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/chapter_commit.py",
+      "symbol": "_read_json",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "Path(path)",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/chapter_commit.py",
+          "anchor": "_read_json"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/chapter_commit.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "Path(args.chapter_file)",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/chapter_commit.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+      "symbol": "ContextManager",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "matches[0]",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "ContextManager"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+      "symbol": "ContextManager",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "ContextManager"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+      "symbol": "ContextManager",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "profile_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "ContextManager"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+      "symbol": "ContextManager",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "taxonomy_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "ContextManager"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+      "symbol": "read_commit_file",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "anchor": "read_commit_file"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+      "symbol": "IndexProjectionWriter",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+          "anchor": "IndexProjectionWriter"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/bootstrap.py",
+      "symbol": "bootstrap_from_index",
+      "domain": "MEMORY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/bootstrap.py",
+          "anchor": "bootstrap_from_index"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+      "symbol": "MemoryContractAdapter",
+      "domain": "MEMORY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "anchor": "MemoryContractAdapter"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+      "symbol": "MemoryContractAdapter",
+      "domain": "MEMORY",
+      "sink": "read_text",
+      "target_expression": "profile_path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "anchor": "MemoryContractAdapter"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+      "symbol": "append_projection_run",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "open",
+      "target_expression": "'a'",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+          "anchor": "append_projection_run"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+      "symbol": "read_projection_runs",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+          "anchor": "read_projection_runs"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projections.py",
+      "symbol": "_read_commit",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projections.py",
+          "anchor": "_read_commit"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/reference_research_injector.py",
+      "symbol": "<module>",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "Path(a.chapter_file)",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/reference_research_injector.py",
+          "anchor": "read_text"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/review_schema.py",
+      "symbol": "_read_json_if_exists",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/review_schema.py",
+          "anchor": "_read_json_if_exists"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+      "symbol": "StateProjectionWriter",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+          "anchor": "StateProjectionWriter"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/write_gates/precommit.py",
+      "symbol": "run_precommit_gate",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/write_gates/precommit.py",
+          "anchor": "run_precommit_gate"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+      "symbol": "extract_chapter_summary",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+          "anchor": "extract_chapter_summary"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+      "symbol": "_read_text_if_exists",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "anchor": "_read_text_if_exists"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+      "symbol": "generate_volume_blueprints",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "anchor": "generate_volume_blueprints"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+      "symbol": "migrate_state_json",
+      "domain": "CRAFT",
+      "sink": "read_text",
+      "target_expression": "p",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+      "symbol": "migrate_state_json",
+      "domain": "STATE_JSON",
+      "sink": "read_text",
+      "target_expression": "p",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/prepare_data_agent_input.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "Path(args.chapter_file)",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/prepare_data_agent_input.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+      "symbol": "_load_json_required",
+      "domain": "MEMORY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+          "anchor": "_load_json_required"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/reconcile_changes.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/reconcile_changes.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/revise_chapter.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "args.chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/revise_chapter.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/status_reporter.py",
+      "symbol": "StatusReporter",
+      "domain": "COMPATIBILITY",
+      "sink": "open",
+      "target_expression": "chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "This reads or writes a caller-supplied chapter, template, archive, or profile path outside a classified story store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/status_reporter.py",
+          "anchor": "StatusReporter"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+      "symbol": "_load_state",
+      "domain": "CRAFT",
+      "sink": "read_text",
+      "target_expression": "p",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "_load_state"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+      "symbol": "_load_state",
+      "domain": "STATE_JSON",
+      "sink": "read_text",
+      "target_expression": "p",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "_load_state"
+        }
+      ]
+    }
+  ]
 }

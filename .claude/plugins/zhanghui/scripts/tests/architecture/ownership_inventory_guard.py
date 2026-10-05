@@ -8,6 +8,7 @@ DOMAINS = {
     "CANON_COMMIT", "EVENTS", "STATE_JSON", "INDEX_DB", "SUMMARIES",
     "MEMORY", "VECTORS", "INTENT", "CRAFT", "WORKFLOW_METADATA",
     "MIGRATION", "COMPATIBILITY",
+    "REFERENCE",
 }
 STATUSES = {"allowed", "guarded", "deprecated", "compatibility_only"}
 MODE_STATUSES = {"allowed", "guarded", "rejected", "projection_only", "not_applicable"}
@@ -15,6 +16,185 @@ CLAIMS = {
     "CANON_AUTHORITY", "VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY",
     "INTENT", "CRAFT", "WORKFLOW", "REFERENCE", "PRESERVE_ONLY", "UNKNOWN",
 }
+REASON_CODES = {"DYNAMIC_TARGET_REVIEWED", "OPAQUE_ADAPTER_REVIEWED", "NON_STORY_STORE"}
+SQL_DOMAINS = {
+    "INDEX_DB": {"chapters", "scenes", "appearances", "entities", "aliases", "state_changes",
+                 "relationships", "story_events", "chapter_reading_power", "invalid_facts",
+                 "review_metrics", "writing_checklist_scores", "override_contracts", "chase_debt",
+                 "debt_events", "foreshadowing", "promise_ledger", "intent", "planning_horizon",
+                 "relationship_events", "timeline", "locks", "samples", "tool_call_stats"},
+    "VECTORS": {"vectors", "vectors_migrating", "bm25_index", "doc_stats", "rag_schema_meta", "rag_query_log"},
+    "WORKFLOW_METADATA": {"gate_decisions", "workflow_events", "review_attempts", "projection_runs"},
+}
+PROTECTED_SOURCE_HINTS = (
+    "state", "index", "commit", "event", "projection", "summary", "memory", "vector",
+    "intent", "craft", "review", "workflow", "migration", "init_project", "volume_state",
+    "promise_ledger", "context_manager", "tracking_query", "archive_manager",
+)
+
+
+def _domain_for_text(value):
+    text = str(value or "").lower()
+    domains = set()
+    if any(token in text for token in (".story-system/commits", "commits/", "commit_path", "commit_dir")):
+        domains.add("CANON_COMMIT")
+    if any(token in text for token in ("events/", ".story-system/events", "event_path", "event_file")):
+        domains.add("EVENTS")
+    if any(token in text for token in ("state.json", "state_path", "state_file", "state")):
+        domains.add("STATE_JSON")
+    if any(token in text for token in ("index.db", "index_path", "db_path", "sqlite")):
+        domains.add("INDEX_DB")
+    if any(token in text for token in ("summary", "summaries")):
+        domains.add("SUMMARIES")
+    if any(token in text for token in ("memory", "scratchpad")):
+        domains.add("MEMORY")
+    if any(token in text for token in ("vector", "bm25")):
+        domains.add("VECTORS")
+    if any(token in text for token in ("intent", "promise", "foreshadow", "strand", "planning")):
+        domains.add("INTENT")
+    if any(token in text for token in ("craft", "style_profile")):
+        domains.add("CRAFT")
+    if any(token in text for token in ("workflow", "gate_decision", "review_attempt", "projection_run")):
+        domains.add("WORKFLOW_METADATA")
+    if any(token in text for token in ("chapter_file", "chapter.md", "taxonomy", "profile_path", "archive_file", "init_project.py")):
+        domains.add("COMPATIBILITY")
+    if "review" in text and any(token in text for token in ("pipeline", "result", "schema", "artifact")):
+        domains.add("WORKFLOW_METADATA")
+    if "commit" in text:
+        domains.add("CANON_COMMIT")
+    if "index_projection_writer" in text:
+        domains.add("INDEX_DB")
+    return domains
+
+
+def _resolve_expr(node, aliases):
+    if isinstance(node, ast.Constant):
+        return repr(node.value) if isinstance(node.value, str) else str(node.value)
+    if isinstance(node, ast.Name):
+        return aliases.get(node.id, node.id)
+    if isinstance(node, ast.JoinedStr):
+        return " ".join(_resolve_expr(part, aliases) for part in node.values)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _resolve_expr(node.left, aliases) + _resolve_expr(node.right, aliases)
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        return _resolve_expr(node.func.value, aliases) + "." + node.func.attr
+    if isinstance(node, ast.Attribute):
+        return _resolve_expr(node.value, aliases) + "." + node.attr
+    return ast.unparse(node)
+
+
+def _sql_resources(sql):
+    text = str(sql or "")
+    mutation = bool(re.search(r"\b(insert|update|delete|replace|create|alter|drop)\b", text, re.I))
+    access = "write" if mutation else "read" if re.search(r"\b(select|pragma|with)\b", text, re.I) else None
+    if not access:
+        return []
+    names = set(re.findall(r"\b(?:from|join|into|update|table)\s+[\"'`]?([a-z_][\w]*)", text, re.I))
+    return [(domain, name, access) for domain, tables in SQL_DOMAINS.items()
+            for name in names if name.lower() in tables]
+
+
+def _protected_candidates(plugin_root, *, writers):
+    candidates, unresolved = set(), set()
+    for path in (plugin_root / "scripts").rglob("*.py"):
+        if "tests" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+        relative = path.relative_to(plugin_root).as_posix()
+        path_hints = any(hint in relative.lower() for hint in PROTECTED_SOURCE_HINTS)
+
+        def visit(node, class_name=None, function_name=None, aliases=None):
+            aliases = aliases if aliases is not None else {}
+            if isinstance(node, ast.ClassDef):
+                class_name = node.name
+                aliases = {}
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                function_name = node.name
+                aliases = {}
+            if isinstance(node, ast.Assign):
+                value = _resolve_expr(node.value, aliases)
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        aliases[target.id] = value
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value:
+                aliases[node.target.id] = _resolve_expr(node.value, aliases)
+
+            if isinstance(node, ast.Call):
+                name = (node.func.id if isinstance(node.func, ast.Name) else
+                        node.func.attr if isinstance(node.func, ast.Attribute) else "")
+                coordinate = (relative, class_name or function_name or "<module>")
+                found = []
+                unresolved_domains = set()
+                if writers and name == "atomic_write_json" and node.args:
+                    target = _resolve_expr(node.args[0], aliases)
+                    domains = _domain_for_text(target)
+                    if domains == {"COMPATIBILITY"}:
+                        unresolved.add((coordinate[0], coordinate[1], "COMPATIBILITY", name, target))
+                    elif domains:
+                        found.extend((domain, name) for domain in domains)
+                    elif path_hints or any(token in (class_name or "").lower() + (function_name or "").lower()
+                                           for token in PROTECTED_SOURCE_HINTS):
+                        unresolved_domains |= _domain_for_text(relative + " " + (class_name or "") + " " + (function_name or "")) or {"COMPATIBILITY"}
+                if name in {"execute", "executemany", "executescript"} and node.args:
+                    sql = _resolve_expr(node.args[0], aliases)
+                    resources = _sql_resources(sql)
+                    found.extend((domain, "SQL:" + table) for domain, table, access in resources
+                                 if access == "write")
+                    if not resources and path_hints and not re.search(r"\b(select|insert|update|delete|replace|create|alter|drop|pragma|begin|commit|rollback)\b", sql, re.I):
+                        unresolved_domains |= _domain_for_text(relative + " " + (class_name or "") + " " + (function_name or "")) or {"COMPATIBILITY"}
+                if not writers and name in {"execute", "executemany", "executescript"} and node.args:
+                    sql = _resolve_expr(node.args[0], aliases)
+                    resources = _sql_resources(sql)
+                    found.extend((domain, "SQL:" + table) for domain, table, access in resources if access == "read")
+                    if not resources and path_hints and not re.search(r"\b(select|insert|update|delete|replace|create|alter|drop|pragma|begin|commit|rollback)\b", sql, re.I):
+                        unresolved_domains |= _domain_for_text(relative + " " + (class_name or "") + " " + (function_name or "")) or {"COMPATIBILITY"}
+                if writers and name in {"write_events", "process_chapter_data", "process_chapter_entities",
+                                        "process_chapter_result", "apply_projection_writers"}:
+                    domain = "EVENTS" if name == "write_events" else "INDEX_DB" if name == "process_chapter_data" else "STATE_JSON"
+                    found.append((domain, name))
+                if not writers and name in {"read_durable_commit", "read_validated_chapter_commit", "_load_latest_commit",
+                                            "_load_latest_accepted_commit"}:
+                    found.append(("CANON_COMMIT", name))
+                if not writers and name in {"read_events", "load_events", "get_events"}:
+                    found.append(("EVENTS", name))
+                if name in {"read_text", "read_bytes", "read_json", "load_json", "write_text", "write_bytes", "open", "glob", "rglob", "iterdir"}:
+                    target_nodes = [node.func.value] if isinstance(node.func, ast.Attribute) else list(node.args[:1])
+                    if name == "open" and len(node.args) > 1:
+                        mode = _resolve_expr(node.args[1], aliases).strip("'\"")
+                        is_write = any(flag in mode for flag in ("w", "a", "x", "+"))
+                        if is_write != writers:
+                            target_nodes = []
+                    elif name in {"read_text", "read_bytes", "read_json", "load_json", "glob", "rglob", "iterdir"} and writers:
+                        target_nodes = []
+                    elif name in {"write_text", "write_bytes"} and not writers:
+                        target_nodes = []
+                    for target_node in target_nodes:
+                        target = _resolve_expr(target_node, aliases)
+                        domains = _domain_for_text(target)
+                        if domains == {"COMPATIBILITY"}:
+                            unresolved_domains.add("COMPATIBILITY")
+                        elif domains:
+                            found.extend((domain, name) for domain in domains)
+                        elif (path_hints or any(token in (function_name or "").lower() for token in PROTECTED_SOURCE_HINTS)) and name in {"read_text", "read_bytes", "read_json", "load_json", "open"}:
+                            unresolved_domains |= _domain_for_text(relative + " " + (class_name or "") + " " + (function_name or "")) or {"COMPATIBILITY"}
+                for domain, sink in found:
+                    candidates.add((coordinate[0], coordinate[1], domain, sink))
+                for domain in unresolved_domains:
+                    target_expression = (
+                        ast.unparse(node.func.value)
+                        if name in {"read_text", "read_bytes", "write_text", "write_bytes"}
+                        and isinstance(node.func, ast.Attribute)
+                        else ast.unparse(node.args[0]) if node.args else "<no-target>"
+                    )
+                    unresolved.add((coordinate[0], coordinate[1], domain, name, target_expression))
+            for child in ast.iter_child_nodes(node):
+                visit(child, class_name, function_name, aliases)
+
+        visit(tree)
+    return candidates, unresolved
 
 
 def _require(condition, message):
@@ -53,6 +233,13 @@ def validate_inventory(inventory, repository_root):
                 _require(source.is_file(), f"{identity}: evidence path missing: {source}")
                 _require(evidence.get("anchor") in source.read_text(encoding="utf-8", errors="replace"),
                          f"{identity}: evidence anchor missing")
+            for source_record in record.get("source_coordinates", []):
+                source_path = repository_root / source_record.get("path", "")
+                _require(source_path.is_file(), f"{identity}: discovered source path missing: {source_path}")
+                _require(source_record.get("symbol") in source_path.read_text(encoding="utf-8", errors="replace"),
+                         f"{identity}: discovered source symbol missing: {source_record.get('symbol')}")
+                _require(source_record.get("data_domain") in DOMAINS, f"{identity}: discovered source domain invalid")
+                _require(source_record.get("sink"), f"{identity}: discovered source sink missing")
             if family == "writers":
                 _require(record.get("owner"), f"{identity}: owner required")
                 domains = record.get("data_domains", [])
@@ -63,11 +250,16 @@ def validate_inventory(inventory, repository_root):
                     _require(record.get(mode, {}).get("behavior"), f"{identity}: {mode} behavior missing")
                     _require(record.get(mode, {}).get("mode") in MODE_STATUSES,
                              f"{identity}: {mode} value invalid")
+                _require(all(item.get("data_domain") in domains for item in record.get("source_coordinates", [])),
+                         f"{identity}: discovered writer source domain is not classified by this owner")
             elif family == "readers":
                 _require(record.get("lifecycle_status") in STATUSES,
                          f"{identity}: lifecycle_status invalid")
                 edges = record.get("read_edges", [])
                 _require(edges, f"{identity}: read_edges required")
+                edge_domains = {edge.get("data_domain") for edge in edges}
+                _require(all(item.get("data_domain") in edge_domains for item in record.get("source_coordinates", [])),
+                         f"{identity}: discovered reader source has no matching mode-aware read edge")
                 for edge in edges:
                     for mode in ("story_system", "legacy"):
                         details = edge.get(mode, {})
@@ -83,6 +275,22 @@ def validate_inventory(inventory, repository_root):
                 for field in ("source", "target", "supported_project_modes", "preflight", "backup",
                               "idempotency", "postcondition", "rollback", "ambiguity_handling"):
                     _require(record.get(field), f"{identity}: migration {field} missing")
+    for family in ("writer_exceptions", "reader_exceptions"):
+        seen_exceptions = set()
+        for exception in inventory.get(family, []):
+            key = _exception_key(family.removesuffix("_exceptions"), exception)
+            _require(key not in seen_exceptions, f"duplicate {family} entry: {key}")
+            seen_exceptions.add(key)
+            _require(exception.get("reason_code") in REASON_CODES, f"{family}: reason_code invalid")
+            _require(exception.get("path") and exception.get("symbol") and exception.get("domain") in DOMAINS
+                     and exception.get("sink") and exception.get("target_expression"),
+                     f"{family}: exact source identity required")
+            _require(len(exception.get("rationale", "")) >= 8, f"{family}: rationale required")
+            for evidence in exception.get("evidence", []):
+                source = repository_root / evidence.get("path", "")
+                _require(source.is_file(), f"{family}: evidence path missing: {source}")
+                _require(evidence.get("anchor") in source.read_text(encoding="utf-8", errors="replace"),
+                         f"{family}: evidence anchor missing")
     return True
 
 
@@ -100,74 +308,52 @@ def runtime_inventory_references(plugin_root):
 
 
 def discovered_writer_coordinates(plugin_root):
-    """Find protected write entrypoints from source, plus explicit API families."""
-    candidates = {
-        ("scripts/data_modules/chapter_commit_service.py", "ChapterCommitService"),
-        ("scripts/data_modules/event_log_store.py", "write_events"),
-        ("scripts/data_modules/event_projection_router.py", "EventProjectionRouter"),
-        ("scripts/data_modules/state_projection_writer.py", "StateProjectionWriter"),
-        ("scripts/data_modules/index_projection_writer.py", "IndexProjectionWriter"),
-        ("scripts/data_modules/summary_projection_writer.py", "SummaryProjectionWriter"),
-        ("scripts/data_modules/memory_projection_writer.py", "MemoryProjectionWriter"),
-        ("scripts/data_modules/vector_projection_writer.py", "VectorProjectionWriter"),
-        ("scripts/data_modules/state_manager.py", "StateManager"),
-        ("scripts/data_modules/sql_state_manager.py", "SQLStateManager"),
-        ("scripts/data_modules/index_manager.py", "IndexManager"),
-        ("scripts/update_state.py", "main"),
-        ("scripts/story_craft.py", "StoryCraftFieldError"),
-        ("scripts/data_modules/volume_state.py", "VolumeStateManager"),
-        ("scripts/data_modules/promise_ledger.py", "PromiseLedger"),
-        ("scripts/consistency/core/runner.py", "apply_all"),
-        ("scripts/init_project.py", "init_project"),
-        ("scripts/migrate_story_craft.py", "migrate_state_json"),
-        ("scripts/data_modules/migrate_state_to_sqlite.py", "migrate_state_to_sqlite"),
-        ("scripts/changes_gate.py", "main"),
-    }
-    protected_calls = {
-        "write_events", "process_chapter_data", "process_chapter_entities",
-        "process_chapter_result",
-    }
-    for path in (plugin_root / "scripts").rglob("*.py"):
-        if "tests" in path.parts:
-            continue
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (OSError, SyntaxError, UnicodeDecodeError):
-            continue
+    """List protected write owners discovered from production persistence sinks."""
+    candidates, _unresolved = _protected_candidates(plugin_root, writers=True)
+    return {(path, symbol) for path, symbol, _domain, _sink in candidates}
 
-        def visit(node, class_name=None, function_name=None):
-            if isinstance(node, ast.ClassDef):
-                class_name = node.name
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                function_name = node.name
-            if isinstance(node, ast.Call):
-                call_name = (node.func.id if isinstance(node.func, ast.Name) else
-                             node.func.attr if isinstance(node.func, ast.Attribute) else "")
-                protected_state_write = False
-                if call_name == "atomic_write_json" and node.args:
-                    target = ast.unparse(node.args[0]).lower()
-                    protected_state_write = any(
-                        marker in target for marker in
-                        ("state", "index", "summary", "memory", "vector", "craft")
-                    )
-                if call_name in protected_calls or protected_state_write:
-                    symbol = class_name or function_name
-                    if symbol:
-                        candidates.add((path.relative_to(plugin_root).as_posix(), symbol))
-            for child in ast.iter_child_nodes(node):
-                visit(child, class_name, function_name)
 
-        visit(tree)
-    return candidates
+def _inventory_source_path(path):
+    return Path(path).as_posix().removeprefix(".claude/plugins/zhanghui/")
 
 
 def writer_coverage(inventory, plugin_root):
-    prefix = ".claude/plugins/zhanghui/"
-    declared = {(Path(row["implementation"]["path"]).as_posix().removeprefix(prefix),
-                 row["implementation"]["symbol"]) for row in inventory["writers"]}
-    candidates = discovered_writer_coordinates(plugin_root)
-    missing = sorted(candidates - declared)
-    return missing
+    declared = set()
+    for row in inventory["writers"]:
+        path = _inventory_source_path(row["implementation"]["path"])
+        declared.update((path, row["implementation"]["symbol"], domain) for domain in row.get("data_domains", []))
+        declared.update((_inventory_source_path(source["path"]), source["symbol"], source["data_domain"])
+                        for source in row.get("source_coordinates", []))
+    candidates, unresolved = _protected_candidates(plugin_root, writers=True)
+    exceptions = {("writer", _inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"),
+                   row.get("sink"), row.get("target_expression")) for row in inventory.get("writer_exceptions", [])}
+    pending = {(path, symbol, domain) for path, symbol, domain, sink, target in unresolved
+               if ("writer", path, symbol, domain, sink, target) not in exceptions}
+    missing = {(path, symbol, domain) for path, symbol, domain, _sink in candidates
+               if (path, symbol, domain) not in declared}
+    return sorted(missing | pending)
+
+
+def _exception_key(family, row):
+    return (family, row.get("path"), row.get("symbol"), row.get("domain"), row.get("sink"), row.get("target_expression"))
+
+
+def reader_coverage(inventory, plugin_root):
+    declared = set()
+    for row in inventory["readers"]:
+        path = _inventory_source_path(row["implementation"]["path"])
+        declared.update((path, row["implementation"]["symbol"], edge.get("data_domain"))
+                        for edge in row.get("read_edges", []))
+        declared.update((_inventory_source_path(source["path"]), source["symbol"], source["data_domain"])
+                        for source in row.get("source_coordinates", []))
+    candidates, unresolved = _protected_candidates(plugin_root, writers=False)
+    exceptions = {("reader", _inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"),
+                   row.get("sink"), row.get("target_expression")) for row in inventory.get("reader_exceptions", [])}
+    pending = {(path, symbol, domain) for path, symbol, domain, sink, target in unresolved
+               if ("reader", path, symbol, domain, sink, target) not in exceptions}
+    missing = {(path, symbol, domain) for path, symbol, domain, _sink in candidates
+               if (path, symbol, domain) not in declared}
+    return sorted(missing | pending)
 
 
 def reader_family_coverage(inventory):
