@@ -11,6 +11,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
+from .durable_projection import discover_validated_chapter_commits
+
 
 SEMANTIC_ROLES = {"CANON", "INTENT", "CRAFT", "OPERATIONAL", "UNKNOWN"}
 SOURCE_ROLES = {
@@ -147,39 +149,23 @@ def classify_rag_hit(project_root: Path, hit: dict[str, Any], *, target_chapter:
 
 
 def load_commit_fact_items(project_root: Path, chapter: int) -> tuple[list[ContextItem], int | None, str | None]:
-    commits_dir = Path(project_root) / ".story-system" / "commits"
     items: list[ContextItem] = []
     latest_chapter = None
     latest_hash = None
-    if not commits_dir.exists():
-        return items, latest_chapter, latest_hash
-    for path in sorted(commits_dir.glob("chapter_*.commit.json")):
-        try:
-            commit_chapter = int(path.name.split("_")[1].split(".")[0])
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (ValueError, OSError, json.JSONDecodeError):
-            continue
+    validated_commits = discover_validated_chapter_commits(project_root)
+    for commit in validated_commits:
+        path = commit["path"]
+        commit_chapter = commit["chapter"]
+        payload = commit["payload"]
         # The requested chapter is the next writing target. Its existing commit,
         # when revising, must not become evidence about its own prewrite context.
-        meta = payload.get("meta") or {}
-        try:
-            metadata_chapter = int(meta.get("chapter") or 0)
-        except (TypeError, ValueError):
-            metadata_chapter = 0
-        if (
-            commit_chapter >= chapter
-            or meta.get("status") != "accepted"
-            or metadata_chapter != commit_chapter
-            or (payload.get("provenance") or {}).get("write_fact_role") != "chapter_commit"
-        ):
+        if commit_chapter >= chapter or payload["meta"]["status"] != "accepted":
             continue
         ref = f"commit:{commit_chapter}"
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         if latest_chapter is None or commit_chapter >= latest_chapter:
             latest_chapter, latest_hash = commit_chapter, digest
-        extraction = payload.get("extraction_result") or payload.get("extraction") or payload
-        if not isinstance(extraction, dict):
-            extraction = payload
+        extraction = payload["extraction_result"]
         for delta in extraction.get("entity_deltas", []) or []:
             if not isinstance(delta, dict):
                 continue

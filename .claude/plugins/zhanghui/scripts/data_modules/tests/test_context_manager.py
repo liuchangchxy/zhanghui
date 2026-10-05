@@ -27,6 +27,16 @@ def temp_project(tmp_path):
     return cfg
 
 
+def _commit_payload(chapter, status):
+    return {
+        "meta": {"schema_version": "story-system/v1", "chapter": chapter, "status": status},
+        "review_result": {"blocking_count": 1 if status == "rejected" else 0},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
+        "extraction_result": {"accepted_events": [], "state_deltas": [], "entity_deltas": []},
+    }
+
+
 def test_context_manager_build_and_filter(temp_project):
     state = {
         "protagonist_state": {"name": "萧炎", "location": {"current": "天云宗"}},
@@ -345,17 +355,11 @@ def test_context_manager_exposes_latest_rejected_commit_not_last_accepted(temp_p
         encoding="utf-8",
     )
     (story_root / "commits" / "chapter_002.commit.json").write_text(
-        json.dumps(
-            {"meta": {"schema_version": "story-system/v1", "chapter": 2, "status": "accepted"}},
-            ensure_ascii=False,
-        ),
+        json.dumps(_commit_payload(2, "accepted"), ensure_ascii=False),
         encoding="utf-8",
     )
     (story_root / "commits" / "chapter_003.commit.json").write_text(
-        json.dumps(
-            {"meta": {"schema_version": "story-system/v1", "chapter": 3, "status": "rejected"}},
-            ensure_ascii=False,
-        ),
+        json.dumps(_commit_payload(3, "rejected"), ensure_ascii=False),
         encoding="utf-8",
     )
 

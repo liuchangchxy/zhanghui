@@ -37,6 +37,16 @@ def _make_project(tmp_path: Path) -> DataModulesConfig:
     return DataModulesConfig.from_project_root(tmp_path)
 
 
+def _commit_payload(chapter: int, status: str) -> dict:
+    return {
+        "meta": {"schema_version": "story-system/v1", "chapter": chapter, "status": status},
+        "review_result": {"blocking_count": 1 if status == "rejected" else 0},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
+        "extraction_result": {"accepted_events": [], "state_deltas": [], "entity_deltas": []},
+    }
+
+
 class TestAdapterSatisfiesProtocol:
     def test_isinstance_check(self, tmp_path):
         cfg = _make_project(tmp_path)
@@ -329,10 +339,7 @@ class TestLoadContext:
         )
         (story_root / "commits" / "chapter_003.commit.json").write_text(
             json.dumps(
-                {
-                    "meta": {"chapter": 3, "status": "accepted"},
-                    "provenance": {"write_fact_role": "chapter_commit"},
-                },
+                _commit_payload(3, "accepted"),
                 ensure_ascii=False,
             ),
             encoding="utf-8",
@@ -379,11 +386,11 @@ class TestLoadContext:
             encoding="utf-8",
         )
         (story_root / "commits" / "chapter_002.commit.json").write_text(
-            json.dumps({"meta": {"chapter": 2, "status": "accepted"}}, ensure_ascii=False),
+            json.dumps(_commit_payload(2, "accepted"), ensure_ascii=False),
             encoding="utf-8",
         )
         (story_root / "commits" / "chapter_003.commit.json").write_text(
-            json.dumps({"meta": {"chapter": 3, "status": "rejected"}}, ensure_ascii=False),
+            json.dumps(_commit_payload(3, "rejected"), ensure_ascii=False),
             encoding="utf-8",
         )
 
