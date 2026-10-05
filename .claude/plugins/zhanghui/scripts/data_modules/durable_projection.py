@@ -108,6 +108,27 @@ def read_validated_chapter_commit(
         raise DurableCommitError(
             f"invalid durable commit {path}: unsupported commit status {meta.get('status')!r}"
         )
+    binding = payload.get("gate_decision_binding")
+    if binding is not None:
+        if not isinstance(binding, dict) or set(binding) != {
+            "gate_decision_ref", "input_fingerprint", "policy_version", "final_action"
+        }:
+            raise DurableCommitError(f"invalid durable commit {path}: malformed GateDecision binding")
+        ref = binding.get("gate_decision_ref")
+        fingerprint = binding.get("input_fingerprint")
+        policy_version = binding.get("policy_version")
+        final_action = binding.get("final_action")
+        if not isinstance(ref, str) or not ref or ref.startswith("/") or ".." in Path(ref).parts:
+            raise DurableCommitError(f"invalid durable commit {path}: invalid GateDecision reference")
+        if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+            raise DurableCommitError(f"invalid durable commit {path}: invalid GateDecision input fingerprint")
+        if not isinstance(policy_version, str) or not policy_version.strip():
+            raise DurableCommitError(f"invalid durable commit {path}: invalid GateDecision policy version")
+        expected_action = "REJECT" if meta.get("status") == "rejected" else "ALLOW_WITH_ADVISORY"
+        if final_action != expected_action:
+            raise DurableCommitError(
+                f"invalid durable commit {path}: final_action {final_action!r} does not match status {meta.get('status')!r}"
+            )
     try:
         ReviewResult.model_validate(payload.get("review_result"))
         FulfillmentResult.model_validate(payload.get("fulfillment_result"))

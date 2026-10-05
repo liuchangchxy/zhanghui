@@ -489,7 +489,29 @@ class TestCommitChapter:
 
         assert (tmp_path / ".story-system" / "commits" / "chapter_003.commit.json").is_file()
         assert result.chapter == 3
-        assert "commit_status=accepted" in result.warnings
+        assert result.gate_action == "ALLOW_WITH_ADVISORY"
+        assert result.chapter_outcome == "accepted"
+        assert result.gate_decision_ref
+
+    def test_pending_human_is_reported_with_gate_reference_and_no_commit(self, tmp_path):
+        cfg = _make_project(tmp_path)
+        extraction = {"state_deltas": [], "entity_deltas": [], "accepted_events": []}
+        changes = {"character_state_changes": [], "new_plot_points": [], "foreshadowing_actions": [],
+                   "location_state_changes": [], "faction_state_changes": [], "time_progression": None,
+                   "item_transfers": [], "unresolved_questions": []}
+        text = "正文\n<chapter_changes>" + json.dumps(changes) + "</chapter_changes>"
+        from data_modules.reconciliation import reconcile_changes
+        result = MemoryContractAdapter(cfg).commit_chapter(1, {
+            "review_result": {"blocking_count": 0},
+            "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+            "disambiguation_result": {"pending": [{"id": "entity-1"}]},
+            "extraction_result": extraction, "chapter_text": text, "proposed_changes": changes,
+            "reconciliation_result": reconcile_changes(changes, extraction, chapter_text=text),
+        })
+        assert result.gate_action == "REQUIRE_HUMAN"
+        assert result.chapter_outcome is None
+        assert result.gate_decision_ref
+        assert not (tmp_path / ".story-system/commits/chapter_001.commit.json").exists()
 
 
 class TestLoadContextAuthorStyle:

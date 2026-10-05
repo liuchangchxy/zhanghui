@@ -188,6 +188,9 @@ def _eval_commit_projection_runtime(root: Path, case: dict[str, Any]) -> dict[st
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     from data_modules.chapter_commit_service import ChapterCommitService
+    from data_modules.gate_findings import (
+        DetectedFinding, EvidenceRef, FindingAuthority, FindingCategory,
+    )
 
     with tempfile.TemporaryDirectory() as tmp:
         project_root = Path(tmp)
@@ -201,16 +204,24 @@ def _eval_commit_projection_runtime(root: Path, case: dict[str, Any]) -> dict[st
             "item_transfers": [], "unresolved_questions": [],
         }
         chapter_text = "behavior eval prose\n<chapter_changes>" + json.dumps(proposed_changes, ensure_ascii=False) + "</chapter_changes>"
-        payload = service.build_commit(
-            chapter=1,
-            review_result={"blocking_count": 1},
+        finding = DetectedFinding(
+            gate_id="behavior_eval.integrity_probe", stable_subject_key="chapter:1:integrity-probe",
+            category=FindingCategory.INTEGRITY, authority=FindingAuthority.SYSTEM_INTEGRITY,
+            scope={"chapter": 1},
+            evidence=[EvidenceRef(kind="deterministic_validation", identity={"valid": False, "rule_id": "behavior_eval_probe"})],
+            checker_id="behavior_eval", checker_version="v1",
+        )
+        attempt = service.evaluate_attempt(
+            chapter=1, findings=[finding], attempt_id="behavior-eval-projection",
+            policy_version="phase6a-v1", scope={"chapter": 1},
+            review_result={"blocking_count": 0},
             fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
             disambiguation_result={"pending": []},
             extraction_result={"accepted_events": [], "state_deltas": [], "entity_deltas": []},
             chapter_text=chapter_text,
             proposed_changes=proposed_changes,
         )
-        projected = service.apply_projections(payload)
+        projected = attempt.chapter_outcome.commit_payload
         state_path = project_root / ".webnovel" / "state.json"
         state = json.loads(state_path.read_text(encoding="utf-8"))
     ok = (

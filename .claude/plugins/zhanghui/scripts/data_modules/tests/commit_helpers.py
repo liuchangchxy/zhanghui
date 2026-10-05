@@ -1,4 +1,7 @@
 from data_modules.reconciliation import reconcile_changes
+from data_modules.gate_finding_adapters import adapt_legacy_artifacts
+from data_modules.gate_findings import WorkflowAction
+from data_modules.gate_severity_policy import GateSeverityPolicy
 import json
 
 EMPTY_PROPOSAL = {
@@ -23,4 +26,20 @@ def build_commit_with_reconciliation(service, **kwargs):
         extraction,
         chapter_text=kwargs["chapter_text"],
     )
-    return service.build_commit(**kwargs)
+    findings = adapt_legacy_artifacts(
+        chapter=kwargs["chapter"], review=kwargs["review_result"],
+        fulfillment=kwargs["fulfillment_result"], disambiguation=kwargs["disambiguation_result"],
+    )
+    decisions = GateSeverityPolicy().evaluate(
+        findings, policy_version="test-v1", scope={"chapter": kwargs["chapter"]},
+    )
+    if decisions.aggregate_action in {WorkflowAction.REQUIRE_HUMAN, WorkflowAction.RECOVER}:
+        return None
+    payload = service.build_commit(**kwargs)
+    if decisions.aggregate_action == WorkflowAction.REJECT:
+        payload["meta"]["status"] = "rejected"
+        extraction_payload = payload.get("extraction_result") or {}
+        extraction_payload["accepted_events"] = []
+        extraction_payload["state_deltas"] = []
+        extraction_payload["entity_deltas"] = []
+    return payload

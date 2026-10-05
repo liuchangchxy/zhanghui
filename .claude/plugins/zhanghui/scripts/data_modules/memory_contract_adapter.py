@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -129,31 +130,61 @@ class MemoryContractAdapter:
         )
 
     def _commit_chapter_mainline(self, chapter: int, result: dict) -> CommitResult:
+        from .gate_finding_adapters import adapt_changes_gate_result, adapt_legacy_artifacts
         service = ChapterCommitService(self.config.project_root)
-        payload = service.build_commit(
-            chapter=chapter,
-            review_result=result.get("review_result", {}) or {},
-            fulfillment_result=result.get("fulfillment_result", {}) or {},
-            disambiguation_result=result.get("disambiguation_result", {}) or {},
-            extraction_result=result.get("extraction_result", {}) or {},
-            chapter_text=result.get("chapter_text"),
-            proposed_changes=result.get("proposed_changes"),
-            reconciliation_result=result.get("reconciliation_result"),
+        review = result.get("review_result", {}) or {}
+        fulfillment = result.get("fulfillment_result", {}) or {}
+        disambiguation = result.get("disambiguation_result", {}) or {}
+        extraction = result.get("extraction_result", {}) or {}
+        from .story_runtime_sources import load_runtime_sources
+        contract_payloads = load_runtime_sources(self.config.project_root, chapter).contracts
+        findings = adapt_legacy_artifacts(
+            chapter=chapter, review=review, fulfillment=fulfillment,
+            disambiguation=disambiguation,
+            contract_payloads=contract_payloads,
         )
-        # Ordinary adapter calls are strict too; replacements must be an
-        # explicit CLI operation with an intentional conflict override.
-        payload = service.apply_projections(payload)
+        changes_gate_result = result.get("changes_gate_result")
+        if isinstance(changes_gate_result, dict):
+            findings.extend(adapt_changes_gate_result(changes_gate_result, chapter=chapter))
+        attempt_kwargs = {
+            "policy_version": "phase6a-v1", "scope": {"chapter": chapter},
+            "review_result": review, "fulfillment_result": fulfillment,
+            "disambiguation_result": disambiguation, "extraction_result": extraction,
+            "chapter_text": result.get("chapter_text"),
+            "proposed_changes": result.get("proposed_changes"),
+            "reconciliation_result": result.get("reconciliation_result"),
+        }
+        response = result.get("human_response")
+        if isinstance(response, dict):
+            attempt = service.evaluate_after_human_response(
+                chapter, findings,
+                prior_attempt_id=str(response.get("prior_attempt_id") or ""),
+                response_id=str(response.get("response_id") or result.get("attempt_id") or f"memory-{uuid.uuid4().hex}"),
+                finding_id=str(response.get("finding_id") or ""),
+                choice=str(response.get("choice") or ""), actor_ref=str(response.get("actor_ref") or ""),
+                **attempt_kwargs,
+            )
+        else:
+            attempt = service.evaluate_attempt(
+                chapter=chapter, findings=findings,
+                attempt_id=str(result.get("attempt_id") or f"memory-{uuid.uuid4().hex}"),
+                **attempt_kwargs,
+            )
+        payload = attempt.chapter_outcome.commit_payload if attempt.chapter_outcome else None
 
         summary_file = self.config.webnovel_dir / "summaries" / f"ch{chapter:04d}.md"
         return CommitResult(
             chapter=chapter,
-            entities_added=len(extraction_list(payload, "entity_deltas")),
+            entities_added=len(extraction_list(payload or {}, "entity_deltas")),
             entities_updated=0,
-            state_changes_recorded=len(extraction_list(payload, "state_deltas")),
+            state_changes_recorded=len(extraction_list(payload or {}, "state_deltas")),
             relationships_added=0,
             memory_items_added=0,
             summary_path=str(summary_file) if summary_file.exists() else "",
-            warnings=[f"commit_status={payload['meta']['status']}"],
+            warnings=[f"gate_action={attempt.action.value}"],
+            gate_action=attempt.action.value,
+            gate_decision_ref=attempt.gate_decision_ref,
+            chapter_outcome=attempt.chapter_outcome.chapter_outcome if attempt.chapter_outcome else None,
         )
 
     def _should_use_commit_mainline(self, result: dict) -> bool:

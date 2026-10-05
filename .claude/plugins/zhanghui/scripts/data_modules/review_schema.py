@@ -63,6 +63,15 @@ class ReviewIssue:
     evidence: str = ""
     fix_hint: str = ""
     blocking: Optional[bool] = None
+    checker_id: str = "llm_review"
+    gate_id: Optional[str] = None
+    authority: Optional[str] = None
+    explicitness: Optional[str] = None
+    subject_id: Optional[str] = None
+    constraint_id: Optional[str] = None
+    source_ref: Optional[str] = None
+    structured_evidence: Optional[List[Dict[str, Any]]] = None
+    score: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
         if self.severity not in VALID_SEVERITIES:
@@ -180,6 +189,15 @@ def parse_review_output(chapter: int, raw: Dict[str, Any]) -> ReviewResult:
             evidence=str(item.get("evidence", "")),
             fix_hint=str(item.get("fix_hint", "")),
             blocking=item.get("blocking"),
+            checker_id=str(item.get("checker_id", "llm_review")),
+            gate_id=item.get("gate_id"),
+            authority=item.get("authority"),
+            explicitness=item.get("explicitness"),
+            subject_id=item.get("subject_id"),
+            constraint_id=item.get("constraint_id"),
+            source_ref=item.get("source_ref"),
+            structured_evidence=item.get("structured_evidence"),
+            score=item.get("score"),
         ))
     return ReviewResult(
         chapter=chapter,
