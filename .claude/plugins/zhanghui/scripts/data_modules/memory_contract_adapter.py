@@ -24,6 +24,8 @@ from .memory_contract import (
     TimelineEvent,
 )
 from .story_runtime_sources import load_runtime_sources
+from .context_provenance import build_governed_context
+from .context_provenance import load_commit_fact_items
 from .story_system_mode import is_story_system_project
 from .urgency_utils import coerce_urgency
 
@@ -172,6 +174,7 @@ class MemoryContractAdapter:
         sections["story_contracts"] = dict(runtime_sources.contracts)
         sections["runtime_status"] = runtime_sources.to_dict()
         sections["latest_commit"] = runtime_sources.latest_commit or {}
+        state_for_context: Dict[str, Any] = {}
 
         # 1. MemoryOrchestrator 基础包
         try:
@@ -206,6 +209,7 @@ class MemoryContractAdapter:
         try:
             sm = self._state_manager()
             sm._load_state()
+            state_for_context = dict(sm._state or {})
             protagonist = sm._state.get("protagonist_state")
             if protagonist:
                 sections["protagonist"] = protagonist
@@ -276,6 +280,36 @@ class MemoryContractAdapter:
                 sections["style_contract"] = contract
         except Exception as e:
             logger.warning("load_context: style_contract failed: %s", e)
+
+        governed = build_governed_context(
+            project_root=self.config.project_root,
+            chapter=chapter,
+            state=state_for_context,
+            source_sections={
+                "outline": sections.get("outline"),
+                "story_contract": sections.get("story_contracts"),
+                "memory_pack": sections.get("memory_pack"),
+                "recent_summaries": sections.get("recent_summaries"),
+                "protagonist": sections.get("protagonist"),
+                "progress": sections.get("progress"),
+                "active_rules": sections.get("active_rules"),
+                "urgent_loops": sections.get("urgent_loops"),
+                "genre_profile_excerpt": sections.get("genre_profile_excerpt"),
+                "author_style_patterns": sections.get("author_style_patterns"),
+                "style_contract": sections.get("style_contract"),
+            },
+        )
+        sections["canon"] = governed["canon"]
+        sections["intent"] = governed["intent"]
+        sections["craft"] = governed["craft"]
+        sections["reference"] = governed["reference"]
+        sections["context_diagnostics"] = governed["diagnostics"]
+        sections["context_snapshot"] = governed["snapshot"]
+        sections["context_contract"] = {
+            "writer_authority_sections": ["canon", "intent", "craft", "reference"],
+            "compatibility_sections_are_non_authoritative": True,
+            "diagnostics_section": "context_diagnostics",
+        }
 
         return ContextPack(
             chapter=chapter,
@@ -354,17 +388,41 @@ class MemoryContractAdapter:
             state_changes = sm.get_state_changes(entity_id)
             recent_changes = state_changes[-5:] if state_changes else []
 
+            latest_commit_chapter = 0
+            for commit_path in (self.config.project_root / ".story-system" / "commits").glob("chapter_*.commit.json"):
+                try:
+                    latest_commit_chapter = max(latest_commit_chapter, int(commit_path.name.split("_")[1].split(".")[0]))
+                except ValueError:
+                    continue
+            committed_items, _, _ = load_commit_fact_items(self.config.project_root, latest_commit_chapter + 1)
+            field_provenance: Dict[str, str] = {}
+            attributes = {k: v for k, v in entity.items()
+                          if k not in ("name", "tier", "aliases", "first_appearance", "last_appearance")}
+            for field_name, value in attributes.items():
+                matches = [item for item in committed_items if item.fact_key == (entity_id, field_name)]
+                field_provenance[field_name] = (
+                    "verified_commit" if matches and matches[-1].content.get("value") == value else "legacy_unknown"
+                )
+            name_matches = [item for item in committed_items if item.fact_key in {(entity_id, "canonical_name"), (entity_id, "name")}]
+            aliases_matches = [item for item in committed_items if item.fact_key == (entity_id, "aliases")]
+            field_provenance["name"] = (
+                "verified_commit" if name_matches and name_matches[-1].content.get("value") == entity.get("name") else "legacy_identity_only"
+            )
+            field_provenance["aliases"] = (
+                "verified_commit" if aliases_matches and aliases_matches[-1].content.get("value") == entity.get("aliases") else "legacy_resolution_only"
+            )
+
             return EntitySnapshot(
                 id=entity_id,
                 name=entity.get("name", entity_id),
                 type=entity_type,
                 tier=entity.get("tier", "核心"),
                 aliases=entity.get("aliases", []),
-                attributes={k: v for k, v in entity.items()
-                            if k not in ("name", "tier", "aliases", "first_appearance", "last_appearance")},
+                attributes=attributes,
                 first_appearance=entity.get("first_appearance", 0),
                 last_appearance=entity.get("last_appearance", 0),
                 recent_state_changes=recent_changes,
+                field_provenance=field_provenance,
             )
         except Exception as e:
             logger.warning("query_entity(%s) failed: %s", entity_id, e)
@@ -385,6 +443,9 @@ class MemoryContractAdapter:
                     value=item.value,
                     domain=item.subject,
                     source_chapter=item.source_chapter,
+                    source_ref=f"memory:{item.id}",
+                    provenance_status="unverified",
+                    evidence=list(item.evidence),
                 ))
             return rules
         except Exception as e:
@@ -414,6 +475,8 @@ class MemoryContractAdapter:
                     planted_chapter=item.source_chapter,
                     expected_payoff=item.payload.get("expected_payoff", ""),
                     urgency=coerce_urgency(item.payload.get("urgency")),
+                    source_ref=f"memory:{item.id}",
+                    evidence=list(item.evidence),
                 )
                 for item in items
             ]
@@ -434,6 +497,9 @@ class MemoryContractAdapter:
                         chapter=ch,
                         time_hint=item.field,
                         event_type=item.subject,
+                        source_ref=f"memory:{item.id}",
+                        evidence=list(item.evidence),
+                        provenance_status="unverified",
                     ))
             events.sort(key=lambda e: e.chapter)
             return events

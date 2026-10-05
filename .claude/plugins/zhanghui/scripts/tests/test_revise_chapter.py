@@ -178,6 +178,40 @@ def test_revise_plan_returns_per_section_actions():
     assert "## §2" in plan["§2"]
 
 
+def test_revision_context_loads_only_governed_sections(tmp_path: Path):
+    sys.path.insert(0, str(REVISE_SCRIPT.parent))
+    from revise_chapter import load_governed_context
+
+    context_file = tmp_path / "context.json"
+    context_file.write_text(json.dumps({"sections": {
+        "canon": [{"content": "A alive", "semantic_role": "CANON"}],
+        "intent": [{"content": "plan A dies in chapter 21", "semantic_role": "INTENT"}],
+        "craft": [],
+        "reference": [],
+        "context_snapshot": {"latest_commit": {"chapter": 20}},
+        "context_diagnostics": [{"type": "legacy_conflict"}],
+        "protagonist": {"realm": "unverified"},
+    }}), encoding="utf-8")
+
+    loaded = load_governed_context(context_file)
+    assert loaded["canon"][0]["content"] == "A alive"
+    assert "context_diagnostics" not in loaded
+    assert "protagonist" not in loaded
+
+
+def test_real_revise_requires_shared_context_file(tmp_path: Path):
+    chapter_file = tmp_path / "ch0005.md"
+    chapter_file.write_text(SAMPLE_CHAPTER, encoding="utf-8")
+    contract_file = tmp_path / "contract.json"
+    contract_file.write_text(json.dumps(CONTRACT_JSON), encoding="utf-8")
+    result = run_revise(
+        "--chapter-file", str(chapter_file),
+        "--contract", str(contract_file),
+    )
+    assert result.returncode == 2
+    assert "provenance-aware --context-file" in result.stderr
+
+
 def test_apply_revised_sections_replaces_only_marked_sections():
     """apply_revised_sections(orig, {"§2": new, "§4": new4}) → 只替换 §2 和 §4，其他原样。"""
     sys.path.insert(0, str(REVISE_SCRIPT.parent))
@@ -456,6 +490,11 @@ def test_main_makes_one_llm_call_per_section_with_multiple_issues(tmp_path: Path
     }
     contract_file = tmp_path / "contract.json"
     contract_file.write_text(json.dumps(contract_data), encoding="utf-8")
+    context_file = tmp_path / "context.json"
+    context_file.write_text(json.dumps({"sections": {
+        "canon": [], "intent": [], "craft": [], "reference": [],
+        "context_snapshot": {"latest_commit": {"chapter": 4}},
+    }}), encoding="utf-8")
 
     calls: list[dict] = []
 
@@ -485,6 +524,7 @@ def test_main_makes_one_llm_call_per_section_with_multiple_issues(tmp_path: Path
         "--chapter-file", str(chapter),
         "--contract", str(contract_file),
         "--include-advisory",  # 显式开 advisory 才能让 §4 也被改
+        "--context-file", str(context_file),
         "--output", str(tmp_path / "out.md"),
     ])
     assert rc == 0, f"stderr / output"

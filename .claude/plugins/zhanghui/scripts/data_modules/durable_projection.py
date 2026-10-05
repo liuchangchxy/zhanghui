@@ -2,12 +2,27 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict
+
+from .chapter_commit_schema import (
+    DisambiguationResult,
+    ExtractionResult,
+    FulfillmentResult,
+    ReviewResult,
+)
 
 
 class DurableCommitError(RuntimeError):
     """Raised when a projection payload has no matching durable chapter commit."""
+
+    def __init__(self, message: str, *, chapter: int | None = None):
+        super().__init__(message)
+        self.chapter = chapter
+
+
+_COMMIT_NAME = re.compile(r"^chapter_(\d+)\.commit\.json$")
 
 
 def _meta(payload: Dict[str, Any], *, label: str) -> Dict[str, Any]:
@@ -47,11 +62,7 @@ def read_durable_commit(project_root: str | Path, chapter: int) -> Dict[str, Any
     path = commit_path(project_root, chapter)
     if not path.is_file():
         raise DurableCommitError(f"Durable chapter commit is missing: {path}")
-    payload = read_commit_file(path)
-    status = str(_meta(payload, label="Durable chapter commit").get("status") or "")
-    if status not in {"accepted", "rejected"}:
-        raise DurableCommitError(f"Durable chapter commit has unsupported status: {status!r}")
-    return payload
+    return read_validated_chapter_commit(path, expected_chapter=int(chapter))
 
 
 def read_commit_file(path: str | Path) -> Dict[str, Any]:
@@ -65,6 +76,67 @@ def read_commit_file(path: str | Path) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise DurableCommitError(f"Durable chapter commit is not an object: {path}")
     return payload
+
+
+def read_validated_chapter_commit(
+    path: str | Path, *, expected_chapter: int | None = None
+) -> Dict[str, Any]:
+    """Read and validate the canonical durable Story System v1 chapter record."""
+    path = Path(path)
+    match = _COMMIT_NAME.fullmatch(path.name)
+    if not match:
+        raise DurableCommitError(f"unexpected file in canonical commit directory: {path}")
+    filename_chapter = int(match.group(1))
+    if filename_chapter < 1 or path.name != f"chapter_{filename_chapter:03d}.commit.json":
+        raise DurableCommitError(f"non-canonical durable commit filename: {path}")
+    if expected_chapter is not None and filename_chapter != int(expected_chapter):
+        raise DurableCommitError(
+            f"durable commit filename chapter {filename_chapter} does not match expected chapter {expected_chapter}"
+        )
+    payload = read_commit_file(path)
+    meta = _meta(payload, label="Durable chapter commit")
+    chapter = meta.get("chapter")
+    if isinstance(chapter, bool) or not isinstance(chapter, int) or chapter != filename_chapter:
+        raise DurableCommitError(
+            f"invalid durable commit {path}: meta.chapter does not match filename chapter {filename_chapter}"
+        )
+    if meta.get("schema_version") != "story-system/v1":
+        raise DurableCommitError(
+            f"invalid durable commit {path}: unsupported schema version {meta.get('schema_version')!r}"
+        )
+    if meta.get("status") not in {"accepted", "rejected"}:
+        raise DurableCommitError(
+            f"invalid durable commit {path}: unsupported commit status {meta.get('status')!r}"
+        )
+    try:
+        ReviewResult.model_validate(payload.get("review_result"))
+        FulfillmentResult.model_validate(payload.get("fulfillment_result"))
+        DisambiguationResult.model_validate(payload.get("disambiguation_result"))
+        ExtractionResult.model_validate(payload.get("extraction_result"))
+    except Exception as exc:
+        raise DurableCommitError(f"invalid durable commit {path}: {exc}") from exc
+    return payload
+
+
+def discover_validated_chapter_commits(project_root: str | Path) -> list[dict[str, Any]]:
+    """Discover the canonical commit set and validate every durable file."""
+    directory = Path(project_root).expanduser().resolve() / ".story-system" / "commits"
+    if not directory.exists():
+        return []
+    if not directory.is_dir():
+        raise DurableCommitError(f"commit path is not a directory: {directory}")
+    result = []
+    for path in sorted(item for item in directory.iterdir() if item.is_file()):
+        if path.name.endswith(".lock") and _COMMIT_NAME.fullmatch(path.name[:-5]):
+            continue
+        try:
+            payload = read_validated_chapter_commit(path)
+        except DurableCommitError as exc:
+            if exc.chapter is None and _COMMIT_NAME.fullmatch(path.name):
+                exc.chapter = int(_COMMIT_NAME.fullmatch(path.name).group(1))
+            raise
+        result.append({"chapter": payload["meta"]["chapter"], "path": path, "payload": payload})
+    return sorted(result, key=lambda item: item["chapter"])
 
 
 def require_durable_commit_match(

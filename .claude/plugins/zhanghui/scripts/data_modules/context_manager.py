@@ -31,6 +31,7 @@ from .context_ranker import ContextRanker
 from .prewrite_validator import PrewriteValidator
 from .story_contracts import read_json_if_exists
 from .story_runtime_sources import RuntimeSourceSnapshot, load_runtime_sources
+from .context_provenance import build_governed_context
 from .context_weights import (
     DEFAULT_TEMPLATE as CONTEXT_DEFAULT_TEMPLATE,
     TEMPLATE_WEIGHTS as CONTEXT_TEMPLATE_WEIGHTS,
@@ -73,6 +74,11 @@ class ContextManager:
         "runtime_status",
         "latest_commit",
         "prewrite_validation",
+        "canon",
+        "intent",
+        "craft",
+        "reference",
+        "context_diagnostics",
     }
     SECTION_ORDER = [
         "core",
@@ -80,6 +86,11 @@ class ContextManager:
         "runtime_status",
         "latest_commit",
         "prewrite_validation",
+        "canon",
+        "intent",
+        "craft",
+        "reference",
+        "context_diagnostics",
         "scene",
         "global",
         "reader_signal",
@@ -112,6 +123,7 @@ class ContextManager:
             self._active_template = template
 
         pack = self._build_pack(chapter)
+        pack["canon"], pack["intent"], pack["craft"], pack["reference"], pack["context_diagnostics"], pack["context_snapshot"] = self._govern_pack(pack, chapter)
         if getattr(self.config, "context_ranker_enabled", True):
             pack = self.context_ranker.rank_pack(pack, chapter)
 
@@ -124,8 +136,11 @@ class ContextManager:
         payload: Dict[str, Any] = {
             "meta": {
                 **(pack.get("meta") or {}),
-                "context_contract_version": "v3",
-            },
+            "context_contract_version": "v3",
+            "writer_authority_sections": ["canon", "intent", "craft", "reference"],
+            "compatibility_sections_are_non_authoritative": True,
+            "diagnostics_section": "context_diagnostics",
+        },
         }
 
         for section_name in self.SECTION_ORDER:
@@ -135,10 +150,38 @@ class ContextManager:
                 if weight > 0 or section_name in self.EXTRA_SECTIONS:
                     payload[section_name] = content
 
+        payload["meta"]["context_snapshot"] = pack.get("context_snapshot") or {}
+
         if chapter > 0:
             payload["meta"]["context_weight_stage"] = self._resolve_context_stage(chapter)
 
         return payload
+
+    def _govern_pack(self, pack: Dict[str, Any], chapter: int):
+        state = self._load_state()
+        governed = build_governed_context(
+            project_root=self.config.project_root,
+            chapter=chapter,
+            state=state,
+            source_sections={
+                "outline": (pack.get("core") or {}).get("chapter_outline"),
+                "story_contract": pack.get("story_contract"),
+                "writing_guidance": pack.get("writing_guidance"),
+                "genre_profile": pack.get("genre_profile"),
+                "reader_signal": pack.get("reader_signal"),
+                "preferences": pack.get("preferences"),
+                "recent_summaries": (pack.get("core") or {}).get("recent_summaries"),
+                "story_skeleton": pack.get("story_skeleton"),
+                "long_term_memory": pack.get("long_term_memory"),
+                "memory": pack.get("memory"),
+                "scene": pack.get("scene"),
+                "plot_structure": pack.get("plot_structure"),
+            },
+        )
+        return (
+            governed["canon"], governed["intent"], governed["craft"],
+            governed["reference"], governed["diagnostics"], governed["snapshot"],
+        )
 
     def filter_invalid_items(self, items: List[Dict[str, Any]], source_type: str, id_key: str) -> List[Dict[str, Any]]:
         confirmed = self.index_manager.get_invalid_ids(source_type, status="confirmed")

@@ -2,26 +2,18 @@
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 from .chapter_commit_service import ChapterCommitService
-from .chapter_commit_schema import (
-    DisambiguationResult,
-    ExtractionResult,
-    FulfillmentResult,
-    ReviewResult,
-)
-from .durable_projection import read_commit_file
+from .durable_projection import DurableCommitError, discover_validated_chapter_commits
 from .event_projection_router import EventProjectionRouter
 from .commit_artifacts import extraction_dict, extraction_list, extraction_text
 from .event_log_store import EventLogStore
 from .projection_rebuild_context import _controlled_rebuild
 
 
-_COMMIT_NAME = re.compile(r"^chapter_(\d+)\.commit\.json$")
 class ProjectionRebuildError(RuntimeError):
     def __init__(self, message: str, *, chapter: int | None = None, projection: str = "canon"):
         super().__init__(message)
@@ -30,55 +22,14 @@ class ProjectionRebuildError(RuntimeError):
 
 
 def discover_and_validate_commits(project_root: str | Path) -> list[dict[str, Any]]:
-    root = Path(project_root).expanduser().resolve()
-    directory = root / ".story-system" / "commits"
-    if not directory.exists():
-        return []
-    if not directory.is_dir():
-        raise ProjectionRebuildError(f"commit path is not a directory: {directory}")
-    files = sorted(path for path in directory.iterdir() if path.is_file())
-    commits: list[tuple[int, Path, dict[str, Any]]] = []
-    seen: set[int] = set()
-    for path in files:
-        if path.name.endswith(".lock") and _COMMIT_NAME.fullmatch(path.name[:-5]):
-            continue
-        match = _COMMIT_NAME.fullmatch(path.name)
-        if not match:
-            raise ProjectionRebuildError(f"unexpected file in canonical commit directory: {path}")
-        chapter = int(match.group(1))
-        if chapter < 1:
-            raise ProjectionRebuildError(f"invalid chapter number in commit filename: {path}")
-        if path.name != f"chapter_{chapter:03d}.commit.json":
-            raise ProjectionRebuildError(
-                f"non-canonical durable commit filename: {path}", chapter=chapter
-            )
-        if chapter in seen:
-            raise ProjectionRebuildError(f"duplicate durable commit for chapter {chapter}: {path}", chapter=chapter)
-        seen.add(chapter)
-        try:
-            payload = read_commit_file(path)
-            meta = payload.get("meta")
-            if not isinstance(meta, dict):
-                raise ValueError("meta must be an object")
-            if int(meta.get("chapter") or 0) != chapter:
-                raise ValueError(f"meta.chapter does not match filename chapter {chapter}")
-            if meta.get("schema_version") != "story-system/v1":
-                raise ValueError(f"unsupported schema version: {meta.get('schema_version')!r}")
-            if meta.get("status") not in {"accepted", "rejected"}:
-                raise ValueError(f"unsupported commit status: {meta.get('status')!r}")
-            # Projection execution status is mutable and never participates in Canon validation.
-            payload.pop("projection_status", None)
-            ReviewResult.model_validate(payload.get("review_result"))
-            FulfillmentResult.model_validate(payload.get("fulfillment_result"))
-            DisambiguationResult.model_validate(payload.get("disambiguation_result"))
-            ExtractionResult.model_validate(payload.get("extraction_result"))
-        except Exception as exc:
-            raise ProjectionRebuildError(
-                f"invalid durable commit {path}: {exc}", chapter=chapter
-            ) from exc
-        commits.append((chapter, path, payload))
-    commits.sort(key=lambda item: item[0])
-    return [{"chapter": chapter, "path": path, "payload": payload} for chapter, path, payload in commits]
+    try:
+        commits = discover_validated_chapter_commits(project_root)
+    except DurableCommitError as exc:
+        raise ProjectionRebuildError(str(exc), chapter=exc.chapter) from exc
+    # Projection execution status is mutable and never participates in Canon validation.
+    for item in commits:
+        item["payload"].pop("projection_status", None)
+    return commits
 
 
 def _reset_events(root: Path) -> None:

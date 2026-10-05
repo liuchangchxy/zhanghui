@@ -149,6 +149,8 @@ REVISION_SYSTEM_PROMPT = """你是网文局部重写器。
 2. 保持原文风格一致（不要 AI 化、不要加入未声明的设定）
 3. 严格遵循 fix_hint，不要扩大改动范围
 4. 修复完成后，整段字数与原段差距控制在 ±30% 以内
+5. governed context 的 CANON 才是已发生事实；INTENT 是未来目标，不能写成已发生；CRAFT 是建议。
+6. REFERENCE 仅用于检索和历史背景；UNKNOWN/LEGACY 不能覆盖 CANON。RAG 相似度不是事实置信度。
 """
 
 
@@ -157,6 +159,7 @@ def call_llm_for_revision(
     original: str,
     instruction: str,
     model: str,
+    governed_context: dict[str, Any] | None = None,
 ) -> str:
     """调 Claude API 重写一个段。
 
@@ -178,8 +181,15 @@ def call_llm_for_revision(
         )
 
     client = anthropic.Anthropic()
+    context_block = (
+        "### 已治理的章节上下文（diagnostics 已省略）\n"
+        + json.dumps(governed_context, ensure_ascii=False, indent=2)
+        + "\n\n"
+        if governed_context else ""
+    )
     user_msg = (
-        f"## 待重写段: {section_id}\n\n"
+        context_block
+        + f"## 待重写段: {section_id}\n\n"
         f"### 原文\n{original}\n\n"
         f"### 修复指令\n{instruction}\n\n"
         f"请只输出重写后的段落（含 ## {section_id} 标题），不要输出其他文本。"
@@ -218,6 +228,20 @@ def call_llm_for_revision(
     return text
 
 
+def load_governed_context(path: Path) -> dict[str, Any]:
+    """Load only Writer-safe sections from the existing memory-contract response."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"上下文文件读取失败: {exc}") from exc
+    sections = raw.get("sections") if isinstance(raw.get("sections"), dict) else raw
+    keys = ("canon", "intent", "craft", "reference", "context_snapshot")
+    selected = {key: sections[key] for key in keys if key in sections}
+    if not any(key in selected for key in ("canon", "intent", "craft", "reference")):
+        raise ValueError("上下文文件缺少 governed canon/intent/craft/reference sections")
+    return selected
+
+
 # === CLI ===
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="根据 RejectionContract 局部重写章节")
@@ -229,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=None,
                         help="输出文件（默认 <chapter>.revised.md）")
     parser.add_argument("--model", default="claude-sonnet-4-5")
+    parser.add_argument("--context-file", type=Path, default=None,
+                        help="memory-contract load-context JSON；仅传入治理后的 sections")
     parser.add_argument(
         "--include-advisory",
         action="store_true",
@@ -243,6 +269,14 @@ def main(argv: list[str] | None = None) -> int:
     if not args.contract.is_file():
         print(f"[revise] contract 文件不存在: {args.contract}", file=sys.stderr)
         return EXIT_INFRA
+
+    governed_context = None
+    if args.context_file is not None:
+        try:
+            governed_context = load_governed_context(args.context_file)
+        except ValueError as e:
+            print(f"[revise] {e}", file=sys.stderr)
+            return EXIT_INFRA
 
     try:
         raw = json.loads(args.contract.read_text(encoding="utf-8"))
@@ -280,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         "contract_chapter": contract.chapter,
         "target_sections": sorted(plan.keys()),
         "targets_text": target_text,
+        "context_snapshot": (governed_context or {}).get("context_snapshot", {}),
         "plan": {k: v[:200] + "..." if len(v) > 200 else v for k, v in plan.items()},
     }
 
@@ -289,6 +324,10 @@ def main(argv: list[str] | None = None) -> int:
             print("[revise] contract 有 issue 但没有 §N 段能解析", file=sys.stderr)
             return EXIT_INVALID
         return EXIT_OK
+
+    if governed_context is None:
+        print("[revise] 真实重写必须提供共享的 provenance-aware --context-file", file=sys.stderr)
+        return EXIT_INFRA
 
     if has_any_issues and not has_resolvable_sections:
         print("[revise] contract 有 issue 但没有 §N 段能解析", file=sys.stderr)
@@ -314,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         joined_hints = "\n".join(grouped[section_id])
         revised[section_id] = call_llm_for_revision(
-            section_id, plan[section_id], joined_hints, args.model,
+            section_id, plan[section_id], joined_hints, args.model, governed_context,
         )
 
     new_text = apply_revised_sections(chapter_text, revised)

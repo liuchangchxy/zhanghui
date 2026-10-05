@@ -382,7 +382,10 @@ def test_apply_projections_normalizes_events_before_router_inspection(
 
     service = ChapterCommitService(tmp_path)
     payload = {
-        "meta": {"status": "accepted", "chapter": 76},
+        "meta": {"schema_version": "story-system/v1", "status": "accepted", "chapter": 76},
+        "review_result": {"blocking_count": 0},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
         "extraction_result": {
             "accepted_events": [
                 {

@@ -37,6 +37,16 @@ def _make_project(tmp_path: Path) -> DataModulesConfig:
     return DataModulesConfig.from_project_root(tmp_path)
 
 
+def _commit_payload(chapter: int, status: str) -> dict:
+    return {
+        "meta": {"schema_version": "story-system/v1", "chapter": chapter, "status": status},
+        "review_result": {"blocking_count": 1 if status == "rejected" else 0},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
+        "extraction_result": {"accepted_events": [], "state_deltas": [], "entity_deltas": []},
+    }
+
+
 class TestAdapterSatisfiesProtocol:
     def test_isinstance_check(self, tmp_path):
         cfg = _make_project(tmp_path)
@@ -97,6 +107,8 @@ class TestQueryEntity:
         assert snap.tier == "核心"
         assert "他" in snap.aliases
         assert len(snap.recent_state_changes) == 1
+        assert snap.field_provenance["realm"] == "legacy_unknown"
+        assert snap.field_provenance["aliases"] == "legacy_resolution_only"
 
 
 class TestQueryRules:
@@ -123,6 +135,8 @@ class TestQueryRules:
         assert len(rules) == 1
         assert rules[0].value == "23种"
         assert rules[0].domain == "力量体系"
+        assert rules[0].semantic_role == "UNKNOWN"
+        assert rules[0].provenance_status == "unverified"
 
     def test_query_rules_filter_by_domain(self, tmp_path):
         cfg = _make_project(tmp_path)
@@ -171,6 +185,8 @@ class TestGetOpenLoops:
         assert len(loops) == 1
         assert loops[0].content == "萧炎与纳兰嫣然三年之约"
         assert loops[0].urgency == 0.9
+        assert loops[0].semantic_role == "INTENT"
+        assert loops[0].provenance_status == "unverified_plan"
 
     def test_get_open_loops_with_string_urgency_does_not_crash(self, tmp_path):
         """回归测试：data-agent 输出字符串 urgency 时，整批伏笔不应被吞掉。
@@ -323,10 +339,7 @@ class TestLoadContext:
         )
         (story_root / "commits" / "chapter_003.commit.json").write_text(
             json.dumps(
-                {
-                    "meta": {"chapter": 3, "status": "accepted"},
-                    "provenance": {"write_fact_role": "chapter_commit"},
-                },
+                _commit_payload(3, "accepted"),
                 ensure_ascii=False,
             ),
             encoding="utf-8",
@@ -373,11 +386,11 @@ class TestLoadContext:
             encoding="utf-8",
         )
         (story_root / "commits" / "chapter_002.commit.json").write_text(
-            json.dumps({"meta": {"chapter": 2, "status": "accepted"}}, ensure_ascii=False),
+            json.dumps(_commit_payload(2, "accepted"), ensure_ascii=False),
             encoding="utf-8",
         )
         (story_root / "commits" / "chapter_003.commit.json").write_text(
-            json.dumps({"meta": {"chapter": 3, "status": "rejected"}}, ensure_ascii=False),
+            json.dumps(_commit_payload(3, "rejected"), ensure_ascii=False),
             encoding="utf-8",
         )
 

@@ -43,6 +43,7 @@ def test_load_context_cli(tmp_path, capsys):
     output = json.loads(capsys.readouterr().out)
     assert output["chapter"] == 1
     assert "sections" in output
+    assert {"canon", "intent", "craft", "reference", "context_diagnostics", "context_snapshot"} <= set(output["sections"])
 
 
 def test_query_entity_not_found(tmp_path, capsys):

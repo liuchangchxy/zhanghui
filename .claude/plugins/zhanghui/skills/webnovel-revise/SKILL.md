@@ -35,20 +35,29 @@ allowed-tools: Read Write Edit Grep Bash
        --dry-run
    ```
    确认 `target_sections` 列表合理。
-3. **真实重写**：
+3. **构造治理后的共享上下文**：
+   ```bash
+   mkdir -p .webnovel/tmp
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/memory_cli.py \
+       --project-root . load-context --chapter {NNNN} \
+       > .webnovel/tmp/ch{NNNN}-revise-context.json
+   ```
+   修订器只会把 `canon`、`intent`、`craft`、`reference` 和 `context_snapshot` 传给 Writer；diagnostics 不进入 Writer 请求。
+4. **真实重写**：
    ```bash
    python3 .../revise_chapter.py \
        --chapter-file "正文/第${NNNN}章-${title}.md" \
        --contract .webnovel/review/ch${NNNN}.json \
+       --context-file .webnovel/tmp/ch${NNNN}-revise-context.json \
        --output "正文/第${NNNN}章-${title}.revised.md"
    ```
-4. **人工 diff**：用 Read 或 diff 工具对比原版和 .revised.md。
-5. **覆盖**：用户确认后，把 .revised.md 改名为原文件名（删 .revised 后缀）。
-6. **CHANGES 重新校验**：
+5. **人工 diff**：用 Read 或 diff 工具对比原版和 .revised.md。
+6. **覆盖**：用户确认后，把 .revised.md 改名为原文件名（删 .revised 后缀）。
+7. **CHANGES 重新校验**：
    ```bash
    python3 .../changes_gate.py --chapter-file "正文/第${NNNN}章-${title}.md" --db index.db --json
    ```
-7. **回写 data-agent**（可选）：先用 `prepare_data_agent_input.py` 从修订后的章节生成 prose-only 临时文件与独立 ProposedChanges JSON；调用 `webnovel-writer:data-agent` 时 `chapter_file` 只传 prose-only 文件，不能传含 `<chapter_changes>` 的原文件。
+8. **回写 data-agent**（可选）：先用 `prepare_data_agent_input.py` 从修订后的章节生成 prose-only 临时文件与独立 ProposedChanges JSON；调用 `webnovel-writer:data-agent` 时 `chapter_file` 只传 prose-only 文件，不能传含 `<chapter_changes>` 的原文件。
 
 ## 退出条件
 

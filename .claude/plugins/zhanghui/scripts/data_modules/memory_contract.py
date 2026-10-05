@@ -46,6 +46,7 @@ class EntitySnapshot:
     first_appearance: int = 0
     last_appearance: int = 0
     recent_state_changes: List[Dict[str, Any]] = field(default_factory=list)
+    field_provenance: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -60,6 +61,11 @@ class Rule:
     value: str
     domain: str = ""
     source_chapter: int = 0
+    semantic_role: str = "UNKNOWN"
+    source_role: str = "PROJECTION"
+    source_ref: str = "legacy_or_memory"
+    provenance_status: str = "unverified"
+    evidence: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -74,6 +80,11 @@ class OpenLoop:
     planted_chapter: int = 0
     expected_payoff: str = ""
     urgency: float = 0.0
+    semantic_role: str = "INTENT"
+    source_role: str = "PROJECTION"
+    source_ref: str = "memory"
+    provenance_status: str = "unverified_plan"
+    evidence: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -86,6 +97,11 @@ class TimelineEvent:
     chapter: int = 0
     time_hint: str = ""
     event_type: str = ""
+    semantic_role: str = "UNKNOWN"
+    source_role: str = "PROJECTION"
+    source_ref: str = "memory"
+    provenance_status: str = "unverified"
+    evidence: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

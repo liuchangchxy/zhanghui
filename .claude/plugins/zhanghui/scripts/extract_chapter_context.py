@@ -231,10 +231,10 @@ def _search_with_rag(
         results = adapter.bm25_search(query=query, top_k=top_k, chapter=chapter_num)
 
     hits: List[Dict[str, Any]] = []
+    from data_modules.context_provenance import classify_rag_hit
     for row in results:
         content = re.sub(r"\s+", " ", str(getattr(row, "content", "") or "")).strip()
-        hits.append(
-            {
+        hits.append(classify_rag_hit(project_root, {
                 "chunk_id": str(getattr(row, "chunk_id", "") or ""),
                 "chapter": int(getattr(row, "chapter", 0) or 0),
                 "scene_index": int(getattr(row, "scene_index", 0) or 0),
@@ -242,8 +242,7 @@ def _search_with_rag(
                 "source": str(getattr(row, "source", "") or mode),
                 "source_file": str(getattr(row, "source_file", "") or ""),
                 "content": content[:180],
-            }
-        )
+            }, target_chapter=chapter_num))
 
     return {
         "invoked": True,
@@ -308,6 +307,12 @@ def _load_contract_context(project_root: Path, chapter_num: int) -> Dict[str, An
         "runtime_status": payload.get("runtime_status", {}),
         "latest_commit": payload.get("latest_commit", {}),
         "prewrite_validation": payload.get("prewrite_validation", {}),
+        "canon": payload.get("canon", []),
+        "intent": payload.get("intent", []),
+        "craft": payload.get("craft", []),
+        "reference": payload.get("reference", []),
+        "context_diagnostics": payload.get("context_diagnostics", []),
+        "context_snapshot": (payload.get("meta") or {}).get("context_snapshot", {}),
         "reader_signal": payload.get("reader_signal", {}),
         "genre_profile": payload.get("genre_profile", {}),
         "writing_guidance": payload.get("writing_guidance", {}),
@@ -331,6 +336,13 @@ def build_chapter_context_payload(project_root: Path, chapter_num: int) -> Dict[
     contract_context = _load_contract_context(project_root, chapter_num)
     plot_structure = contract_context.get("plot_structure") or load_chapter_plot_structure(project_root, chapter_num)
     rag_assist = _load_rag_assist(project_root, chapter_num, outline)
+    reference = list(contract_context.get("reference") or [])
+    if rag_assist.get("hits"):
+        reference.append({
+            "content": rag_assist["hits"], "semantic_role": "UNKNOWN",
+            "source_role": "RETRIEVAL", "source_ref": "rag_assist",
+            "provenance_status": "retrieval_only",
+        })
 
     return {
         "chapter": chapter_num,
@@ -351,6 +363,14 @@ def build_chapter_context_payload(project_root: Path, chapter_num: int) -> Dict[
         "scene": contract_context.get("scene", {}),
         "core": contract_context.get("core", {}),
         "rag_assist": rag_assist,
+        "canon": contract_context.get("canon", []),
+        "intent": contract_context.get("intent", []),
+        "craft": contract_context.get("craft", []),
+        "reference": reference,
+        "context_diagnostics": contract_context.get("context_diagnostics", []),
+        "context_snapshot": contract_context.get("context_snapshot", {}),
+        "previous_summaries_provenance": {"semantic_role": "OPERATIONAL", "source_role": "SUMMARY", "provenance_status": "unverified", "presentation_role": "REFERENCE"},
+        "state_summary_provenance": {"semantic_role": "UNKNOWN", "source_role": "LEGACY", "provenance_status": "unverified", "presentation_role": "REFERENCE"},
     }
 
 
@@ -386,4 +406,3 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         enable_windows_utf8_stdio()
     main()
-
