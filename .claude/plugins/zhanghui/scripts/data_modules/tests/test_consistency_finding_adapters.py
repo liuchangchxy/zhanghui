@@ -38,15 +38,27 @@ def test_subject_scoped_identity_survives_evidence_change_and_separates_subjects
 def test_missing_identity_and_unknown_code_are_diagnostic_only():
     findings = adapt_consistency_patch([
         {"patch": "state_revision", "chapter": 2, "message": "revision mismatch", "issue_code": "revision_mismatch", "subject_id": "state", "evidence": {"expected_revision": 1}},
-        {"patch": "state_revision", "chapter": 2, "message": "ignore prose"},
+        {"patch": "state_revision", "chapter": 2, "message": "unknown typed observation",
+         "issue_code": "future_issue_code"},
     ], {"chapter": 2})
     decision = GateSeverityPolicy().evaluate(findings, policy_version="v1", scope={"chapter": 2})
+    assert findings[1].authority.value == "LEGACY_UNKNOWN"
+    assert findings[1].checker_id == "consistency.unmapped_typed"
+    assert findings[1].evidence[0].kind == "unmapped_typed_issue"
     assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+
+
+def test_adapter_rejects_untyped_legacy_rows():
+    with pytest.raises(ValueError, match="typed patch and issue_code"):
+        adapt_consistency_patch(
+            {"patch": "foreshadow_dag", "chapter": 2, "message": "legacy prose only"},
+            {"chapter": 2},
+        )
 
 
 def test_diagnostic_findings_keep_runner_source_fingerprint():
     for row in (
-        {"patch": "unknown_patch", "issue_code": "mystery", "input_ref": {"source_input_fingerprint": "abc123"}},
+        {"patch": "foreshadow_dag", "issue_code": "future_issue_code", "input_ref": {"source_input_fingerprint": "abc123"}},
         PatchFinding(patch="foreshadow_dag", chapter=2, issue_code="cycle", message="cycle",
                      input_ref={"source_input_fingerprint": "def456"}),
     ):
@@ -110,13 +122,15 @@ def test_p7_stale_derived_view_is_adapter_contract_recovery_mapping():
     assert decision.aggregate_action == WorkflowAction.RECOVER
 
 
-def test_unknown_legacy_row_wording_is_diagnostic_and_never_policy_authority():
-    finding = adapt_consistency_patch(
-        {"patch": "foreshadow_dag", "chapter": 2, "message": "BLOCKER: cycle detected", "fix_hint": "stop writing"},
-        {"chapter": 2},
-    )[0]
+def test_unknown_typed_issue_code_is_diagnostic_and_never_policy_authority():
+    finding = adapt_consistency_patch({
+        "patch": "foreshadow_dag", "chapter": 2, "issue_code": "future_cycle_variant",
+        "message": "display only", "fix_hint": "inspect typed observation",
+    }, {"chapter": 2})[0]
     decision = GateSeverityPolicy().evaluate([finding], policy_version="v1", scope={"chapter": 2})
     assert finding.authority.value == "LEGACY_UNKNOWN"
+    assert finding.checker_id == "consistency.unmapped_typed"
+    assert finding.evidence[0].kind == "unmapped_typed_issue"
     assert finding.gate_id.endswith("diagnostic")
     assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
 

@@ -185,8 +185,8 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" me
 
 AI 自动生成：
 - 15 个 beat 在卷内的章节位置
-- Midpoint（必填 BLOCKER）：卷中反转/假胜利/假失败
-- All Is Lost（必填 BLOCKER）：卷末最低点
+- Midpoint（必填规划前置条件）：卷中反转/假胜利/假失败
+- All Is Lost（必填规划前置条件）：卷末最低点
 - Final Image（必填）：与下卷 Opening Image 形成呼应
 
 输出文件：`大纲/第{volume_id}卷-节拍表.md`
@@ -198,8 +198,8 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
   --volume {volume_id} --total-chapters {total_chapters}
 ```
 
-BLOCKER 处理：
-- Midpoint/All Is Lost 缺失 → BLOCKER，暂停并询问用户
+规划前置条件处理：
+- Midpoint/All Is Lost 缺失 → 暂停当前规划步骤并询问用户
 
 ### Step 5：生成卷时间线表
 
@@ -248,10 +248,11 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
   story-craft init-locks --volume {volume_id}
 ```
 
-BLOCKER 处理：
-- 深层伏笔 < 1 → BLOCKER
-- 中层伏笔 < 3 → BLOCKER
-- 卷级定时锁 < 3 → BLOCKER
+本地规划前置条件：
+- 深层伏笔 < 1 → 暂停当前大纲生成，补齐规划输入
+- 中层伏笔 < 3 → 暂停当前大纲生成，补齐规划输入
+- 卷级定时锁 < 3 → 暂停当前大纲生成，补齐规划输入
+这些数量要求只约束本地大纲生成步骤，不映射到 `GateSeverityPolicy`。
 
 ### Step 7：批量生成章纲
 
@@ -289,11 +290,11 @@ BLOCKER 处理：
 
 ```bash
 # PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
-# --output-version v1 返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
+# 默认返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
-sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}', '--output-version', 'v1']))
+sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
 "
 ```
 
@@ -307,7 +308,7 @@ sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 
 写回规则：只增量补充相关段落；新角色写入角色卡或角色组；新势力 / 地点 / 规则写入世界观或力量体系；新反派层级写入反派设计。
 
-硬规则：若发现与总纲或既有设定冲突，标记 `BLOCKER` 并停止后续更新。
+本地规划前置条件：若发现与总纲或既有设定冲突，暂停当前写回步骤并请用户裁决；这只约束本次规划更新，不提升一致性 finding 的 policy action，也不修改章节提交策略。
 
 ### Step 8.5（新增）：craft 一致性检查
 
@@ -327,11 +328,11 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
 - ✅ 每章 Scene-Sequel 必填字段不缺失
 - ✅ 每章 hook_type 已声明
 
-输出 BLOCKER 列表 → 暂停 → 用户裁决 → 继续 Step 9。
+输出需要作者裁决的规划问题 → 暂停当前规划步骤 → 用户裁决 → 继续 Step 9。此流程是本地规划步骤控制，不改变 GateSeverityPolicy 对 craft findings 的 advisory 语义。
 
 ### Step 9：验证、保存并更新状态
 
-必须通过：节拍表 / 时间线表 / 详细大纲均存在且非空；每章时间字段齐全；时间线单调递增；倒计时推进正确；新设定已回写；`BLOCKER=0`；有节点时相邻章节 `CEN -> CBN` 无明显逻辑冲突且每章`必须覆盖节点`不超过 4 个。
+本地规划前置条件：节拍表 / 时间线表 / 详细大纲均存在且非空；每章时间字段齐全；时间线单调递增；倒计时推进正确；新设定已回写；所有规划问题均已裁决；有节点时相邻章节 `CEN -> CBN` 无明显逻辑冲突且每章`必须覆盖节点`不超过 4 个。
 
 验证全部通过后，生成显式结构化写回文件 `大纲/第{volume_id}卷-总纲写回.json`（只写规划中显式列出的伏笔 / 开放环，禁止从卷纲自由文本推断）：
 
@@ -430,7 +431,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" st
 - 中段反转缺失且未给出理由。
 - 任一章节缺少时间字段；时间回跳且未标注闪回；倒计时算术冲突。
 - 与总纲核心冲突或卷末高潮明显冲突。
-- 存在 `BLOCKER` 未裁决。
+- 存在尚未裁决的规划前置问题。
 
 ## 恢复规则
 
@@ -496,7 +497,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" us
 异常分类：
 - 已自动处理：只重做失败批次、补齐非阻断占位、重跑合同刷新。
 - 建议确认：新增角色名、势力名、卷末钩子需要作者看一眼。
-- 必须处理：总纲 / 设定冲突、时间线回跳、`BLOCKER` 未裁决、当前章相关占位残留。
+- 必须处理：总纲 / 设定冲突、时间线回跳、未裁决的规划前置问题、当前章相关占位残留。
 
 下一步建议必须使用任务化语言 + 可复制命令，例如：
 

@@ -196,8 +196,8 @@ def _eval_consistency_action_matrix(root: Path, case: dict[str, Any]) -> dict[st
     for name, required in requirements.items():
         text = _read(plugin_root / "skills" / name / "SKILL.md")
         missing.extend(f"{name}: {token}" for token in required if token not in text)
-        if "--output-version', 'v1'" not in text:
-            missing.append(f"{name}: versioned CLI output")
+        if "--output-version" in text or "默认返回结构化评估" not in text:
+            missing.append(f"{name}: default structured CLI output")
         if "source_input_fingerprint" not in text or "过期上下文" not in text:
             missing.append(f"{name}: stale source fingerprint guard")
     write_text = _read(plugin_root / "skills" / "webnovel-write" / "SKILL.md")

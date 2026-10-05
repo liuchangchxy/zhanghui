@@ -200,10 +200,10 @@ issues = evaluate_pre_write_gates(
 )
 if issues:
     print("\n".join(issues))
-    raise SystemExit(1)  # BLOCKER: 不允许写
+    raise SystemExit(1)  # 本地写作前置条件未满足，不允许继续写作
 ```
 
-**BLOCKER 时**：要求用户先在 plan 阶段调整伏笔账本或回收 overdue 伏笔，方可继续。
+**写作前置条件未满足时**：要求用户先在 plan 阶段调整伏笔账本或回收 overdue 伏笔，方可继续。该检查只决定当前写作步骤能否开始，不属于一致性 GateSeverityPolicy，也不改变章节提交策略。
 
 **逃生口**：`WEBNOVEL_DISABLE_CHUNKED_GATE=1` 临时跳过本检查。
 
@@ -264,11 +264,11 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 
 ```bash
 # PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
-# --output-version v1 返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
+# 默认返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
-sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}', '--output-version', 'v1']))
+sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
 "
 ```
 
@@ -506,7 +506,7 @@ sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 "
 ```
 
-检查每个 patch 的 outcome；出现 `failed` 时按结果中的错误类型修复并重试。apply 的失败属于执行/投影维护问题，不标成一致性 BLOCKER，也不代替 `ChapterCommitService` 的章节提交判断。
+检查每个 patch 的 outcome；出现 `failed` 时按结果中的错误类型修复并重试。apply 的失败属于执行/投影维护问题，应按错误类型修复，不改变一致性 finding 的 policy action，也不代替 `ChapterCommitService` 的章节提交判断。
 
 ### Step 5：Data Agent + reconciliation + chapter-commit 提交（事实回写主链）
 
@@ -611,7 +611,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" st
 约束：
 - `--persist` + `--emit-runtime-contracts` + `--chapter` 三项开关必须同时存在；缺一即视为章级合同未刷新。
 - 占位 query 禁止文本：`{章纲目标}` / `第N章章纲目标` 仅作"禁用示例"出现，不得作为命令实参。
-- 失败兜底：retry 一次；仍失败则阻断 `chapter-commit` 并报告 BLOCKER。
+- 失败兜底：retry 一次；仍失败则停止本次 `chapter-commit` 调用并报告提交失败，之后由 `ChapterCommitService` 按其既有契约处理。
 
 #### Step 5.6：postcommit projection 五项验证
 
@@ -763,7 +763,7 @@ tail -n 1 "${PROJECT_ROOT}/.webnovel/observability/data_agent_timing.jsonl" || t
 异常分类：
 - 已自动处理：自动重跑失败 batch、自动重做 anti-slop 扫描、自动重投影合同、自动重写 data artifacts、`projections retry` 自动跑通。
 - 建议确认：人物小传细节、微世界观表述、节拍微调、伏笔登记需要作者看一眼。
-- 必须处理：`chapter-commit rejected`、projection retry 仍失败、`BLOCKER` 未裁决、关键产物缺失。
+- 必须处理：`chapter-commit rejected`、projection retry 仍失败、写作前置条件未完成、关键产物缺失。
 
 下一步建议必须使用任务化语言 + 可复制命令，例如：
 

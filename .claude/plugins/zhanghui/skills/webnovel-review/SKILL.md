@@ -97,11 +97,11 @@ Review 阶段额外输出"一致性"维度：
 
 ```bash
 # PYTHONPATH 必须指向工具根（${CLAUDE_PLUGIN_ROOT}），使 cwd=PROJECT_ROOT 时仍能 import scripts.consistency
-# --output-version v1 返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
+# 默认返回结构化评估；退出码 0 表示评估完成，1 表示执行/基础设施错误，2 表示输入无效。
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}" python3 -c "
 from scripts.consistency.cli import main
 import sys
-sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}', '--output-version', 'v1']))
+sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${chapter_num}']))
 "
 ```
 
@@ -314,7 +314,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
 异常分类：
 - 已自动处理：自动重跑失败 sub-agent、自动重生成 metrics、自动补 checkpoint 记录。
 - 建议确认：人物小传细节、微世界观表述、节拍微调、伏笔登记需要作者看一眼。
-- 必须处理：有 blocking 问题且用户未选择处理策略（最终状态为“需要你处理”）、`BLOCKER` 未裁决、关键产物缺失。
+- 必须处理：需要用户选择处理策略的问题（最终状态为“需要你处理”）、尚未裁决的规划前置问题、关键产物缺失。
 
 下一步建议必须使用任务化语言 + 可复制命令，例如：
 

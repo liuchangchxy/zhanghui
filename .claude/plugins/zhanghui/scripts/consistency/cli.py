@@ -21,13 +21,11 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--project-root", type=str, required=True)
     check.add_argument("--chapter", type=int, required=True)
     check.add_argument("--patch", type=str, default=None, help="Run only this patch")
-    check.add_argument("--output-version", choices=("legacy", "v1"), default="v1")
 
     # list
     lst = subparsers.add_parser("list", help="List consistency findings for a chapter")
     lst.add_argument("--project-root", type=str, default=None)
     lst.add_argument("--chapter", type=int, required=True)
-    lst.add_argument("--output-version", choices=("legacy", "v1"), default="v1")
 
     # init
     init = subparsers.add_parser("init", help="Initialize patch fields in state.json")
@@ -68,10 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         project_root = Path(args.project_root)
         if not project_root.is_dir() or not (project_root / ".webnovel").is_dir():
             response = _evaluation_response("invalid_input", args.chapter, None, [], [], None)
-            if args.output_version == "v1":
-                print(json.dumps(response, ensure_ascii=False, indent=2))
-            else:
-                print("Project root or .webnovel directory does not exist", file=sys.stderr)
+            print(json.dumps(response, ensure_ascii=False, indent=2))
             return 2
         runner = ConsistencyRunner(project_root=project_root)
         if args.command == "check" and args.patch:
@@ -86,18 +81,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         findings = evaluation.findings
         if evaluation.status != "evaluated":
-            if args.output_version == "v1":
-                print(json.dumps(_evaluation_response(
-                    "execution_error", args.chapter, evaluation.source_input_fingerprint,
-                    [], evaluation.diagnostics, None,
-                ), ensure_ascii=False, indent=2))
-            else:
-                print(json.dumps([asdict(item) for item in evaluation.diagnostics], ensure_ascii=False, indent=2))
+            print(json.dumps(_evaluation_response(
+                "execution_error", args.chapter, evaluation.source_input_fingerprint,
+                [], evaluation.diagnostics, None,
+            ), ensure_ascii=False, indent=2))
             return 1
-        if args.output_version == "legacy":
-            print(json.dumps([asdict(item) if is_dataclass(item) else item.model_dump(mode="json")
-                              for item in findings], ensure_ascii=False, indent=2))
-            return 1 if findings else 0
         normalized = adapt_consistency_patch(findings, {"chapter": args.chapter})
         decisions = GateSeverityPolicy().evaluate(
             normalized, policy_version="consistency-v1", scope={"chapter": args.chapter},

@@ -59,7 +59,7 @@
       "required": [
         "必须通过 Agent 工具调用 `webnovel-writer:reviewer`",
         "review-pipeline",
-        "有 blocking 问题且用户未选择处理策略"
+        "需要用户选择处理策略的问题"
       ]
     },
     {

@@ -231,7 +231,8 @@ def test_review_schema_consistency():
 def test_consistency_consumers_use_shared_actions_and_preserve_commit_owner():
     for skill_name in ("webnovel-write", "webnovel-plan", "webnovel-review"):
         text = _read_text(SKILLS_DIR / skill_name / "SKILL.md")
-        assert "--output-version', 'v1'" in text
+        assert "--output-version" not in text
+        assert "默认返回结构化评估" in text
         assert "policy_action" in text
         assert "source_input_fingerprint" in text
         assert "过期上下文" in text
@@ -379,7 +380,7 @@ def test_review_skill_final_report_covers_metrics_and_blocking_decision():
         "如果无阻断，明确可以继续写作",
     ):
         assert required in text
-    assert "有 blocking 问题且用户未选择处理策略" in text
+    assert "需要用户选择处理策略的问题" in text
     assert "最终状态为“需要你处理”" in text
 
 

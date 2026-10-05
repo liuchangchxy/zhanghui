@@ -14,7 +14,14 @@ def test_parser_check_command():
     assert args.project_root == "/tmp/proj"
     assert args.chapter == 5
     assert args.patch is None
-    assert args.output_version == "v1"
+    assert not hasattr(args, "output_version")
+
+
+def test_parser_rejects_retired_legacy_output_mode():
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["check", "--project-root", "/tmp/proj", "--chapter", "5",
+                           "--output-version", "legacy"])
 
 
 def test_parser_check_specific_patch():
@@ -109,7 +116,7 @@ def _policy_finding(action):
 def test_cli_v1_serializes_shared_policy_action_and_success_exits_zero(tmp_path, capsys, monkeypatch, action):
     project = _valid_project(tmp_path)
     monkeypatch.setattr(cli_module, "adapt_consistency_patch", lambda _rows, _scope: [_policy_finding(action)])
-    rc = main(["check", "--project-root", str(project), "--chapter", "5", "--output-version", "v1"])
+    rc = main(["check", "--project-root", str(project), "--chapter", "5"])
     response = json.loads(capsys.readouterr().out)
     assert rc == 0
     assert response["version"] == 1
@@ -121,7 +128,7 @@ def test_cli_v1_serializes_shared_policy_action_and_success_exits_zero(tmp_path,
 
 
 def test_cli_v1_invalid_project_root_returns_two_and_structured_status(tmp_path, capsys):
-    rc = main(["check", "--project-root", str(tmp_path / "missing"), "--chapter", "5", "--output-version", "v1"])
+    rc = main(["check", "--project-root", str(tmp_path / "missing"), "--chapter", "5"])
     response = json.loads(capsys.readouterr().out)
     assert rc == 2
     assert response["status"] == "invalid_input"
@@ -132,22 +139,13 @@ def test_cli_v1_corrupt_state_is_execution_error_not_findings(tmp_path, capsys, 
     project = _valid_project(tmp_path)
     (project / ".webnovel" / "state.json").write_text("{bad", encoding="utf-8")
     monkeypatch.setattr(cli_module, "adapt_consistency_patch", lambda *_: pytest.fail("policy must not run"))
-    rc = main(["check", "--project-root", str(project), "--chapter", "5", "--output-version", "v1"])
+    rc = main(["check", "--project-root", str(project), "--chapter", "5"])
     response = json.loads(capsys.readouterr().out)
     assert rc == 1
     assert response["status"] == "execution_error"
     assert response["findings"] == []
     assert response["policy_action"] is None
     assert response["diagnostics"][0]["diagnostic_code"] == "state_read_failed"
-
-
-def test_cli_legacy_mode_does_not_report_execution_failure_as_clean(tmp_path, capsys):
-    project = _valid_project(tmp_path)
-    (project / ".webnovel" / "state.json").write_text("{bad", encoding="utf-8")
-    rc = main(["check", "--project-root", str(project), "--chapter", "5", "--output-version", "legacy"])
-    response = json.loads(capsys.readouterr().out)
-    assert rc == 1
-    assert response[0]["diagnostic_code"] == "state_read_failed"
 
 
 def test_cli_runs_real_p1_through_runner_adapter_policy_without_persisting_decisions(tmp_path, capsys):
@@ -160,7 +158,7 @@ def test_cli_runs_real_p1_through_runner_adapter_policy_without_persisting_decis
     ]}
     state_path.write_text(json.dumps(state), encoding="utf-8")
 
-    rc = main(["check", "--project-root", str(project), "--chapter", "5", "--output-version", "v1"])
+    rc = main(["check", "--project-root", str(project), "--chapter", "5"])
     response = json.loads(capsys.readouterr().out)
     assert rc == 0
     assert response["status"] == "evaluated"
@@ -177,7 +175,7 @@ def test_cli_runs_real_p1_through_runner_adapter_policy_without_persisting_decis
 def test_cli_unknown_patch_is_invalid_input_not_clean_evaluation(tmp_path, capsys, monkeypatch):
     project = _valid_project(tmp_path)
     monkeypatch.setattr(cli_module, "adapt_consistency_patch", lambda *_: pytest.fail("invalid patch must not evaluate"))
-    rc = main(["check", "--project-root", str(project), "--chapter", "5", "--patch", "typo", "--output-version", "v1"])
+    rc = main(["check", "--project-root", str(project), "--chapter", "5", "--patch", "typo"])
     response = json.loads(capsys.readouterr().out)
     assert rc == 2
     assert response["status"] == "invalid_input"
