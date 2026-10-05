@@ -32,7 +32,22 @@ def _commit_payload(*, chapter=3, status="accepted", **extraction):
     }
     extraction_payload.update(extraction)
     return {
-        "meta": {"status": status, "chapter": chapter},
+        "meta": {
+            "schema_version": "story-system/v1",
+            "status": status,
+            "chapter": chapter,
+        },
+        "provenance": {"write_fact_role": "chapter_commit"},
+        "review_result": {"blocking_count": 1 if status == "rejected" else 0},
+        "fulfillment_result": {
+            "planned_nodes": [],
+            "covered_nodes": [],
+            "missed_nodes": ["test rejection"] if status == "rejected" else [],
+            "extra_nodes": [],
+        },
+        "disambiguation_result": {
+            "pending": ["test rejection"] if status == "rejected" else [],
+        },
         "extraction_result": extraction_payload,
     }
 
