@@ -477,3 +477,34 @@ def test_rebuild_keeps_unprovable_legacy_state_row_non_authoritative(tmp_path):
     assert report["ok"] is True
     assert len(legacy) == 1
     assert legacy[0]["status"] == "legacy_unlinked"
+
+
+def test_rebuild_shadows_mixed_evidence_legacy_memory_row_when_canon_resolves_loop(tmp_path):
+    from data_modules.config import DataModulesConfig
+    from data_modules.memory.schema import MemoryItem
+    from data_modules.memory.store import ScratchpadManager
+
+    _make_accepted_loop_commit(tmp_path, 1, "open_loop_created")
+    _make_accepted_loop_commit(tmp_path, 2, "open_loop_closed")
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    store = ScratchpadManager(cfg)
+    legacy_id = "old-content-derived-loop"
+    store.upsert_item(MemoryItem(
+        id=legacy_id, layer="semantic", category="open_loop", subject="同一条谜团",
+        field="status", value="同一条谜团", status="active", source_chapter=1,
+        payload={"planted_chapter": 1, "status": "active"},
+        evidence=["memory_facts:open_loop:1", "manual:preserve"],
+    ))
+
+    report = rebuild_projections(tmp_path)
+
+    rows = store.query(category="open_loop", status=None)
+    active = store.query(category="open_loop", status="active")
+    assert report["ok"] is True
+    upgraded = [row for row in rows if row.payload.get("loop_id") == "evt-loop-1"]
+    assert len(upgraded) == 1
+    assert "manual:preserve" in upgraded[0].evidence
+    assert upgraded[0].status == "outdated"
+    assert all(row.id != legacy_id for row in active)
+    assert len([row for row in rows if row.subject == "同一条谜团"]) == 1

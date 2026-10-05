@@ -124,3 +124,31 @@ def test_event_ordering_and_replay_are_deterministic_without_mutating_input():
     second = reconcile_intent_events(events)
     assert first == second
     assert repr(events) == before
+
+
+def test_duplicate_content_creates_keep_separate_identity_rows():
+    result = reconcile_intent_events([
+        _event("create-a", 1, "open_loop_created", "同一句"),
+        _event("create-b", 2, "open_loop_created", "同一句"),
+    ])
+    assert [row["identity_id"] for row in result["open_loops"]] == ["create-a", "create-b"]
+    assert [row["status"] for row in result["open_loops"]] == ["active", "active"]
+
+
+def test_explicit_promise_id_links_only_matching_created_promise():
+    result = reconcile_intent_events([
+        _event("promise-a", 1, "promise_created", "救下盟友", promise_id="intent-a"),
+        _event("promise-b", 2, "promise_created", "救下盟友", promise_id="intent-b"),
+        _event("paid-b", 3, "promise_paid_off", "盟友获救", promise_id="intent-b"),
+    ])
+    assert [(row["identity_id"], row["status"]) for row in result["reader_promises"]] == [
+        ("promise-a", "active"), ("promise-b", "paid_off")
+    ]
+
+
+def test_structured_loop_type_description_uses_memory_writer_content_convention():
+    result = reconcile_intent_events([{
+        "event_id": "loop-typed", "chapter": 1, "event_type": "open_loop_created",
+        "subject": "hero", "payload": {"loop_type": "mystery", "description": "玉佩为何发热"},
+    }])
+    assert result["open_loops"][0]["content"] == "mystery：玉佩为何发热"

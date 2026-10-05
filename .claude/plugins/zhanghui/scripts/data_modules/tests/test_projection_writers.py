@@ -966,3 +966,48 @@ def test_router_routes_open_loop_events_to_state(tmp_path):
     router = EventProjectionRouter()
     assert "state" in router.route({"event_type": "open_loop_created"})
     assert "state" in router.route({"event_type": "open_loop_closed"})
+
+
+def test_memory_projection_keeps_duplicate_loop_text_distinct_and_closes_by_identity(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "loop-a", "event_type": "open_loop_created", "subject": "同一句",
+        "payload": {"content": "同一句"},
+    }]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[{
+        "event_id": "loop-b", "event_type": "open_loop_created", "subject": "同一句",
+        "payload": {"content": "同一句"},
+    }]))
+    writer.apply(_commit_payload(chapter=3, accepted_events=[{
+        "event_id": "close-b", "event_type": "open_loop_closed", "subject": "改写后的表达",
+        "payload": {"content": "改写后的表达", "loop_id": "loop-b"},
+    }]))
+
+    store = ScratchpadManager(cfg)
+    rows = store.query(category="open_loop", status=None)
+    by_identity = {row.payload.get("loop_id"): row for row in rows if row.payload.get("loop_id")}
+    assert len(by_identity) == 2
+    assert by_identity["loop-a"].status == "active"
+    assert by_identity["loop-b"].status == "outdated"
+    assert by_identity["loop-b"].payload["lifecycle_status"] == "resolved"
+    assert by_identity["loop-b"].payload["resolution_event_id"] == "close-b"
+    assert {row.payload.get("loop_id") for row in store.query(category="open_loop", status="active")} == {"loop-a"}
+
+
+def test_memory_projection_orphan_close_does_not_resolve_an_unlinked_legacy_identity(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "loop-a", "event_type": "open_loop_created", "subject": "同一句",
+        "payload": {"content": "同一句"},
+    }]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[{
+        "event_id": "close-orphan", "event_type": "open_loop_closed", "subject": "同一句",
+        "payload": {"content": "同一句", "loop_id": "missing-id"},
+    }]))
+    active = ScratchpadManager(cfg).query(category="open_loop", status="active")
+    assert len(active) == 1
+    assert active[0].payload["loop_id"] == "loop-a"

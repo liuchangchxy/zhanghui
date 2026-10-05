@@ -7,10 +7,16 @@ from typing import Any
 def _content(event: dict[str, Any]) -> str:
     payload = event.get("payload")
     payload = payload if isinstance(payload, dict) else {}
-    for key in ("content", "unanswered_question", "description"):
+    for key in ("content", "unanswered_question"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    description = str(payload.get("description") or "").strip()
+    loop_type = str(payload.get("loop_type") or "").strip()
+    if description and loop_type:
+        return f"{loop_type}：{description}"
+    if description or loop_type:
+        return description or loop_type
     return str(event.get("subject") or "").strip()
 
 
@@ -37,14 +43,23 @@ def _diagnostic(event: dict[str, Any], reason: str, candidates: list[str]) -> di
 
 def _resolve(
     rows: list[dict[str, Any]], event: dict[str, Any], *, explicit_keys: tuple[str, ...],
-    close_type: str, diagnostics: list[dict[str, Any]],
+    close_type: str, diagnostics: list[dict[str, Any]], explicit_match_fields: tuple[str, ...] = (),
 ) -> None:
     content = _content(event)
     explicit_id = _link_id(event, explicit_keys)
     if explicit_id:
-        candidates = [row for row in rows if row["identity_id"] == explicit_id]
+        candidates = [
+            row for row in rows
+            if row["identity_id"] == explicit_id
+            or any(str(row.get(field) or "").strip() == explicit_id for field in explicit_match_fields)
+        ]
         if not candidates:
             diagnostics.append(_diagnostic(event, "orphan_close", []))
+            return
+        if len(candidates) > 1:
+            diagnostics.append(
+                _diagnostic(event, "ambiguous_explicit_link", [row["identity_id"] for row in candidates])
+            )
             return
         target = candidates[0]
         if target["status"] != "active":
@@ -146,6 +161,7 @@ def reconcile_intent_events(
                 reader_promises, event,
                 explicit_keys=("promise_id", "source_event_id", "promise_event_id"),
                 close_type=event_type, diagnostics=diagnostics,
+                explicit_match_fields=("promise_id",),
             )
             if len(diagnostics) > before and diagnostics[-1]["reason"] == "orphan_close":
                 diagnostics[-1]["reason"] = "unlinked_payoff"

@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 from ..commit_artifacts import extraction_list
 from ..config import DataModulesConfig, get_config
 from ..durable_projection import require_durable_commit_match
+from ..intent_reconciliation import reconcile_intent_events
 from ..urgency_utils import coerce_urgency
 from .schema import COMMIT_PROJECTION_EVIDENCE_PREFIXES, CATEGORY_TO_BUCKET, MemoryItem
 from .store import ScratchpadManager
@@ -246,21 +247,33 @@ class MemoryWriter:
             content = str(row.get("content", "") or "").strip()
             if not content:
                 continue
+            identity_id = str(row.get("identity_id") or "").strip()
+            source_chapter = int(row.get("source_chapter") or row.get("planted_chapter") or chapter)
+            lifecycle_status = str(row.get("status") or "active")
             item = MemoryItem(
-                id=self._item_id("open_loop", content, "status", chapter),
+                id=self._item_id("open_loop", identity_id or content, "event" if identity_id else "status", source_chapter),
                 layer="semantic",
                 category="open_loop",
                 subject=content,
                 field="status",
                 value=content,
                 payload={
+                    "loop_id": identity_id or None,
+                    "source_event_id": row.get("source_event_id"),
+                    "source_chapter": source_chapter,
+                    "resolution_event_id": row.get("resolution_event_id"),
+                    "resolved_chapter": row.get("resolved_chapter"),
+                    "link_status": row.get("link_status", "legacy" if not identity_id else "linked"),
+                    "lifecycle_status": lifecycle_status,
                     "urgency": coerce_urgency(row.get("urgency")),
-                    "planted_chapter": row.get("planted_chapter"),
+                    "planted_chapter": source_chapter,
                     "expected_payoff": row.get("expected_payoff"),
-                    "status": row.get("status"),
+                    "target_chapter": row.get("target_chapter"),
+                    "tier": row.get("tier"),
                 },
-                source_chapter=int(chapter),
-                evidence=[f"memory_facts:open_loop:{chapter}"],
+                status="active" if lifecycle_status == "active" else "outdated",
+                source_chapter=source_chapter,
+                evidence=[f"memory_facts:open_loop:{source_chapter}"],
             )
             self._upsert(item, stats)
 
@@ -296,6 +309,39 @@ class MemoryWriter:
             "open_loops": [],
             "reader_promises": [],
         }
+        intent_events = [
+            {**event, "chapter": event.get("chapter") or chapter}
+            for event in accepted_events
+            if isinstance(event, dict)
+            and str(event.get("event_type") or "").strip()
+            in {"open_loop_created", "open_loop_closed"}
+        ]
+        if intent_events:
+            existing_loops = self.store.query(category="open_loop", status=None)
+            initial_loops = []
+            for item in existing_loops:
+                loop_id = str(item.payload.get("loop_id") or item.payload.get("source_event_id") or "").strip()
+                if not loop_id:
+                    continue
+                initial_loops.append({
+                    "identity_id": loop_id,
+                    "source_event_id": str(item.payload.get("source_event_id") or loop_id),
+                    "source_chapter": int(item.payload.get("source_chapter") or item.payload.get("planted_chapter") or item.source_chapter),
+                    "content": item.value,
+                    "status": str(item.payload.get("lifecycle_status") or ("active" if item.status == "active" else "resolved")),
+                    "link_status": str(item.payload.get("link_status") or "linked"),
+                    **({"resolution_event_id": item.payload["resolution_event_id"]} if item.payload.get("resolution_event_id") else {}),
+                    **({"resolved_chapter": item.payload["resolved_chapter"]} if item.payload.get("resolved_chapter") else {}),
+                })
+            lifecycle_rows = reconcile_intent_events(
+                intent_events, initial_open_loops=initial_loops
+            )["open_loops"]
+            current_ids = {str(event.get("event_id") or "") for event in intent_events}
+            memory_facts["open_loops"] = [
+                row for row in lifecycle_rows
+                if str(row.get("source_event_id") or "") in current_ids
+                or str(row.get("resolution_event_id") or "") in current_ids
+            ]
         for event in accepted_events:
             if not isinstance(event, dict):
                 continue
@@ -324,23 +370,9 @@ class MemoryWriter:
                             "field": payload.get("field") or event_type,
                         }
                     )
-            elif event_type == "open_loop_created":
-                content = self._coerce_loop_content(payload, event)
-                if content:
-                    memory_facts["open_loops"].append(
-                        {
-                            "content": content,
-                            "status": payload.get("status") or "active",
-                            "urgency": coerce_urgency(payload.get("urgency")),
-                            "planted_chapter": (
-                                payload.get("planted_chapter") or event.get("chapter") or chapter
-                            ),
-                            "expected_payoff": (
-                                payload.get("expected_payoff")
-                                or payload.get("loop_deadline")
-                            ),
-                        }
-                    )
+            elif event_type in {"open_loop_created", "open_loop_closed"}:
+                # Lifecycle rows are derived together above so a close can update an earlier identity.
+                continue
             elif event_type in {"promise_created", "promise_paid_off"}:
                 content = str(
                     payload.get("content")

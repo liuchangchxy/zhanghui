@@ -185,12 +185,26 @@ def _write_intent_diagnostics(root: Path, commits: list[dict[str, Any]]) -> None
     write_json(path, _expected_intent_diagnostics(commits))
 
 
-def _reset_memory(root: Path) -> None:
+def _reset_memory(root: Path, commits: list[dict[str, Any]] | None = None) -> None:
     from .config import DataModulesConfig
     from .memory.schema import BUCKET_TO_CATEGORY, COMMIT_PROJECTION_EVIDENCE_PREFIXES
     from .memory.store import ScratchpadManager
 
     store = ScratchpadManager(DataModulesConfig.from_project_root(root))
+    canonical_events = [
+        event
+        for item in (commits or [])
+        if item["payload"]["meta"]["status"] == "accepted"
+        for event in extraction_list(item["payload"], "accepted_events")
+        if isinstance(event, dict)
+    ]
+    canonical_intent = reconcile_intent_events(canonical_events)
+    canonical_by_category = {
+        "open_loop": canonical_intent["open_loops"],
+        "reader_promise": canonical_intent["reader_promises"],
+    }
+    from .memory.writer import MemoryWriter
+    memory_writer = MemoryWriter(DataModulesConfig.from_project_root(root))
     with store._lock:
         data = store.load()
         for bucket in BUCKET_TO_CATEGORY:
@@ -204,6 +218,33 @@ def _reset_memory(root: Path) -> None:
                 if not evidence and row.evidence:
                     continue
                 row.evidence = evidence
+                category = BUCKET_TO_CATEGORY[bucket]
+                has_identity = bool(
+                    row.payload.get("loop_id") or row.payload.get("promise_event_id")
+                    or row.payload.get("source_event_id")
+                )
+                if category in canonical_by_category and not has_identity:
+                    content = str(row.subject or row.value or "").strip()
+                    candidates = [
+                        item for item in canonical_by_category[category]
+                        if str(item.get("content") or "").strip() == content
+                    ]
+                    source_chapter = int(row.payload.get("source_chapter") or row.payload.get("planted_chapter") or row.source_chapter or 0)
+                    exact_chapter = [item for item in candidates if int(item.get("source_chapter") or 0) == source_chapter]
+                    if len(exact_chapter) == 1:
+                        identity = exact_chapter[0]
+                        identity_id = str(identity.get("identity_id") or "")
+                        row.id = memory_writer._item_id(category, identity_id, "event", source_chapter)
+                        row.payload.update({
+                            "loop_id" if category == "open_loop" else "promise_event_id": identity_id,
+                            "source_event_id": identity.get("source_event_id"),
+                            "source_chapter": source_chapter,
+                            "link_status": "legacy_exact_unique",
+                        })
+                    elif candidates:
+                        row.status = "outdated"
+                        row.payload["lifecycle_status"] = "legacy_shadowed"
+                        row.payload["link_status"] = "unlinked"
                 retained.append(row)
             setattr(data, bucket, retained)
         store.save(data, _use_lock=False)
@@ -254,7 +295,7 @@ def _prepare_targets(root: Path, commits: list[dict[str, Any]]) -> None:
         "state": lambda: _reset_state(root, commits),
         "index": lambda: _reset_index(root),
         "summary": lambda: _reset_summaries(root),
-        "memory": lambda: _reset_memory(root),
+        "memory": lambda: _reset_memory(root, commits),
         "vector": lambda: _reset_vectors(root, commits),
         "intent_diagnostics": lambda: _reset_intent_diagnostics(root),
     }
