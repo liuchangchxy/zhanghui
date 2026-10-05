@@ -21,10 +21,12 @@
       ],
       "owner": "ChapterCommitService",
       "story_system_mode": {
-        "behavior": "schema-validated new decisions; replacement rejected"
+        "behavior": "schema-validated new decisions; replacement rejected",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "supported legacy persistence when Story System is absent"
+        "behavior": "supported legacy persistence when Story System is absent",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -51,10 +53,12 @@
       ],
       "owner": "commit projection pipeline",
       "story_system_mode": {
-        "behavior": "requires matching durable commit"
+        "behavior": "requires matching durable commit",
+        "mode": "projection_only"
       },
       "legacy_mode": {
-        "behavior": "legacy event compatibility"
+        "behavior": "legacy event compatibility",
+        "mode": "projection_only"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -80,10 +84,12 @@
       ],
       "owner": "EventProjectionRouter",
       "story_system_mode": {
-        "behavior": "commit-derived events"
+        "behavior": "commit-derived events",
+        "mode": "projection_only"
       },
       "legacy_mode": {
-        "behavior": "compatibility projection"
+        "behavior": "compatibility projection",
+        "mode": "projection_only"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -109,10 +115,12 @@
       ],
       "owner": "ChapterCommitService projection coordinator",
       "story_system_mode": {
-        "behavior": "validated commit projection only"
+        "behavior": "validated commit projection only",
+        "mode": "projection_only"
       },
       "legacy_mode": {
-        "behavior": "supported rebuild/projection only"
+        "behavior": "supported rebuild/projection only",
+        "mode": "projection_only"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -138,10 +146,12 @@
       ],
       "owner": "ChapterCommitService projection coordinator",
       "story_system_mode": {
-        "behavior": "validated commit projection only"
+        "behavior": "validated commit projection only",
+        "mode": "projection_only"
       },
       "legacy_mode": {
-        "behavior": "supported rebuild/projection only"
+        "behavior": "supported rebuild/projection only",
+        "mode": "projection_only"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -167,10 +177,12 @@
       ],
       "owner": "ChapterCommitService projection coordinator",
       "story_system_mode": {
-        "behavior": "validated commit projection only"
+        "behavior": "validated commit projection only",
+        "mode": "projection_only"
       },
       "legacy_mode": {
-        "behavior": "supported rebuild/projection only"
+        "behavior": "supported rebuild/projection only",
+        "mode": "projection_only"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -196,10 +208,12 @@
       ],
       "owner": "ChapterCommitService projection coordinator",
       "story_system_mode": {
-        "behavior": "validated commit projection only"
+        "behavior": "validated commit projection only",
+        "mode": "projection_only"
       },
       "legacy_mode": {
-        "behavior": "supported rebuild/projection only"
+        "behavior": "supported rebuild/projection only",
+        "mode": "projection_only"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -225,10 +239,12 @@
       ],
       "owner": "ChapterCommitService projection coordinator",
       "story_system_mode": {
-        "behavior": "validated commit projection only"
+        "behavior": "validated commit projection only",
+        "mode": "projection_only"
       },
       "legacy_mode": {
-        "behavior": "supported rebuild/projection only"
+        "behavior": "supported rebuild/projection only",
+        "mode": "projection_only"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -255,10 +271,12 @@
       ],
       "owner": "StateManager field ownership",
       "story_system_mode": {
-        "behavior": "Canon buffers guarded; workflow fields owned here"
+        "behavior": "Canon buffers guarded; workflow fields owned here",
+        "mode": "guarded"
       },
       "legacy_mode": {
-        "behavior": "legacy state writes supported"
+        "behavior": "legacy state writes supported",
+        "mode": "allowed"
       },
       "lifecycle_status": "guarded",
       "active_consumers": [
@@ -285,10 +303,12 @@
       ],
       "owner": "SQLStateManager table ownership",
       "story_system_mode": {
-        "behavior": "Canon-like writes guarded outside projection"
+        "behavior": "Canon-like writes guarded outside projection",
+        "mode": "guarded"
       },
       "legacy_mode": {
-        "behavior": "legacy compatibility writes"
+        "behavior": "legacy compatibility writes",
+        "mode": "allowed"
       },
       "lifecycle_status": "guarded",
       "active_consumers": [
@@ -315,10 +335,12 @@
       ],
       "owner": "IndexManager table ownership",
       "story_system_mode": {
-        "behavior": "Canon-like tables projection-owned; operational tables allowed"
+        "behavior": "Canon-like tables projection-owned; operational tables allowed",
+        "mode": "guarded"
       },
       "legacy_mode": {
-        "behavior": "legacy writes supported"
+        "behavior": "legacy writes supported",
+        "mode": "allowed"
       },
       "lifecycle_status": "guarded",
       "active_consumers": [
@@ -345,10 +367,12 @@
       ],
       "owner": "author/planning workflow",
       "story_system_mode": {
-        "behavior": "future-facing Craft only"
+        "behavior": "future-facing Craft only",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "legacy Craft writes"
+        "behavior": "legacy Craft writes",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -375,10 +399,12 @@
       ],
       "owner": "author/planning workflow",
       "story_system_mode": {
-        "behavior": "Craft fields only"
+        "behavior": "Craft fields only",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "Craft fields only"
+        "behavior": "Craft fields only",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -404,10 +430,12 @@
       ],
       "owner": "author/planning workflow",
       "story_system_mode": {
-        "behavior": "Intent only"
+        "behavior": "Intent only",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "Intent only"
+        "behavior": "Intent only",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -433,10 +461,12 @@
       ],
       "owner": "author/planning workflow",
       "story_system_mode": {
-        "behavior": "does not mutate Canon promise projection"
+        "behavior": "does not mutate Canon promise projection",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "Intent ledger supported"
+        "behavior": "Intent ledger supported",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -464,10 +494,12 @@
       ],
       "owner": "consistency patch owner",
       "story_system_mode": {
-        "behavior": "P1-P6 state writes skipped; P7 derived views only"
+        "behavior": "P1-P6 state writes skipped; P7 derived views only",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "patch-owned Intent/Craft updates"
+        "behavior": "patch-owned Intent/Craft updates",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -495,10 +527,12 @@
       ],
       "owner": "project setup",
       "story_system_mode": {
-        "behavior": "defaults/contracts, not chapter facts"
+        "behavior": "defaults/contracts, not chapter facts",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "legacy defaults"
+        "behavior": "legacy defaults",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -526,10 +560,12 @@
       ],
       "owner": "explicit migration command",
       "story_system_mode": {
-        "behavior": "backup; malformed Craft replacement risk needs preflight"
+        "behavior": "backup; malformed Craft replacement risk needs preflight",
+        "mode": "guarded"
       },
       "legacy_mode": {
-        "behavior": "legacy migration with backup"
+        "behavior": "legacy migration with backup",
+        "mode": "allowed"
       },
       "lifecycle_status": "guarded",
       "active_consumers": [
@@ -557,10 +593,12 @@
       ],
       "owner": "explicit migration command",
       "story_system_mode": {
-        "behavior": "preflight required"
+        "behavior": "preflight required",
+        "mode": "guarded"
       },
       "legacy_mode": {
-        "behavior": "supported conversion"
+        "behavior": "supported conversion",
+        "mode": "allowed"
       },
       "lifecycle_status": "guarded",
       "active_consumers": [
@@ -586,10 +624,12 @@
       ],
       "owner": "review workflow",
       "story_system_mode": {
-        "behavior": "review artifacts and metrics only"
+        "behavior": "review artifacts and metrics only",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "review artifacts and metrics only"
+        "behavior": "review artifacts and metrics only",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -615,10 +655,12 @@
       ],
       "owner": "per-attempt workflow decision store",
       "story_system_mode": {
-        "behavior": "decision audit only; not Canon"
+        "behavior": "decision audit only; not Canon",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "decision audit only"
+        "behavior": "decision audit only",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -645,10 +687,12 @@
       ],
       "owner": "CHANGES validation",
       "story_system_mode": {
-        "behavior": "proposal validation, not persistent Canon"
+        "behavior": "proposal validation, not persistent Canon",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "legacy gate active"
+        "behavior": "legacy gate active",
+        "mode": "allowed"
       },
       "lifecycle_status": "compatibility_only",
       "active_consumers": [
@@ -674,10 +718,12 @@
       ],
       "owner": "Chapter Canon state fields",
       "story_system_mode": {
-        "behavior": "rejected: current CLI mode guard rejects these chapter-fact mutations before loading/saving state"
+        "behavior": "rejected: current CLI mode guard rejects these chapter-fact mutations before loading/saving state",
+        "mode": "rejected"
       },
       "legacy_mode": {
-        "behavior": "allowed for supported legacy projects"
+        "behavior": "allowed for supported legacy projects",
+        "mode": "allowed"
       },
       "lifecycle_status": "guarded",
       "active_consumers": [
@@ -706,10 +752,12 @@
       ],
       "owner": "planning/Craft field owner; overlap needs later reconciliation",
       "story_system_mode": {
-        "behavior": "rejected by the shared CLI guard today; semantic owner remains Intent/Craft pending field-level audit"
+        "behavior": "rejected by the shared CLI guard today; semantic owner remains Intent/Craft pending field-level audit",
+        "mode": "rejected"
       },
       "legacy_mode": {
-        "behavior": "allowed for supported legacy projects"
+        "behavior": "allowed for supported legacy projects",
+        "mode": "allowed"
       },
       "lifecycle_status": "guarded",
       "active_consumers": [
@@ -737,10 +785,12 @@
       ],
       "owner": "author/planning workflow",
       "story_system_mode": {
-        "behavior": "allowed: planning metadata, not chapter Canon"
+        "behavior": "allowed: planning metadata, not chapter Canon",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "allowed"
+        "behavior": "allowed",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -767,10 +817,12 @@
       ],
       "owner": "review workflow",
       "story_system_mode": {
-        "behavior": "allowed: review checkpoint metadata only"
+        "behavior": "allowed: review checkpoint metadata only",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "allowed"
+        "behavior": "allowed",
+        "mode": "allowed"
       },
       "lifecycle_status": "allowed",
       "active_consumers": [
@@ -785,6 +837,324 @@
         }
       ],
       "selector": "review-metadata-option"
+    },
+    {
+      "writer_id": "archive-save-state",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+        "symbol": "ArchiveManager"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "COMPATIBILITY"
+      ],
+      "owner": "archive compatibility snapshot writes",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "anchor": "ArchiveManager"
+        }
+      ]
+    },
+    {
+      "writer_id": "consistency-state-save",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+        "symbol": "ConsistencyRunner"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "INTENT",
+        "CRAFT"
+      ],
+      "owner": "consistency-owned legacy patch writes",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "anchor": "ConsistencyRunner"
+        }
+      ]
+    },
+    {
+      "writer_id": "index-cli-entry",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "INDEX_DB"
+      ],
+      "owner": "index maintenance CLI writes",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "writer_id": "memory-legacy-bridge",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+        "symbol": "MemoryContractAdapter"
+      },
+      "data_domains": [
+        "MEMORY",
+        "STATE_JSON"
+      ],
+      "owner": "legacy memory contract bridge",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "anchor": "MemoryContractAdapter"
+        }
+      ]
+    },
+    {
+      "writer_id": "sql-state-cli-entry",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "state database maintenance CLI",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "writer_id": "state-manager-cli-entry",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "state manager CLI",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "writer_id": "state-locked-write",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+        "symbol": "_LockedState"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "locked atomic state projection write",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+          "anchor": "_LockedState"
+        }
+      ]
+    },
+    {
+      "writer_id": "webnovel-atomic-state-save",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+        "symbol": "_save_state_via_atomic"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "CLI atomic state save helper",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "anchor": "_save_state_via_atomic"
+        }
+      ]
+    },
+    {
+      "writer_id": "project-memory-pattern",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+        "symbol": "add_pattern"
+      },
+      "data_domains": [
+        "MEMORY"
+      ],
+      "owner": "project memory pattern insertion",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+          "anchor": "add_pattern"
+        }
+      ]
+    },
+    {
+      "writer_id": "update-state-save",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "StateUpdater"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "INTENT",
+        "CRAFT",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "legacy and mode-aware state CLI persistence",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "StateUpdater"
+        }
+      ]
     }
   ],
   "readers": [
@@ -823,7 +1193,8 @@
           "anchor": "ChapterCommitService"
         }
       ],
-      "reader_family": "Story System commit and projection readers"
+      "reader_family": "Story System commit and projection readers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "event-reader",
@@ -860,7 +1231,8 @@
           "anchor": "EventLogStore"
         }
       ],
-      "reader_family": "Story System commit and projection readers"
+      "reader_family": "Story System commit and projection readers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "context-assembly",
@@ -897,7 +1269,8 @@
           "anchor": "ContextManager"
         }
       ],
-      "reader_family": "context/runtime source assembly"
+      "reader_family": "context/runtime source assembly",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "query-reader",
@@ -934,7 +1307,8 @@
           "anchor": "main"
         }
       ],
-      "reader_family": "query and resume"
+      "reader_family": "query and resume",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "resume-reader",
@@ -971,7 +1345,8 @@
           "anchor": "ContextManager"
         }
       ],
-      "reader_family": "query and resume"
+      "reader_family": "query and resume",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "write-reader",
@@ -1008,7 +1383,8 @@
           "anchor": "main"
         }
       ],
-      "reader_family": "write/plan/review consumers"
+      "reader_family": "write/plan/review consumers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "plan-reader",
@@ -1045,7 +1421,8 @@
           "anchor": "VolumeStateManager"
         }
       ],
-      "reader_family": "write/plan/review consumers"
+      "reader_family": "write/plan/review consumers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "review-reader",
@@ -1082,7 +1459,8 @@
           "anchor": "main"
         }
       ],
-      "reader_family": "write/plan/review consumers"
+      "reader_family": "write/plan/review consumers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "state-reader",
@@ -1119,7 +1497,8 @@
           "anchor": "StateManager"
         }
       ],
-      "reader_family": "state/index/summary/memory/vector readers"
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "index-reader",
@@ -1156,7 +1535,8 @@
           "anchor": "IndexManager"
         }
       ],
-      "reader_family": "state/index/summary/memory/vector readers"
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "summary-reader",
@@ -1193,7 +1573,8 @@
           "anchor": "SummaryProjectionWriter"
         }
       ],
-      "reader_family": "state/index/summary/memory/vector readers"
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "memory-reader",
@@ -1230,7 +1611,8 @@
           "anchor": "MemoryProjectionWriter"
         }
       ],
-      "reader_family": "state/index/summary/memory/vector readers"
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "vector-reader",
@@ -1267,7 +1649,8 @@
           "anchor": "VectorProjectionWriter"
         }
       ],
-      "reader_family": "state/index/summary/memory/vector readers"
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "craft-reader",
@@ -1304,7 +1687,8 @@
           "anchor": "StoryCraftFieldError"
         }
       ],
-      "reader_family": "state/index/summary/memory/vector readers"
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed"
     },
     {
       "reader_id": "reference-reader",
@@ -1341,7 +1725,8 @@
           "anchor": "StoryContractPaths"
         }
       ],
-      "reader_family": "legacy fallback readers"
+      "reader_family": "legacy fallback readers",
+      "lifecycle_status": "allowed"
     }
   ],
   "migrations": [

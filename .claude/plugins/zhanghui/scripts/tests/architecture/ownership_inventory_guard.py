@@ -10,6 +10,7 @@ DOMAINS = {
     "MIGRATION", "COMPATIBILITY",
 }
 STATUSES = {"allowed", "guarded", "deprecated", "compatibility_only"}
+MODE_STATUSES = {"allowed", "guarded", "rejected", "projection_only", "not_applicable"}
 CLAIMS = {
     "CANON_AUTHORITY", "VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY",
     "INTENT", "CRAFT", "WORKFLOW", "REFERENCE", "PRESERVE_ONLY", "UNKNOWN",
@@ -60,7 +61,11 @@ def validate_inventory(inventory, repository_root):
                          f"{identity}: lifecycle_status invalid")
                 for mode in ("story_system_mode", "legacy_mode"):
                     _require(record.get(mode, {}).get("behavior"), f"{identity}: {mode} behavior missing")
+                    _require(record.get(mode, {}).get("mode") in MODE_STATUSES,
+                             f"{identity}: {mode} value invalid")
             elif family == "readers":
+                _require(record.get("lifecycle_status") in STATUSES,
+                         f"{identity}: lifecycle_status invalid")
                 edges = record.get("read_edges", [])
                 _require(edges, f"{identity}: read_edges required")
                 for edge in edges:
@@ -95,8 +100,8 @@ def runtime_inventory_references(plugin_root):
 
 
 def discovered_writer_coordinates(plugin_root):
-    """List exact known protected writer entrypoints for inventory comparison."""
-    return {
+    """Find protected write entrypoints from source, plus explicit API families."""
+    candidates = {
         ("scripts/data_modules/chapter_commit_service.py", "ChapterCommitService"),
         ("scripts/data_modules/event_log_store.py", "write_events"),
         ("scripts/data_modules/event_projection_router.py", "EventProjectionRouter"),
@@ -118,6 +123,42 @@ def discovered_writer_coordinates(plugin_root):
         ("scripts/data_modules/migrate_state_to_sqlite.py", "migrate_state_to_sqlite"),
         ("scripts/changes_gate.py", "main"),
     }
+    protected_calls = {
+        "write_events", "process_chapter_data", "process_chapter_entities",
+        "process_chapter_result",
+    }
+    for path in (plugin_root / "scripts").rglob("*.py"):
+        if "tests" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+
+        def visit(node, class_name=None, function_name=None):
+            if isinstance(node, ast.ClassDef):
+                class_name = node.name
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                function_name = node.name
+            if isinstance(node, ast.Call):
+                call_name = (node.func.id if isinstance(node.func, ast.Name) else
+                             node.func.attr if isinstance(node.func, ast.Attribute) else "")
+                protected_state_write = False
+                if call_name == "atomic_write_json" and node.args:
+                    target = ast.unparse(node.args[0]).lower()
+                    protected_state_write = any(
+                        marker in target for marker in
+                        ("state", "index", "summary", "memory", "vector", "craft")
+                    )
+                if call_name in protected_calls or protected_state_write:
+                    symbol = class_name or function_name
+                    if symbol:
+                        candidates.add((path.relative_to(plugin_root).as_posix(), symbol))
+            for child in ast.iter_child_nodes(node):
+                visit(child, class_name, function_name)
+
+        visit(tree)
+    return candidates
 
 
 def writer_coverage(inventory, plugin_root):
@@ -154,6 +195,8 @@ def unqualified_ownership_claims(text):
         if "state.json" in line.lower() and "投影" in line and "commit" in line.lower() and "权威" in line:
             continue
         if "data agent" in line.lower() and ("生成临时" in line or "只生成" in line):
+            continue
+        if "data agent" in line.lower() and "does not write canonical facts or projections" in line.lower():
             continue
         if any(re.search(pattern, line, re.I) for pattern in patterns):
             violations.append((line_number, line.strip()))

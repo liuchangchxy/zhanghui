@@ -45,14 +45,36 @@ def test_invalid_domains_and_missing_reader_authority_are_rejected():
 @pytest.mark.parametrize("family,field", [
     ("writers", "owner"), ("writers", "replacement"), ("writers", "retirement_criterion"),
     ("writers", "evidence"), ("writers", "active_consumers"),
-    ("readers", "read_edges"), ("migrations", "backup"), ("migrations", "rollback"),
+    ("readers", "read_edges"), ("readers", "lifecycle_status"),
+    ("migrations", "backup"), ("migrations", "rollback"),
     ("migrations", "ambiguity_handling"),
 ])
 def test_missing_required_ownership_fields_are_rejected(family, field):
     inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
     broken = copy.deepcopy(inventory)
+    broken[family][0].setdefault(field, "allowed")
     del broken[family][0][field]
     with pytest.raises(ValueError):
+        validate_inventory(broken, ROOT)
+
+
+@pytest.mark.parametrize("family,id_key", [("writers", "writer_id"), ("readers", "reader_id"),
+                                            ("migrations", "migration_id")])
+def test_duplicate_ids_are_rejected_per_record_family(family, id_key):
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    broken[family].append(copy.deepcopy(broken[family][0]))
+    with pytest.raises(ValueError, match="duplicate"):
+        validate_inventory(broken, ROOT)
+
+
+def test_legacy_state_reader_cannot_claim_story_system_canon_authority():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    edge = broken["readers"][0]["read_edges"][0]
+    edge["story_system"]["primary_source"] = "legacy state.json"
+    edge["story_system"]["authority_claim"] = "CANON_AUTHORITY"
+    with pytest.raises(ValueError, match="legacy source"):
         validate_inventory(broken, ROOT)
 
 
@@ -75,13 +97,29 @@ def test_unregistered_protected_writer_candidate_fails_until_classified(monkeypa
     assert guard.writer_coverage(inventory, PLUGIN) == []
 
 
+def test_ast_scanner_discovers_new_state_writer_in_source(tmp_path):
+    from tests.architecture.ownership_inventory_guard import discovered_writer_coordinates
+
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "new_writer.py").write_text(
+        "def write_story_state(state_path, payload):\n"
+        "    atomic_write_json(state_path, payload)\n",
+        encoding="utf-8",
+    )
+    assert ("scripts/new_writer.py", "write_story_state") in discovered_writer_coordinates(tmp_path)
+
+
+def test_ast_scanner_finds_actual_archive_and_memory_writers():
+    from tests.architecture.ownership_inventory_guard import discovered_writer_coordinates
+
+    found = discovered_writer_coordinates(PLUGIN)
+    assert ("scripts/archive_manager.py", "ArchiveManager") in found
+    assert ("scripts/project_memory.py", "add_pattern") in found
+
+
 def test_production_runtime_does_not_consult_inventory():
     assert runtime_inventory_references(ROOT / ".claude/plugins/zhanghui") == []
-
-    broken = json.loads(json.dumps(inventory))
-    del broken["readers"][0]["read_edges"][0]["story_system"]["authority_claim"]
-    with pytest.raises(ValueError, match="authority_claim"):
-        validate_inventory(broken, ROOT)
 
 
 def test_inventory_has_required_domains_and_unique_stable_ids():
@@ -105,8 +143,9 @@ def test_inventory_has_required_domains_and_unique_stable_ids():
 def test_inventory_has_mode_aware_records_and_resolvable_evidence():
     inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
     for writer in inventory["writers"]:
-        assert writer["story_system_mode"]["behavior"]
-        assert writer["legacy_mode"]["behavior"]
+        for mode in (writer["story_system_mode"], writer["legacy_mode"]):
+            assert mode["mode"] in {"allowed", "guarded", "rejected", "projection_only", "not_applicable"}
+            assert mode["behavior"]
         assert writer["active_consumers"]
         assert writer["retirement_criterion"]
         for evidence in writer["evidence"]:
