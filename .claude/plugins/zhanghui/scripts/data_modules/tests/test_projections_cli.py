@@ -541,6 +541,104 @@ def _make_accepted_promise_commit(project_root: Path, chapter: int, event_type: 
     service.persist_commit(payload)
 
 
+def _make_accepted_intent_commit(project_root: Path, chapter: int, events: list[dict]) -> None:
+    service = ChapterCommitService(project_root)
+    payload = build_commit_with_reconciliation(
+        service,
+        chapter=chapter,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": events},
+    )
+    service.persist_commit(payload)
+
+
+def test_rebuild_reconciles_duplicate_loops_promises_and_legacy_rows_without_duplicate_active_context(tmp_path):
+    from data_modules.config import DataModulesConfig
+    from data_modules.memory_contract_adapter import MemoryContractAdapter
+    from data_modules.memory.schema import MemoryItem
+    from data_modules.memory.store import ScratchpadManager
+
+    _make_accepted_intent_commit(tmp_path, 1, [
+        {"event_id": "loop-a", "event_type": "open_loop_created", "chapter": 1, "subject": "谜团", "payload": {"content": "相同谜团"}},
+        {"event_id": "amb-a", "event_type": "open_loop_created", "chapter": 1, "subject": "谜团", "payload": {"content": "歧义谜团"}},
+        {"event_id": "promise-a", "event_type": "promise_created", "chapter": 1, "subject": "守护村庄", "payload": {"content": "守护村庄", "promise_id": "planned-promise-a"}},
+    ])
+    _make_accepted_intent_commit(tmp_path, 2, [
+        {"event_id": "loop-b", "event_type": "open_loop_created", "chapter": 2, "subject": "谜团", "payload": {"content": "相同谜团"}},
+        {"event_id": "amb-b", "event_type": "open_loop_created", "chapter": 2, "subject": "谜团", "payload": {"content": "歧义谜团"}},
+        {"event_id": "close-b", "event_type": "open_loop_closed", "chapter": 2, "subject": "谜团已解", "payload": {"content": "谜团已解", "loop_id": "loop-b"}},
+        {"event_id": "paid-a", "event_type": "promise_paid_off", "chapter": 2, "subject": "守护村庄", "payload": {"content": "约定已兑现", "source_event_id": "promise-a"}},
+    ])
+    _make_accepted_intent_commit(tmp_path, 3, [
+        {"event_id": "close-amb", "event_type": "open_loop_closed", "chapter": 3, "subject": "歧义谜团", "payload": {"content": "歧义谜团"}},
+        {"event_id": "paid-only", "event_type": "promise_paid_off", "chapter": 3, "subject": "无来源约定", "payload": {"content": "无来源约定", "promise_id": "missing-promise"}},
+    ])
+
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({
+        "project_info": {"promise_ledger": [{"id": "planned-promise-a", "status": "pending"}]},
+        "plot_threads": {"foreshadowing": [{"content": "相同谜团", "status": "active", "planted_chapter": 1}]},
+    }), encoding="utf-8")
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    store = ScratchpadManager(cfg)
+    store.upsert_item(MemoryItem(
+        id="old-loop-a", layer="semantic", category="open_loop", subject="相同谜团",
+        field="status", value="相同谜团", status="active", source_chapter=1,
+        payload={"planted_chapter": 1, "status": "active"},
+        evidence=["memory_facts:open_loop:1", "manual:keep"],
+    ))
+    store.upsert_item(MemoryItem(
+        id="old-promise-a", layer="semantic", category="reader_promise", subject="守护村庄",
+        field="promise", value="守护村庄", status="active", source_chapter=1,
+        evidence=["memory_facts:reader_promise:1", "manual:keep-promise"],
+    ))
+
+    commits_dir = tmp_path / ".story-system" / "commits"
+    canon_before = {path.name: path.read_bytes() for path in sorted(commits_dir.glob("chapter_*.json"))}
+    # A stale diagnostics row must be replaced as part of the same owned projection lifecycle.
+    diagnostics_path = tmp_path / ".story-system" / "projections" / "intent-diagnostics.json"
+    diagnostics_path.parent.mkdir(parents=True, exist_ok=True)
+    diagnostics_path.write_text(json.dumps({"schema_version": "intent-diagnostics/v1", "diagnostics": [{"event_id": "stale"}]}), encoding="utf-8")
+
+    first = rebuild_projections(tmp_path)
+    first_state = json.loads(state_path.read_text(encoding="utf-8"))
+    first_rows = store.query(category="open_loop", status=None)
+    first_promises = store.query(category="reader_promise", status=None)
+    first_diagnostics = diagnostics_path.read_bytes()
+    second = rebuild_projections(tmp_path)
+
+    state_rows = first_state["plot_threads"]["foreshadowing"]
+    state_by_id = {row.get("loop_id"): row for row in state_rows if row.get("loop_id")}
+    assert first["ok"] is True and second["ok"] is True
+    assert state_by_id["loop-a"]["status"] == "active"
+    assert state_by_id["loop-b"]["status"] == "resolved"
+    assert state_by_id["loop-b"]["resolution_event_id"] == "close-b"
+    assert state_by_id["amb-a"]["status"] == state_by_id["amb-b"]["status"] == "active"
+    active_loop_ids = {row.payload.get("loop_id") for row in store.query(category="open_loop", status="active")}
+    assert active_loop_ids == {"loop-a", "amb-a", "amb-b"}
+    context_loops = MemoryContractAdapter(cfg).get_open_loops(status="active")
+    assert len(context_loops) == 3
+    assert sum(loop.content == "相同谜团" for loop in context_loops) == 1
+    same_content_rows = [row for row in first_rows if row.subject == "相同谜团"]
+    assert {row.payload.get("loop_id") for row in same_content_rows} == {"loop-a", "loop-b"}
+    assert len([row for row in same_content_rows if row.status == "active"]) == 1
+    assert "manual:keep" in next(row for row in first_rows if row.payload.get("loop_id") == "loop-a").evidence
+    assert len(first_promises) == 1
+    assert first_promises[0].payload["promise_event_id"] == "promise-a"
+    assert first_promises[0].status == "outdated"
+    assert first_promises[0].payload["resolution_event_id"] == "paid-a"
+    assert store.query(category="reader_promise", status="active") == []
+    assert json.loads(state_path.read_text(encoding="utf-8"))["project_info"]["promise_ledger"] == [{"id": "planned-promise-a", "status": "pending"}]
+    diagnostics = json.loads(first_diagnostics)
+    assert {row["reason"] for row in diagnostics["diagnostics"]} == {"ambiguous_legacy_close", "unlinked_payoff"}
+    assert diagnostics_path.read_bytes() == first_diagnostics
+    assert {path.name: path.read_bytes() for path in sorted(commits_dir.glob("chapter_*.json"))} == canon_before
+
+
 def test_rebuild_upgrades_legacy_reader_promise_memory_without_duplicate_active_rows(tmp_path):
     from data_modules.config import DataModulesConfig
     from data_modules.memory.schema import MemoryItem
