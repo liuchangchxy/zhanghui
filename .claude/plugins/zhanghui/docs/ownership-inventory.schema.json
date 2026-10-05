@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zhanghui.local/schemas/ownership-inventory.schema.json",
+  "title": "Zhanghui ownership inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "baseline", "writers", "readers", "migrations"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "baseline": {"type": "string", "minLength": 7},
+    "writers": {"type": "array", "items": {"$ref": "#/$defs/writer"}},
+    "readers": {"type": "array", "items": {"$ref": "#/$defs/reader"}},
+    "migrations": {"type": "array", "items": {"$ref": "#/$defs/migration"}},
+    "required_reader_families": {"type": "array", "items": {"type": "string"}},
+    "compatibility_matrix": {"type": "object", "required": ["new_story_system", "existing_story_system", "legacy", "mixed_partial"], "properties": {"new_story_system": {"type": "object"}, "existing_story_system": {"type": "object"}, "legacy": {"type": "object"}, "mixed_partial": {"type": "object"}}, "additionalProperties": false}
+  },
+  "$defs": {
+    "coordinate": {"type": "object", "required": ["path", "symbol"], "properties": {"path": {"type": "string"}, "symbol": {"type": "string"}}, "additionalProperties": false},
+    "evidence": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["path", "anchor"], "properties": {"path": {"type": "string"}, "anchor": {"type": "string"}}, "additionalProperties": false}},
+    "mode": {"type": "object", "required": ["behavior"], "properties": {"behavior": {"type": "string", "minLength": 1}}, "additionalProperties": false},
+    "baseRecord": {"type": "object", "required": ["implementation", "active_consumers", "replacement", "retirement_criterion", "evidence"], "properties": {"implementation": {"$ref": "#/$defs/coordinate"}, "active_consumers": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "replacement": {"type": ["string", "null"]}, "retirement_criterion": {"type": "string", "minLength": 8}, "evidence": {"$ref": "#/$defs/evidence"}}, "additionalProperties": true},
+    "writer": {"allOf": [{"$ref": "#/$defs/baseRecord"}, {"type": "object", "required": ["writer_id", "data_domains", "owner", "story_system_mode", "legacy_mode", "lifecycle_status"], "properties": {"writer_id": {"type": "string", "minLength": 1}, "data_domains": {"type": "array", "minItems": 1, "items": {"enum": ["CANON_COMMIT", "EVENTS", "STATE_JSON", "INDEX_DB", "SUMMARIES", "MEMORY", "VECTORS", "INTENT", "CRAFT", "WORKFLOW_METADATA", "MIGRATION", "COMPATIBILITY"]}}, "owner": {"type": "string", "minLength": 1}, "story_system_mode": {"$ref": "#/$defs/mode"}, "legacy_mode": {"$ref": "#/$defs/mode"}, "lifecycle_status": {"enum": ["allowed", "guarded", "deprecated", "compatibility_only"]}}, "additionalProperties": true}]},
+    "readerMode": {"type": "object", "required": ["primary_source", "authority_claim", "condition", "fallback"], "properties": {"primary_source": {"type": "string"}, "authority_claim": {"enum": ["CANON_AUTHORITY", "VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY", "INTENT", "CRAFT", "WORKFLOW", "REFERENCE", "PRESERVE_ONLY", "UNKNOWN"]}, "condition": {"type": "string"}, "fallback": {"type": ["object", "null"], "properties": {"source": {"type": "string"}, "authority_claim": {"enum": ["CANON_AUTHORITY", "VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY", "INTENT", "CRAFT", "WORKFLOW", "REFERENCE", "PRESERVE_ONLY", "UNKNOWN"]}}, "required": ["source", "authority_claim"], "additionalProperties": false}}, "additionalProperties": false},
+    "reader": {"allOf": [{"$ref": "#/$defs/baseRecord"}, {"type": "object", "required": ["reader_id", "read_edges"], "properties": {"reader_id": {"type": "string"}, "read_edges": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["data_domain", "resource", "story_system", "legacy"], "properties": {"data_domain": {"type": "string"}, "resource": {"type": "string"}, "story_system": {"$ref": "#/$defs/readerMode"}, "legacy": {"$ref": "#/$defs/readerMode"}}, "additionalProperties": false}}}, "additionalProperties": true}]},
+    "migration": {"type": "object", "required": ["migration_id", "implementation", "source", "target", "supported_project_modes", "preflight", "backup", "idempotency", "postcondition", "rollback", "ambiguity_handling", "lifecycle_status", "active_consumers", "replacement", "retirement_criterion", "evidence"], "properties": {"migration_id": {"type": "string"}, "implementation": {"$ref": "#/$defs/coordinate"}, "source": {"type": "string"}, "target": {"type": "string"}, "supported_project_modes": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "preflight": {"type": "string"}, "backup": {"type": "string"}, "idempotency": {"type": "string"}, "postcondition": {"type": "string"}, "rollback": {"type": "string"}, "ambiguity_handling": {"type": "string"}, "lifecycle_status": {"enum": ["implemented", "required", "planned", "compatibility_only"]}, "active_consumers": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "replacement": {"type": ["string", "null"]}, "retirement_criterion": {"type": "string"}, "evidence": {"$ref": "#/$defs/evidence"}}, "additionalProperties": false}
+  }
+}

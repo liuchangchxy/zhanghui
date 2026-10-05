@@ -1,0 +1,1429 @@
+{
+  "schema_version": 1,
+  "baseline": "2b3fc7bcd6f052fdc88d7e40bec5152a177af430",
+  "required_reader_families": [
+    "context/runtime source assembly",
+    "query and resume",
+    "write/plan/review consumers",
+    "state/index/summary/memory/vector readers",
+    "Story System commit and projection readers",
+    "legacy fallback readers"
+  ],
+  "writers": [
+    {
+      "writer_id": "chapter-commit",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+        "symbol": "ChapterCommitService"
+      },
+      "data_domains": [
+        "CANON_COMMIT"
+      ],
+      "owner": "ChapterCommitService",
+      "story_system_mode": {
+        "behavior": "schema-validated new decisions; replacement rejected"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy persistence when Story System is absent"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "anchor": "ChapterCommitService"
+        }
+      ]
+    },
+    {
+      "writer_id": "event-log",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+        "symbol": "write_events"
+      },
+      "data_domains": [
+        "EVENTS",
+        "INDEX_DB"
+      ],
+      "owner": "commit projection pipeline",
+      "story_system_mode": {
+        "behavior": "requires matching durable commit"
+      },
+      "legacy_mode": {
+        "behavior": "legacy event compatibility"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "anchor": "write_events"
+        }
+      ]
+    },
+    {
+      "writer_id": "event-projection-router",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/event_projection_router.py",
+        "symbol": "EventProjectionRouter"
+      },
+      "data_domains": [
+        "EVENTS"
+      ],
+      "owner": "EventProjectionRouter",
+      "story_system_mode": {
+        "behavior": "commit-derived events"
+      },
+      "legacy_mode": {
+        "behavior": "compatibility projection"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_projection_router.py",
+          "anchor": "EventProjectionRouter"
+        }
+      ]
+    },
+    {
+      "writer_id": "state-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+        "symbol": "StateProjectionWriter"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "ChapterCommitService projection coordinator",
+      "story_system_mode": {
+        "behavior": "validated commit projection only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild/projection only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+          "anchor": "StateProjectionWriter"
+        }
+      ]
+    },
+    {
+      "writer_id": "index-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+        "symbol": "IndexProjectionWriter"
+      },
+      "data_domains": [
+        "INDEX_DB"
+      ],
+      "owner": "ChapterCommitService projection coordinator",
+      "story_system_mode": {
+        "behavior": "validated commit projection only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild/projection only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+          "anchor": "IndexProjectionWriter"
+        }
+      ]
+    },
+    {
+      "writer_id": "summary-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/summary_projection_writer.py",
+        "symbol": "SummaryProjectionWriter"
+      },
+      "data_domains": [
+        "SUMMARIES"
+      ],
+      "owner": "ChapterCommitService projection coordinator",
+      "story_system_mode": {
+        "behavior": "validated commit projection only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild/projection only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/summary_projection_writer.py",
+          "anchor": "SummaryProjectionWriter"
+        }
+      ]
+    },
+    {
+      "writer_id": "memory-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+        "symbol": "MemoryProjectionWriter"
+      },
+      "data_domains": [
+        "MEMORY"
+      ],
+      "owner": "ChapterCommitService projection coordinator",
+      "story_system_mode": {
+        "behavior": "validated commit projection only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild/projection only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+          "anchor": "MemoryProjectionWriter"
+        }
+      ]
+    },
+    {
+      "writer_id": "vector-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/vector_projection_writer.py",
+        "symbol": "VectorProjectionWriter"
+      },
+      "data_domains": [
+        "VECTORS"
+      ],
+      "owner": "ChapterCommitService projection coordinator",
+      "story_system_mode": {
+        "behavior": "validated commit projection only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild/projection only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/vector_projection_writer.py",
+          "anchor": "VectorProjectionWriter"
+        }
+      ]
+    },
+    {
+      "writer_id": "state-manager",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+        "symbol": "StateManager"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "StateManager field ownership",
+      "story_system_mode": {
+        "behavior": "Canon buffers guarded; workflow fields owned here"
+      },
+      "legacy_mode": {
+        "behavior": "legacy state writes supported"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "anchor": "StateManager"
+        }
+      ]
+    },
+    {
+      "writer_id": "sql-state-manager",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+        "symbol": "SQLStateManager"
+      },
+      "data_domains": [
+        "INDEX_DB",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "SQLStateManager table ownership",
+      "story_system_mode": {
+        "behavior": "Canon-like writes guarded outside projection"
+      },
+      "legacy_mode": {
+        "behavior": "legacy compatibility writes"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "anchor": "SQLStateManager"
+        }
+      ]
+    },
+    {
+      "writer_id": "index-manager",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+        "symbol": "IndexManager"
+      },
+      "data_domains": [
+        "INDEX_DB",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "IndexManager table ownership",
+      "story_system_mode": {
+        "behavior": "Canon-like tables projection-owned; operational tables allowed"
+      },
+      "legacy_mode": {
+        "behavior": "legacy writes supported"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+          "anchor": "IndexManager"
+        }
+      ]
+    },
+    {
+      "writer_id": "story-craft",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+        "symbol": "StoryCraftFieldError"
+      },
+      "data_domains": [
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "future-facing Craft only"
+      },
+      "legacy_mode": {
+        "behavior": "legacy Craft writes"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "StoryCraftFieldError"
+        }
+      ]
+    },
+    {
+      "writer_id": "webnovel-story-craft",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+        "symbol": "cmd_story_craft"
+      },
+      "data_domains": [
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "Craft fields only"
+      },
+      "legacy_mode": {
+        "behavior": "Craft fields only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "anchor": "cmd_story_craft"
+        }
+      ]
+    },
+    {
+      "writer_id": "volume-state",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+        "symbol": "VolumeStateManager"
+      },
+      "data_domains": [
+        "INTENT"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "Intent only"
+      },
+      "legacy_mode": {
+        "behavior": "Intent only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+          "anchor": "VolumeStateManager"
+        }
+      ]
+    },
+    {
+      "writer_id": "promise-ledger",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py",
+        "symbol": "PromiseLedger"
+      },
+      "data_domains": [
+        "INTENT"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "does not mutate Canon promise projection"
+      },
+      "legacy_mode": {
+        "behavior": "Intent ledger supported"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py",
+          "anchor": "PromiseLedger"
+        }
+      ]
+    },
+    {
+      "writer_id": "consistency-apply",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+        "symbol": "apply_all"
+      },
+      "data_domains": [
+        "INTENT",
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "consistency patch owner",
+      "story_system_mode": {
+        "behavior": "P1-P6 state writes skipped; P7 derived views only"
+      },
+      "legacy_mode": {
+        "behavior": "patch-owned Intent/Craft updates"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "anchor": "apply_all"
+        }
+      ]
+    },
+    {
+      "writer_id": "project-init",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+        "symbol": "init_project"
+      },
+      "data_domains": [
+        "MIGRATION",
+        "COMPATIBILITY",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "project setup",
+      "story_system_mode": {
+        "behavior": "defaults/contracts, not chapter facts"
+      },
+      "legacy_mode": {
+        "behavior": "legacy defaults"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "anchor": "init_project"
+        }
+      ]
+    },
+    {
+      "writer_id": "story-craft-migration",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+        "symbol": "migrate_state_json"
+      },
+      "data_domains": [
+        "MIGRATION",
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "explicit migration command",
+      "story_system_mode": {
+        "behavior": "backup; malformed Craft replacement risk needs preflight"
+      },
+      "legacy_mode": {
+        "behavior": "legacy migration with backup"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ]
+    },
+    {
+      "writer_id": "state-sqlite-migration",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+        "symbol": "migrate_state_to_sqlite"
+      },
+      "data_domains": [
+        "MIGRATION",
+        "INDEX_DB",
+        "STATE_JSON"
+      ],
+      "owner": "explicit migration command",
+      "story_system_mode": {
+        "behavior": "preflight required"
+      },
+      "legacy_mode": {
+        "behavior": "supported conversion"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+          "anchor": "migrate_state_to_sqlite"
+        }
+      ]
+    },
+    {
+      "writer_id": "review-workflow",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+        "symbol": "atomic_write_json"
+      },
+      "data_domains": [
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "review workflow",
+      "story_system_mode": {
+        "behavior": "review artifacts and metrics only"
+      },
+      "legacy_mode": {
+        "behavior": "review artifacts and metrics only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "anchor": "atomic_write_json"
+        }
+      ]
+    },
+    {
+      "writer_id": "gate-decision",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/gate_decision_store.py",
+        "symbol": "atomic_write_json"
+      },
+      "data_domains": [
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "per-attempt workflow decision store",
+      "story_system_mode": {
+        "behavior": "decision audit only; not Canon"
+      },
+      "legacy_mode": {
+        "behavior": "decision audit only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/gate_decision_store.py",
+          "anchor": "atomic_write_json"
+        }
+      ]
+    },
+    {
+      "writer_id": "changes-validation",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "INTENT",
+        "COMPATIBILITY"
+      ],
+      "owner": "CHANGES validation",
+      "story_system_mode": {
+        "behavior": "proposal validation, not persistent Canon"
+      },
+      "legacy_mode": {
+        "behavior": "legacy gate active"
+      },
+      "lifecycle_status": "compatibility_only",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Only after separate reviewed policy decision and adoption evidence meets cohort gate.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "anchor": "main"
+        }
+      ]
+    },
+    {
+      "writer_id": "update-state-canon-state",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "Chapter Canon state fields",
+      "story_system_mode": {
+        "behavior": "rejected: current CLI mode guard rejects these chapter-fact mutations before loading/saving state"
+      },
+      "legacy_mode": {
+        "behavior": "allowed for supported legacy projects"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain until this option family has no supported caller and an explicit field-level replacement is tested.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "main"
+        }
+      ],
+      "selector": "canon-state-options"
+    },
+    {
+      "writer_id": "update-state-foreshadowing-strand",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "INTENT",
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "planning/Craft field owner; overlap needs later reconciliation",
+      "story_system_mode": {
+        "behavior": "rejected by the shared CLI guard today; semantic owner remains Intent/Craft pending field-level audit"
+      },
+      "legacy_mode": {
+        "behavior": "allowed for supported legacy projects"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain until this option family has no supported caller and an explicit field-level replacement is tested.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "main"
+        }
+      ],
+      "selector": "foreshadowing-and-strand-options"
+    },
+    {
+      "writer_id": "update-state-volume-planning",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "INTENT",
+        "STATE_JSON"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "allowed: planning metadata, not chapter Canon"
+      },
+      "legacy_mode": {
+        "behavior": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain until this option family has no supported caller and an explicit field-level replacement is tested.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "main"
+        }
+      ],
+      "selector": "volume-planning-options"
+    },
+    {
+      "writer_id": "update-state-review-metadata",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "review workflow",
+      "story_system_mode": {
+        "behavior": "allowed: review checkpoint metadata only"
+      },
+      "legacy_mode": {
+        "behavior": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain until this option family has no supported caller and an explicit field-level replacement is tested.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "main"
+        }
+      ],
+      "selector": "review-metadata-option"
+    }
+  ],
+  "readers": [
+    {
+      "reader_id": "commit-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+        "symbol": "ChapterCommitService"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CANON_COMMIT",
+          "resource": "accepted chapter commit",
+          "story_system": {
+            "primary_source": ".story-system/commits",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "schema-validated accepted commit",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "not a legacy Canon source",
+            "authority_claim": "UNKNOWN",
+            "condition": "Story System disabled",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "anchor": "ChapterCommitService"
+        }
+      ],
+      "reader_family": "Story System commit and projection readers"
+    },
+    {
+      "reader_id": "event-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+        "symbol": "EventLogStore"
+      },
+      "read_edges": [
+        {
+          "data_domain": "EVENTS",
+          "resource": "event log",
+          "story_system": {
+            "primary_source": "index.db story_events",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "matched durable commit",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy event store",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "anchor": "EventLogStore"
+        }
+      ],
+      "reader_family": "Story System commit and projection readers"
+    },
+    {
+      "reader_id": "context-assembly",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+        "symbol": "ContextManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CANON_COMMIT",
+          "resource": "assembled chapter context",
+          "story_system": {
+            "primary_source": "accepted commits and verified projections",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "Story System source assembly",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy state/index/context",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "ContextManager"
+        }
+      ],
+      "reader_family": "context/runtime source assembly"
+    },
+    {
+      "reader_id": "query-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/tracking_query.py",
+        "symbol": "main"
+      },
+      "read_edges": [
+        {
+          "data_domain": "INDEX_DB",
+          "resource": "query index",
+          "story_system": {
+            "primary_source": "commit-verified index",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "Story System query",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy index/state",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy query",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/tracking_query.py",
+          "anchor": "main"
+        }
+      ],
+      "reader_family": "query and resume"
+    },
+    {
+      "reader_id": "resume-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+        "symbol": "ContextManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "workflow resume state",
+          "story_system": {
+            "primary_source": "workflow metadata plus durable commit",
+            "authority_claim": "WORKFLOW",
+            "condition": "resume workflow",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy status/state",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy resume",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "ContextManager"
+        }
+      ],
+      "reader_family": "query and resume"
+    },
+    {
+      "reader_id": "write-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+        "symbol": "main"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CANON_COMMIT",
+          "resource": "prior chapter context",
+          "story_system": {
+            "primary_source": "accepted commits",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "Story System write",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy state",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy write",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+          "anchor": "main"
+        }
+      ],
+      "reader_family": "write/plan/review consumers"
+    },
+    {
+      "reader_id": "plan-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+        "symbol": "VolumeStateManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "INTENT",
+          "resource": "volumes and planning horizon",
+          "story_system": {
+            "primary_source": "project state Intent fields",
+            "authority_claim": "INTENT",
+            "condition": "planning",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "project state Intent fields",
+            "authority_claim": "INTENT",
+            "condition": "planning",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+          "anchor": "VolumeStateManager"
+        }
+      ],
+      "reader_family": "write/plan/review consumers"
+    },
+    {
+      "reader_id": "review-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+        "symbol": "main"
+      },
+      "read_edges": [
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "review artifact",
+          "story_system": {
+            "primary_source": "review result artifacts",
+            "authority_claim": "WORKFLOW",
+            "condition": "review workflow",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "review result artifacts",
+            "authority_claim": "WORKFLOW",
+            "condition": "review workflow",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "anchor": "main"
+        }
+      ],
+      "reader_family": "write/plan/review consumers"
+    },
+    {
+      "reader_id": "state-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+        "symbol": "StateManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "STATE_JSON",
+          "resource": "state.json fields",
+          "story_system": {
+            "primary_source": "commit-verified projection or explicit Intent/Craft fields",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "field owner",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "state.json",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "anchor": "StateManager"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers"
+    },
+    {
+      "reader_id": "index-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+        "symbol": "IndexManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "INDEX_DB",
+          "resource": "index tables",
+          "story_system": {
+            "primary_source": "commit-verified story tables",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "Canon-like tables only",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "index.db tables",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+          "anchor": "IndexManager"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers"
+    },
+    {
+      "reader_id": "summary-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/summary_projection_writer.py",
+        "symbol": "SummaryProjectionWriter"
+      },
+      "read_edges": [
+        {
+          "data_domain": "SUMMARIES",
+          "resource": "summary projections",
+          "story_system": {
+            "primary_source": "commit-bound summaries",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "verified projection",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy summary files",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/summary_projection_writer.py",
+          "anchor": "SummaryProjectionWriter"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers"
+    },
+    {
+      "reader_id": "memory-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+        "symbol": "MemoryProjectionWriter"
+      },
+      "read_edges": [
+        {
+          "data_domain": "MEMORY",
+          "resource": "memory projection",
+          "story_system": {
+            "primary_source": "commit-bound memory",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "verified projection",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy memory files",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+          "anchor": "MemoryProjectionWriter"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers"
+    },
+    {
+      "reader_id": "vector-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/vector_projection_writer.py",
+        "symbol": "VectorProjectionWriter"
+      },
+      "read_edges": [
+        {
+          "data_domain": "VECTORS",
+          "resource": "RAG vectors",
+          "story_system": {
+            "primary_source": "commit-bound vectors",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "verified projection",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy vector index",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/vector_projection_writer.py",
+          "anchor": "VectorProjectionWriter"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers"
+    },
+    {
+      "reader_id": "craft-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+        "symbol": "StoryCraftFieldError"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CRAFT",
+          "resource": "story_craft fields",
+          "story_system": {
+            "primary_source": "Story Craft state",
+            "authority_claim": "CRAFT",
+            "condition": "planning only",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "Story Craft state",
+            "authority_claim": "CRAFT",
+            "condition": "planning only",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "StoryCraftFieldError"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers"
+    },
+    {
+      "reader_id": "reference-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/story_contracts.py",
+        "symbol": "StoryContractPaths"
+      },
+      "read_edges": [
+        {
+          "data_domain": "REFERENCE",
+          "resource": "contract and workflow artifacts",
+          "story_system": {
+            "primary_source": "canonical Story System paths",
+            "authority_claim": "REFERENCE",
+            "condition": "active contract reads",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy contract fallback",
+            "authority_claim": "REFERENCE",
+            "condition": "compatibility reads",
+            "fallback": null
+          }
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_contracts.py",
+          "anchor": "StoryContractPaths"
+        }
+      ],
+      "reader_family": "legacy fallback readers"
+    }
+  ],
+  "migrations": [
+    {
+      "migration_id": "migrate-story-craft-v1",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+        "symbol": "migrate_state_json"
+      },
+      "source": "legacy story_craft shape in state.json",
+      "target": "current story_craft shape",
+      "supported_project_modes": [
+        "legacy",
+        "existing Story System after explicit preflight"
+      ],
+      "preflight": "Current function validates JSON and top-level object, but does not reject malformed nested story_craft; it backs up before replacing malformed nested values with defaults.",
+      "backup": "atomic backup before save",
+      "idempotency": "fills absent defaults without duplicating keys",
+      "postcondition": "state remains valid JSON; existing top-level fields preserved except story_craft is replaced when absent or malformed; not lossless for malformed nested values.",
+      "rollback": "restore recorded backup",
+      "ambiguity_handling": "Backup exists, but nested malformed value is not reported before replacement; do not treat as a lossless Story System migration.",
+      "lifecycle_status": "implemented",
+      "active_consumers": [
+        "explicit migrate-story-craft command"
+      ],
+      "replacement": null,
+      "retirement_criterion": "A preflight/reporting mode and preservation behavior are tested, or all supported callers leave old shape and the migration support window closes after reviewed evidence.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ]
+    },
+    {
+      "migration_id": "state-to-sqlite",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+        "symbol": "migrate_state_to_sqlite"
+      },
+      "source": "state.json",
+      "target": "index.db SQLite state tables",
+      "supported_project_modes": [
+        "legacy",
+        "explicitly opted-in migration"
+      ],
+      "preflight": "validate source and destination formats before copy",
+      "backup": "migration backup required",
+      "idempotency": "repeatable without duplicate logical records",
+      "postcondition": "source and destination values reconcile",
+      "rollback": "restore backup and retain original JSON",
+      "ambiguity_handling": "emit conflict report without silent winner selection",
+      "lifecycle_status": "implemented",
+      "active_consumers": [
+        "explicit state-to-SQLite migration"
+      ],
+      "replacement": null,
+      "retirement_criterion": "No supported callers and opted-in projects pass round-trip evidence.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+          "anchor": "migrate_state_to_sqlite"
+        }
+      ]
+    }
+  ],
+  "compatibility_matrix": {
+    "new_story_system": {
+      "chapter_facts": "chapter-commit and validated commit projections",
+      "migration": "initialize contracts/defaults only"
+    },
+    "existing_story_system": {
+      "chapter_facts": "accepted commits remain immutable",
+      "migration": "schema preflight; no-op if no disk format change; unsupported schemas rejected"
+    },
+    "legacy": {
+      "chapter_facts": "documented legacy compatibility paths",
+      "migration": "no automatic migration on plugin update"
+    },
+    "mixed_partial": {
+      "chapter_facts": "no implicit Canon source selection",
+      "migration": "diagnose and stop pending explicit repair"
+    }
+  }
+}
