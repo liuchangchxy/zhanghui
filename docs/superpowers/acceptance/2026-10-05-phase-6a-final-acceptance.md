@@ -38,7 +38,7 @@ pytest \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_review_author_view.py \
-  .claude/plugins/zhanghui/scripts/integration/test_review_with_craft.py \
+  .claude/plugins/zhanghui/scripts/tests/integration/test_review_with_craft.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py \
   -q
 ```
@@ -58,7 +58,7 @@ pytest \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_finding_adapters.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_review_schema.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_review_author_view.py \
-  .claude/plugins/zhanghui/scripts/integration/test_review_with_craft.py \
+  .claude/plugins/zhanghui/scripts/tests/integration/test_review_with_craft.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_consistency_finding_adapters.py \
   --collect-only -q
 ```
