@@ -8,7 +8,7 @@ purpose: XML 标签格式参考
 
 **当前约定**：
 - 章节写作时**不再要求**添加 XML 标签
-- Data Agent 会自动从纯正文中提取实体，写入 index.db
+- Data Agent 从纯正文生成临时实体提取结果；Story System 下由 `chapter-commit` 与 commit-backed projection writers 更新索引。Legacy 项目按其兼容流程处理。
 - 标签仅用于**手动标注**场景（如明确标记重要实体、补充提取遗漏）
 - 如果你选择使用标签，请遵循以下规范
 </context>

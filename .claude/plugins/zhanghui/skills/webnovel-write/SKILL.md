@@ -676,7 +676,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ba
 2. Step 3 已产出 `overall_score` 且 `review_metrics` 成功落库
 3. Step 4 已处理全部 `critical`，`high` 未修项有 deviation 记录
 4. Step 4 的 `anti_ai_force_check=pass`（基于全文检查；fail 时不得进入 Step 5）
-5. Step 5 已回写 `state.json`、`index.db`、`summaries/ch{chapter_padded}.md`
+5. Step 5.6 已确认本次 accepted commit 对应的 state/index/summary/memory/vector 投影全部成功，或 `projections retry` 已成功；仍缺失或过期的投影必须保持为可见失败。
 6. 若开启性能观测，已读取最新 timing 记录并输出结论
 
 ## 验证与交付
