@@ -53,7 +53,7 @@ hook_strength: "strong"
 
 ```
 
-长期记忆只提炼"可跨章复用"的事实，转成 events/deltas 写入 extraction_result。摘要中的每条埋设伏笔必须同步写一条 `accepted_events[].event_type == "open_loop_created"`；已回收则用 `promise_paid_off` 或对应闭合事件。提取基于最终正文，不以 CHANGES 声明作证据；提交前由独立 reconciliation 对账。
+长期记忆只提炼"可跨章复用"的事实，转成 events/deltas 写入 extraction_result。摘要中的每条埋设伏笔必须同步写一条 `accepted_events[].event_type == "open_loop_created"`；正文明确显示已回收时可提取 `promise_paid_off` 或 `open_loop_closed`。**不得从自由文本、语义相似、记忆描述或 LLM 判断推测 `loop_id` / Promise source ID。** 只有调用方传入的结构化输入明确含有既存 ID 时才原样写入对应事件 payload；当前 prose-only 生产路径没有此 ID 输入，缺少 ID 时留给确定性 exact-unique legacy resolver，无法唯一解析则保持 unlinked 并由 projection rebuild 记录诊断。不得为补齐 ID 而读取或改写 Canon。提取基于最终正文，不以 CHANGES 声明作证据；提交前由独立 reconciliation 对账。
 
 ## 4. 输入
 

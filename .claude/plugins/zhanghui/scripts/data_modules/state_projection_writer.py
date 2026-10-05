@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,7 @@ import filelock
 
 from .commit_artifacts import extraction_dict, extraction_list, extraction_text
 from .durable_projection import require_durable_commit_match
+from .intent_reconciliation import reconcile_intent_events
 from .projection_rebuild_context import is_controlled_rebuild
 from .story_contracts import read_json_if_exists
 
@@ -261,11 +263,7 @@ class StateProjectionWriter:
         return ids
 
     def _apply_foreshadowing(self, state: dict, chapter: int, commit_payload: dict) -> int:
-        """把 open_loop 事件聚合进 plot_threads.foreshadowing（issue #130）。
-
-        幂等：created 按 content 去重；closed 对已 resolved 条目不重复改写，
-        因此 projections replay 重放任意章节不会产生重复或抖动。
-        """
+        """Project open-loop lifecycle by canonical create event identity."""
         if chapter <= 0:
             return 0
         loop_events = [
@@ -287,60 +285,87 @@ class StateProjectionWriter:
             rows = []
             plot_threads["foreshadowing"] = rows
 
-        applied = 0
-        for event in loop_events:
-            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
-            content = str(
-                payload.get("content")
-                or payload.get("description")
-                or event.get("subject")
-                or ""
-            ).strip()
-            if not content:
+        existing_by_id = {
+            str(row.get("loop_id") or row.get("source_event_id") or ""): row
+            for row in rows
+            if isinstance(row, dict)
+            and str(row.get("loop_id") or row.get("source_event_id") or "").strip()
+        }
+        initial = []
+        for loop_id, row in existing_by_id.items():
+            initial.append({
+                "identity_id": loop_id,
+                "source_event_id": str(row.get("source_event_id") or loop_id),
+                "source_chapter": self._safe_int(row.get("source_chapter") or row.get("planted_chapter")),
+                "content": str(row.get("content") or "").strip(),
+                "status": str(row.get("status") or "active"),
+                "link_status": str(row.get("link_status") or "linked"),
+                **({"resolution_event_id": row["resolution_event_id"]} if row.get("resolution_event_id") else {}),
+                **({"resolved_chapter": row["resolved_chapter"]} if row.get("resolved_chapter") else {}),
+            })
+        normalized_events = []
+        for raw in loop_events:
+            event = dict(raw)
+            event.setdefault("chapter", chapter)
+            normalized_events.append(event)
+
+        reconciled = reconcile_intent_events(
+            normalized_events, initial_open_loops=initial
+        )["open_loops"]
+        projected_rows: list[dict[str, Any]] = []
+        for lifecycle in reconciled:
+            loop_id = str(lifecycle.get("identity_id") or "")
+            old = existing_by_id.get(loop_id, {})
+            row = dict(old)
+            row.update({
+                "loop_id": loop_id,
+                "source_event_id": lifecycle.get("source_event_id"),
+                "source_chapter": lifecycle.get("source_chapter"),
+                "content": lifecycle.get("content") or old.get("content") or "",
+                "status": lifecycle.get("status"),
+                "planted_chapter": lifecycle.get("source_chapter") or old.get("planted_chapter"),
+                "link_status": lifecycle.get("link_status"),
+            })
+            for field in ("resolution_event_id", "resolved_chapter", "target_chapter", "tier"):
+                value = lifecycle.get(field)
+                if value is not None:
+                    row[field] = value
+            projected_rows.append(row)
+
+        canonical_content = {
+            (str(row.get("content") or "").strip(), self._safe_int(row.get("source_chapter")))
+            for row in projected_rows
+        }
+        active_canonical_content = {
+            str(row.get("content") or "").strip()
+            for row in projected_rows
+            if row.get("status") == "active"
+        }
+        legacy_rows: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
                 continue
-            event_type = str(event.get("event_type") or "").strip()
-            row = next(
-                (
-                    r
-                    for r in rows
-                    if isinstance(r, dict) and str(r.get("content") or "").strip() == content
-                ),
-                None,
-            )
-            if event_type == "open_loop_created":
-                if row is not None:
-                    row.setdefault("planted_chapter", chapter)
-                    continue
-                new_row: dict[str, Any] = {
-                    "content": content,
-                    "status": "active",
-                    "planted_chapter": chapter,
-                }
-                target = self._safe_int(
-                    payload.get("target_chapter") or payload.get("due_chapter")
-                )
-                if target > 0:
-                    new_row["target_chapter"] = target
-                tier = str(payload.get("tier") or "").strip()
-                if tier:
-                    new_row["tier"] = tier
-                rows.append(new_row)
-                applied += 1
-            else:
-                if row is None:
-                    rows.append(
-                        {
-                            "content": content,
-                            "status": "resolved",
-                            "resolved_chapter": chapter,
-                        }
-                    )
-                    applied += 1
-                elif str(row.get("status") or "") != "resolved":
-                    row["status"] = "resolved"
-                    row["resolved_chapter"] = chapter
-                    applied += 1
-        return applied
+            loop_id = str(row.get("loop_id") or row.get("source_event_id") or "").strip()
+            if loop_id:
+                continue
+            content = str(row.get("content") or "").strip()
+            planted_chapter = self._safe_int(row.get("planted_chapter"))
+            if (content, planted_chapter) in canonical_content:
+                continue
+            preserved = dict(row)
+            if content and any(item[0] == content for item in canonical_content):
+                preserved["status"] = "legacy_unlinked"
+                preserved["link_status"] = "unlinked"
+            elif content in active_canonical_content and str(row.get("status") or "") == "active":
+                preserved["status"] = "legacy_unlinked"
+                preserved["link_status"] = "unlinked"
+            legacy_rows.append(preserved)
+
+        before = json.dumps(rows, ensure_ascii=False, sort_keys=True)
+        after_rows = legacy_rows + projected_rows
+        rows[:] = after_rows
+        after = json.dumps(rows, ensure_ascii=False, sort_keys=True)
+        return int(before != after)
 
     def _apply_strand_tracker(self, state: dict, chapter: int, commit_payload: dict) -> bool:
         strand = self._dominant_strand(commit_payload)

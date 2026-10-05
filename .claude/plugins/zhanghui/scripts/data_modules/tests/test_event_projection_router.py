@@ -117,7 +117,18 @@ def test_router_ignores_unknown_and_non_dict_events():
 def test_manifest_is_the_ordered_rebuild_topology():
     manifest = EventProjectionRouter.PROJECTION_MANIFEST
     assert EventProjectionRouter.PROJECTION_ORDER == (
-        "events", "state", "index", "summary", "memory", "vector"
+        "events", "state", "index", "summary", "memory", "vector", "intent_diagnostics"
     )
     assert set(manifest) == set(EventProjectionRouter.PROJECTION_ORDER)
     assert all({"writer", "reset", "order", "reproducibility"} <= set(row) for row in manifest.values())
+
+
+def test_manifest_declares_rebuild_owned_intent_diagnostics_projection():
+    manifest = EventProjectionRouter.PROJECTION_MANIFEST
+    assert manifest["intent_diagnostics"] == {
+        "writer": "ProjectionRebuild",
+        "reset": "intent_diagnostics",
+        "order": 70,
+        "reproducibility": "strict",
+    }
+    assert EventProjectionRouter.PROJECTION_ORDER[-1] == "intent_diagnostics"

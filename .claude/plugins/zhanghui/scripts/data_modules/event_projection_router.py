@@ -16,6 +16,7 @@ class EventProjectionRouter:
         "summary": {"writer": "SummaryProjectionWriter", "reset": "summary", "order": 40, "reproducibility": "strict"},
         "memory": {"writer": "MemoryProjectionWriter", "reset": "memory", "order": 50, "reproducibility": "semantic"},
         "vector": {"writer": "VectorProjectionWriter", "reset": "vector", "order": 60, "reproducibility": "regenerable"},
+        "intent_diagnostics": {"writer": "ProjectionRebuild", "reset": "intent_diagnostics", "order": 70, "reproducibility": "strict"},
     }
     PROJECTION_ORDER = tuple(
         name for name, _ in sorted(PROJECTION_MANIFEST.items(), key=lambda row: row[1]["order"])

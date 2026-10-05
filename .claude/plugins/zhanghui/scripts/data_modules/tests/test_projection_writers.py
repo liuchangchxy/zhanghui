@@ -865,10 +865,12 @@ def test_memory_projection_writer_maps_open_loop_event_into_scratchpad(tmp_path)
     assert any("三年之约" in x.subject for x in loops)
 
 
-def _loop_event(event_type, content, chapter=None, **payload_extra):
+def _loop_event(event_type, content, chapter=None, event_id=None, **payload_extra):
     payload = {"content": content}
     payload.update(payload_extra)
     event = {"event_type": event_type, "subject": "narrator", "payload": payload}
+    if event_id:
+        event["event_id"] = event_id
     if chapter is not None:
         event["chapter"] = chapter
     return event
@@ -888,7 +890,7 @@ def test_state_writer_aggregates_foreshadowing_from_open_loop_events(tmp_path):
         _commit_payload(
             chapter=5,
             accepted_events=[
-                _loop_event("open_loop_created", "三年之约提及", target_chapter=30, tier="major")
+                _loop_event("open_loop_created", "三年之约提及", event_id="loop-create", target_chapter=30, tier="major")
             ],
         )
     )
@@ -904,7 +906,7 @@ def test_state_writer_aggregates_foreshadowing_from_open_loop_events(tmp_path):
     writer.apply(
         _commit_payload(
             chapter=28,
-            accepted_events=[_loop_event("open_loop_closed", "三年之约提及")],
+            accepted_events=[_loop_event("open_loop_closed", "三年之约提及", event_id="loop-close", loop_id="loop-create")],
         )
     )
     rows = _read_state(tmp_path)["plot_threads"]["foreshadowing"]
@@ -921,7 +923,7 @@ def test_state_writer_foreshadowing_replay_is_idempotent(tmp_path):
     writer = StateProjectionWriter(tmp_path)
     payload = _commit_payload(
         chapter=7,
-        accepted_events=[_loop_event("open_loop_created", "黑色棺材的来历")],
+        accepted_events=[_loop_event("open_loop_created", "黑色棺材的来历", event_id="loop-replay")],
     )
     writer.apply(payload)
     writer.apply(payload)
@@ -930,21 +932,31 @@ def test_state_writer_foreshadowing_replay_is_idempotent(tmp_path):
     assert rows[0]["planted_chapter"] == 7
 
 
-def test_state_writer_foreshadowing_orphan_close_keeps_record(tmp_path):
-    """closed 事件找不到对应 active 条目时保留为 resolved 记录，不丢数据。"""
+def test_state_writer_foreshadowing_orphan_close_does_not_fabricate_loop(tmp_path):
+    """Orphan close must be diagnosed elsewhere and must not fabricate a resolved State row."""
     (tmp_path / ".webnovel").mkdir(parents=True, exist_ok=True)
     (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
     writer = StateProjectionWriter(tmp_path)
     writer.apply(
         _commit_payload(
             chapter=9,
-            accepted_events=[_loop_event("open_loop_closed", "从未登记过的旧约")],
+            accepted_events=[_loop_event("open_loop_closed", "从未登记过的旧约", event_id="loop-orphan")],
         )
     )
     rows = _read_state(tmp_path)["plot_threads"]["foreshadowing"]
-    assert len(rows) == 1
-    assert rows[0]["status"] == "resolved"
-    assert rows[0]["resolved_chapter"] == 9
+    assert rows == []
+
+
+def test_state_writer_keeps_identical_content_loops_distinct_and_closes_by_id(tmp_path):
+    (tmp_path / ".webnovel").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
+    writer = StateProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[_loop_event("open_loop_created", "同一句", event_id="loop-a")]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[_loop_event("open_loop_created", "同一句", event_id="loop-b")]))
+    writer.apply(_commit_payload(chapter=3, accepted_events=[_loop_event("open_loop_closed", "改写后的表述", event_id="close-b", loop_id="loop-b")]))
+    rows = _read_state(tmp_path)["plot_threads"]["foreshadowing"]
+    assert [(row["loop_id"], row["status"]) for row in rows] == [("loop-a", "active"), ("loop-b", "resolved")]
+    assert rows[1]["resolution_event_id"] == "close-b"
 
 
 def test_router_routes_open_loop_events_to_state(tmp_path):
@@ -954,3 +966,112 @@ def test_router_routes_open_loop_events_to_state(tmp_path):
     router = EventProjectionRouter()
     assert "state" in router.route({"event_type": "open_loop_created"})
     assert "state" in router.route({"event_type": "open_loop_closed"})
+
+
+def test_memory_projection_keeps_duplicate_loop_text_distinct_and_closes_by_identity(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "loop-a", "event_type": "open_loop_created", "subject": "同一句",
+        "payload": {"content": "同一句"},
+    }]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[{
+        "event_id": "loop-b", "event_type": "open_loop_created", "subject": "同一句",
+        "payload": {"content": "同一句"},
+    }]))
+    writer.apply(_commit_payload(chapter=3, accepted_events=[{
+        "event_id": "close-b", "event_type": "open_loop_closed", "subject": "改写后的表达",
+        "payload": {"content": "改写后的表达", "loop_id": "loop-b"},
+    }]))
+
+    store = ScratchpadManager(cfg)
+    rows = store.query(category="open_loop", status=None)
+    by_identity = {row.payload.get("loop_id"): row for row in rows if row.payload.get("loop_id")}
+    assert len(by_identity) == 2
+    assert by_identity["loop-a"].status == "active"
+    assert by_identity["loop-b"].status == "outdated"
+    assert by_identity["loop-b"].payload["lifecycle_status"] == "resolved"
+    assert by_identity["loop-b"].payload["resolution_event_id"] == "close-b"
+    assert {row.payload.get("loop_id") for row in store.query(category="open_loop", status="active")} == {"loop-a"}
+
+
+def test_memory_projection_orphan_close_does_not_resolve_an_unlinked_legacy_identity(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "loop-a", "event_type": "open_loop_created", "subject": "同一句",
+        "payload": {"content": "同一句"},
+    }]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[{
+        "event_id": "close-orphan", "event_type": "open_loop_closed", "subject": "同一句",
+        "payload": {"content": "同一句", "loop_id": "missing-id"},
+    }]))
+    active = ScratchpadManager(cfg).query(category="open_loop", status="active")
+    assert len(active) == 1
+    assert active[0].payload["loop_id"] == "loop-a"
+
+
+def test_memory_projection_tracks_promise_create_and_linked_payoff_without_ledger_write(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger = [{"id": "planned-a", "status": "pending", "notes": "planner-owned"}]
+    state_path.write_text(json.dumps({"project_info": {"promise_ledger": ledger}}), encoding="utf-8")
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "promise-a", "event_type": "promise_created", "subject": "救下盟友",
+        "payload": {"content": "救下盟友", "promise_id": "planned-a", "type": "rescue"},
+    }]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[{
+        "event_id": "promise-b", "event_type": "promise_created", "subject": "救下盟友",
+        "payload": {"content": "救下盟友", "promise_id": "planned-b", "type": "rescue"},
+    }]))
+    writer.apply(_commit_payload(chapter=3, accepted_events=[{
+        "event_id": "paid-b", "event_type": "promise_paid_off", "subject": "盟友获救",
+        "payload": {"content": "盟友获救", "promise_id": "planned-b"},
+    }]))
+
+    store = ScratchpadManager(cfg)
+    rows = store.query(category="reader_promise", status=None)
+    by_identity = {row.payload.get("promise_event_id"): row for row in rows if row.payload.get("promise_event_id")}
+    assert len(by_identity) == 2
+    assert by_identity["promise-a"].status == "active"
+    assert by_identity["promise-b"].status == "outdated"
+    assert by_identity["promise-b"].payload["lifecycle_status"] == "paid_off"
+    assert by_identity["promise-b"].payload["resolution_event_id"] == "paid-b"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["project_info"]["promise_ledger"] == ledger
+    assert {row.payload.get("promise_event_id") for row in store.query(category="reader_promise", status="active")} == {"promise-a"}
+
+
+def test_payoff_only_event_does_not_create_reader_promise_memory(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "paid-only", "event_type": "promise_paid_off", "subject": "盟友获救",
+        "payload": {"content": "盟友获救", "promise_id": "missing-promise"},
+    }]))
+    assert ScratchpadManager(cfg).query(category="reader_promise", status="active") == []
+
+
+def test_promise_paid_off_with_legacy_exact_unique_content_updates_same_memory_identity(tmp_path):
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    writer = MemoryProjectionWriter(tmp_path)
+    writer.apply(_commit_payload(chapter=1, accepted_events=[{
+        "event_id": "promise-a", "event_type": "promise_created", "subject": "守护村庄",
+        "payload": {"content": "守护村庄"},
+    }]))
+    writer.apply(_commit_payload(chapter=2, accepted_events=[{
+        "event_id": "paid-a", "event_type": "promise_paid_off", "subject": "守护村庄",
+        "payload": {"content": "守护村庄"},
+    }]))
+    rows = ScratchpadManager(cfg).query(category="reader_promise", status=None)
+    assert len(rows) == 1
+    assert rows[0].payload["promise_event_id"] == "promise-a"
+    assert rows[0].payload["resolution_event_id"] == "paid-a"
+    assert rows[0].payload["link_status"] == "legacy_exact_unique"
+    assert rows[0].status == "outdated"
