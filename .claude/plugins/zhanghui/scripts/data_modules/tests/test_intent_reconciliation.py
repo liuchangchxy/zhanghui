@@ -1,4 +1,4 @@
-from data_modules.intent_reconciliation import reconcile_intent_events
+from data_modules.intent_reconciliation import intent_event_content_candidates, reconcile_intent_events
 
 
 def _event(event_id, chapter, event_type, content, **payload):
@@ -152,3 +152,11 @@ def test_structured_loop_type_description_uses_memory_writer_content_convention(
         "subject": "hero", "payload": {"loop_type": "mystery", "description": "玉佩为何发热"},
     }])
     assert result["open_loops"][0]["content"] == "mystery：玉佩为何发热"
+
+
+def test_loop_type_metadata_alone_is_not_a_legacy_storage_alias():
+    assert intent_event_content_candidates({
+        "event_type": "open_loop_created",
+        "subject": "entity-7",
+        "payload": {"loop_type": "mystery"},
+    }) == []

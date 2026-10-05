@@ -203,6 +203,22 @@ def _reset_memory(root: Path, commits: list[dict[str, Any]] | None = None) -> No
         "open_loop": canonical_intent["open_loops"],
         "reader_promise": canonical_intent["reader_promises"],
     }
+    create_types = {
+        "open_loop_created": "open_loop",
+        "promise_created": "reader_promise",
+    }
+    legacy_aliases: dict[str, dict[str, dict[str, Any]]] = {
+        "open_loop": {},
+        "reader_promise": {},
+    }
+    for event in canonical_events:
+        category = create_types.get(str(event.get("event_type") or ""))
+        event_id = str(event.get("event_id") or "").strip()
+        if category and event_id:
+            legacy_aliases[category].setdefault(event_id, {
+                "source_chapter": int(event.get("chapter") or 0),
+                "aliases": set(intent_event_content_candidates(event)),
+            })
     from .memory.writer import MemoryWriter
     memory_writer = MemoryWriter(DataModulesConfig.from_project_root(root))
     with store._lock:
@@ -224,13 +240,36 @@ def _reset_memory(root: Path, commits: list[dict[str, Any]] | None = None) -> No
                     or row.payload.get("source_event_id")
                 )
                 if category in canonical_by_category and not has_identity:
-                    content = str(row.subject or row.value or "").strip()
-                    candidates = [
-                        item for item in canonical_by_category[category]
-                        if str(item.get("content") or "").strip() == content
+                    row_contents = {
+                        str(value or "").strip()
+                        for value in (row.subject, row.value)
+                        if str(value or "").strip()
+                    }
+                    candidate_ids = {
+                        identity_id
+                        for identity_id, source in legacy_aliases[category].items()
+                        if row_contents.intersection(source["aliases"])
+                    }
+                    source_chapter = int(
+                        row.payload.get("source_chapter")
+                        or row.payload.get("planted_chapter")
+                        or row.source_chapter
+                        or 0
+                    )
+                    chapter_ids = {
+                        identity_id
+                        for identity_id in candidate_ids
+                        if legacy_aliases[category][identity_id]["source_chapter"] == source_chapter
+                    }
+                    identities = {
+                        str(item.get("identity_id") or ""): item
+                        for item in canonical_by_category[category]
+                    }
+                    exact_chapter = [
+                        identities[identity_id]
+                        for identity_id in chapter_ids
+                        if identity_id in identities
                     ]
-                    source_chapter = int(row.payload.get("source_chapter") or row.payload.get("planted_chapter") or row.source_chapter or 0)
-                    exact_chapter = [item for item in candidates if int(item.get("source_chapter") or 0) == source_chapter]
                     if len(exact_chapter) == 1:
                         identity = exact_chapter[0]
                         identity_id = str(identity.get("identity_id") or "")
@@ -241,7 +280,7 @@ def _reset_memory(root: Path, commits: list[dict[str, Any]] | None = None) -> No
                             "source_chapter": source_chapter,
                             "link_status": "legacy_exact_unique",
                         })
-                    elif candidates:
+                    elif candidate_ids:
                         row.status = "outdated"
                         row.payload["lifecycle_status"] = "legacy_shadowed"
                         row.payload["link_status"] = "unlinked"

@@ -6,6 +6,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def _ensure_scripts_on_path() -> None:
     scripts_dir = Path(__file__).resolve().parents[2]
@@ -566,6 +568,141 @@ def test_rebuild_shadows_mixed_evidence_legacy_memory_row_when_canon_resolves_lo
     assert upgraded[0].status == "outdated"
     assert all(row.id != legacy_id for row in active)
     assert len([row for row in rows if row.subject == "同一条谜团"]) == 1
+
+
+def test_rebuild_resolves_description_alias_before_context_exposes_legacy_loop(tmp_path):
+    from data_modules.config import DataModulesConfig
+    from data_modules.memory_contract_adapter import MemoryContractAdapter
+    from data_modules.memory.schema import MemoryItem
+    from data_modules.memory.store import ScratchpadManager
+
+    _make_accepted_intent_commit(tmp_path, 1, [{
+        "event_id": "mystery-loop", "event_type": "open_loop_created", "chapter": 1,
+        "subject": "线索", "payload": {"loop_type": "mystery", "description": "玉佩为何发热"},
+    }])
+    _make_accepted_intent_commit(tmp_path, 2, [{
+        "event_id": "mystery-close", "event_type": "open_loop_closed", "chapter": 2,
+        "subject": "谜底揭晓", "payload": {"loop_id": "mystery-loop", "description": "真相已经揭晓"},
+    }])
+    config = DataModulesConfig.from_project_root(tmp_path)
+    config.ensure_dirs()
+    store = ScratchpadManager(config)
+    store.upsert_item(MemoryItem(
+        id="legacy-mystery-loop", layer="semantic", category="open_loop",
+        subject="玉佩为何发热", field="status", value="玉佩为何发热", status="active",
+        source_chapter=1, evidence=["memory_facts:open_loop:1", "manual:author-note"],
+    ))
+
+    report = rebuild_projections(tmp_path)
+    first_rows = store.query(category="open_loop", status=None)
+    second_report = rebuild_projections(tmp_path)
+
+    rows = store.query(category="open_loop", status=None)
+    assert report["ok"] is True and second_report["ok"] is True
+    canonical = next(row for row in rows if row.payload.get("loop_id") == "mystery-loop")
+    state_rows = json.loads(
+        (tmp_path / ".webnovel" / "state.json").read_text(encoding="utf-8")
+    )["plot_threads"]["foreshadowing"]
+    assert next(row for row in state_rows if row.get("loop_id") == "mystery-loop")["status"] == "resolved"
+    assert canonical.status == "outdated"
+    assert canonical.payload["lifecycle_status"] == "resolved"
+    assert canonical.payload["resolution_event_id"] == "mystery-close"
+    assert "manual:author-note" in canonical.evidence
+    assert store.query(category="open_loop", status="active") == []
+    assert MemoryContractAdapter(config).get_open_loops(status="active") == []
+    context = MemoryContractAdapter(config).load_context(chapter=3)
+    assert context.sections.get("urgent_loops", []) == []
+    assert len([row for row in rows if row.payload.get("loop_id") == "mystery-loop"]) == 1
+    assert len(rows) == len(first_rows)
+    first_canonical = next(row for row in first_rows if row.payload.get("loop_id") == "mystery-loop")
+    assert first_canonical.id == canonical.id
+    assert "manual:author-note" in first_canonical.evidence
+
+
+@pytest.mark.parametrize(
+    ("field", "legacy_text"),
+    [
+        ("content", "玉佩为何发热"),
+        ("description", "玉佩为何发热"),
+        ("unanswered_question", "玉佩为何发热？"),
+        ("normalized", "mystery：玉佩为何发热"),
+    ],
+)
+def test_rebuild_migrates_only_exact_historical_memory_aliases(tmp_path, field, legacy_text):
+    from data_modules.config import DataModulesConfig
+    from data_modules.memory.schema import MemoryItem
+    from data_modules.memory.store import ScratchpadManager
+
+    payload = {"loop_type": "mystery", "description": "玉佩为何发热"}
+    if field == "content":
+        payload["content"] = legacy_text
+    elif field == "unanswered_question":
+        payload[field] = legacy_text
+    _make_accepted_intent_commit(tmp_path, 1, [{
+        "event_id": "alias-loop", "event_type": "open_loop_created", "chapter": 1,
+        "subject": "线索", "payload": payload,
+    }])
+    _make_accepted_intent_commit(tmp_path, 2, [{
+        "event_id": "alias-close", "event_type": "open_loop_closed", "chapter": 2,
+        "subject": "谜底揭晓", "payload": {"loop_id": "alias-loop", "content": "真相揭晓"},
+    }])
+    config = DataModulesConfig.from_project_root(tmp_path)
+    config.ensure_dirs()
+    store = ScratchpadManager(config)
+    store.upsert_item(MemoryItem(
+        id="old-alias", layer="semantic", category="open_loop", subject=legacy_text,
+        field="status", value=legacy_text, status="active", source_chapter=1,
+        evidence=["memory_facts:open_loop:1", "manual:keep"],
+    ))
+
+    report = rebuild_projections(tmp_path)
+
+    rows = store.query(category="open_loop", status=None)
+    assert report["ok"] is True
+    assert len(rows) == 1
+    assert rows[0].payload["loop_id"] == "alias-loop"
+    assert rows[0].status == "outdated"
+    assert "manual:keep" in rows[0].evidence
+
+
+def test_rebuild_does_not_bind_ambiguous_or_wrong_chapter_legacy_memory_alias(tmp_path):
+    from data_modules.config import DataModulesConfig
+    from data_modules.memory.schema import MemoryItem
+    from data_modules.memory.store import ScratchpadManager
+
+    _make_accepted_intent_commit(tmp_path, 1, [
+        {
+            "event_id": "loop-a", "event_type": "open_loop_created", "chapter": 1,
+            "subject": "A", "payload": {"description": "玉佩发热"},
+        },
+        {
+            "event_id": "loop-b", "event_type": "open_loop_created", "chapter": 1,
+            "subject": "B", "payload": {"description": "玉佩发热"},
+        },
+    ])
+    config = DataModulesConfig.from_project_root(tmp_path)
+    config.ensure_dirs()
+    store = ScratchpadManager(config)
+    store.upsert_item(MemoryItem(
+        id="ambiguous", layer="semantic", category="open_loop", subject="玉佩发热",
+        field="status", value="玉佩发热", status="active", source_chapter=1,
+        evidence=["manual:ambiguous"],
+    ))
+    store.upsert_item(MemoryItem(
+        id="wrong-chapter", layer="semantic", category="open_loop", subject="玉佩发热",
+        field="status", value="玉佩发热", status="active", source_chapter=9,
+        evidence=["manual:wrong-chapter"],
+    ))
+
+    report = rebuild_projections(tmp_path)
+
+    rows = store.query(category="open_loop", status=None)
+    assert report["ok"] is True
+    legacy = [row for row in rows if row.id in {"ambiguous", "wrong-chapter"}]
+    assert {row.id for row in legacy} == {"ambiguous", "wrong-chapter"}
+    assert all(row.payload.get("loop_id") is None for row in legacy)
+    assert all(row.status == "outdated" for row in legacy)
+    assert {e for row in legacy for e in row.evidence} == {"manual:ambiguous", "manual:wrong-chapter"}
 
 
 def test_rebuild_keeps_payoff_only_diagnostic_without_creating_active_promise(tmp_path):

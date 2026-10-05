@@ -9,6 +9,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from data_modules.config import DataModulesConfig
@@ -18,6 +19,20 @@ from data_modules.index_manager import (
     IndexManager,
     ReviewMetrics,
 )
+
+
+@pytest.fixture(autouse=True)
+def restore_data_modules_after_dashboard_imports():
+    """Restore the data_modules graph after tests import it from another root."""
+    original = {
+        name: module for name, module in sys.modules.items()
+        if name == "dashboard.app" or name == "data_modules" or name.startswith("data_modules.")
+    }
+    yield
+    for name in list(sys.modules):
+        if name == "dashboard.app" or name == "data_modules" or name.startswith("data_modules."):
+            sys.modules.pop(name, None)
+    sys.modules.update(original)
 
 
 def _create_dashboard_client(monkeypatch, project_root: Path) -> TestClient:

@@ -21,15 +21,17 @@ def intent_event_content(event: dict[str, Any]) -> str:
 
 
 def intent_event_content_candidates(event: dict[str, Any]) -> list[str]:
-    """Return canonical and exact legacy representations for safe row migration.
+    """Return exact historical storage representations for safe row migration.
 
     Lifecycle resolution itself uses only ``intent_event_content``. These aliases
     are limited to fields historically used to store the same event content and
-    are used only for exact, chapter-qualified legacy projection upgrades.
+    are used only for exact, chapter-qualified legacy projection upgrades. The
+    loop type is metadata by itself and a subject fallback may be an entity ID,
+    so neither is an independent migration alias.
     """
     payload = event.get("payload")
     payload = payload if isinstance(payload, dict) else {}
-    candidates = [intent_event_content(event)]
+    candidates: list[str] = []
     for key in ("content", "unanswered_question"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
@@ -38,11 +40,8 @@ def intent_event_content_candidates(event: dict[str, Any]) -> list[str]:
     loop_type = str(payload.get("loop_type") or "").strip()
     if description and loop_type:
         candidates.append(f"{loop_type}：{description}")
-    candidates.extend(value for value in (description, loop_type) if value)
-    if not any(candidates):
-        subject = str(event.get("subject") or "").strip()
-        if subject:
-            candidates.append(subject)
+    if description:
+        candidates.append(description)
     return list(dict.fromkeys(candidate for candidate in candidates if candidate))
 
 
