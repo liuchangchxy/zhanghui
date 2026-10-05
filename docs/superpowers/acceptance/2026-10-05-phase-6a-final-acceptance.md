@@ -26,7 +26,7 @@ Canonical suite is the union of A, B, C and E, with duplicate files listed once.
 Run from repository root:
 
 ```bash
-pytest \
+PYTHONPATH=.claude/plugins/zhanghui/scripts pytest \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_decision_store.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py \
@@ -46,7 +46,7 @@ pytest \
 ## Exact collection command
 
 ```bash
-pytest \
+PYTHONPATH=.claude/plugins/zhanghui/scripts pytest \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_decision_store.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py \
@@ -66,7 +66,7 @@ pytest \
 ## Exact Step 1/2 regression command
 
 ```bash
-pytest \
+PYTHONPATH=.claude/plugins/zhanghui/scripts pytest \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_findings.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_gate_decision_store.py \
   .claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py \
