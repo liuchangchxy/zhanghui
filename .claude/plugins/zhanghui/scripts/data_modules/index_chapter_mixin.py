@@ -38,6 +38,14 @@ class IndexChapterMixin:
 
     def get_chapter(self, chapter: int) -> Optional[Dict]:
         """获取章节元数据"""
+        owned = self._phase9_owned_rows("chapters")
+        if owned is not None:
+            row = next((item for item in owned if int(item.get("chapter") or 0) == int(chapter)), None)
+            if row is None:
+                return None
+            return {"chapter": chapter, **(row.get("payload") or {}),
+                    "effective_revision_id": row.get("effective_revision_id"),
+                    "effective_content_sha256": row.get("effective_content_sha256")}
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM chapters WHERE chapter = ?", (chapter,))
@@ -50,6 +58,12 @@ class IndexChapterMixin:
         """获取最近章节"""
         if limit is None:
             limit = self.config.query_recent_chapters_limit
+        owned = self._phase9_owned_rows("chapters")
+        if owned is not None:
+            return [{"chapter": row["chapter"], **(row.get("payload") or {}),
+                     "effective_revision_id": row.get("effective_revision_id"),
+                     "effective_content_sha256": row.get("effective_content_sha256")}
+                    for row in sorted(owned, key=lambda item: item["chapter"], reverse=True)[:limit]]
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -99,6 +113,10 @@ class IndexChapterMixin:
 
     def get_scenes(self, chapter: int) -> List[Dict]:
         """获取章节场景"""
+        owned = self._phase9_owned_rows("scenes")
+        if owned is not None:
+            return [{"chapter": chapter, "scene_index": index, **(row.get("payload") or {})}
+                    for index, row in enumerate(item for item in owned if item.get("chapter") == chapter)]
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -185,6 +203,10 @@ class IndexChapterMixin:
         """获取实体出场记录"""
         if limit is None:
             limit = self.config.query_entity_appearances_limit
+        owned = self._phase9_owned_rows("appearances")
+        if owned is not None:
+            return [{"chapter": row["chapter"], **(row.get("payload") or {})}
+                    for row in owned if str((row.get("payload") or {}).get("entity_id") or "") == str(entity_id)][:limit]
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -205,6 +227,11 @@ class IndexChapterMixin:
         """获取最近出场的实体"""
         if limit is None:
             limit = self.config.query_recent_appearances_limit
+        owned = self._phase9_owned_rows("appearances")
+        if owned is not None:
+            return [{"entity_id": (row.get("payload") or {}).get("entity_id"),
+                     "last_chapter": row.get("chapter"), "total": 1}
+                    for row in sorted(owned, key=lambda item: int(item.get("chapter") or 0), reverse=True)[:limit]]
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(

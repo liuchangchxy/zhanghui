@@ -457,6 +457,8 @@ def build_doctor_report(
 ) -> dict[str, Any]:
     snapshot = resolve_project_phase(project_root, chapter=chapter)
     checks: list[dict[str, Any]] = []
+    activation_report: dict[str, Any] = {"mode": "unknown", "active_status": "unknown",
+                                         "candidate_status": "not_scanned"}
     checks.extend(_preflight_checks(preflight_report))
 
     if snapshot.phase == PHASE_NO_PROJECT or not snapshot.project_root:
@@ -477,6 +479,20 @@ def build_doctor_report(
         root = Path(snapshot.project_root)
         checks.extend(_file_checks(root, snapshot))
         checks.extend(_json_checks(root))
+        from .owned_project_view import activation_health_report
+        activation_report = activation_health_report(root)
+        activation_ok = activation_report.get("active_status") != "blocked"
+        checks.append(_check(
+            "phase9.activation",
+            status=CHECK_OK if activation_ok else CHECK_ERROR,
+            severity="info" if activation_ok else "blocker",
+            message=("active Phase 9 publication verified" if activation_ok
+                     else "activation-managed project has no valid active publication"),
+            path=".story-system/publications",
+            actual=json.dumps(activation_report, ensure_ascii=False, sort_keys=True),
+            impact="Runtime reads must use one verified active generation; invalid activation blocks Canon reads.",
+            repair="Run the Phase 9 publication recovery command or repair the exact active evidence chain.",
+        ))
         try:
             runtime_health = build_story_runtime_health(root, chapter=chapter)
         except Exception as exc:
@@ -522,6 +538,7 @@ def build_doctor_report(
         "project_root": snapshot.project_root,
         "mode": "deep" if deep else "standard",
         "phase": snapshot.phase,
+        "phase9_activation": activation_report,
         "expected_profile": _expected_profile(snapshot),
         "blocking_count": len(blocking),
         "warning_count": len(warnings),

@@ -221,6 +221,13 @@ class StateManager:
 
     def _load_state(self):
         """加载状态文件"""
+        from .owned_project_view import OwnedProjectView
+
+        view = OwnedProjectView.pin_active(self.config.project_root)
+        if view is not None:
+            self._state = self._ensure_state_schema(view.state_view())
+            self._activation_state_base = deepcopy(self._state)
+            return
         if self.config.state_file.exists():
             self._state = read_json_safe(self.config.state_file, default={})
             self._state = self._ensure_state_schema(self._state)
@@ -237,6 +244,11 @@ class StateManager:
         - 仅合并本实例产生的增量（pending_*）
         - 原子化写入
         """
+        from .projection_generation import ProjectionGeneration
+        if ProjectionGeneration(self.config.project_root).enrollment_path.exists():
+            if self._has_pending_canon_mutations():
+                raise RuntimeError(CANON_WRITE_ERROR)
+            return self._save_activation_owner_overlay()
         self._reject_pending_canon_write()
 
         # 无增量时不写入，避免无意义覆盖
@@ -422,6 +434,41 @@ class StateManager:
 
         except filelock.Timeout:
             raise RuntimeError("无法获取 state.json 文件锁，请稍后重试")
+
+    def _save_activation_owner_overlay(self) -> Dict[str, Any]:
+        from .owned_project_view import OwnedStateStore
+
+        baseline = getattr(self, "_activation_state_base", {})
+        for key in ("entity_state", "protagonist_state", "strand_tracker"):
+            if self._state.get(key) != baseline.get(key):
+                raise RuntimeError(CANON_WRITE_ERROR)
+        current_progress = self._state.get("progress", {})
+        baseline_progress = baseline.get("progress", {})
+        for key in ("current_chapter", "total_words", "last_updated"):
+            if current_progress.get(key) != baseline_progress.get(key):
+                raise RuntimeError(CANON_WRITE_ERROR)
+        baseline_status = baseline_progress.get("chapter_status", {})
+        current_status = current_progress.get("chapter_status", {})
+        allowed_status_keys = set(self._pending_chapter_status)
+        if {k: v for k, v in current_status.items() if k not in allowed_status_keys} != {
+                k: v for k, v in baseline_status.items() if k not in allowed_status_keys}:
+            raise RuntimeError(CANON_WRITE_ERROR)
+        values = {}
+        for key in ("story_craft", "planning", "promise_ledger", "review_checkpoints",
+                    "workflow", "craft", "intent", "disambiguation_warnings",
+                    "disambiguation_pending"):
+            if key in self._state:
+                values[key] = deepcopy(self._state[key])
+        if self._pending_chapter_status:
+            values["progress.chapter_status"] = dict(self._pending_chapter_status)
+        if not values:
+            return {"saved": False, "sqlite_sync_ok": True}
+        revision = OwnedStateStore(self.config.project_root).write_owner_values(values)
+        self._activation_state_base = deepcopy(self._state)
+        self._pending_disambiguation_warnings.clear()
+        self._pending_disambiguation_pending.clear()
+        self._pending_chapter_status.clear()
+        return {"saved": True, "sqlite_sync_ok": True, "owner_overlay_revision": revision}
 
     def _sync_to_sqlite(self) -> bool:
         """同步待处理数据到 SQLite（v5.1 引入，v5.4 沿用）"""
@@ -755,6 +802,10 @@ class StateManager:
 
     def _save_state(self) -> None:
         """直接持久化当前内存状态到 state.json（轻量写入，不走 pending 合并）。"""
+        from .projection_generation import ProjectionGeneration
+        if ProjectionGeneration(self.config.project_root).enrollment_path.exists():
+            self._save_activation_owner_overlay()
+            return
         self._reject_legacy_canon_write()
         self.config.ensure_dirs()
         atomic_write_json(self.config.state_file, self._state, backup=False)

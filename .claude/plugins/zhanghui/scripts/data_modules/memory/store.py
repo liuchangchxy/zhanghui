@@ -46,6 +46,20 @@ class ScratchpadManager:
         return ScratchpadData.from_dict(payload)
 
     def save(self, data: ScratchpadData, _use_lock: bool = True) -> None:
+        from .schema import BUCKET_TO_CATEGORY, COMMIT_PROJECTION_EVIDENCE_PREFIXES
+        from ..projection_generation import ProjectionGeneration
+
+        if ProjectionGeneration(self.config.project_root).enrollment_path.exists():
+            existing = self.load()
+            for bucket in BUCKET_TO_CATEGORY:
+                old = [row.to_dict() for row in getattr(existing, bucket)
+                       if any(str(marker).startswith(COMMIT_PROJECTION_EVIDENCE_PREFIXES)
+                              for marker in row.evidence)]
+                new = [row.to_dict() for row in getattr(data, bucket)
+                       if any(str(marker).startswith(COMMIT_PROJECTION_EVIDENCE_PREFIXES)
+                              for marker in row.evidence)]
+                if old != new:
+                    raise RuntimeError("activation-managed Canon memory rows are immutable")
         self.config.ensure_dirs()
         if bool(getattr(self.config, "memory_compactor_enabled", True)):
             threshold = max(1, int(getattr(self.config, "memory_compactor_threshold", 500)))

@@ -237,6 +237,18 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
         self.config = config or get_config()
         self._init_db()
 
+    def _phase9_owned_rows(self, table: str):
+        from .owned_project_view import OwnedIndexView
+        from .projection_generation import ProjectionGeneration
+
+        if not ProjectionGeneration(self.config.project_root).enrollment_path.exists():
+            return None
+        pinned = ProjectionGeneration(self.config.project_root).pin_active_generation()
+        if pinned is None:
+            from .owned_project_view import OwnedViewError
+            raise OwnedViewError("ENROLLED_PUBLICATION_MISSING")
+        return OwnedIndexView(self.config.project_root, pinned).read_table(table)
+
     def _init_db(self):
         """初始化数据库表"""
         self.config.ensure_dirs()

@@ -51,7 +51,7 @@ def _load_latest_accepted_commit(paths: StoryContractPaths, chapter: int) -> dic
     return None
 
 
-def load_runtime_sources(project_root: Path, chapter: int) -> RuntimeSourceSnapshot:
+def load_runtime_sources(project_root: Path, chapter: int, *, owned_view=None) -> RuntimeSourceSnapshot:
     project_root = Path(project_root)
     paths = StoryContractPaths.from_project_root(project_root)
     volume = _volume_for_chapter(project_root, chapter)
@@ -62,8 +62,15 @@ def load_runtime_sources(project_root: Path, chapter: int) -> RuntimeSourceSnaps
         "chapter": read_json_if_exists(paths.chapter_json(chapter)) or {},
         "review": read_json_if_exists(paths.review_json(chapter)) or {},
     }
-    latest_commit = _load_latest_commit(paths, chapter)
-    latest_accepted_commit = _load_latest_accepted_commit(paths, chapter)
+    if owned_view is not None:
+        effective = owned_view.effective_commits_before(chapter)
+        latest_commit = effective[-1]["payload"] if effective else None
+        accepted = [row["payload"] for row in effective
+                    if (row["payload"].get("meta") or {}).get("status") == "accepted"]
+        latest_accepted_commit = accepted[-1] if accepted else None
+    else:
+        latest_commit = _load_latest_commit(paths, chapter)
+        latest_accepted_commit = _load_latest_accepted_commit(paths, chapter)
 
     fallback_sources: list[str] = []
     for key, payload in contracts.items():

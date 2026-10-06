@@ -12,18 +12,19 @@ from typing import Any, Callable
 from filelock import FileLock
 
 from .canon_correction_schema import canonical_json
-from .projection_generation import PinnedGeneration
+from .projection_generation import PinnedGeneration, ProjectionGeneration
 
 
 class OwnedViewError(RuntimeError):
     pass
 
 
-_CANON_INDEX_TABLES = {"chapters", "scenes", "appearances", "state_changes", "story_events", "entities"}
+_CANON_INDEX_TABLES = {"chapters", "scenes", "appearances", "state_changes", "story_events", "entities", "relationships"}
 _OWNER_STATE_ROOTS = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
-                      "workflow", "craft", "intent"}
+                      "workflow", "craft", "intent", "disambiguation_warnings",
+                      "disambiguation_pending"}
 _OWNER_STATE_PATHS = {"progress.volumes_planned", "progress.current_volume",
-                      "progress.total_volumes"}
+                      "progress.total_volumes", "progress.chapter_status"}
 _CANON_STATE_ROOTS = {"entity_state", "protagonist_state", "strand_tracker"}
 
 
@@ -92,6 +93,12 @@ class OwnedStateStore:
                 target = result
                 for part in parts[:-1]:
                     target = target.setdefault(part, {})
+                if key == "progress.chapter_status" and isinstance(value, dict):
+                    conflicts = set(target.get(parts[-1], {})).intersection(value)
+                    if conflicts:
+                        raise OwnedViewError(f"OWNER_CANON_STATE_COLLISION:{sorted(conflicts)}")
+                    target.setdefault(parts[-1], {}).update(value)
+                    continue
                 if parts[-1] in target:
                     raise OwnedViewError(f"OWNER_CANON_STATE_COLLISION:{key}")
                 target[parts[-1]] = value
@@ -114,6 +121,11 @@ class OwnedStateStore:
         unknown = set(values) - _OWNER_STATE_ROOTS - _OWNER_STATE_PATHS
         if unknown:
             raise OwnedViewError(f"UNOWNED_STATE_OVERLAY_PATH:{sorted(unknown)}")
+        statuses = values.get("progress.chapter_status")
+        if statuses is not None and (not isinstance(statuses, dict) or any(
+                value not in {"chapter_drafted", "chapter_reviewed", "chapter_rejected"}
+                for value in statuses.values())):
+            raise OwnedViewError("CANON_CHAPTER_STATUS_IS_IMMUTABLE")
         self.overlay_path.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(str(self.lock_path)):
             overlay = self._overlay()
@@ -145,17 +157,30 @@ class OwnedIndexView:
         if table not in _CANON_INDEX_TABLES:
             raise OwnedViewError("TABLE_IS_NOT_CANON_OWNED")
         domains = {"chapters": "index", "scenes": "index", "appearances": "index",
-                   "state_changes": "index", "entities": "index", "story_events": "events"}
+                   "state_changes": "index", "entities": "index", "story_events": "events",
+                   "relationships": "events"}
         rows = []
         projection_key = {"chapters": "chapter_meta", "scenes": "scenes",
                           "appearances": "entities_appeared", "state_changes": "state_deltas",
-                          "entities": "entity_deltas", "story_events": "accepted_events"}.get(table)
+                          "entities": "entity_deltas", "story_events": "accepted_events",
+                          "relationships": "accepted_events"}.get(table)
         for doc in _chapter_documents(self.pinned, domains[table]):
             if doc.get("projection", {}).get("tombstone"):
                 continue
             payload = doc["projection"].get(projection_key, [])
             if table == "chapters":
                 payload = [payload or {}]
+            if table == "relationships":
+                normalized = []
+                for event in (payload or []):
+                    if not isinstance(event, dict) or event.get("event_type") != "relationship_changed":
+                        continue
+                    body = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+                    normalized.append({"from_entity": body.get("from_entity") or event.get("subject"),
+                                       "to_entity": body.get("to_entity") or body.get("to"),
+                                       "type": body.get("relationship_type") or body.get("relation_type") or body.get("type"),
+                                       "description": body.get("description"), "chapter": doc["chapter"]})
+                payload = normalized
             if not isinstance(payload, list):
                 payload = [payload]
             rows.extend({"chapter": doc["chapter"],
@@ -183,6 +208,8 @@ class OwnedMemoryView:
         self.owner_rows = list(owner_rows or [])
 
     def rows(self) -> list[dict[str, Any]]:
+        from .memory.schema import COMMIT_PROJECTION_EVIDENCE_PREFIXES
+
         canon = []
         for doc in _chapter_documents(self.pinned, "memory"):
             if doc.get("projection", {}).get("tombstone"):
@@ -190,11 +217,17 @@ class OwnedMemoryView:
             canon.append({"chapter": doc["chapter"], "payload": doc["projection"],
                           "authority_claim": "CANON_AUTHORITY",
                           "generation_id": self.pinned.generation_id})
+        mutable_rows = []
         for row in self.owner_rows:
+            evidence = row.get("evidence", [])
+            if any(str(marker).startswith(COMMIT_PROJECTION_EVIDENCE_PREFIXES)
+                   for marker in (evidence if isinstance(evidence, list) else [evidence])):
+                continue
             if row.get("authority_claim") == "CANON_AUTHORITY":
                 raise OwnedViewError("OWNER_MEMORY_CANNOT_CLAIM_CANON")
+            mutable_rows.append(row)
         return canon + [{**row, "authority_claim": row.get("authority_claim", "OWNER_AUTHORITY")}
-                        for row in self.owner_rows]
+                        for row in mutable_rows]
 
 
 class OwnedRAGView:
@@ -205,11 +238,17 @@ class OwnedRAGView:
 
     def search(self, query: str) -> list[dict[str, Any]]:
         canon = []
+        terms = {token.lower() for token in re.findall(r"[\w\u3400-\u9fff]+", query) if token}
         for doc in _chapter_documents(self.pinned, "vector"):
             if doc.get("projection", {}).get("tombstone"):
                 continue
+            content = canonical_json(doc["projection"])
+            words = {token.lower() for token in re.findall(r"[\w\u3400-\u9fff]+", content) if token}
+            score = len(terms.intersection(words)) / max(1, len(terms))
+            if terms and score == 0:
+                continue
             canon.append({"chapter": doc["chapter"], "payload": doc["projection"],
-                          "score": 0.0, "authority_claim": "CANON_AUTHORITY",
+                          "content": content, "score": score, "authority_claim": "CANON_AUTHORITY",
                           "generation_id": self.pinned.generation_id})
         owner = self.owner_search(query)
         if any(row.get("authority_claim") == "CANON_AUTHORITY" for row in owner):
@@ -217,3 +256,124 @@ class OwnedRAGView:
         merged = canon + [{**row, "authority_claim": row.get("authority_claim", "OWNER_AUTHORITY")}
                           for row in owner]
         return sorted(merged, key=lambda row: float(row.get("score", 0)), reverse=True)
+
+
+class OwnedProjectView:
+    """One operation-scoped pin; runtime callers never resolve candidates."""
+
+    def __init__(self, project_root: str | Path, pinned: PinnedGeneration):
+        self.project_root = Path(project_root).expanduser().resolve()
+        _pinned(pinned)
+        self.pinned = pinned
+        self.state = OwnedStateStore(self.project_root)
+        self.index = OwnedIndexView(self.project_root, pinned)
+        self.memory = OwnedMemoryView(pinned)
+
+    @classmethod
+    def pin_active(cls, project_root: str | Path) -> "OwnedProjectView | None":
+        protocol = ProjectionGeneration(project_root)
+        enrolled = protocol.enrollment_path.exists()
+        pinned = protocol.pin_active_generation()
+        if pinned is None:
+            if enrolled:
+                raise OwnedViewError("ENROLLED_PUBLICATION_MISSING")
+            return None
+        return cls(project_root, pinned)
+
+    def assert_still_active(self) -> None:
+        current = ProjectionGeneration(self.project_root).pin_active_generation()
+        if (current is None or current.publication_record_sha256 != self.pinned.publication_record_sha256
+                or current.generation_id != self.pinned.generation_id):
+            raise OwnedViewError("ACTIVE_PUBLICATION_CHANGED_DURING_OPERATION")
+
+    def state_view(self) -> dict[str, Any]:
+        return self.state.read_view(self.pinned)
+
+    def canon_chapter(self, chapter: int) -> dict[str, Any]:
+        matches = []
+        for domain in ("events", "state", "index", "summary", "memory", "vector", "intent_diagnostics"):
+            path = self.pinned.generation_root / domain / f"chapter_{chapter:03d}.json"
+            if path.is_file():
+                matches.append(json.loads(path.read_text(encoding="utf-8")))
+        if not matches:
+            raise OwnedViewError("CHAPTER_NOT_IN_PINNED_GENERATION")
+        if any(row.get("effective_revision_id") != matches[0].get("effective_revision_id")
+               or row.get("effective_content_sha256") != matches[0].get("effective_content_sha256")
+               for row in matches):
+            raise OwnedViewError("GENERATION_CHAPTER_SLICE_MISMATCH")
+        return {"generation_id": self.pinned.generation_id,
+                "publication_record_id": self.pinned.publication_record_id,
+                "semantic_activation_id": self.pinned.semantic_activation_id,
+                "effective_revision_id": matches[0]["effective_revision_id"],
+                "effective_content_sha256": matches[0]["effective_content_sha256"],
+                "effective_status": matches[0]["effective_status"],
+                "domains": {row["writer"]: row["projection"] for row in matches}}
+
+    def effective_commits_before(self, chapter: int) -> list[dict[str, Any]]:
+        rows = []
+        for path in sorted((self.pinned.generation_root / "index").glob("chapter_*.json")):
+            number = int(path.stem.removeprefix("chapter_"))
+            if number >= chapter:
+                continue
+            view = self.canon_chapter(number)
+            index = view["domains"].get("index", {})
+            events = view["domains"].get("events", {}).get("accepted_events", [])
+            state = view["domains"].get("state", {})
+            extraction = {
+                "chapter_meta": index.get("chapter_meta", {}),
+                "summary_text": view["domains"].get("summary", {}).get("summary_text", ""),
+                "accepted_events": events if isinstance(events, list) else [],
+                "state_deltas": state.get("state_deltas", []),
+                "entity_deltas": index.get("entity_deltas", []),
+            }
+            rows.append({"chapter": number,
+                         "payload": {"meta": {"chapter": number, "status": view["effective_status"]},
+                                     "extraction_result": extraction,
+                                     "effective_revision_id": view["effective_revision_id"],
+                                     "effective_content_sha256": view["effective_content_sha256"]}})
+        return rows
+
+
+def activation_health_report(project_root: str | Path) -> dict[str, Any]:
+    """Operator report separates the pinned active record from staged candidates."""
+    root = Path(project_root).expanduser().resolve()
+    protocol = ProjectionGeneration(root)
+    if not protocol.enrollment_path.exists():
+        return {"mode": "base_only", "active_status": "not_enrolled",
+                "candidate_status": "not_scanned"}
+    try:
+        from .effective_history import EffectiveHistoryStore
+
+        pinned = protocol.pin_active_generation()
+        if pinned is None:
+            raise OwnedViewError("ENROLLED_PUBLICATION_MISSING")
+        store = EffectiveHistoryStore()
+        history = store.read_active_snapshot(root)
+        if not history.ok:
+            raise OwnedViewError(";".join(history.diagnostics))
+        overlay = OwnedStateStore(root)._overlay()
+        candidates = []
+        for path in sorted((root / ".story-system/corrections").glob("chapter_*/*/corrections/*.correction.json")):
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+                candidate = store.resolve_candidate(root, str(value.get("correction_id") or ""))
+                candidates.append({"correction_id": value.get("correction_id"),
+                                  "status": "ready" if candidate.ok else "blocked",
+                                  "diagnostics": list(candidate.diagnostics)})
+            except Exception as exc:
+                candidates.append({"path": path.relative_to(root).as_posix(),
+                                  "status": "blocked", "diagnostics": [str(exc)]})
+        return {
+            "mode": "activation_managed", "active_status": "valid",
+            "semantic_activation_id": pinned.semantic_activation_id,
+            "effective_history_digest": history.effective_history_digest,
+            "effective_tip": max(history.chapters, default=None),
+            "generation_id": pinned.generation_id,
+            "publication_record_id": pinned.publication_record_id,
+            "owner_overlay_revision": overlay.get("revision", 0),
+            "candidate_status": "ready" if any(row["status"] == "ready" for row in candidates)
+            else "pending_or_blocked", "candidates": candidates,
+        }
+    except Exception as exc:
+        return {"mode": "activation_managed", "active_status": "blocked",
+                "candidate_status": "not_scanned", "error": str(exc)}

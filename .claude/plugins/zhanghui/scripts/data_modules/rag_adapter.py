@@ -1108,6 +1108,25 @@ class RAGAdapter:
         filters: Optional[Dict[str, Any]] = None,
     ) -> List[SearchResult]:
         """统一检索入口。"""
+        from .owned_project_view import OwnedProjectView, OwnedRAGView
+
+        owned_view = OwnedProjectView.pin_active(self.config.project_root)
+        if owned_view is not None:
+            owner_results = self.bm25_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter)
+            owner_rows = [{"chunk_id": row.chunk_id, "chapter": row.chapter,
+                           "scene_index": row.scene_index, "content": row.content,
+                           "score": row.score, "source": row.source,
+                           "chunk_type": row.chunk_type, "source_file": row.source_file,
+                           "authority_claim": "LEGACY_COMPATIBILITY"}
+                          for row in owner_results]
+            merged = OwnedRAGView(owned_view.pinned, lambda _query: owner_rows).search(query)
+            return [SearchResult(
+                chunk_id=str(row.get("chunk_id") or f"canon-chapter-{row['chapter']}"),
+                chapter=int(row["chapter"]), scene_index=int(row.get("scene_index") or 0),
+                content=str(row.get("content") or ""), score=float(row.get("score") or 0.0),
+                source=str(row.get("source") or "effective_generation"),
+                chunk_type=row.get("chunk_type"), source_file=row.get("source_file"),
+            ) for row in merged[:top_k]]
         strategy = str(strategy or "auto").lower()
         if filters and chapter is None:
             try:

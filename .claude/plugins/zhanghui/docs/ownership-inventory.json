@@ -5629,6 +5629,23 @@
       ],
       "reader_id": "canon-projection-generation-reader",
       "read_edge_id": "canon-projection-generation-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+      "symbol": "EventLogStore",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "doc",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "Reads the exact chapter event slice from the validated pinned generation; runtime event reads do not fall back to mutable event files or SQLite mirrors.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "anchor": "def list_recent"
+        }
+      ],
+      "reader_id": "phase9-owned-project-view-reader",
+      "read_edge_id": "phase9-owned-canon-view-edge"
     }
   ]
 }

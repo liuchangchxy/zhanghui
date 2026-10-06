@@ -10,6 +10,7 @@ from typing import Any
 from .chapter_commit_service import ChapterCommitService
 from .projection_rebuild import rebuild_projections
 from .projection_log import latest_projection_run
+from .event_projection_router import EventProjectionRouter
 
 
 SCHEMA_VERSION = "webnovel-projections/v1"
@@ -52,6 +53,9 @@ def _projection_failed(payload: dict[str, Any]) -> bool:
 
 def retry_projection(project_root: str | Path, *, chapter: int) -> dict[str, Any]:
     root = Path(project_root)
+    activation = _active_generation_recovery(root, chapter=chapter)
+    if activation is not None:
+        return activation
     path = _commit_path(root, chapter)
     payload, error = _read_commit(path)
     if error:
@@ -80,6 +84,48 @@ def retry_projection(project_root: str | Path, *, chapter: int) -> dict[str, Any
         "projection_status": dict(projected.get("projection_status") or {}),
         "latest_projection_run": latest_run,
     }
+
+
+def _active_generation_recovery(root: Path, *, chapter: int | None = None) -> dict[str, Any] | None:
+    from .effective_history import EffectiveHistoryStore
+    from .projection_generation import ProjectionGeneration
+    from .projection_rebuild import build_effective_generation
+
+    protocol = ProjectionGeneration(root)
+    if not protocol.enrollment_path.exists():
+        return None
+    try:
+        active = EffectiveHistoryStore().read_active_snapshot(root)
+        if not active.ok:
+            raise RuntimeError(";".join(active.diagnostics))
+        if chapter is not None and chapter not in active.chapters:
+            raise RuntimeError("chapter is not in the active effective history")
+        pinned = protocol.pin_active_generation()
+        if pinned is None:
+            raise RuntimeError("active publication is missing")
+        built = build_effective_generation(root, active, previous_generation_id=pinned.generation_id)
+        publication = protocol.publish_generation(
+            built["validated_generation"], pinned.publication_record_sha256,
+            active.correction_lineage_digest,
+        )
+        return {
+            "schema_version": SCHEMA_VERSION, "action": "same_semantic_recovery", "ok": True,
+            "project_root": str(root), "chapter": chapter,
+            "semantic_activation_id": publication.body["semantic_activation_id"],
+            "effective_history_digest": active.effective_history_digest,
+            "generation_id": publication.body["generation_id"],
+            "publication_record_id": publication.publication_record_id,
+            "candidate_status": "not_considered",
+            "projection_status": {domain: "validated" for domain in EventProjectionRouter.PROJECTION_ORDER},
+            "error": "",
+        }
+    except Exception as exc:
+        return {
+            "schema_version": SCHEMA_VERSION, "action": "same_semantic_recovery", "ok": False,
+            "project_root": str(root), "chapter": chapter,
+            "active_status": "blocked", "candidate_status": "not_considered",
+            "error": str(exc),
+        }
 
 
 def replay_projections(project_root: str | Path, *, start_chapter: int, end_chapter: int) -> dict[str, Any]:

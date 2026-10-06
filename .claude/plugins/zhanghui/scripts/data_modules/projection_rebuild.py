@@ -525,6 +525,12 @@ def _validate_outputs(root: Path, commits: list[dict[str, Any]]) -> None:
 
 def rebuild_projections(project_root: str | Path) -> dict[str, Any]:
     root = Path(project_root).expanduser().resolve()
+    if (root / ".story-system/effective-history/enrollment.json").exists():
+        from .projections import _active_generation_recovery
+        result = _active_generation_recovery(root)
+        return result or {"schema_version": "webnovel-projections/v1", "action": "rebuild",
+                          "ok": False, "project_root": str(root),
+                          "error": "activation-managed recovery unavailable"}
     try:
         commits = discover_and_validate_commits(root)
         if not commits:

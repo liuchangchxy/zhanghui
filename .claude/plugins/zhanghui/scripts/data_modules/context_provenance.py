@@ -148,21 +148,24 @@ def classify_rag_hit(project_root: Path, hit: dict[str, Any], *, target_chapter:
     return result
 
 
-def load_commit_fact_items(project_root: Path, chapter: int) -> tuple[list[ContextItem], int | None, str | None]:
+def load_commit_fact_items(project_root: Path, chapter: int, owned_view=None) -> tuple[list[ContextItem], int | None, str | None]:
     items: list[ContextItem] = []
     latest_chapter = None
     latest_hash = None
-    validated_commits = discover_validated_chapter_commits(project_root)
+    validated_commits = (owned_view.effective_commits_before(chapter) if owned_view is not None
+                         else discover_validated_chapter_commits(project_root))
     for commit in validated_commits:
-        path = commit["path"]
+        path = commit.get("path")
         commit_chapter = commit["chapter"]
         payload = commit["payload"]
         # The requested chapter is the next writing target. Its existing commit,
         # when revising, must not become evidence about its own prewrite context.
         if commit_chapter >= chapter or payload["meta"]["status"] != "accepted":
             continue
-        ref = f"commit:{commit_chapter}"
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        ref = (f"active:{owned_view.pinned.semantic_activation_id}:chapter:{commit_chapter}"
+               if owned_view is not None else f"commit:{commit_chapter}")
+        digest = (payload.get("effective_content_sha256") if owned_view is not None
+                  else hashlib.sha256(path.read_bytes()).hexdigest())
         if latest_chapter is None or commit_chapter >= latest_chapter:
             latest_chapter, latest_hash = commit_chapter, digest
         extraction = payload["extraction_result"]
@@ -261,9 +264,10 @@ def _max_chapter(db_path: Path, table: str) -> int | None:
 
 def build_governed_context(
     *, project_root: Path, chapter: int, state: dict[str, Any], source_sections: dict[str, Any],
+    owned_view=None,
 ) -> dict[str, Any]:
     """Produce explicit Writer-facing roles and diagnostics without mutating sources."""
-    commits, latest_chapter, latest_hash = load_commit_fact_items(project_root, chapter)
+    commits, latest_chapter, latest_hash = load_commit_fact_items(project_root, chapter, owned_view)
     try:
         state_chapter = int(((state.get("progress") or {}).get("current_chapter") or 0))
     except (TypeError, ValueError):
@@ -359,11 +363,16 @@ def build_governed_context(
             else:
                 reference.append(ContextItem(value, "UNKNOWN" if source_role == "LEGACY" else "OPERATIONAL", source_role, key, provenance_status="retrieval_only" if key == "rag_assist" else "intent_satisfaction_record" if key == "fulfillment_result" else "unverified"))
     if latest_chapter is not None:
-        latest_path = Path(project_root) / ".story-system" / "commits" / f"chapter_{latest_chapter:03d}.commit.json"
-        try:
-            latest_payload = json.loads(latest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            latest_payload = {}
+        if owned_view is not None:
+            latest_rows = owned_view.effective_commits_before(chapter)
+            latest_payload = next((row["payload"] for row in latest_rows
+                                   if row["chapter"] == latest_chapter), {})
+        else:
+            latest_path = Path(project_root) / ".story-system" / "commits" / f"chapter_{latest_chapter:03d}.commit.json"
+            try:
+                latest_payload = json.loads(latest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                latest_payload = {}
         fulfillment = latest_payload.get("fulfillment_result")
         if fulfillment:
             reference.append(ContextItem(fulfillment, "OPERATIONAL", "REVIEW", f"commit:{latest_chapter}:fulfillment_result", chapter=latest_chapter, provenance_status="intent_satisfaction_record"))
@@ -483,5 +492,8 @@ def build_governed_context(
             "latest_commit": {"chapter": latest_chapter, "sha256": latest_hash} if latest_chapter is not None else None,
             "projection_chapter": state_chapter,
             "projection_freshness": projection_freshness,
+            "semantic_activation_id": owned_view.pinned.semantic_activation_id if owned_view is not None else None,
+            "generation_id": owned_view.pinned.generation_id if owned_view is not None else None,
+            "publication_record_id": owned_view.pinned.publication_record_id if owned_view is not None else None,
         },
     }
