@@ -3138,17 +3138,17 @@
       "read_edges": [
         {
           "data_domain": "MEMORY",
-          "resource": "memory projection",
+          "resource": "memory data consumed by the validated MemoryProjectionWriter flow",
           "story_system": {
-            "primary_source": "commit-bound memory",
+            "primary_source": "ScratchpadManager data read by MemoryWriter.apply_commit_projection after require_durable_commit_match succeeds",
             "authority_claim": "VERIFIED_PROJECTION",
-            "condition": "verified projection",
+            "condition": "only the MemoryProjectionWriter path, after its durable commit validation; this claim does not apply to direct ScratchpadManager callers",
             "fallback": null
           },
           "legacy": {
-            "primary_source": "legacy memory files",
+            "primary_source": "legacy memory scratchpad",
             "authority_claim": "LEGACY_COMPATIBILITY",
-            "condition": "legacy mode",
+            "condition": "legacy compatibility mode",
             "fallback": null
           },
           "read_edge_id": "memory-reader-edge"
@@ -3162,7 +3162,11 @@
       "evidence": [
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
-          "anchor": "MemoryProjectionWriter"
+          "anchor": "apply_commit_projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/writer.py",
+          "anchor": "def apply_commit_projection"
         }
       ],
       "reader_family": "state/index/summary/memory/vector readers",
@@ -3173,22 +3177,6 @@
           "symbol": "ScratchpadManager",
           "data_domain": "MEMORY",
           "sink": "read_json_safe",
-          "reader_id": "memory-reader",
-          "read_edge_id": "memory-reader-edge"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
-          "symbol": "MemoryContractAdapter",
-          "data_domain": "MEMORY",
-          "sink": "read_text",
-          "reader_id": "memory-reader",
-          "read_edge_id": "memory-reader-edge"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
-          "symbol": "_prepare_targets",
-          "data_domain": "MEMORY",
-          "sink": "read_text",
           "reader_id": "memory-reader",
           "read_edge_id": "memory-reader-edge"
         }
@@ -3205,15 +3193,15 @@
           "data_domain": "VECTORS",
           "resource": "RAG vectors",
           "story_system": {
-            "primary_source": "commit-bound vectors",
-            "authority_claim": "VERIFIED_PROJECTION",
-            "condition": "verified projection",
+            "primary_source": "low-level RAG adapter and vector cache storage",
+            "authority_claim": "UNKNOWN",
+            "condition": "retrieval and rebuild storage APIs do not validate a durable commit at the read boundary",
             "fallback": null
           },
           "legacy": {
-            "primary_source": "legacy vector index",
+            "primary_source": "legacy vector/cache storage",
             "authority_claim": "LEGACY_COMPATIBILITY",
-            "condition": "legacy mode",
+            "condition": "low-level storage reads carry no story authority claim",
             "fallback": null
           },
           "read_edge_id": "vector-reader-edge-1"
@@ -3851,6 +3839,77 @@
           "sink": "SQL:locks",
           "reader_id": "index-operational-reader",
           "read_edge_id": "index-operational-reader-index_db"
+        }
+      ]
+    },
+    {
+      "reader_id": "memory-direct-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+        "symbol": "ScratchpadManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "MEMORY",
+          "resource": "directly writable memory scratchpad and raw memory artifacts",
+          "story_system": {
+            "primary_source": "ScratchpadManager scratchpad and raw memory files",
+            "authority_claim": "UNKNOWN",
+            "condition": "low-level reads can observe direct-memory writes and do not validate a durable commit",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy memory scratchpad and raw memory files",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode reads compatibility memory data",
+            "fallback": null
+          },
+          "read_edge_id": "memory-direct-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "ScratchpadManager callers",
+        "MemoryContractAdapter",
+        "projection rebuild preflight"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when direct memory access and raw memory preflight reads are removed or replaced.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "anchor": "def load(self)"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/writer.py",
+          "anchor": "def update_from_chapter_result"
+        }
+      ],
+      "reader_family": "direct memory and raw memory store readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "symbol": "ScratchpadManager",
+          "data_domain": "MEMORY",
+          "sink": "read_json_safe",
+          "reader_id": "memory-direct-reader",
+          "read_edge_id": "memory-direct-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "symbol": "MemoryContractAdapter",
+          "data_domain": "MEMORY",
+          "sink": "read_text",
+          "reader_id": "memory-direct-reader",
+          "read_edge_id": "memory-direct-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_prepare_targets",
+          "data_domain": "MEMORY",
+          "sink": "read_text",
+          "reader_id": "memory-direct-reader",
+          "read_edge_id": "memory-direct-reader-edge"
         }
       ]
     }

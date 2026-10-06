@@ -87,6 +87,21 @@ def test_inventory_records_resolve_and_cover_required_reader_families():
     assert reader_family_coverage(inventory) == []
 
 
+def test_direct_memory_store_reader_cannot_claim_verified_projection():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    direct_writer = next(row for row in inventory["writers"]
+                         if row["writer_id"] == "memory-direct-write")
+    direct_reader = next(row for row in inventory["readers"]
+                         if row["reader_id"] == "memory-direct-reader")
+    shared_source = next(source for source in direct_reader["source_coordinates"]
+                         if source["symbol"] == "ScratchpadManager")
+    edge = next(edge for edge in direct_reader["read_edges"]
+                if edge["read_edge_id"] == shared_source["read_edge_id"])
+    assert direct_writer["implementation"]["symbol"] == shared_source["symbol"]
+    assert edge["story_system"]["authority_claim"] != "VERIFIED_PROJECTION"
+    assert edge["story_system"]["authority_claim"] != "CANON_AUTHORITY"
+
+
 def test_reader_inventory_coordinate_removal_exposes_protected_read():
     inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
     source = next(item for row in inventory["readers"] for item in row.get("source_coordinates", [])
