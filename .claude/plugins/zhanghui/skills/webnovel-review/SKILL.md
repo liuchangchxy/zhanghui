@@ -259,7 +259,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
 
 - 唯一写入者（reviewer 链路）：主流程从 reviewer 的 Agent 返回结构化 JSON 落盘到 `.webnovel/tmp/review_results.json`（含 `review_metrics` 落到 `.webnovel/tmp/review_metrics.json`）。
 - reviewer 本身不直接写文件；主流程不直接重写 review 结果，只在 review-pipeline 中落库与重放。
-- write 链路下其余状态产物（state/index/summaries/memory/vectors/projection）的唯一写入者是 `data-agent`，主流程只检查文件存在与 schema，不直接写。
+- write 链路中的章节事实由 `chapter-commit` 接受并持久化；其后的 projection writers 从 durable commit 更新 state/index/summaries/memory/vectors。Data Agent 只生成临时提取产物。主流程验证本次 commit 对应的投影结果与重试状态。
 - 产物所有权凭证：`.webnovel/tmp/subagent_runs/{skill}-reviewer.jsonl` / `write-data-agent.jsonl`。
 
 ## SubagentRun 可汇总信号

@@ -27,7 +27,7 @@ purpose: 每次章节写作前加载，确保三大定律执行
 当前规则：正文不再要求 XML 标签：
 
 1. **写作时**: 直接写纯正文，新角色/地点/物品正常描写
-2. **完成后**: Data Agent 自动识别新实体并写入 index.db
+2. **完成后**: Data Agent 生成临时实体提取结果；Story System 由 `chapter-commit` 接受章节事实，再由 projection writers 更新 index.db。
 3. **不确定实体**: Data Agent 标记为 uncertain，由人工确认
 
 ## 章节约束分层
@@ -135,7 +135,7 @@ purpose: 每次章节写作前加载，确保三大定律执行
 <input>剧情需要主角展示筑基期实力，但 index.db 显示练气期</input>
 <output>
 ❌ 直接写筑基期战力 → 违反"设定即物理"
-✅ 先安排突破场景，Data Agent 更新 index.db，再展示新实力
+✅ 先安排突破场景；Story System 中先完成 `chapter-commit`，再确认索引投影成功后展示新实力。
 </output>
 </example>
 

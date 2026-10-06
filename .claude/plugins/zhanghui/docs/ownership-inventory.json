@@ -1,0 +1,4839 @@
+{
+  "schema_version": 1,
+  "baseline": "2b3fc7bcd6f052fdc88d7e40bec5152a177af430",
+  "required_reader_families": [
+    "context/runtime source assembly",
+    "query and resume",
+    "write/plan/review consumers",
+    "state/index/summary/memory/vector readers",
+    "Story System commit and projection readers",
+    "legacy fallback readers"
+  ],
+  "writers": [
+    {
+      "writer_id": "chapter-commit",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+        "symbol": "ChapterCommitService"
+      },
+      "data_domains": [
+        "CANON_COMMIT",
+        "EVENTS"
+      ],
+      "owner": "ChapterCommitService",
+      "story_system_mode": {
+        "behavior": "schema-validated new decisions; replacement rejected",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy persistence when Story System is absent",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "anchor": "ChapterCommitService"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "symbol": "ChapterCommitService",
+          "data_domain": "EVENTS",
+          "sink": "write_events",
+          "writer_id": "chapter-commit"
+        }
+      ]
+    },
+    {
+      "writer_id": "event-log",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+        "symbol": "write_events"
+      },
+      "data_domains": [
+        "EVENTS",
+        "INDEX_DB"
+      ],
+      "owner": "commit projection pipeline",
+      "story_system_mode": {
+        "behavior": "requires matching durable commit",
+        "mode": "projection_only"
+      },
+      "legacy_mode": {
+        "behavior": "legacy event compatibility",
+        "mode": "projection_only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "anchor": "write_events"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "symbol": "EventLogStore",
+          "data_domain": "EVENTS",
+          "sink": "SQL:story_events",
+          "writer_id": "event-log"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_events",
+          "data_domain": "EVENTS",
+          "sink": "SQL:story_events",
+          "writer_id": "event-log"
+        }
+      ]
+    },
+    {
+      "writer_id": "event-projection-router",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/event_projection_router.py",
+        "symbol": "EventProjectionRouter"
+      },
+      "data_domains": [
+        "EVENTS"
+      ],
+      "owner": "EventProjectionRouter",
+      "story_system_mode": {
+        "behavior": "commit-derived events",
+        "mode": "projection_only"
+      },
+      "legacy_mode": {
+        "behavior": "compatibility projection",
+        "mode": "projection_only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_projection_router.py",
+          "anchor": "EventProjectionRouter"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "state-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+        "symbol": "StateProjectionWriter"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "ChapterCommitService projection coordinator",
+      "story_system_mode": {
+        "behavior": "validated commit projection only",
+        "mode": "projection_only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild/projection only",
+        "mode": "projection_only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+          "anchor": "StateProjectionWriter"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "symbol": "ChapterCommitService",
+          "data_domain": "STATE_JSON",
+          "sink": "apply_projection_writers",
+          "writer_id": "state-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "rebuild_projections",
+          "data_domain": "STATE_JSON",
+          "sink": "apply_projection_writers",
+          "writer_id": "state-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projections.py",
+          "symbol": "retry_projection",
+          "data_domain": "STATE_JSON",
+          "sink": "apply_projection_writers",
+          "writer_id": "state-projection"
+        }
+      ]
+    },
+    {
+      "writer_id": "index-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+        "symbol": "IndexProjectionWriter"
+      },
+      "data_domains": [
+        "INDEX_DB"
+      ],
+      "owner": "IndexProjectionWriter accepted-commit projection",
+      "story_system_mode": {
+        "behavior": "validated durable commit projection only",
+        "mode": "projection_only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild or projection only",
+        "mode": "projection_only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+          "anchor": "IndexProjectionWriter"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapter_reading_power",
+          "writer_id": "index-projection"
+        }
+      ],
+      "selector": "accepted Canon projection tables"
+    },
+    {
+      "writer_id": "summary-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/summary_projection_writer.py",
+        "symbol": "SummaryProjectionWriter"
+      },
+      "data_domains": [
+        "SUMMARIES"
+      ],
+      "owner": "ChapterCommitService projection coordinator",
+      "story_system_mode": {
+        "behavior": "validated commit projection only",
+        "mode": "projection_only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild/projection only",
+        "mode": "projection_only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/summary_projection_writer.py",
+          "anchor": "SummaryProjectionWriter"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "memory-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+        "symbol": "MemoryProjectionWriter"
+      },
+      "data_domains": [
+        "MEMORY"
+      ],
+      "owner": "ChapterCommitService projection coordinator",
+      "story_system_mode": {
+        "behavior": "validated commit projection only",
+        "mode": "projection_only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild/projection only",
+        "mode": "projection_only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+          "anchor": "MemoryProjectionWriter"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "vector-projection",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/vector_projection_writer.py",
+        "symbol": "VectorProjectionWriter"
+      },
+      "data_domains": [
+        "VECTORS"
+      ],
+      "owner": "ChapterCommitService projection coordinator",
+      "story_system_mode": {
+        "behavior": "validated commit projection only",
+        "mode": "projection_only"
+      },
+      "legacy_mode": {
+        "behavior": "supported rebuild/projection only",
+        "mode": "projection_only"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/vector_projection_writer.py",
+          "anchor": "VectorProjectionWriter"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:bm25_index",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:bm25_index",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:rag_schema_meta",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors_migrating",
+          "writer_id": "vector-projection"
+        }
+      ]
+    },
+    {
+      "writer_id": "state-manager",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+        "symbol": "StateManager"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "StateManager field ownership",
+      "story_system_mode": {
+        "behavior": "Canon buffers guarded; workflow fields owned here",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "legacy state writes supported",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "anchor": "StateManager"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "symbol": "StateManager",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json",
+          "writer_id": "state-manager"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "symbol": "StateManager",
+          "data_domain": "STATE_JSON",
+          "sink": "process_chapter_entities",
+          "writer_id": "state-manager"
+        }
+      ]
+    },
+    {
+      "writer_id": "sql-state-manager",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+        "symbol": "SQLStateManager"
+      },
+      "data_domains": [
+        "INDEX_DB",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "SQLStateManager table ownership",
+      "story_system_mode": {
+        "behavior": "Canon-like writes guarded outside projection",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "legacy compatibility writes",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "anchor": "SQLStateManager"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "SQLStateManager",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "writer_id": "sql-state-manager"
+        }
+      ]
+    },
+    {
+      "writer_id": "index-manager",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+        "symbol": "IndexManager"
+      },
+      "data_domains": [
+        "INDEX_DB",
+        "WORKFLOW_METADATA",
+        "VECTORS"
+      ],
+      "owner": "IndexManager table ownership",
+      "story_system_mode": {
+        "behavior": "Canon-like tables projection-owned; operational tables allowed",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "legacy writes supported",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+          "anchor": "IndexManager"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "story-craft",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+        "symbol": "StoryCraftFieldError"
+      },
+      "data_domains": [
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "future-facing Craft only",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "legacy Craft writes",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "StoryCraftFieldError"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "webnovel-story-craft",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+        "symbol": "cmd_story_craft"
+      },
+      "data_domains": [
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "Craft fields only",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "Craft fields only",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "anchor": "cmd_story_craft"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "volume-state",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+        "symbol": "VolumeStateManager"
+      },
+      "data_domains": [
+        "INTENT"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "Intent only",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "Intent only",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+          "anchor": "VolumeStateManager"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "promise-ledger",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py",
+        "symbol": "PromiseLedger"
+      },
+      "data_domains": [
+        "INTENT"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "does not mutate Canon promise projection",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "Intent ledger supported",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py",
+          "anchor": "PromiseLedger"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "consistency-apply",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+        "symbol": "apply_all"
+      },
+      "data_domains": [
+        "INTENT",
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "consistency patch owner",
+      "story_system_mode": {
+        "behavior": "P1-P6 state writes skipped; P7 derived views only",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "patch-owned Intent/Craft updates",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "anchor": "apply_all"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/patches/p7_derived_views.py",
+          "symbol": "P7DerivedViews",
+          "data_domain": "INTENT",
+          "sink": "write_text",
+          "writer_id": "consistency-apply"
+        }
+      ]
+    },
+    {
+      "writer_id": "project-init",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+        "symbol": "init_project"
+      },
+      "data_domains": [
+        "MIGRATION",
+        "COMPATIBILITY",
+        "WORKFLOW_METADATA",
+        "STATE_JSON"
+      ],
+      "owner": "project setup",
+      "story_system_mode": {
+        "behavior": "defaults/contracts, not chapter facts",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "legacy defaults",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "anchor": "init_project"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "symbol": "generate_volume_blueprints",
+          "data_domain": "STATE_JSON",
+          "sink": "write_text",
+          "writer_id": "project-init"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "symbol": "init_project",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json",
+          "writer_id": "project-init"
+        }
+      ]
+    },
+    {
+      "writer_id": "story-craft-migration",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+        "symbol": "migrate_state_json"
+      },
+      "data_domains": [
+        "MIGRATION",
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "explicit migration command",
+      "story_system_mode": {
+        "behavior": "backup; malformed Craft replacement risk needs preflight",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "legacy migration with backup",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "state-sqlite-migration",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+        "symbol": "migrate_state_to_sqlite"
+      },
+      "data_domains": [
+        "MIGRATION",
+        "INDEX_DB",
+        "STATE_JSON"
+      ],
+      "owner": "explicit migration command",
+      "story_system_mode": {
+        "behavior": "preflight required",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported conversion",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+          "anchor": "migrate_state_to_sqlite"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+          "symbol": "migrate_state_to_sqlite",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json",
+          "writer_id": "state-sqlite-migration"
+        }
+      ]
+    },
+    {
+      "writer_id": "review-workflow",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+        "symbol": "atomic_write_json"
+      },
+      "data_domains": [
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "review workflow",
+      "story_system_mode": {
+        "behavior": "review artifacts and metrics only",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "review artifacts and metrics only",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "anchor": "atomic_write_json"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "symbol": "build_review_artifacts",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "atomic_write_json",
+          "writer_id": "review-workflow"
+        }
+      ]
+    },
+    {
+      "writer_id": "gate-decision",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/gate_decision_store.py",
+        "symbol": "atomic_write_json"
+      },
+      "data_domains": [
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "per-attempt workflow decision store",
+      "story_system_mode": {
+        "behavior": "decision audit only; not Canon",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "decision audit only",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/gate_decision_store.py",
+          "anchor": "atomic_write_json"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/gate_decision_store.py",
+          "symbol": "GateDecisionStore",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "atomic_write_json",
+          "writer_id": "gate-decision"
+        }
+      ]
+    },
+    {
+      "writer_id": "changes-validation",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "INTENT",
+        "COMPATIBILITY"
+      ],
+      "owner": "CHANGES validation",
+      "story_system_mode": {
+        "behavior": "proposal validation, not persistent Canon",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "legacy gate active",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "compatibility_only",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Only after separate reviewed policy decision and adoption evidence meets cohort gate.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "anchor": "main"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "update-state-canon-state",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "Chapter Canon state fields",
+      "story_system_mode": {
+        "behavior": "rejected: current CLI mode guard rejects these chapter-fact mutations before loading/saving state",
+        "mode": "rejected"
+      },
+      "legacy_mode": {
+        "behavior": "allowed for supported legacy projects",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain until this option family has no supported caller and an explicit field-level replacement is tested.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "main"
+        }
+      ],
+      "selector": "canon-state-options",
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "update-state-foreshadowing-strand",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "INTENT",
+        "CRAFT",
+        "STATE_JSON"
+      ],
+      "owner": "planning/Craft field owner; overlap needs later reconciliation",
+      "story_system_mode": {
+        "behavior": "rejected by the shared CLI guard today; semantic owner remains Intent/Craft pending field-level audit",
+        "mode": "rejected"
+      },
+      "legacy_mode": {
+        "behavior": "allowed for supported legacy projects",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain until this option family has no supported caller and an explicit field-level replacement is tested.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "main"
+        }
+      ],
+      "selector": "foreshadowing-and-strand-options",
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "update-state-volume-planning",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "INTENT",
+        "STATE_JSON"
+      ],
+      "owner": "author/planning workflow",
+      "story_system_mode": {
+        "behavior": "allowed: planning metadata, not chapter Canon",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "allowed",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain until this option family has no supported caller and an explicit field-level replacement is tested.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "main"
+        }
+      ],
+      "selector": "volume-planning-options",
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "update-state-review-metadata",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "review workflow",
+      "story_system_mode": {
+        "behavior": "allowed: review checkpoint metadata only",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "allowed",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain until this option family has no supported caller and an explicit field-level replacement is tested.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "main"
+        }
+      ],
+      "selector": "review-metadata-option",
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "archive-save-state",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+        "symbol": "ArchiveManager"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "COMPATIBILITY"
+      ],
+      "owner": "archive compatibility snapshot writes",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "anchor": "ArchiveManager"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "symbol": "ArchiveManager",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json",
+          "writer_id": "archive-save-state"
+        }
+      ]
+    },
+    {
+      "writer_id": "consistency-state-save",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+        "symbol": "ConsistencyRunner"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "INTENT",
+        "CRAFT"
+      ],
+      "owner": "consistency-owned legacy patch writes",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "anchor": "ConsistencyRunner"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/cli.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "write_text",
+          "writer_id": "consistency-state-save"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json",
+          "writer_id": "consistency-state-save"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
+          "data_domain": "STATE_JSON",
+          "sink": "write_text",
+          "writer_id": "consistency-state-save"
+        }
+      ]
+    },
+    {
+      "writer_id": "index-cli-entry",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "INDEX_DB"
+      ],
+      "owner": "index maintenance CLI writes",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+          "anchor": "main"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+          "symbol": "main",
+          "data_domain": "INDEX_DB",
+          "sink": "process_chapter_data",
+          "writer_id": "index-cli-entry"
+        }
+      ]
+    },
+    {
+      "writer_id": "memory-legacy-bridge",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+        "symbol": "MemoryContractAdapter"
+      },
+      "data_domains": [
+        "MEMORY",
+        "STATE_JSON"
+      ],
+      "owner": "legacy memory contract bridge",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "anchor": "MemoryContractAdapter"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "symbol": "MemoryContractAdapter",
+          "data_domain": "STATE_JSON",
+          "sink": "process_chapter_result",
+          "writer_id": "memory-legacy-bridge"
+        }
+      ]
+    },
+    {
+      "writer_id": "sql-state-cli-entry",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "state database maintenance CLI",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "anchor": "main"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "process_chapter_entities",
+          "writer_id": "sql-state-cli-entry"
+        }
+      ]
+    },
+    {
+      "writer_id": "state-manager-cli-entry",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+        "symbol": "main"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "state manager CLI",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "anchor": "main"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "process_chapter_result",
+          "writer_id": "state-manager-cli-entry"
+        }
+      ]
+    },
+    {
+      "writer_id": "state-locked-write",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+        "symbol": "_LockedState"
+      },
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "owner": "locked atomic state projection write",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+          "anchor": "_LockedState"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+          "symbol": "_LockedState",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json",
+          "writer_id": "state-locked-write"
+        }
+      ]
+    },
+    {
+      "writer_id": "webnovel-atomic-state-save",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+        "symbol": "_save_state_via_atomic"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "CLI atomic state save helper",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "anchor": "_save_state_via_atomic"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "symbol": "_save_state_via_atomic",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json",
+          "writer_id": "webnovel-atomic-state-save"
+        }
+      ]
+    },
+    {
+      "writer_id": "project-memory-pattern",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+        "symbol": "add_pattern"
+      },
+      "data_domains": [
+        "MEMORY"
+      ],
+      "owner": "project memory pattern insertion",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+          "anchor": "add_pattern"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+          "symbol": "add_pattern",
+          "data_domain": "MEMORY",
+          "sink": "atomic_write_json",
+          "writer_id": "project-memory-pattern"
+        }
+      ]
+    },
+    {
+      "writer_id": "update-state-save",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+        "symbol": "StateUpdater"
+      },
+      "data_domains": [
+        "STATE_JSON",
+        "INTENT",
+        "CRAFT",
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "legacy and mode-aware state CLI persistence",
+      "story_system_mode": {
+        "behavior": "guarded compatibility or workflow write; cannot create Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "supported legacy behavior as documented by this API",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "anchor": "StateUpdater"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "symbol": "StateUpdater",
+          "data_domain": "STATE_JSON",
+          "sink": "atomic_write_json",
+          "writer_id": "update-state-save"
+        }
+      ]
+    },
+    {
+      "writer_id": "projection-run-log",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+        "symbol": "append_projection_run"
+      },
+      "data_domains": [
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "Append-only projection run telemetry",
+      "story_system_mode": {
+        "behavior": "appends operational projection run metadata; does not claim Canon or coordinate a projection",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "appends operational projection run metadata for legacy workflows",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+          "anchor": "append_projection_run"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+          "symbol": "append_projection_run",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "Path.open",
+          "writer_id": "projection-run-log"
+        }
+      ]
+    },
+    {
+      "writer_id": "override-ledger",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+        "symbol": "persist_amend_proposals"
+      },
+      "data_domains": [
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "OverrideLedgerService pending author amendment proposals",
+      "story_system_mode": {
+        "mode": "allowed",
+        "behavior": "Stores event-triggered amendment proposals as pending workflow records; does not apply them as Canon."
+      },
+      "legacy_mode": {
+        "mode": "allowed",
+        "behavior": "Stores pending proposal records for legacy event workflows; does not apply them as Canon."
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "ChapterCommitService event processing",
+        "author amendment review workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when amendment proposals are no longer persisted for author review or a replacement proposal store owns these rows.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "anchor": "persist_amend_proposals"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "ensure_override_ledger_columns",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "writer_id": "override-ledger"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "persist_amend_proposals",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "writer_id": "override-ledger"
+        }
+      ]
+    },
+    {
+      "writer_id": "style-samples",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/style_sampler.py",
+        "symbol": "StyleSampler"
+      },
+      "data_domains": [
+        "CRAFT"
+      ],
+      "owner": "StyleSampler style-reference sample store",
+      "story_system_mode": {
+        "mode": "allowed",
+        "behavior": "Stores selected style samples in style_samples.db as CRAFT references; samples do not establish story Canon."
+      },
+      "legacy_mode": {
+        "mode": "allowed",
+        "behavior": "Stores selected style samples for the legacy writing workflow as CRAFT references."
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "StyleSampler sample selection",
+        "style-aware writing context"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when style reference samples move to a replacement CRAFT sample store and all StyleSampler consumers are migrated.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/style_sampler.py",
+          "anchor": "CREATE TABLE IF NOT EXISTS samples"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/style_sampler.py",
+          "symbol": "StyleSampler",
+          "data_domain": "CRAFT",
+          "sink": "SQL:samples",
+          "writer_id": "style-samples"
+        }
+      ]
+    },
+    {
+      "writer_id": "memory-direct-write",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+        "symbol": "ScratchpadManager"
+      },
+      "data_domains": [
+        "MEMORY"
+      ],
+      "owner": "ScratchpadManager direct memory lifecycle",
+      "story_system_mode": {
+        "behavior": "direct scratchpad memory writes; no durable commit required and no Canon authority",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "direct legacy memory writes through configured scratchpad path",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "Memory CLI update and memory bootstrap/update callers"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "anchor": "class ScratchpadManager"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "anchor": "if args.command == \"update\""
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/writer.py",
+          "anchor": "def update_from_chapter_result"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "index-operational-ledgers",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+        "symbol": "IndexDebtMixin"
+      },
+      "data_domains": [
+        "INDEX_DB",
+        "WORKFLOW_METADATA",
+        "VECTORS"
+      ],
+      "owner": "Index operational debt, invalid-fact, and RAG telemetry tables",
+      "story_system_mode": {
+        "behavior": "operational workflow and observability writes; outside Canon projection",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "operational workflow and observability writes for legacy workflows",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "anchor": "class IndexDebtMixin"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chase_debt",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:debt_events",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:invalid_facts",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:rag_query_log",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:tool_call_stats",
+          "writer_id": "index-operational-ledgers"
+        }
+      ]
+    },
+    {
+      "writer_id": "review-metrics-workflow",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+        "symbol": "IndexReadingMixin"
+      },
+      "data_domains": [
+        "INDEX_DB"
+      ],
+      "owner": "Review metrics and checklist workflow records",
+      "story_system_mode": {
+        "behavior": "review workflow metrics only; no Canon authority",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "review workflow metrics supported in legacy workflows",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "review-pipeline metric persistence"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when review metric persistence is removed or replaced.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "anchor": "save_review_metrics"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:review_metrics",
+          "writer_id": "review-metrics-workflow"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:writing_checklist_scores",
+          "writer_id": "review-metrics-workflow"
+        }
+      ],
+      "selector": "review metrics and checklist workflow tables"
+    },
+    {
+      "writer_id": "test-db-fixtures",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+        "symbol": "test_db"
+      },
+      "data_domains": [
+        "INDEX_DB"
+      ],
+      "owner": "test-only temporary SQLite fixtures",
+      "story_system_mode": {
+        "behavior": "test fixture writes to isolated temporary databases; no project authority",
+        "mode": "not_applicable"
+      },
+      "legacy_mode": {
+        "behavior": "test fixture writes to isolated temporary databases; no project authority",
+        "mode": "not_applicable"
+      },
+      "lifecycle_status": "compatibility_only",
+      "active_consumers": [
+        "plugin pytest fixtures only"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when these isolated test database fixtures are removed.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "writer_id": "test-db-fixtures"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "writer_id": "test-db-fixtures"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:foreshadowing",
+          "writer_id": "test-db-fixtures"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "writer_id": "test-db-fixtures"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:timeline",
+          "writer_id": "test-db-fixtures"
+        }
+      ]
+    }
+  ],
+  "readers": [
+    {
+      "reader_id": "commit-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+        "symbol": "ChapterCommitService"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CANON_COMMIT",
+          "resource": "accepted chapter commit",
+          "story_system": {
+            "primary_source": ".story-system/commits",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "schema-validated accepted commit",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "not a legacy Canon source",
+            "authority_claim": "UNKNOWN",
+            "condition": "Story System disabled",
+            "fallback": null
+          },
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "anchor": "ChapterCommitService"
+        }
+      ],
+      "reader_family": "Story System commit and projection readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "symbol": "ChapterCommitService",
+          "data_domain": "CANON_COMMIT",
+          "sink": "glob",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_provenance.py",
+          "symbol": "build_governed_context",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_text",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_provenance.py",
+          "symbol": "classify_rag_hit",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_text",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_provenance.py",
+          "symbol": "load_commit_fact_items",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_bytes",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "symbol": "discover_validated_chapter_commits",
+          "data_domain": "CANON_COMMIT",
+          "sink": "iterdir",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "symbol": "discover_validated_chapter_commits",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_validated_chapter_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "symbol": "read_durable_commit",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_validated_chapter_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "symbol": "require_durable_commit_match",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "symbol": "EventLogStore",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "symbol": "MemoryContractAdapter",
+          "data_domain": "CANON_COMMIT",
+          "sink": "glob",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_phase.py",
+          "symbol": "_scan_commits",
+          "data_domain": "CANON_COMMIT",
+          "sink": "glob",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_runtime_sources.py",
+          "symbol": "load_runtime_sources",
+          "data_domain": "CANON_COMMIT",
+          "sink": "_load_latest_accepted_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_runtime_sources.py",
+          "symbol": "load_runtime_sources",
+          "data_domain": "CANON_COMMIT",
+          "sink": "_load_latest_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_system_mode.py",
+          "symbol": "is_story_system_project",
+          "data_domain": "CANON_COMMIT",
+          "sink": "glob",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "event-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+        "symbol": "EventLogStore"
+      },
+      "read_edges": [
+        {
+          "data_domain": "EVENTS",
+          "resource": "event log",
+          "story_system": {
+            "primary_source": "index.db story_events",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "matched durable commit",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy event store",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          },
+          "read_edge_id": "event-reader-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "anchor": "EventLogStore"
+        }
+      ],
+      "reader_family": "Story System commit and projection readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
+          "symbol": "EventLogStore",
+          "data_domain": "EVENTS",
+          "sink": "SQL:story_events",
+          "reader_id": "event-reader",
+          "read_edge_id": "event-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_events",
+          "data_domain": "EVENTS",
+          "sink": "SQL:story_events",
+          "reader_id": "event-reader",
+          "read_edge_id": "event-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "EVENTS",
+          "sink": "SQL:story_events",
+          "reader_id": "event-reader",
+          "read_edge_id": "event-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "EVENTS",
+          "sink": "read_events",
+          "reader_id": "event-reader",
+          "read_edge_id": "event-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_events.py",
+          "symbol": "main",
+          "data_domain": "EVENTS",
+          "sink": "read_events",
+          "reader_id": "event-reader",
+          "read_edge_id": "event-reader-edge-1"
+        }
+      ]
+    },
+    {
+      "reader_id": "context-assembly",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+        "symbol": "ContextManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CANON_COMMIT",
+          "resource": "assembled chapter context",
+          "story_system": {
+            "primary_source": "accepted commits and verified projections",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "Story System source assembly",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy state/index/context",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          },
+          "read_edge_id": "context-assembly-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "ContextManager"
+        }
+      ],
+      "reader_family": "context/runtime source assembly",
+      "lifecycle_status": "allowed",
+      "source_coordinates": []
+    },
+    {
+      "reader_id": "query-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/tracking_query.py",
+        "symbol": "main"
+      },
+      "read_edges": [
+        {
+          "data_domain": "INDEX_DB",
+          "resource": "query index",
+          "story_system": {
+            "primary_source": "commit-verified index",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "Story System query",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy index/state",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy query",
+            "fallback": null
+          },
+          "read_edge_id": "query-reader-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/tracking_query.py",
+          "anchor": "main"
+        }
+      ],
+      "reader_family": "query and resume",
+      "lifecycle_status": "allowed",
+      "source_coordinates": []
+    },
+    {
+      "reader_id": "resume-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+        "symbol": "ContextManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "workflow resume state",
+          "story_system": {
+            "primary_source": "workflow metadata plus durable commit",
+            "authority_claim": "WORKFLOW",
+            "condition": "resume workflow",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy status/state",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy resume",
+            "fallback": null
+          },
+          "read_edge_id": "resume-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "ContextManager"
+        }
+      ],
+      "reader_family": "query and resume",
+      "lifecycle_status": "allowed",
+      "source_coordinates": []
+    },
+    {
+      "reader_id": "write-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+        "symbol": "main"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CANON_COMMIT",
+          "resource": "prior chapter context",
+          "story_system": {
+            "primary_source": "accepted commits",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "Story System write",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy state",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy write",
+            "fallback": null
+          },
+          "read_edge_id": "write-reader-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+          "anchor": "main"
+        }
+      ],
+      "reader_family": "write/plan/review consumers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": []
+    },
+    {
+      "reader_id": "plan-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+        "symbol": "VolumeStateManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "INTENT",
+          "resource": "volumes and planning horizon",
+          "story_system": {
+            "primary_source": "project state Intent fields",
+            "authority_claim": "INTENT",
+            "condition": "planning",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "project state Intent fields",
+            "authority_claim": "INTENT",
+            "condition": "planning",
+            "fallback": null
+          },
+          "read_edge_id": "plan-reader-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+          "anchor": "VolumeStateManager"
+        }
+      ],
+      "reader_family": "write/plan/review consumers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
+          "data_domain": "INTENT",
+          "sink": "read_text",
+          "reader_id": "plan-reader",
+          "read_edge_id": "plan-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/patches/p7_derived_views.py",
+          "symbol": "P7DerivedViews",
+          "data_domain": "INTENT",
+          "sink": "read_text",
+          "reader_id": "plan-reader",
+          "read_edge_id": "plan-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INTENT",
+          "sink": "read_text",
+          "reader_id": "plan-reader",
+          "read_edge_id": "plan-reader-edge-1"
+        }
+      ]
+    },
+    {
+      "reader_id": "review-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+        "symbol": "main"
+      },
+      "read_edges": [
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "review artifact",
+          "story_system": {
+            "primary_source": "review result artifacts",
+            "authority_claim": "WORKFLOW",
+            "condition": "review workflow",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "review result artifacts",
+            "authority_claim": "WORKFLOW",
+            "condition": "review workflow",
+            "fallback": null
+          },
+          "read_edge_id": "review-reader-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "anchor": "main"
+        }
+      ],
+      "reader_family": "write/plan/review consumers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/gate_decision_store.py",
+          "symbol": "GateDecisionStore",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "read_text",
+          "reader_id": "review-reader",
+          "read_edge_id": "review-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "symbol": "build_review_artifacts",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "read_text",
+          "reader_id": "review-reader",
+          "read_edge_id": "review-reader-edge-1"
+        }
+      ]
+    },
+    {
+      "reader_id": "state-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+        "symbol": "StateManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "STATE_JSON",
+          "resource": "state.json fields",
+          "story_system": {
+            "primary_source": "commit-verified projection or explicit Intent/Craft fields",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "field owner",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "state.json",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          },
+          "read_edge_id": "state-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "anchor": "StateManager"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "symbol": "ArchiveManager",
+          "data_domain": "STATE_JSON",
+          "sink": "open",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_overdue_foreshadow",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/chapter_outline_loader.py",
+          "symbol": "volume_num_for_chapter_from_state",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/cli.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
+          "data_domain": "STATE_JSON",
+          "sink": "open",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/chapter_commit_service.py",
+          "symbol": "ChapterCommitService",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/orchestrator.py",
+          "symbol": "MemoryOrchestrator",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+          "symbol": "migrate_state_to_sqlite",
+          "data_domain": "STATE_JSON",
+          "sink": "open",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/prewrite_validator.py",
+          "symbol": "PrewriteValidator",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_status.py",
+          "symbol": "_project_title",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_prepare_targets",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_state",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "symbol": "StateManager",
+          "data_domain": "STATE_JSON",
+          "sink": "read_json_safe",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_runtime_health.py",
+          "symbol": "_resolve_chapter",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "symbol": "cmd_story_craft",
+          "data_domain": "STATE_JSON",
+          "sink": "read_json_safe",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+          "symbol": "extract_state_summary",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "symbol": "generate_volume_blueprints",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "symbol": "init_project",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+          "symbol": "_current_chapter",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "symbol": "_load_story_state",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/run_behavior_evals.py",
+          "symbol": "_eval_commit_projection_runtime",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "symbol": "_run_self_tests",
+          "data_domain": "STATE_JSON",
+          "sink": "open",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/status_reporter.py",
+          "symbol": "StatusReporter",
+          "data_domain": "STATE_JSON",
+          "sink": "open",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/tracking_query.py",
+          "symbol": "load_foreshadow_index",
+          "data_domain": "STATE_JSON",
+          "sink": "open",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/update_state.py",
+          "symbol": "StateUpdater",
+          "data_domain": "STATE_JSON",
+          "sink": "open",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "index-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+        "symbol": "IndexManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "INDEX_DB",
+          "resource": "index tables",
+          "story_system": {
+            "primary_source": "commit-verified story tables",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "Canon-like tables only",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "index.db tables",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          },
+          "read_edge_id": "index-reader-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_manager.py",
+          "anchor": "IndexManager"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_check_db_readable",
+          "data_domain": "INDEX_DB",
+          "sink": "open",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_entity_lookup",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_entity_lookup",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_foreshadowing_state",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:foreshadowing",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_item_state",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_timeline",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:timeline",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:foreshadowing",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:timeline",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapter_reading_power",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+          "symbol": "IndexProjectionWriter",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapter_reading_power",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/knowledge_query.py",
+          "symbol": "KnowledgeQuery",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/knowledge_query.py",
+          "symbol": "KnowledgeQuery",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "SQLStateManager",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "SQLStateManager",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        }
+      ]
+    },
+    {
+      "reader_id": "summary-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/summary_projection_writer.py",
+        "symbol": "SummaryProjectionWriter"
+      },
+      "read_edges": [
+        {
+          "data_domain": "SUMMARIES",
+          "resource": "summary projections",
+          "story_system": {
+            "primary_source": "commit-bound summaries",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "verified projection",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy summary files",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode",
+            "fallback": null
+          },
+          "read_edge_id": "summary-reader-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/summary_projection_writer.py",
+          "anchor": "SummaryProjectionWriter"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text",
+          "reader_id": "summary-reader",
+          "read_edge_id": "summary-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/bootstrap.py",
+          "symbol": "bootstrap_from_index",
+          "data_domain": "SUMMARIES",
+          "sink": "glob",
+          "reader_id": "summary-reader",
+          "read_edge_id": "summary-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/orchestrator.py",
+          "symbol": "MemoryOrchestrator",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text",
+          "reader_id": "summary-reader",
+          "read_edge_id": "summary-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "symbol": "MemoryContractAdapter",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text",
+          "reader_id": "summary-reader",
+          "read_edge_id": "summary-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_summaries",
+          "data_domain": "SUMMARIES",
+          "sink": "glob",
+          "reader_id": "summary-reader",
+          "read_edge_id": "summary-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text",
+          "reader_id": "summary-reader",
+          "read_edge_id": "summary-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "main",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text",
+          "reader_id": "summary-reader",
+          "read_edge_id": "summary-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+          "symbol": "_load_summary_file",
+          "data_domain": "SUMMARIES",
+          "sink": "read_text",
+          "reader_id": "summary-reader",
+          "read_edge_id": "summary-reader-edge-1"
+        }
+      ]
+    },
+    {
+      "reader_id": "memory-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+        "symbol": "MemoryProjectionWriter"
+      },
+      "read_edges": [
+        {
+          "data_domain": "MEMORY",
+          "resource": "memory data consumed by the validated MemoryProjectionWriter flow",
+          "story_system": {
+            "primary_source": "ScratchpadManager data read by MemoryWriter.apply_commit_projection after require_durable_commit_match succeeds",
+            "authority_claim": "VERIFIED_PROJECTION",
+            "condition": "only the MemoryProjectionWriter path, after its durable commit validation; this claim does not apply to direct ScratchpadManager callers",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy memory scratchpad",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy compatibility mode",
+            "fallback": null
+          },
+          "read_edge_id": "memory-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+          "anchor": "apply_commit_projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/writer.py",
+          "anchor": "def apply_commit_projection"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+          "symbol": "MemoryProjectionWriter",
+          "data_domain": "MEMORY",
+          "sink": "apply_commit_projection",
+          "reader_id": "memory-reader",
+          "read_edge_id": "memory-reader-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "vector-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/vector_projection_writer.py",
+        "symbol": "VectorProjectionWriter"
+      },
+      "read_edges": [
+        {
+          "data_domain": "VECTORS",
+          "resource": "RAG vectors",
+          "story_system": {
+            "primary_source": "low-level RAG adapter and vector cache storage",
+            "authority_claim": "UNKNOWN",
+            "condition": "retrieval and rebuild storage APIs do not validate a durable commit at the read boundary",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy vector/cache storage",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "low-level storage reads carry no story authority claim",
+            "fallback": null
+          },
+          "read_edge_id": "vector-reader-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/vector_projection_writer.py",
+          "anchor": "VectorProjectionWriter"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:bm25_index",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:bm25_index",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:rag_schema_meta",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors_migrating",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        }
+      ]
+    },
+    {
+      "reader_id": "craft-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+        "symbol": "StoryCraftFieldError"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CRAFT",
+          "resource": "story_craft fields",
+          "story_system": {
+            "primary_source": "Story Craft state",
+            "authority_claim": "CRAFT",
+            "condition": "planning only",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "Story Craft state",
+            "authority_claim": "CRAFT",
+            "condition": "planning only",
+            "fallback": null
+          },
+          "read_edge_id": "craft-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "StoryCraftFieldError"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/style_fingerprint.py",
+          "symbol": "generate_baseline",
+          "data_domain": "CRAFT",
+          "sink": "glob",
+          "reader_id": "craft-reader",
+          "read_edge_id": "craft-reader-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "reference-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/story_contracts.py",
+        "symbol": "StoryContractPaths"
+      },
+      "read_edges": [
+        {
+          "data_domain": "REFERENCE",
+          "resource": "contract and workflow artifacts",
+          "story_system": {
+            "primary_source": "canonical Story System paths",
+            "authority_claim": "REFERENCE",
+            "condition": "active contract reads",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy contract fallback",
+            "authority_claim": "REFERENCE",
+            "condition": "compatibility reads",
+            "fallback": null
+          },
+          "read_edge_id": "reference-reader-edge-1"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_contracts.py",
+          "anchor": "StoryContractPaths"
+        }
+      ],
+      "reader_family": "legacy fallback readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": []
+    },
+    {
+      "reader_id": "projection-run-log-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+        "symbol": "read_projection_runs"
+      },
+      "read_edges": [
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "projection run audit log",
+          "story_system": {
+            "primary_source": "append-only projection run telemetry in index.db",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational diagnostics only; not story authority",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "append-only projection run telemetry in index.db",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational diagnostics only; not story authority",
+            "fallback": null
+          },
+          "read_edge_id": "projection-run-log-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "active workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+          "anchor": "read_projection_runs"
+        }
+      ],
+      "reader_family": "projection-run-log",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+          "symbol": "read_projection_runs",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "read_text",
+          "reader_id": "projection-run-log-reader",
+          "read_edge_id": "projection-run-log-reader-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "override-ledger-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+        "symbol": "persist_amend_proposals"
+      },
+      "read_edges": [
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "pending override_contracts amendment proposals",
+          "story_system": {
+            "primary_source": "index.db override_contracts pending proposal rows",
+            "authority_claim": "WORKFLOW",
+            "condition": "proposal remains pending author review",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "index.db override_contracts pending proposal rows",
+            "authority_claim": "WORKFLOW",
+            "condition": "proposal remains pending author review",
+            "fallback": null
+          },
+          "read_edge_id": "override-ledger-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "ChapterCommitService proposal generation",
+        "author amendment review workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when proposal review no longer reads the pending override_contracts rows or a replacement workflow store owns them.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "anchor": "override_contracts"
+        }
+      ],
+      "reader_family": "write/plan/review consumers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "override-ledger-reader",
+          "read_edge_id": "override-ledger-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "override-ledger-reader",
+          "read_edge_id": "override-ledger-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "ensure_override_ledger_columns",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "override-ledger-reader",
+          "read_edge_id": "override-ledger-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "persist_amend_proposals",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "override-ledger-reader",
+          "read_edge_id": "override-ledger-reader-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "style-samples-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/style_sampler.py",
+        "symbol": "StyleSampler"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CRAFT",
+          "resource": "style_samples.db samples",
+          "story_system": {
+            "primary_source": "style_samples.db selected style samples",
+            "authority_claim": "CRAFT",
+            "condition": "sample is selected as an advisory writing reference",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "style_samples.db selected style samples",
+            "authority_claim": "CRAFT",
+            "condition": "sample is selected as an advisory writing reference",
+            "fallback": null
+          },
+          "read_edge_id": "style-samples-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "StyleSampler sample selection",
+        "style-aware writing context"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when style-reference retrieval moves to a replacement CRAFT sample store and all consumers are migrated.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/style_sampler.py",
+          "anchor": "SELECT id, chapter, scene_type"
+        }
+      ],
+      "reader_family": "state/index/summary/memory/vector readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/style_sampler.py",
+          "symbol": "StyleSampler",
+          "data_domain": "CRAFT",
+          "sink": "SQL:samples",
+          "reader_id": "style-samples-reader",
+          "read_edge_id": "style-samples-reader-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "archive-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+        "symbol": "ArchiveManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "COMPATIBILITY",
+          "resource": "archived character, plot-thread, and review snapshots",
+          "story_system": {
+            "primary_source": ".webnovel/archive snapshots",
+            "authority_claim": "PRESERVE_ONLY",
+            "condition": "archive restore or inspection is requested",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": ".webnovel/archive snapshots",
+            "authority_claim": "PRESERVE_ONLY",
+            "condition": "archive restore or inspection is requested",
+            "fallback": null
+          },
+          "read_edge_id": "archive-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "ArchiveManager archive maintenance"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when archive restore and inspection no longer read these compatibility snapshots.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "anchor": "def load_archive"
+        }
+      ],
+      "reader_family": "legacy fallback readers",
+      "lifecycle_status": "compatibility_only",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "symbol": "ArchiveManager",
+          "data_domain": "COMPATIBILITY",
+          "sink": "open",
+          "reader_id": "archive-reader",
+          "read_edge_id": "archive-reader-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "story-craft-migration-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+        "symbol": "migrate_state_json"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CRAFT",
+          "resource": "raw legacy story_craft field",
+          "story_system": {
+            "primary_source": "raw state.json supplied to explicit migration command",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "only when migration CLI is explicitly invoked after its target and backup preflight; no commit verification is claimed",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "raw legacy state.json supplied to explicit migration command",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "only when migration CLI is explicitly invoked after its target and backup preflight",
+            "fallback": null
+          },
+          "read_edge_id": "story-craft-migration-reader-craft"
+        },
+        {
+          "data_domain": "STATE_JSON",
+          "resource": "raw legacy state.json migration input",
+          "story_system": {
+            "primary_source": "raw state.json supplied to explicit migration command",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "only when migration CLI is explicitly invoked after its target and backup preflight; no commit verification is claimed",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "raw legacy state.json supplied to explicit migration command",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "only when migration CLI is explicitly invoked after its target and backup preflight",
+            "fallback": null
+          },
+          "read_edge_id": "story-craft-migration-reader-state_json"
+        }
+      ],
+      "active_consumers": [
+        "explicit migrate-story-craft CLI only"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when the explicit legacy story_craft migration command is removed.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "def migrate_state_json"
+        }
+      ],
+      "reader_family": "explicit story craft migration input",
+      "lifecycle_status": "compatibility_only",
+      "source_coordinates": []
+    },
+    {
+      "reader_id": "index-operational-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+        "symbol": "IndexObservabilityMixin"
+      },
+      "read_edges": [
+        {
+          "data_domain": "INDEX_DB",
+          "resource": "operational workflow and observability tables",
+          "story_system": {
+            "primary_source": "index.db operational workflow and observability tables",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational reads only; not Canon authority",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "index.db operational workflow and observability tables",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational reads only; not story authority",
+            "fallback": null
+          },
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "operational workflow and observability tables",
+          "story_system": {
+            "primary_source": "index.db operational workflow and observability tables",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational reads only; not Canon authority",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "index.db operational workflow and observability tables",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational reads only; not story authority",
+            "fallback": null
+          },
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "data_domain": "VECTORS",
+          "resource": "operational workflow and observability tables",
+          "story_system": {
+            "primary_source": "index.db RAG query telemetry table",
+            "authority_claim": "UNKNOWN",
+            "condition": "operational telemetry only; no story authority claim",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "index.db RAG query telemetry table",
+            "authority_claim": "UNKNOWN",
+            "condition": "operational telemetry only; no story authority claim",
+            "fallback": null
+          },
+          "read_edge_id": "index-operational-reader-vectors"
+        }
+      ],
+      "active_consumers": [
+        "review, debt, invalid-fact, and operational reporting workflows"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when operational index tables and readers are removed or replaced.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "anchor": "class IndexObservabilityMixin"
+        }
+      ],
+      "reader_family": "index operational ledger and telemetry readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chase_debt",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:debt_events",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chase_debt",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:invalid_facts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:rag_query_log",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:review_metrics",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:tool_call_stats",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:review_metrics",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:writing_checklist_scores",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "ensure_override_ledger_columns",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "persist_amend_proposals",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "symbol": "_sqlite_lock",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:locks",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        }
+      ]
+    },
+    {
+      "reader_id": "memory-direct-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+        "symbol": "ScratchpadManager"
+      },
+      "read_edges": [
+        {
+          "data_domain": "MEMORY",
+          "resource": "directly writable memory scratchpad and raw memory artifacts",
+          "story_system": {
+            "primary_source": "ScratchpadManager scratchpad and raw memory files",
+            "authority_claim": "UNKNOWN",
+            "condition": "low-level reads can observe direct-memory writes and do not validate a durable commit",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy memory scratchpad and raw memory files",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode reads compatibility memory data",
+            "fallback": null
+          },
+          "read_edge_id": "memory-direct-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "ScratchpadManager callers",
+        "MemoryContractAdapter",
+        "projection rebuild preflight"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when direct memory access and raw memory preflight reads are removed or replaced.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "anchor": "def load(self)"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/writer.py",
+          "anchor": "def update_from_chapter_result"
+        }
+      ],
+      "reader_family": "direct memory and raw memory store readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "symbol": "ScratchpadManager",
+          "data_domain": "MEMORY",
+          "sink": "read_json_safe",
+          "reader_id": "memory-direct-reader",
+          "read_edge_id": "memory-direct-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "symbol": "MemoryContractAdapter",
+          "data_domain": "MEMORY",
+          "sink": "read_text",
+          "reader_id": "memory-direct-reader",
+          "read_edge_id": "memory-direct-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_prepare_targets",
+          "data_domain": "MEMORY",
+          "sink": "read_text",
+          "reader_id": "memory-direct-reader",
+          "read_edge_id": "memory-direct-reader-edge"
+        }
+      ]
+    }
+  ],
+  "migrations": [
+    {
+      "migration_id": "migrate-story-craft-v1",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+        "symbol": "migrate_state_json"
+      },
+      "source": "legacy story_craft shape in state.json",
+      "target": "current story_craft shape",
+      "supported_project_modes": [
+        "legacy",
+        "existing Story System after explicit preflight"
+      ],
+      "preflight": "Current function validates JSON and top-level object, but does not reject malformed nested story_craft; it backs up before replacing malformed nested values with defaults.",
+      "backup": "atomic backup before save",
+      "idempotency": "fills absent defaults without duplicating keys",
+      "postcondition": "state remains valid JSON; existing top-level fields preserved except story_craft is replaced when absent or malformed; not lossless for malformed nested values.",
+      "rollback": "restore recorded backup",
+      "ambiguity_handling": "Backup exists, but nested malformed value is not reported before replacement; do not treat as a lossless Story System migration.",
+      "lifecycle_status": "implemented",
+      "active_consumers": [
+        "explicit migrate-story-craft command"
+      ],
+      "replacement": null,
+      "retirement_criterion": "A preflight/reporting mode and preservation behavior are tested, or all supported callers leave old shape and the migration support window closes after reviewed evidence.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ]
+    },
+    {
+      "migration_id": "state-to-sqlite",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+        "symbol": "migrate_state_to_sqlite"
+      },
+      "source": "state.json",
+      "target": "index.db SQLite state tables",
+      "supported_project_modes": [
+        "legacy",
+        "explicitly opted-in migration"
+      ],
+      "preflight": "validate source and destination formats before copy",
+      "backup": "migration backup required",
+      "idempotency": "repeatable without duplicate logical records",
+      "postcondition": "source and destination values reconcile",
+      "rollback": "restore backup and retain original JSON",
+      "ambiguity_handling": "emit conflict report without silent winner selection",
+      "lifecycle_status": "implemented",
+      "active_consumers": [
+        "explicit state-to-SQLite migration"
+      ],
+      "replacement": null,
+      "retirement_criterion": "No supported callers and opted-in projects pass round-trip evidence.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
+          "anchor": "migrate_state_to_sqlite"
+        }
+      ]
+    }
+  ],
+  "compatibility_matrix": {
+    "new_story_system": {
+      "chapter_facts": "chapter-commit and validated commit projections",
+      "migration": "initialize contracts/defaults only"
+    },
+    "existing_story_system": {
+      "chapter_facts": "accepted commits remain immutable",
+      "migration": "schema preflight; no-op if no disk format change; unsupported schemas rejected"
+    },
+    "legacy": {
+      "chapter_facts": "documented legacy compatibility paths",
+      "migration": "no automatic migration on plugin update"
+    },
+    "mixed_partial": {
+      "chapter_facts": "no implicit Canon source selection",
+      "migration": "diagnose and stop pending explicit repair"
+    }
+  },
+  "writer_exceptions": [
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+      "symbol": "ScratchpadManager",
+      "domain": "MEMORY",
+      "sink": "atomic_write_json",
+      "target_expression": "self.path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "ScratchpadManager persists project memory directly through its configured scratchpad path; this write can run outside a durable chapter commit.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "anchor": "ScratchpadManager"
+        }
+      ],
+      "writer_id": "memory-direct-write"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/review_schema.py",
+      "symbol": "_write_json",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "atomic_write_json",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/review_schema.py",
+          "anchor": "_write_json"
+        }
+      ],
+      "writer_id": "review-workflow"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+      "symbol": "migrate_state_json",
+      "domain": "CRAFT",
+      "sink": "atomic_write_json",
+      "target_expression": "str(p)",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ],
+      "writer_id": "story-craft-migration"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+      "symbol": "migrate_state_json",
+      "domain": "STATE_JSON",
+      "sink": "atomic_write_json",
+      "target_expression": "str(p)",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ],
+      "writer_id": "story-craft-migration"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+      "symbol": "main",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "atomic_write_json",
+      "target_expression": "out_path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
+          "anchor": "main"
+        }
+      ],
+      "writer_id": "review-workflow"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/revise_chapter.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "write_text",
+      "target_expression": "out_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The revised Markdown is a user-selected draft output; the command does not replace the accepted chapter or write a durable commit/projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/revise_chapter.py",
+          "anchor": "out_path.write_text"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:aliases",
+      "target_expression": "conn",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db inserts synthetic aliases rows into an isolated SQLite fixture used only by plugin tests; fixture values cannot establish or project real story authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/run_behavior_evals.py",
+      "symbol": "_eval_commit_projection_runtime",
+      "domain": "STATE_JSON",
+      "sink": "write_text",
+      "target_expression": "out",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "_eval_commit_projection_runtime writes state-shaped data only into its temporary behavior-evaluation fixture; that test artifact is not a project state store and cannot establish story authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/run_behavior_evals.py",
+          "anchor": "_eval_commit_projection_runtime"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/run_behavior_evals.py",
+      "symbol": "_eval_consistency_cli_contract",
+      "domain": "STATE_JSON",
+      "sink": "write_text",
+      "target_expression": "out",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "_eval_consistency_cli_contract writes state-shaped data only into its temporary behavior-evaluation fixture; that test artifact is not a project state store and cannot establish story authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/run_behavior_evals.py",
+          "anchor": "_eval_consistency_cli_contract"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+      "symbol": "_run_self_tests",
+      "domain": "STATE_JSON",
+      "sink": "atomic_write_json",
+      "target_expression": "test_root",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "_run_self_tests writes fixture state under its isolated temporary self-test directory; the generated JSON is test data and cannot establish or project a user story authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "anchor": "_run_self_tests"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+      "symbol": "_sqlite_lock",
+      "domain": "INDEX_DB",
+      "sink": "SQL:locks",
+      "target_expression": "conn",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "_sqlite_lock writes only the SQLite locks coordination row while serializing database access; this short-lived mutex data is not a chapter fact, Intent, workflow decision, or story projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "anchor": "CREATE TABLE IF NOT EXISTS locks"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+      "symbol": "ArchiveManager",
+      "domain": "COMPATIBILITY",
+      "sink": "atomic_write_json",
+      "target_expression": "archive_file",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "archive_file resolves to .webnovel/archive/{characters,plot_threads,reviews}.json and is owned by archive-save-state as preserved compatibility history, not Canon.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "anchor": "self.characters_archive"
+        }
+      ],
+      "writer_id": "archive-save-state"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:entities",
+      "target_expression": "conn",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db inserts synthetic entities rows into an isolated SQLite fixture used only by plugin tests; fixture values cannot establish or project real story authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:foreshadowing",
+      "target_expression": "conn",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db inserts synthetic foreshadowing rows into an isolated SQLite fixture used only by plugin tests; fixture values cannot establish or project real story authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:timeline",
+      "target_expression": "conn",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db inserts synthetic timeline rows into an isolated SQLite fixture used only by plugin tests; fixture values cannot establish or project real story authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:relationships",
+      "target_expression": "conn",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db inserts synthetic relationships rows into an isolated SQLite fixture used only by plugin tests; fixture values cannot establish or project real story authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    }
+  ],
+  "reader_exceptions": [
+    {
+      "path": ".claude/plugins/zhanghui/scripts/_shared/text_humanizer.py",
+      "symbol": "_load_chapter",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The caller-supplied manuscript or temporary source input is source text/input, not a protected persisted story authority; this read does not modify or certify the durable commit/projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/_shared/text_humanizer.py",
+          "anchor": "path"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The chapter manuscript supplied for CHANGES validation is source text/input, not a protected persisted story authority; this read does not modify or certify the durable commit/projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "anchor": "chapter_path"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/chapter_commit.py",
+      "symbol": "_read_json",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "Path(path)",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/chapter_commit.py",
+          "anchor": "_read_json"
+        }
+      ],
+      "reader_id": "commit-reader",
+      "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/chapter_commit.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "Path(args.chapter_file)",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The chapter file is proposal text passed into ChapterCommitService for validation and commit creation; the source file itself is not the durable accepted commit.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/chapter_commit.py",
+          "anchor": "Path(args.chapter_file)"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+      "symbol": "ContextManager",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "matches[0]",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The matched chapter/context source text is read as context input and is not accepted Canon or a durable projection; the file target is resolved by ContextManager.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "matches[0].read_text"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+      "symbol": "ContextManager",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The caller-selected chapter/context input is read as context input and is not accepted Canon or a durable projection; the file target is resolved by ContextManager.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "path"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+      "symbol": "ContextManager",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "profile_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The project profile reference/configuration is read as context input and is not accepted Canon or a durable projection; the file target is resolved by ContextManager.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "profile_path"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+      "symbol": "ContextManager",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "taxonomy_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The project taxonomy reference/configuration is read as context input and is not accepted Canon or a durable projection; the file target is resolved by ContextManager.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "taxonomy_path"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+      "symbol": "read_commit_file",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "anchor": "read_commit_file"
+        }
+      ],
+      "reader_id": "commit-reader",
+      "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+      "symbol": "IndexProjectionWriter",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "IndexProjectionWriter reads chapter prose only to derive the chapter title and word-count metrics for an index projection; the manuscript read does not authorize the accepted commit.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_projection_writer.py",
+          "anchor": "path.read_text"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/bootstrap.py",
+      "symbol": "bootstrap_from_index",
+      "domain": "MEMORY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/bootstrap.py",
+          "anchor": "bootstrap_from_index"
+        }
+      ],
+      "reader_id": "memory-reader",
+      "read_edge_id": "memory-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+      "symbol": "MemoryContractAdapter",
+      "domain": "MEMORY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "anchor": "MemoryContractAdapter"
+        }
+      ],
+      "reader_id": "memory-reader",
+      "read_edge_id": "memory-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+      "symbol": "MemoryContractAdapter",
+      "domain": "MEMORY",
+      "sink": "read_text",
+      "target_expression": "profile_path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
+          "anchor": "MemoryContractAdapter"
+        }
+      ],
+      "reader_id": "memory-reader",
+      "read_edge_id": "memory-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projections.py",
+      "symbol": "_read_commit",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projections.py",
+          "anchor": "_read_commit"
+        }
+      ],
+      "reader_id": "commit-reader",
+      "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/reference_research_injector.py",
+      "symbol": "<module>",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "Path(a.chapter_file)",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The chapter source supplied as a reference-research insertion input is source text/input, not a protected persisted story authority; this read does not modify or certify the durable commit/projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/reference_research_injector.py",
+          "anchor": "Path(a.chapter_file)"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/review_schema.py",
+      "symbol": "_read_json_if_exists",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/review_schema.py",
+          "anchor": "_read_json_if_exists"
+        }
+      ],
+      "reader_id": "resume-reader",
+      "read_edge_id": "resume-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+      "symbol": "StateProjectionWriter",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "StateProjectionWriter reads the supplied chapter file only to derive projected word-count metrics; the manuscript is not Canon authority and cannot replace its matching commit.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+          "anchor": "chapter_file.read_text"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/write_gates/precommit.py",
+      "symbol": "run_precommit_gate",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The chapter draft supplied to the precommit validation gate is source text/input, not a protected persisted story authority; this read does not modify or certify the durable commit/projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/write_gates/precommit.py",
+          "anchor": "chapter_file"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+      "symbol": "extract_chapter_summary",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The chapter prose supplied for summary extraction is source text/input, not a protected persisted story authority; this read does not modify or certify the durable commit/projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/extract_chapter_context.py",
+          "anchor": "chapter_file"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+      "symbol": "_read_text_if_exists",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The initialization template/configuration text seeds project setup files; it is not chapter Canon, a commit, or an active projection store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "anchor": "path"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+      "symbol": "generate_volume_blueprints",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The volume blueprint/template input seeds project setup files; it is not chapter Canon, a commit, or an active projection store.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/init_project.py",
+          "anchor": "path"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+      "symbol": "migrate_state_json",
+      "domain": "CRAFT",
+      "sink": "read_text",
+      "target_expression": "p",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The explicit migration command reads raw legacy state.json only when invoked to add or normalize story_craft; it is not a commit-verified projection read.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ],
+      "reader_id": "story-craft-migration-reader",
+      "read_edge_id": "story-craft-migration-reader-craft"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+      "symbol": "migrate_state_json",
+      "domain": "STATE_JSON",
+      "sink": "read_text",
+      "target_expression": "p",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The explicit migration command reads raw legacy state.json only when invoked to add or normalize story_craft; it is not a commit-verified projection read.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "migrate_state_json"
+        }
+      ],
+      "reader_id": "story-craft-migration-reader",
+      "read_edge_id": "story-craft-migration-reader-state_json"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/prepare_data_agent_input.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "Path(args.chapter_file)",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The chapter source supplied to construct temporary agent input is source text/input, not a protected persisted story authority; this read does not modify or certify the durable commit/projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/prepare_data_agent_input.py",
+          "anchor": "Path(args.chapter_file)"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+      "symbol": "_load_json_required",
+      "domain": "MEMORY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/project_memory.py",
+          "anchor": "_load_json_required"
+        }
+      ],
+      "reader_id": "memory-reader",
+      "read_edge_id": "memory-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/reconcile_changes.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "chapter_path",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The chapter prose supplied for reconciliation checks is source text/input, not a protected persisted story authority; this read does not modify or certify the durable commit/projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/reconcile_changes.py",
+          "anchor": "chapter_path"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/revise_chapter.py",
+      "symbol": "main",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "args.chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The source chapter is read as input for producing a separate revised draft; reading manuscript prose does not establish accepted Canon.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/revise_chapter.py",
+          "anchor": "args.chapter_file"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/status_reporter.py",
+      "symbol": "StatusReporter",
+      "domain": "COMPATIBILITY",
+      "sink": "open",
+      "target_expression": "chapter_file",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "The chapter prose read to report manuscript metrics is source text/input, not a protected persisted story authority; this read does not modify or certify the durable commit/projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/status_reporter.py",
+          "anchor": "chapter_file"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+      "symbol": "_load_state",
+      "domain": "CRAFT",
+      "sink": "read_text",
+      "target_expression": "p",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "_load_state"
+        }
+      ],
+      "reader_id": "craft-reader",
+      "read_edge_id": "craft-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+      "symbol": "_load_state",
+      "domain": "STATE_JSON",
+      "sink": "read_text",
+      "target_expression": "p",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "_load_state"
+        }
+      ],
+      "reader_id": "state-reader",
+      "read_edge_id": "state-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+      "symbol": "_sqlite_lock",
+      "domain": "INDEX_DB",
+      "sink": "SQL:locks",
+      "target_expression": "conn",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "_sqlite_lock reads the SQLite locks coordination row to serialize database access; the lock record is ephemeral operational state, not a chapter fact, Intent, workflow decision, or story projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "anchor": "CREATE TABLE IF NOT EXISTS locks"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+      "symbol": "ArchiveManager",
+      "domain": "COMPATIBILITY",
+      "sink": "open",
+      "target_expression": "archive_file",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "archive_file resolves to .webnovel/archive/{characters,plot_threads,reviews}.json and is explicitly owned by archive-reader as preserved compatibility history, not Canon.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/archive_manager.py",
+          "anchor": "self.characters_archive"
+        }
+      ],
+      "reader_id": "archive-reader",
+      "read_edge_id": "archive-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:aliases",
+      "target_expression": "test_db",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db selects synthetic aliases rows from an isolated SQLite fixture used only by plugin tests; fixture values are not a project story authority or projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:entities",
+      "target_expression": "test_db",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db selects synthetic entities rows from an isolated SQLite fixture used only by plugin tests; fixture values are not a project story authority or projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:foreshadowing",
+      "target_expression": "test_db",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db selects synthetic foreshadowing rows from an isolated SQLite fixture used only by plugin tests; fixture values are not a project story authority or projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:timeline",
+      "target_expression": "test_db",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db selects synthetic timeline rows from an isolated SQLite fixture used only by plugin tests; fixture values are not a project story authority or projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+      "symbol": "test_db",
+      "domain": "INDEX_DB",
+      "sink": "SQL:relationships",
+      "target_expression": "test_db",
+      "reason_code": "NON_STORY_STORE",
+      "rationale": "test_db selects synthetic relationships rows from an isolated SQLite fixture used only by plugin tests; fixture values are not a project story authority or projection.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+      "symbol": "ScratchpadManager",
+      "domain": "MEMORY",
+      "sink": "read_json_safe",
+      "target_expression": "self.path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "self.path resolves to the project scratchpad JSON file; ScratchpadManager reads it as a MEMORY read model and it cannot become Canon authority without commit evidence.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "anchor": "self.path = Path(self.config.scratchpad_file)"
+        }
+      ],
+      "reader_id": "memory-reader",
+      "read_edge_id": "memory-reader-edge"
+    }
+  ]
+}

@@ -370,6 +370,26 @@ def test_context_manager_exposes_latest_rejected_commit_not_last_accepted(temp_p
     assert payload["runtime_status"]["latest_accepted_commit"]["meta"]["status"] == "accepted"
 
 
+def test_story_system_reader_never_promotes_divergent_legacy_state_to_canon(temp_project):
+    temp_project.state_file.write_text(json.dumps({
+        "protagonist_state": {"name": "LEGACY_CANON_SENTINEL", "power": {"realm": "legacy realm"}},
+        "progress": {"current_chapter": 1},
+    }), encoding="utf-8")
+    story_root = temp_project.story_system_dir
+    (story_root / "commits").mkdir(parents=True, exist_ok=True)
+    (story_root / "MASTER_SETTING.json").write_text(json.dumps({
+        "meta": {"schema_version": "story-system/v1", "contract_type": "MASTER_SETTING"},
+        "route": {"primary_genre": "玄幻"},
+    }), encoding="utf-8")
+    (story_root / "commits" / "chapter_001.commit.json").write_text(
+        json.dumps(_commit_payload(1, "accepted")), encoding="utf-8")
+
+    payload = ContextManager(temp_project).build_context(2)
+
+    assert "LEGACY_CANON_SENTINEL" not in json.dumps(payload["canon"], ensure_ascii=False)
+    assert payload["meta"]["compatibility_sections_are_non_authoritative"] is True
+
+
 def test_context_manager_blocks_when_story_contract_missing(temp_project):
     state = {
         "protagonist_state": {"name": "萧炎"},
