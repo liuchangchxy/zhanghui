@@ -1,17 +1,30 @@
-# Phase 7 H1 acceptance record template
+# Phase 7 H1 acceptance record
 
-This is a result-free template committed in H1. The implementation commit cannot record or claim its own tested SHA. Fill results only in a separate post-review record if that is later authorized.
+This H2 record binds acceptance results to the immutable H1 implementation. H2 changes this acceptance record only.
 
 ## Identity
 
 - Baseline SHA: `e9156f57fe79da63731cbc69c1e5f716c4feb577`
-- Implementation H1 SHA: collected after the implementation commit; not embedded here
-- H1 tree SHA: collected after the implementation commit; not embedded here
+- `tested_implementation_head`: `825a97e87c1d1e512a48ea2313c4f64122ddad46`
+- H1 tree SHA: `266aade92cd7a2734dd47cbd207fbe753937b24b`
 - Branch: `codex/phase-7-ownership-compatibility-closure`
 - Source root: `.claude/plugins/zhanghui/`
 - Marketplace-selected path: `./.claude/plugins/zhanghui`
+- H1 independent review verdict: `PASS`
 
-## Exact commands
+## H1 acceptance results
+
+| Manifest command group | Collected | Passed | Result |
+|---|---:|---:|---|
+| Ownership inventory, active documentation, acceptance template | 70 | 70 | PASS |
+| CHANGES shadow | 18 | 18 | PASS |
+| Commit, projection router, context, bypass, prompt integrity | 213 | 213 | PASS |
+| Projection writers, projections CLI | 73 | 73 | PASS |
+| `git diff --check` | — | — | PASS |
+
+The exact manifest commands were run against H1. Node IDs below were collected on the unchanged H1 checkout before this H2 record was edited.
+
+## Exact acceptance commands
 
 ```bash
 PYTHONPATH=.claude/plugins/zhanghui/scripts pytest \
@@ -36,46 +49,435 @@ PYTHONPATH=.claude/plugins/zhanghui/scripts pytest \
 git diff --check
 ```
 
-## Collected nodes and results
+## Exact pytest node IDs
 
-- Inventory suite: pending H1 execution; record exact collection count and node IDs outside this template.
-- Active-document suite: pending H1 execution; record exact collection count and node IDs outside this template.
-- CHANGES shadow suite: pending H1 execution; record exact collection count and node IDs outside this template.
-- Commit/projection/prompt regression suites: pending H1 execution; record exact collection count and node IDs outside this template.
-- `git diff --check`: pending H1 execution.
+### 1. Ownership inventory, active documentation, and acceptance template — 70 collected
+
+```text
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_inventory_schema_and_records_exist
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_schema_declares_draft_2020_12_and_separate_record_families
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_invalid_domains_and_missing_reader_authority_are_rejected
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[writers-owner]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[writers-replacement]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[writers-retirement_criterion]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[writers-evidence]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[writers-active_consumers]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[readers-read_edges]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[readers-lifecycle_status]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[migrations-backup]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[migrations-rollback]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_missing_required_ownership_fields_are_rejected[migrations-ambiguity_handling]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_duplicate_ids_are_rejected_per_record_family[writers-writer_id]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_duplicate_ids_are_rejected_per_record_family[readers-reader_id]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_duplicate_ids_are_rejected_per_record_family[migrations-migration_id]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_legacy_state_reader_cannot_claim_story_system_canon_authority
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_inventory_records_resolve_and_cover_required_reader_families
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_direct_memory_store_reader_cannot_claim_verified_projection
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_reader_exact_coordinate_authority_conflict_requires_machine_discriminator
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_reader_inventory_coordinate_removal_exposes_protected_read
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_unregistered_protected_writer_candidate_fails_until_classified
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_ast_scanner_discovers_new_state_writer_in_source
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_ast_scanner_finds_actual_archive_and_memory_writers
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_reader_scanner_detects_new_protected_file_reader
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_unresolved_protected_reader_source_requires_exact_classification
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_writer_scanner_detects_new_protected_sql_mutator
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_unresolved_protected_writer_target_requires_exact_reason_coded_exception
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_production_runtime_does_not_consult_inventory
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_inventory_has_required_domains_and_unique_stable_ids
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_inventory_has_mode_aware_records_and_resolvable_evidence
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_compatibility_contract_separates_version_axes_and_project_modes
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_marketplace_source_and_repository_versions_resolve_without_snapshot_activation
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_open_scanner_uses_target_and_mode_separately[path.open('a')-write]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_open_scanner_uses_target_and_mode_separately[path.open('w')-write]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_open_scanner_uses_target_and_mode_separately[path.open('r')-read]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_open_scanner_uses_target_and_mode_separately[path.open()-read]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_open_scanner_uses_target_and_mode_separately[path.open(mode='a')-write]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_open_scanner_uses_target_and_mode_separately[open(path, 'a')-write]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_open_scanner_uses_target_and_mode_separately[open(path, mode='r')-read]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_open_scanner_uses_target_and_mode_separately[open(path)-read]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_source_coordinate_cannot_be_attached_to_wrong_same_domain_owner
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_state_manager_cannot_have_conflicting_shadow_writer_contract
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_conflicting_same_implementation_domain_requires_distinct_selector
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_inventory_has_no_mechanically_generated_source_records
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_non_commit_reader_edges_cannot_claim_canon_authority[plan-reader-INTENT]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_non_commit_reader_edges_cannot_claim_canon_authority[state-reader-STATE_JSON]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_non_commit_reader_edges_cannot_claim_canon_authority[review-reader-WORKFLOW_METADATA]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_non_commit_reader_edges_cannot_claim_canon_authority[index-reader-INDEX_DB]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_style_samples_table_is_not_misclassified_as_index_db
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_override_proposals_and_style_samples_have_distinct_owner_contracts
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_state_manager_state_json_reader_is_discovered_and_bound_to_projection_edge
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_consistency_runner_intent_reader_uses_intent_authority
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_discovered_projection_readers_keep_domain_authority[state-reader-STATE_JSON-/state_manager.py-VERIFIED_PROJECTION]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_discovered_projection_readers_keep_domain_authority[review-reader-WORKFLOW_METADATA-/review_pipeline.py-WORKFLOW]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_discovered_projection_readers_keep_domain_authority[index-reader-INDEX_DB-/sql_state_manager.py-VERIFIED_PROJECTION]
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_non_story_exceptions_have_distinct_target_specific_rationales
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_dynamic_protected_exception_requires_owner_link_and_classification
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_projection_log_append_is_not_misclassified_as_reader
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_dynamic_reader_exception_requires_owner_and_exact_read_edge
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_generic_dynamic_exception_rationale_does_not_replace_ownership
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_writer_coverage_requires_exact_sink_coordinate
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_reader_coverage_requires_exact_sink_coordinate
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_inventory.py::test_stale_dynamic_exception_is_rejected
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_documentation.py::test_marketplace_selects_canonical_active_root_and_excludes_snapshot
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_documentation.py::test_active_docs_keep_commit_and_projection_ownership_contract
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_documentation.py::test_ownership_document_rule_rejects_unqualified_false_claim_but_allows_labeled_history
+.claude/plugins/zhanghui/scripts/tests/architecture/test_ownership_documentation.py::test_all_selected_active_paths_have_no_unqualified_ownership_claims
+.claude/plugins/zhanghui/scripts/tests/architecture/test_phase7_acceptance_template.py::test_h1_acceptance_template_is_complete_and_result_free
+.claude/plugins/zhanghui/scripts/tests/architecture/test_phase7_acceptance_template.py::test_h1_acceptance_commands_reference_existing_test_files
+```
+
+### 2. CHANGES shadow — 18 collected
+
+```text
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_shadow_consumes_real_phase2_artifacts_and_preserves_opaque_denominators
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_shadow_rejects_stale_phase2_reconciliation_and_keeps_denominators
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_shadow_uses_extraction_result_schema_and_reports_invalid_artifact
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_shadow_is_deterministic_and_keeps_opaque_fields_without_mutating_inputs
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_shadow_report_schema_is_versioned_and_keeps_denominators_and_health_separate
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_sampling_categories_match_phase2_taxonomy
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_candidate_category_gate_is_scoped_and_never_retires_automatically
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_candidate_gate_prerequisites_block_discussion[kwargs0]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_candidate_gate_prerequisites_block_discussion[kwargs1]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_candidate_gate_prerequisites_block_discussion[kwargs2]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_candidate_coverage_keeps_opaque_items_in_denominator
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_all_evidence_and_conflict_gates_block_discussion[migration]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_all_evidence_and_conflict_gates_block_discussion[release_policy]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_all_evidence_and_conflict_gates_block_discussion[unresolved]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_all_evidence_and_conflict_gates_block_discussion[false_block]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_all_evidence_and_conflict_gates_block_discussion[missing_cell]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_no_candidate_or_invalid_candidate_cannot_enter_discussion
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_changes_shadow_report.py::test_real_corpus_is_not_fabricated_for_retirement_discussion
+```
+
+### 3. Commit, projection router, context, writer bypass, and prompt integrity — 213 collected
+
+```text
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_planner_missed_node_does_not_veto_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_accepts_when_all_checks_pass
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_missing_original_reconciliation_inputs_even_with_no_artifact
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_conflicted_reconciliation
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_service_recomputes_and_rejects_forged_passed_artifact
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_require_human_persists_pending_attempt_without_consuming_commit_slot
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_reject_keeps_immutable_rejected_commit_and_binding_only
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_service_recomputes_policy_and_records_cached_count_mismatch
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_stale_cached_decision_and_false_external_count_cannot_suppress_reject
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_recover_success_creates_two_attempts_and_only_then_commits
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_recovery_success_requires_fresh_policy_result_before_terminal_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_missing_recovery_finding_refresher_reevaluates_as_pending_human
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_human_response_is_appended_then_policy_is_reevaluated_as_new_attempt
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_recover_failure_is_structured_and_reevaluated[report0-REJECT-rejected]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_recover_failure_is_structured_and_reevaluated[report1-REQUIRE_HUMAN-pending_human]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_service_detects_stale_prose_and_proposal_against_audit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_service_detects_stale_extraction_against_audit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_includes_volume_ref_and_write_fact_provenance
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_malformed_gate_artifacts
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_nested_extraction_result_shape
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_extraction_wrapper_even_with_empty_core_fields
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_extraction_result_missing_core_fields
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_non_object_extraction_items
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_rejects_non_object_accepted_event_items
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_service_normalizes_accepted_events_before_projection
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_apply_projections_normalizes_events_before_router_inspection
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_apply_projections_updates_state_for_rejected_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_chapter_commit_cli_ignores_consistency_fields_and_preserves_changes_advisories
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_apply_projections_writes_events_and_amend_proposals
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_commit_is_durable_before_any_projection_side_effect
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_failed_commit_persistence_runs_no_projection
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_commit_service.py::test_projection_failure_does_not_mutate_durable_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_router_maps_power_breakthrough_to_state_and_memory
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_router_maps_relationship_changed_to_index
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_router_maps_world_rule_broken_to_memory_only
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_router_collects_required_writers_from_commit_payload
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_router_maps_power_breakthrough_to_state_memory_vector
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_router_maps_relationship_changed_to_index_and_vector
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_required_writers_includes_vector_for_key_events
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_required_writers_includes_index_for_accepted_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_router_ignores_unknown_and_non_dict_events
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_manifest_is_the_ordered_rebuild_topology
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_event_projection_router.py::test_manifest_declares_rebuild_owned_intent_diagnostics_projection
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_build_and_filter
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_uses_memory_orchestrator_for_working_when_enabled
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_skips_memory_orchestrator_when_disabled
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_loads_volume_outline_file
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_includes_story_contract_and_prewrite_validation
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_prefers_contract_route_over_legacy_genre_profile
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_exposes_latest_rejected_commit_not_last_accepted
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_story_system_reader_never_promotes_divergent_legacy_state_to_canon
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_blocks_when_story_contract_missing
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_query_router
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_applies_ranker_and_contract_meta
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_includes_reader_signal_and_genre_profile
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_genre_section_and_refs_extraction
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_reader_signal_with_debt_and_disable_switch
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_includes_writing_guidance
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_dynamic_weights_and_composite_genre
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_genre_alias_guidance_and_heading_extraction
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_genre_aliases_normalized_for_profile_lookup
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_enables_methodology_for_xianxia
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_enables_methodology_for_non_xianxia_by_default
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_allows_methodology_whitelist_restriction
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_persist_writing_checklist_score_logs_failure
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_composite_genre_boundary_three_plus
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_dynamic_weights_from_config_override
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_genre_profile_fallbacks_to_project_info
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_genre_profile_prefers_project_info_over_project
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_context_manager.py::test_context_manager_includes_plot_structure_when_outline_has_nodes
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_ownership_writer_bypass.py::test_actual_public_fact_writer_apis_reject_without_commit_before_persisting
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_ownership_writer_bypass.py::test_update_state_cli_rejects_canon_options_before_state_write
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_ownership_writer_bypass.py::test_update_state_cli_keeps_intent_volume_planning_available_in_story_system
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agent_frontmatter_complete[context-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agent_frontmatter_complete[data-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agent_frontmatter_complete[deconstruction-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agent_frontmatter_complete[reviewer.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-chart-scan]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-dashboard]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-deconstruct]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-deslop-check]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-doctor]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-fast-write]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-init]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-learn]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-plan]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-query]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-resume]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-review]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-revise]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-style-profile]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_skill_frontmatter_complete[webnovel-write]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agent_template_structure[context-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agent_template_structure[data-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agent_template_structure[deconstruction-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agent_template_structure[reviewer.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[context-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[data-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[deconstruction-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[reviewer.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md0]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md1]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md2]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md3]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md4]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md5]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md6]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md7]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md8]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md9]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md10]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md11]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md12]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md13]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_all_references_exist[SKILL.md14]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[context-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[data-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[deconstruction-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[reviewer.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md0]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md1]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md2]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md3]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md4]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md5]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md6]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md7]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md8]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md9]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md10]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md11]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md12]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md13]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_cli_commands_valid[SKILL.md14]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_review_schema_consistency
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_consistency_consumers_use_shared_actions_and_preserve_commit_owner
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[context-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[data-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[deconstruction-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[reviewer.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md0]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md1]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md2]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md3]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md4]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md5]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md6]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md7]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md8]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md9]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md10]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md11]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md12]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md13]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_stale_references[SKILL.md14]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_webnovel_review_skill_uses_unified_reviewer_pipeline
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_active_skills_use_agent_tool_name_not_legacy_task
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_webnovel_write_skill_uses_explicit_agent_invocation_templates
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_main_skills_define_author_friendly_final_report_contract[webnovel-init]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_main_skills_define_author_friendly_final_report_contract[webnovel-plan]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_main_skills_define_author_friendly_final_report_contract[webnovel-write]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_main_skills_define_author_friendly_final_report_contract[webnovel-review]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_write_skill_final_report_covers_commit_projection_and_backup
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_review_skill_final_report_covers_metrics_and_blocking_decision
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_main_skills_record_subagent_run_summaries_for_agent_calls
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agents_expose_subagent_run_summary_signals_without_changing_outputs[context-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agents_expose_subagent_run_summary_signals_without_changing_outputs[reviewer.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agents_expose_subagent_run_summary_signals_without_changing_outputs[data-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agents_expose_subagent_run_summary_signals_without_changing_outputs[deconstruction-agent.md]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_main_skills_define_author_friendly_progress_and_recovery_contract[webnovel-init]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_main_skills_define_author_friendly_progress_and_recovery_contract[webnovel-plan]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_main_skills_define_author_friendly_progress_and_recovery_contract[webnovel-write]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_main_skills_define_author_friendly_progress_and_recovery_contract[webnovel-review]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_write_skill_progress_nodes_are_author_friendly_and_limited
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_write_skill_resume_contract_uses_runtime_ledger_and_confirmation_boundaries
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_story_system_runtime_contract_commands_exist
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_webnovel_write_skill_uses_chapter_commit_as_step5_mainline
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_webnovel_write_skill_uses_project_root_backup_not_bare_git_add
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_webnovel_query_skill_prefers_story_system_and_memory_contract
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_context_agent_prefers_contract_and_latest_commit_mainline
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_context_agent_loads_fixed_guides_and_outputs_writer_brief
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agents_do_not_name_nonexistent_writing_dna_files
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_data_agent_is_described_as_extraction_only_not_direct_write_mainline
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_dashboard_and_plan_skills_surface_story_runtime_mainline
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_webnovel_write_skill_routes_step2_through_writing_brief
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_context_agent_and_write_skill_form_isolated_write_chain
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_direct_state_writes_in_write_skill
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_no_direct_state_writes_in_agents
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_init_candidates_is_object_not_list_in_agent_schema
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_deconstruction_agent_preserves_init_handoff_and_boundaries
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_deconstruction_agent_schema_extension
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_deconstruction_agent_is_not_init_only
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_placeholder_scan_runs_in_both_plan_and_write_skills
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_story_system_chapter_refresh_uses_real_goal_not_placeholder_query[webnovel-plan]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_story_system_chapter_refresh_uses_real_goal_not_placeholder_query[webnovel-write]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_story_system_chapter_refresh_persists_runtime_contracts[webnovel-plan]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_story_system_chapter_refresh_persists_runtime_contracts[webnovel-write]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_write_skill_gate_stages_ordered_prewrite_precommit_postcommit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_review_pipeline_persists_metrics_in_review_chain[webnovel-write]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_review_pipeline_persists_metrics_in_review_chain[webnovel-review]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_write_skill_postcommit_verifies_five_projections_and_retry_only
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_plan_skill_covers_outline_writeback_and_state_sync_contract
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_agent_write_ownership_matches_tools_frontmatter
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_write_skill_has_readonly_git_diff_change_surface_check
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_write_review_skills_state_artifact_ownership
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_reviewer_has_no_react_meta_narrative
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_plan_reads_reference_research_when_pointer_set
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_plan_auto_discovers_reference_research
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_chart_scan_skill_mentions_marked_references
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_write_skill_references_reference_research_injector
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_review_skill_references_do_not_copy_check
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_prompt_integrity.py::test_reviewer_agent_supports_do_not_copy_violation_category
+```
+
+### 4. Projection writers and projections CLI — 73 collected
+
+```text
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_projection_rejects_fake_payload_before_state_write
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_index_projection_rejects_fake_payload_before_index_write
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_projection_rejects_corrupt_durable_commit_before_state_write
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_projection_writers_reject_mismatched_payload_before_side_effects
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_summary_memory_and_vector_writers_reject_payload_without_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_projection_writers_accept_matching_durable_payload_and_ignore_projection_status
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_projection_writer_handles_rejected_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_projection_writer_applies_accepted_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_projection_writer_rejects_out_of_order_retry
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_legacy_chapter_index_writer_rejects_story_system_project
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_accepted_chapter_commits_advance_progress_and_word_count
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_reapplying_accepted_chapter_commit_does_not_double_count_words
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_projection_writer_derives_delta_from_power_breakthrough_event
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_projection_writer_updates_strand_tracker
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_projection_writer_rejects_changed_payload_for_same_chapter
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_accepted_commit_updates_state_json_end_to_end
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_index_projection_writer_applies_entity_delta
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_index_projection_writer_registers_stable_protagonist_aliases
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_entity_delta_without_protagonist_flag_preserves_existing_protagonist
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_index_projection_writer_derives_relationship_from_event
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_index_projection_writer_derives_artifact_entity_from_event
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_accepted_commit_writes_chapter_index_tables
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_index_projection_writer_is_idempotent_for_replay
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_index_projection_writer_records_state_change_from_event
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_summary_projection_writer_writes_summary_markdown
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_summary_projection_writer_replay_overwrites_not_appends
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_memory_projection_writer_maps_commit_into_scratchpad
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_memory_projection_writer_is_idempotent_for_replay
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_vector_projection_writer_is_idempotent_for_replay
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_memory_projection_writer_maps_open_loop_event_into_scratchpad
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_writer_aggregates_foreshadowing_from_open_loop_events
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_writer_foreshadowing_replay_is_idempotent
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_writer_foreshadowing_orphan_close_does_not_fabricate_loop
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_state_writer_keeps_identical_content_loops_distinct_and_closes_by_id
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_router_routes_open_loop_events_to_state
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_memory_projection_keeps_duplicate_loop_text_distinct_and_closes_by_identity
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_memory_projection_orphan_close_does_not_resolve_an_unlinked_legacy_identity
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_memory_projection_tracks_promise_create_and_linked_payoff_without_ledger_write
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_payoff_only_event_does_not_create_reader_promise_memory
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projection_writers.py::test_promise_paid_off_with_legacy_exact_unique_content_updates_same_memory_identity
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rejected_projection_fixture_is_bound_to_a_service_owned_hard_veto
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_retry_projection_replays_existing_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_retry_projection_rebuilds_event_read_models_from_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_retry_projection_replay_keeps_event_read_models_aligned_and_unique
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_retry_legacy_commit_with_projection_status_preserves_its_bytes
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_retry_repairs_divergent_event_file_and_sqlite_from_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_retry_after_event_mirror_failure_repairs_and_preserves_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_retry_projection_reports_missing_commit
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_replay_projections_runs_range
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_full_rebuild_discovers_sparse_commit_sequence_and_preserves_canon
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_full_rebuild_validates_every_commit_before_reset
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_full_rebuild_is_repeatable_and_preserves_operational_index_data
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_full_rebuild_reports_projection_and_chapter_on_failure
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_full_rebuild_refuses_empty_or_noncanonical_commit_sets_before_reset
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_full_rebuild_preserves_incremental_foreshadowing_semantics
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_full_rebuild_validates_scenes_appearances_and_state_change_index
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_full_rebuild_validates_index_field_values
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_regenerates_intent_diagnostics_and_clears_stale_rows
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_writes_empty_intent_diagnostics_projection
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_upgrades_unique_legacy_state_loop_row_to_event_identity
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_upgrades_legacy_state_description_alias_for_structured_loop_content
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_upgrades_legacy_state_question_alias_for_structured_loop_content
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_keeps_unprovable_legacy_state_row_non_authoritative
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_shadows_mixed_evidence_legacy_memory_row_when_canon_resolves_loop
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_resolves_description_alias_before_context_exposes_legacy_loop
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_migrates_only_exact_historical_memory_aliases[content-\u7389\u4f69\u4e3a\u4f55\u53d1\u70ed]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_migrates_only_exact_historical_memory_aliases[description-\u7389\u4f69\u4e3a\u4f55\u53d1\u70ed]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_migrates_only_exact_historical_memory_aliases[unanswered_question-\u7389\u4f69\u4e3a\u4f55\u53d1\u70ed\uff1f]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_migrates_only_exact_historical_memory_aliases[normalized-mystery\uff1a\u7389\u4f69\u4e3a\u4f55\u53d1\u70ed]
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_does_not_bind_ambiguous_or_wrong_chapter_legacy_memory_alias
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_keeps_payoff_only_diagnostic_without_creating_active_promise
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_reconciles_duplicate_loops_promises_and_legacy_rows_without_duplicate_active_context
+.claude/plugins/zhanghui/scripts/data_modules/tests/test_projections_cli.py::test_rebuild_upgrades_legacy_reader_promise_memory_without_duplicate_active_rows
+```
 
 ## Ownership coverage
 
-- Inventory totals: writers pending; readers pending; migrations pending.
-- Writer coverage: pending.
-- Reader coverage (reader-family coverage): pending.
-- Runtime inventory-isolation: pending.
-- Active-document drift: pending.
-- Runtime guard changes: pending; only a reproduced public API/CLI Canon bypass can justify one.
-- Direct bypass reproduction verdicts: pending per writer family; distinguish real API/CLI calls from synthetic scanner fixtures.
+- Writers: 43
+- Readers: 22
+- Migrations: 2
+- Writer source coordinates: 61
+- Reader source coordinates: 132
+- Writer exceptions: 16
+- Reader exceptions: 38
+- Unclassified writers: 0
+- Unclassified readers: 0
+- Conflicting exact-coordinate Story System reader authorities: 0
+- Production runtime inventory dependency: none
+- Production Canon guard changes: none
+- Historical `.claude/plugins/zhanghui/6.4.0/**` changes: none
 
 ## CHANGES shadow evidence
 
-- CHANGES denominators: pending measurement.
-- ProposedChanges denominator: pending corpus measurement.
-- ObservedChanges denominator: pending corpus measurement.
-- Project/chapter counts and required mode/category cells: pending.
-- Evidence status: `INSUFFICIENT` until at least 60 chapters, at least 3 opted-in projects, every required mode/category cell, and all infrastructure artifacts are present and valid.
-- Opaque/unmapped/unsupported items remain uncovered denominator entries.
-- No CHANGES or `changes_gate.py` retirement is part of Phase 7.
+- Real opted-in corpus: none
+- ProposedChanges / ObservedChanges denominators: no real corpus; not measured
+- Evidence status: `INSUFFICIENT`
+- Retirement eligibility: not established; no retirement claim is made
 
-## Source/mode matrix
+## Source, mode, and version limits
 
-- Git/source-tree identity: pending H1 SHA/tree SHA.
-- Plugin package version: pending manifest check.
-- Marketplace catalog version and selected source: pending manifest check.
-- Installed host plugin version: requires a host-side check; repository evidence cannot establish it.
-- Project data schema version: pending commit/projection schema check.
-- New Story System / existing Story System / legacy / mixed-partial fixture results: pending.
-- Historical `6.4.0/` snapshot change check: pending.
+- H1 Git/source tree is bound to the SHA and tree SHA above.
+- Installed host plugin version: repository evidence cannot verify this; a host-side check remains necessary.
 
 ## Independent review and known limits
 
-- Reviewer verdict: pending independent review; do not infer from implementation tests.
-- Known limits: record concrete limitations and any unresolved release decision after H1 execution.
-- Phase 7 status: pending; no pass claim is encoded in this template.
+- Reviewer verdict: `PASS`
+- Reviewed implementation: R6/H1 `825a97e87c1d1e512a48ea2313c4f64122ddad46`
+- Independent review found no remaining implementation blocker.
+- CHANGES adoption evidence remains `INSUFFICIENT` because no real opted-in corpus was supplied.
+- Installed host plugin version was not verified by repository evidence.
+- Phase 7 does not include full historical migration, projection recovery or full rebuild, amend/supersede, or Intent/Craft model merge. These are scope limitations, not Phase 7 failures.
