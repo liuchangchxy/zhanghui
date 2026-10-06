@@ -1,0 +1,139 @@
+import json
+
+import pytest
+
+from data_modules.canon_correction_schema import (
+    artifact_sha256, base_commit_digest, effective_content_digest, request_sha256,
+)
+from data_modules.canon_correction_store import (
+    append_correction, append_correction_request, build_correction_review_package,
+    record_interactive_correction_decision, verify_phase9_correction_decision,
+)
+from data_modules.durable_projection import DurableCommitError
+from data_modules.effective_history import (
+    EffectiveHistoryStore, EffectiveProjectionInput,
+    validate_effective_projection_input,
+)
+
+
+def _commit(chapter=3):
+    return {
+        "meta": {"schema_version": "story-system/v1", "chapter": chapter, "status": "accepted"},
+        "review_result": {"blocking_count": 0},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
+        "extraction_result": {"accepted_events": [], "state_deltas": [], "entity_deltas": []},
+    }
+
+
+def _install_base(root, chapter=3):
+    base = _commit(chapter)
+    path = root / f".story-system/commits/chapter_{chapter:03d}.commit.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(base), encoding="utf-8")
+    return base
+
+
+def _stage_retract(root, base, suffix="retract", prior_verifications=()):
+    digest = base_commit_digest(base)
+    req = {
+        "schema_version": "canon-correction-request/v1", "request_id": f"TEST-ONLY-{suffix}-request",
+        "chapter": 3, "base_commit_sha256": digest, "parent_revision_id": f"base:{digest}",
+        "parent_effective_content_sha256": effective_content_digest("accepted", base["extraction_result"]),
+        "operation": "RETRACT", "proposed_effective_status": "retracted",
+        "proposed_effective_extraction_result": None,
+        "proposed_effective_content_sha256": effective_content_digest("retracted", None),
+        "changed_paths": [], "proposer_provenance": {"fixture": "TEST ONLY"}, "reason": "TEST ONLY",
+    }
+    append_correction_request(root, req, decision_verifications=prior_verifications)
+    package = build_correction_review_package(
+        req, parent_status="accepted", parent_extraction=base["extraction_result"],
+    )
+    auth = record_interactive_correction_decision(
+        root, req, package, choice="APPROVE", authorization_id=f"TEST-ONLY-{suffix}-auth",
+        interaction_id=f"TEST-ONLY-{suffix}-interaction", interaction_surface="test fixture",
+        confirmed_at="2026-10-06T00:00:00Z",
+    )
+    verified = verify_phase9_correction_decision(req, auth, package)
+    correction = {
+        "schema_version": "canon-correction/v1", "correction_id": f"TEST-ONLY-{suffix}",
+        "chapter": 3, "base_commit_sha256": digest, "parent_revision_id": req["parent_revision_id"],
+        "parent_effective_content_sha256": req["parent_effective_content_sha256"],
+        "operation": "RETRACT", "effective_extraction_result": None, "changed_paths": [],
+        "request_sha256": request_sha256(req), "authorization_ref": auth.authorization_id,
+        "authorization_sha256": artifact_sha256(auth), "provenance": {"fixture": "TEST ONLY"},
+        "actor_ref": "TEST ONLY", "reason": "TEST ONLY",
+    }
+    append_correction(root, correction, request=req, authorization=auth,
+                      decision_verifications=[verified])
+    return req, auth, package, verified
+
+
+def test_staged_candidate_does_not_change_active_base_history(tmp_path):
+    base = _install_base(tmp_path)
+    store = EffectiveHistoryStore()
+    before = store.read_active_snapshot(tmp_path)
+    digest = base_commit_digest(base)
+    req = {
+        "schema_version": "canon-correction-request/v1", "request_id": "TEST-ONLY-pending",
+        "chapter": 3, "base_commit_sha256": digest, "parent_revision_id": f"base:{digest}",
+        "parent_effective_content_sha256": effective_content_digest("accepted", base["extraction_result"]),
+        "operation": "RETRACT", "proposed_effective_status": "retracted",
+        "proposed_effective_extraction_result": None,
+        "proposed_effective_content_sha256": effective_content_digest("retracted", None),
+        "changed_paths": [], "proposer_provenance": {"fixture": "TEST ONLY"}, "reason": "TEST ONLY",
+    }
+    append_correction_request(tmp_path, req)
+    candidate = store.resolve_candidate(tmp_path, "missing-target")
+    after = store.read_active_snapshot(tmp_path)
+    assert not candidate.ok
+    assert before.effective_history_digest == after.effective_history_digest
+    assert before.chapters[3].status == "accepted"
+
+
+def test_approved_staged_correction_is_candidate_until_publication(tmp_path):
+    base = _install_base(tmp_path)
+    store = EffectiveHistoryStore()
+    active_before = store.read_active_snapshot(tmp_path)
+    _stage_retract(tmp_path, base)
+    candidate = store.resolve_candidate(tmp_path, "TEST-ONLY-retract")
+    active_after = store.read_active_snapshot(tmp_path)
+    assert candidate.ok
+    assert candidate.chapters[3].status == "retracted"
+    assert active_after.chapters[3].status == "accepted"
+    assert active_after.effective_history_digest == active_before.effective_history_digest
+
+
+def test_effective_projection_input_revalidates_disk_base_and_rejects_arbitrary_dict(tmp_path):
+    base = _install_base(tmp_path)
+    store = EffectiveHistoryStore()
+    snapshot = store.read_active_snapshot(tmp_path)
+    value = store.projection_input(snapshot, 3)
+    assert validate_effective_projection_input(tmp_path, value) is value
+    with pytest.raises(TypeError):
+        validate_effective_projection_input(tmp_path, {"base_commit": base})
+    path = tmp_path / ".story-system/commits/chapter_003.commit.json"
+    changed = _commit()
+    changed["extraction_result"]["summary_text"] = "tampered"
+    path.write_text(json.dumps(changed), encoding="utf-8")
+    with pytest.raises(DurableCommitError, match="BASE_COMMIT_MISMATCH"):
+        validate_effective_projection_input(tmp_path, value)
+
+
+def test_sibling_candidate_conflict_does_not_change_base_active_snapshot(tmp_path):
+    base = _install_base(tmp_path)
+    store = EffectiveHistoryStore()
+    active_before = store.read_active_snapshot(tmp_path)
+    _stage_retract(tmp_path, base, "first")
+    correction_dir = next((tmp_path / ".story-system/corrections").glob("chapter_*/*/corrections"))
+    original = json.loads((correction_dir / "TEST-ONLY-first.correction.json").read_text(encoding="utf-8"))
+    sibling = {**original, "correction_id": "TEST-ONLY-sibling"}
+    (correction_dir / "TEST-ONLY-sibling.correction.json").write_text(
+        json.dumps(sibling), encoding="utf-8",
+    )
+    candidate = store.resolve_candidate(tmp_path, "TEST-ONLY-first")
+    active_after = store.read_active_snapshot(tmp_path)
+    assert not candidate.ok
+    assert any("SIBLING" in item for item in candidate.diagnostics)
+    assert active_after.effective_history_digest == active_before.effective_history_digest
+    assert active_after.chapters[3].status == "accepted"

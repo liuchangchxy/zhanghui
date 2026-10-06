@@ -4114,6 +4114,93 @@
           "read_edge_id": "canon-correction-confirmation-parent-edge"
         }
       ]
+    },
+    {
+      "reader_id": "effective-history-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/effective_history.py",
+        "symbol": "EffectiveHistoryStore"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CANON_COMMIT",
+          "resource": "accepted immutable chapter commit closure used by the active or candidate effective-history snapshot",
+          "story_system": {
+            "primary_source": ".story-system/commits/{chapter}.commit.json validated through durable_projection",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "base commit identity is validated; candidate corrections remain separately staged until publication",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "no legacy commit record",
+            "authority_claim": "UNKNOWN",
+            "condition": "unsupported for correction history",
+            "fallback": null
+          },
+          "read_edge_id": "effective-history-base-commit-edge"
+        },
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "correction requests, authorizations, and correction artifacts used to resolve a candidate snapshot",
+          "story_system": {
+            "primary_source": ".story-system/corrections/{chapter}/{base_sha256}/{requests,authorizations,corrections}",
+            "authority_claim": "WORKFLOW",
+            "condition": "exact target candidate validation only; no candidate scan can change active history",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "no legacy correction artifacts",
+            "authority_claim": "UNKNOWN",
+            "condition": "unsupported for correction history",
+            "fallback": null
+          },
+          "read_edge_id": "effective-history-candidate-artifact-edge"
+        }
+      ],
+      "active_consumers": [
+        "effective history facade",
+        "projection-input validation"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain as the single validated boundary for active and candidate effective-history inputs.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/effective_history.py",
+          "anchor": "class EffectiveHistoryStore"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/effective_history.py",
+          "anchor": "def _read_json_artifacts"
+        }
+      ],
+      "reader_family": "Story System commit and projection readers",
+      "lifecycle_status": "guarded",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/effective_history.py",
+          "symbol": "EffectiveHistoryStore",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit",
+          "reader_id": "effective-history-reader",
+          "read_edge_id": "effective-history-base-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/effective_history.py",
+          "symbol": "validate_effective_projection_input",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit",
+          "reader_id": "effective-history-reader",
+          "read_edge_id": "effective-history-base-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/effective_history.py",
+          "symbol": "_read_json_artifacts",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "read_text",
+          "reader_id": "effective-history-reader",
+          "read_edge_id": "effective-history-candidate-artifact-edge"
+        }
+      ]
     }
   ],
   "migrations": [
