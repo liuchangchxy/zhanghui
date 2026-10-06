@@ -340,7 +340,8 @@
                   "data_domain",
                   "resource",
                   "story_system",
-                  "legacy"
+                  "legacy",
+                  "read_edge_id"
                 ],
                 "properties": {
                   "data_domain": {
@@ -368,6 +369,10 @@
                   },
                   "legacy": {
                     "$ref": "#/$defs/readerMode"
+                  },
+                  "read_edge_id": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "additionalProperties": false
@@ -500,9 +505,34 @@
         },
         "sink": {
           "type": "string"
+        },
+        "writer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reader_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "read_edge_id": {
+          "type": "string",
+          "minLength": 1
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "writer_id"
+          ]
+        },
+        {
+          "required": [
+            "reader_id",
+            "read_edge_id"
+          ]
+        }
+      ]
     },
     "sourceException": {
       "type": "object",
@@ -545,9 +575,51 @@
         },
         "evidence": {
           "$ref": "#/$defs/evidence"
+        },
+        "writer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reader_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "read_edge_id": {
+          "type": "string",
+          "minLength": 1
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reason_code": {
+                "const": "NON_STORY_STORE"
+              }
+            },
+            "required": [
+              "reason_code"
+            ]
+          },
+          "then": {},
+          "else": {
+            "oneOf": [
+              {
+                "required": [
+                  "writer_id"
+                ]
+              },
+              {
+                "required": [
+                  "reader_id",
+                  "read_edge_id"
+                ]
+              }
+            ]
+          }
+        }
+      ]
     }
   }
 }

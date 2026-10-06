@@ -1,3 +1,5 @@
+import pytest
+
 """Read-only CHANGES shadow measurement contract tests."""
 
 import json
@@ -111,3 +113,98 @@ def test_shadow_report_schema_is_versioned_and_keeps_denominators_and_health_sep
     required = set(schema["required"])
     assert {"schema_version", "policy_version", "input_sha256", "denominators",
             "semantic_counts", "infrastructure_health"} <= required
+
+
+def _eligible_reports(*, projects=3, chapters=60, low_category=None, low_rate=1.0, unhealthy=False):
+    from data_modules.changes_shadow_report import REQUIRED_CATEGORIES
+    rows = []
+    for index in range(chapters):
+        mode = "story_system" if index % 2 else "legacy"
+        project = f"p{index % projects}"
+        categories = {}
+        for category in REQUIRED_CATEGORIES:
+            rate = low_rate if category == low_category else 1.0
+            categories[category] = {"proposed": 100, "observed": 100,
+                                    "proposed_comparable": int(100 * rate),
+                                    "observed_comparable": int(100 * rate)}
+        rows.append({"project_id": project, "project_mode": mode, "chapter_id": str(index),
+                     "categories": categories,
+                     "denominators": {"proposed_claims": 200, "observed_facts": 200, "combined": 400},
+                     "infrastructure_health": {"missing": int(unhealthy), "invalid": 0, "stale": 0, "extractor_failure": 0},
+                     "hard_conflict_adjudication": {"unresolved": 0, "false_block": 0}})
+    return rows
+
+
+def test_sampling_categories_match_phase2_taxonomy():
+    from data_modules.changes_shadow_report import REQUIRED_CATEGORIES
+    from data_modules.reconciliation import REQUIRED_CHANGE_FIELDS
+    assert REQUIRED_CATEGORIES == set(REQUIRED_CHANGE_FIELDS)
+
+
+def test_candidate_category_gate_is_scoped_and_never_retires_automatically():
+    from data_modules.changes_shadow_report import aggregate_reports
+    reports = _eligible_reports(low_category="new_plot_points", low_rate=0.80)
+    result = aggregate_reports(reports, candidate_categories=["character_state_changes"],
+                               migration_evidence_complete=True, release_cohort_policy_present=True)
+    assert result["status"] == "DISCUSSION_GATE_REQUIRES_HUMAN_REVIEW"
+    assert result["retirement_discussion_threshold"]["automatic_retirement"] is False
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"chapters": 59}, {"projects": 2}, {"unhealthy": True},
+])
+def test_candidate_gate_prerequisites_block_discussion(kwargs):
+    from data_modules.changes_shadow_report import aggregate_reports
+    reports = _eligible_reports(**kwargs)
+    result = aggregate_reports(reports, candidate_categories=["character_state_changes"],
+                               migration_evidence_complete=True, release_cohort_policy_present=True)
+    assert result["status"] == "INSUFFICIENT"
+
+
+def test_candidate_coverage_keeps_opaque_items_in_denominator():
+    from data_modules.changes_shadow_report import aggregate_reports
+    reports = _eligible_reports(low_category="character_state_changes", low_rate=0.94)
+    result = aggregate_reports(reports, candidate_categories=["character_state_changes"],
+                               migration_evidence_complete=True, release_cohort_policy_present=True)
+    assert result["status"] == "INSUFFICIENT"
+    assert result["retirement_discussion_threshold"]["candidate_category_coverage"]["character_state_changes"]["denominator"] == 12000
+
+
+@pytest.mark.parametrize("failure", ["migration", "release_policy", "unresolved", "false_block", "missing_cell"])
+def test_all_evidence_and_conflict_gates_block_discussion(failure):
+    from data_modules.changes_shadow_report import aggregate_reports
+    reports = _eligible_reports()
+    migration, release = True, True
+    if failure == "migration":
+        migration = False
+    elif failure == "release_policy":
+        release = False
+    elif failure in {"unresolved", "false_block"}:
+        key = "unresolved" if failure == "unresolved" else "false_block"
+        reports[0]["hard_conflict_adjudication"][key] = 1
+    else:
+        for row in reports:
+            if row["project_mode"] == "legacy":
+                row["categories"].pop("time_progression", None)
+    result = aggregate_reports(reports, candidate_categories=["character_state_changes"],
+                               migration_evidence_complete=migration, release_cohort_policy_present=release)
+    assert result["status"] == "INSUFFICIENT"
+
+
+def test_no_candidate_or_invalid_candidate_cannot_enter_discussion():
+    from data_modules.changes_shadow_report import aggregate_reports
+    reports = _eligible_reports()
+    result = aggregate_reports(reports, migration_evidence_complete=True, release_cohort_policy_present=True)
+    assert result["status"] == "INSUFFICIENT"
+    with pytest.raises(ValueError, match="Phase 2 CHANGES"):
+        aggregate_reports(reports, candidate_categories=["realm"], migration_evidence_complete=True,
+                          release_cohort_policy_present=True)
+
+
+def test_real_corpus_is_not_fabricated_for_retirement_discussion():
+    from data_modules.changes_shadow_report import aggregate_reports
+    result = aggregate_reports([], candidate_categories=["character_state_changes"],
+                               migration_evidence_complete=False, release_cohort_policy_present=False)
+    assert result["status"] == "INSUFFICIENT"
+    assert result["sample_counts"] == {"chapters": 0, "projects": 0}
+    assert result["retirement_discussion_threshold"]["automatic_retirement"] is False

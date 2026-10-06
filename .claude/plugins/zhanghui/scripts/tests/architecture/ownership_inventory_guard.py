@@ -54,7 +54,7 @@ def _domain_for_text(value):
         domains.add("INTENT")
     if any(token in text for token in ("craft", "style_profile")):
         domains.add("CRAFT")
-    if any(token in text for token in ("workflow", "gate_decision", "review_attempt", "projection_run")):
+    if any(token in text for token in ("workflow", "gate_decision", "review_attempt", "projection_run", "projection_log")):
         domains.add("WORKFLOW_METADATA")
     if any(token in text for token in ("chapter_file", "chapter.md", "taxonomy", "profile_path", "archive_file", "init_project.py")):
         domains.add("COMPATIBILITY")
@@ -161,9 +161,19 @@ def _protected_candidates(plugin_root, *, writers):
                 if not writers and name in {"read_events", "load_events", "get_events"}:
                     found.append(("EVENTS", name))
                 if name in {"read_text", "read_bytes", "read_json", "load_json", "write_text", "write_bytes", "open", "glob", "rglob", "iterdir"}:
-                    target_nodes = [node.func.value] if isinstance(node.func, ast.Attribute) else list(node.args[:1])
-                    if name == "open" and len(node.args) > 1:
-                        mode = _resolve_expr(node.args[1], aliases).strip("'\"")
+                    is_path_open = name == "open" and isinstance(node.func, ast.Attribute)
+                    is_builtin_open = name == "open" and isinstance(node.func, ast.Name)
+                    if is_path_open:
+                        target_nodes = [node.func.value]
+                        mode_node = node.args[0] if node.args else next((kw.value for kw in node.keywords if kw.arg == "mode"), None)
+                    elif is_builtin_open:
+                        target_nodes = [node.args[0]] if node.args else []
+                        mode_node = node.args[1] if len(node.args) > 1 else next((kw.value for kw in node.keywords if kw.arg == "mode"), None)
+                    else:
+                        target_nodes = [node.func.value] if isinstance(node.func, ast.Attribute) else list(node.args[:1])
+                        mode_node = None
+                    if name == "open":
+                        mode = _resolve_expr(mode_node, aliases).strip("'\"") if mode_node else "r"
                         is_write = any(flag in mode for flag in ("w", "a", "x", "+"))
                         if is_write != writers:
                             target_nodes = []
@@ -177,18 +187,21 @@ def _protected_candidates(plugin_root, *, writers):
                         if domains == {"COMPATIBILITY"}:
                             unresolved_domains.add("COMPATIBILITY")
                         elif domains:
-                            found.extend((domain, name) for domain in domains)
+                            found.extend((domain, "Path.open" if is_path_open else name) for domain in domains)
                         elif (path_hints or any(token in (function_name or "").lower() for token in PROTECTED_SOURCE_HINTS)) and name in {"read_text", "read_bytes", "read_json", "load_json", "open"}:
                             unresolved_domains |= _domain_for_text(relative + " " + (class_name or "") + " " + (function_name or "")) or {"COMPATIBILITY"}
                 for domain, sink in found:
                     candidates.add((coordinate[0], coordinate[1], domain, sink))
                 for domain in unresolved_domains:
-                    target_expression = (
-                        ast.unparse(node.func.value)
-                        if name in {"read_text", "read_bytes", "write_text", "write_bytes"}
-                        and isinstance(node.func, ast.Attribute)
-                        else ast.unparse(node.args[0]) if node.args else "<no-target>"
-                    )
+                    if name == "open" and isinstance(node.func, ast.Attribute):
+                        target_expression = ast.unparse(node.func.value)
+                    elif name == "open":
+                        target_expression = ast.unparse(node.args[0]) if node.args else "<no-target>"
+                    else:
+                        target_expression = (ast.unparse(node.func.value)
+                            if name in {"read_text", "read_bytes", "write_text", "write_bytes"}
+                            and isinstance(node.func, ast.Attribute)
+                            else ast.unparse(node.args[0]) if node.args else "<no-target>")
                     unresolved.add((coordinate[0], coordinate[1], domain, name, target_expression))
             for child in ast.iter_child_nodes(node):
                 visit(child, class_name, function_name, aliases)
@@ -240,6 +253,18 @@ def validate_inventory(inventory, repository_root):
                          f"{identity}: discovered source symbol missing: {source_record.get('symbol')}")
                 _require(source_record.get("data_domain") in DOMAINS, f"{identity}: discovered source domain invalid")
                 _require(source_record.get("sink"), f"{identity}: discovered source sink missing")
+                expected_id = id_key
+                _require(source_record.get(expected_id) == identity,
+                         f"{identity}: discovered source owner linkage mismatch")
+                _require(_inventory_source_path(source_record.get("path", "")) == _inventory_source_path(implementation.get("path", ""))
+                         and source_record.get("symbol") == implementation.get("symbol"),
+                         f"{identity}: discovered source is assigned to a different owner implementation")
+                if family == "readers":
+                    edge_id = source_record.get("read_edge_id")
+                    _require(edge_id and any(edge.get("read_edge_id") == edge_id
+                                             and edge.get("data_domain") == source_record.get("data_domain")
+                                             for edge in record.get("read_edges", [])),
+                             f"{identity}: source read edge linkage mismatch")
             if family == "writers":
                 _require(record.get("owner"), f"{identity}: owner required")
                 domains = record.get("data_domains", [])
@@ -286,6 +311,24 @@ def validate_inventory(inventory, repository_root):
                      and exception.get("sink") and exception.get("target_expression"),
                      f"{family}: exact source identity required")
             _require(len(exception.get("rationale", "")) >= 8, f"{family}: rationale required")
+            if exception.get("reason_code") != "NON_STORY_STORE":
+                owner_key = "writer_id" if family == "writer_exceptions" else "reader_id"
+                records = inventory.get("writers" if family == "writer_exceptions" else "readers", [])
+                _require(exception.get(owner_key) in {row.get(owner_key) for row in records},
+                         f"{family}: protected exception owner missing or unresolved")
+                owner = next(row for row in records if row.get(owner_key) == exception[owner_key])
+                allowed_domains = owner.get("data_domains", []) if family == "writer_exceptions" else [edge.get("data_domain") for edge in owner.get("read_edges", [])]
+                _require(exception.get("domain") in allowed_domains,
+                         f"{family}: protected exception owner does not classify domain")
+                if family == "reader_exceptions":
+                    edge_id = exception.get("read_edge_id")
+                    _require(edge_id and any(edge.get("read_edge_id") == edge_id and edge.get("data_domain") == exception.get("domain") for edge in owner.get("read_edges", [])),
+                             f"{family}: protected exception read edge missing")
+            else:
+                _require("non-story" in exception.get("rationale", "").lower()
+                         or "test" in exception.get("rationale", "").lower()
+                         or "operational" in exception.get("rationale", "").lower(),
+                         f"{family}: NON_STORY_STORE classification rationale required")
             for evidence in exception.get("evidence", []):
                 source = repository_root / evidence.get("path", "")
                 _require(source.is_file(), f"{family}: evidence path missing: {source}")
@@ -318,12 +361,8 @@ def _inventory_source_path(path):
 
 
 def writer_coverage(inventory, plugin_root):
-    declared = set()
-    for row in inventory["writers"]:
-        path = _inventory_source_path(row["implementation"]["path"])
-        declared.update((path, row["implementation"]["symbol"], domain) for domain in row.get("data_domains", []))
-        declared.update((_inventory_source_path(source["path"]), source["symbol"], source["data_domain"])
-                        for source in row.get("source_coordinates", []))
+    declared = {(_inventory_source_path(source["path"]), source["symbol"], source["data_domain"])
+                for row in inventory["writers"] for source in row.get("source_coordinates", [])}
     candidates, unresolved = _protected_candidates(plugin_root, writers=True)
     exceptions = {("writer", _inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"),
                    row.get("sink"), row.get("target_expression")) for row in inventory.get("writer_exceptions", [])}
@@ -333,19 +372,13 @@ def writer_coverage(inventory, plugin_root):
                if (path, symbol, domain) not in declared}
     return sorted(missing | pending)
 
-
 def _exception_key(family, row):
     return (family, row.get("path"), row.get("symbol"), row.get("domain"), row.get("sink"), row.get("target_expression"))
 
 
 def reader_coverage(inventory, plugin_root):
-    declared = set()
-    for row in inventory["readers"]:
-        path = _inventory_source_path(row["implementation"]["path"])
-        declared.update((path, row["implementation"]["symbol"], edge.get("data_domain"))
-                        for edge in row.get("read_edges", []))
-        declared.update((_inventory_source_path(source["path"]), source["symbol"], source["data_domain"])
-                        for source in row.get("source_coordinates", []))
+    declared = {(_inventory_source_path(source["path"]), source["symbol"], source["data_domain"])
+                for row in inventory["readers"] for source in row.get("source_coordinates", [])}
     candidates, unresolved = _protected_candidates(plugin_root, writers=False)
     exceptions = {("reader", _inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"),
                    row.get("sink"), row.get("target_expression")) for row in inventory.get("reader_exceptions", [])}
@@ -354,7 +387,6 @@ def reader_coverage(inventory, plugin_root):
     missing = {(path, symbol, domain) for path, symbol, domain, _sink in candidates
                if (path, symbol, domain) not in declared}
     return sorted(missing | pending)
-
 
 def reader_family_coverage(inventory):
     covered = {record.get("reader_family") for record in inventory["readers"]}

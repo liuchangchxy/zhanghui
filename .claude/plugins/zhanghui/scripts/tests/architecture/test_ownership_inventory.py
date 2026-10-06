@@ -110,8 +110,10 @@ def test_unregistered_protected_writer_candidate_fails_until_classified():
         candidate = ("scripts/new_writer.py", "write_story_state", "STATE_JSON")
         inventory = {"writers": [], "writer_exceptions": []}
         assert guard.writer_coverage(inventory, fixture_root) == [candidate]
-        inventory["writers"].append({"implementation": {"path": candidate[0], "symbol": candidate[1]},
-                                     "data_domains": [candidate[2]]})
+        inventory["writers"].append({"writer_id": "new-owner", "implementation": {"path": candidate[0], "symbol": candidate[1]},
+                                     "data_domains": [candidate[2]], "source_coordinates": [
+                                         {"path": candidate[0], "symbol": candidate[1], "data_domain": candidate[2],
+                                          "sink": "atomic_write_json", "writer_id": "new-owner"}]})
         assert guard.writer_coverage(inventory, fixture_root) == []
     finally:
         import shutil
@@ -298,3 +300,81 @@ def test_marketplace_source_and_repository_versions_resolve_without_snapshot_act
     assert source.resolve() == PLUGIN.resolve()
     assert marketplace["plugins"][0]["version"] == plugin["version"]
     assert not (PLUGIN / "6.4.0/docs/ownership-inventory.json").exists()
+
+@pytest.mark.parametrize("call,expected", [
+    ("path.open('a')", "write"), ("path.open('w')", "write"),
+    ("path.open('r')", "read"), ("path.open()", "read"),
+    ("path.open(mode='a')", "write"), ("open(path, 'a')", "write"),
+    ("open(path, mode='r')", "read"), ("open(path)", "read"),
+])
+def test_open_scanner_uses_target_and_mode_separately(tmp_path, call, expected):
+    from tests.architecture.ownership_inventory_guard import _protected_candidates
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "state_io.py").write_text(
+        "from pathlib import Path\ndef access(root):\n    path = root / 'state.json'\n    " + call + "\n", encoding="utf-8")
+    writes, _ = _protected_candidates(tmp_path, writers=True)
+    reads, _ = _protected_candidates(tmp_path, writers=False)
+    selected, rejected = (writes, reads) if expected == "write" else (reads, writes)
+    assert any(row[2] == "STATE_JSON" and row[3] in {"open", "Path.open"} for row in selected)
+    assert not any(row[2] == "STATE_JSON" for row in rejected)
+    assert all(row[3] not in {"'a'", "'r'"} for row in selected)
+
+
+def test_source_coordinate_cannot_be_attached_to_wrong_same_domain_owner():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    source = next(row["source_coordinates"][0] for row in broken["writers"] if row.get("source_coordinates"))
+    wrong_owner = next(row for row in broken["writers"] if row["writer_id"] != source["writer_id"]
+                       and source["data_domain"] in row.get("data_domains", []))
+    moved = copy.deepcopy(source)
+    moved["writer_id"] = wrong_owner["writer_id"]
+    wrong_owner["source_coordinates"].append(moved)
+    with pytest.raises(ValueError, match="different owner implementation"):
+        validate_inventory(broken, ROOT)
+
+
+def test_dynamic_protected_exception_requires_owner_link_and_classification():
+    from tests.architecture.ownership_inventory_guard import writer_coverage
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    exception = next(row for row in inventory["writer_exceptions"] if row.get("writer_id"))
+    broken = copy.deepcopy(inventory)
+    broken_exception = next(row for row in broken["writer_exceptions"] if row.get("writer_id"))
+    broken_exception.pop("writer_id", None)
+    with pytest.raises(ValueError, match="owner"):
+        validate_inventory(broken, ROOT)
+    assert writer_coverage(inventory, PLUGIN) == []
+
+
+def test_projection_log_append_is_not_misclassified_as_reader():
+    from tests.architecture.ownership_inventory_guard import _protected_candidates
+    writes, _ = _protected_candidates(PLUGIN, writers=True)
+    reads, _ = _protected_candidates(PLUGIN, writers=False)
+    assert any(p.endswith("projection_log.py") and s == "append_projection_run" for p, s, *_ in writes)
+    assert not any(p.endswith("projection_log.py") and s == "append_projection_run" for p, s, *_ in reads)
+
+
+def test_dynamic_reader_exception_requires_owner_and_exact_read_edge():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    protected = next(row for row in inventory["reader_exceptions"] if row.get("reader_id"))
+    broken = copy.deepcopy(inventory)
+    target = next(row for row in broken["reader_exceptions"] if row.get("reader_id"))
+    target.pop("reader_id")
+    with pytest.raises(ValueError, match="owner"):
+        validate_inventory(broken, ROOT)
+    broken = copy.deepcopy(inventory)
+    target = next(row for row in broken["reader_exceptions"] if row.get("reader_id"))
+    target.pop("read_edge_id", None)
+    with pytest.raises(ValueError, match="read edge"):
+        validate_inventory(broken, ROOT)
+    assert protected["read_edge_id"]
+
+
+def test_generic_dynamic_exception_rationale_does_not_replace_ownership():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    target = next(row for row in broken["writer_exceptions"] if row.get("writer_id"))
+    target.pop("writer_id")
+    target["rationale"] = "dynamic target reviewed"
+    with pytest.raises(ValueError, match="owner"):
+        validate_inventory(broken, ROOT)

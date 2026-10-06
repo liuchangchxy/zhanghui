@@ -22,7 +22,7 @@ POLICY_VERSION = "changes-shadow-v1"
 REQUIRED_CATEGORIES = {
     "character_state_changes", "new_plot_points", "foreshadowing_actions",
     "location_state_changes", "faction_state_changes", "time_progression",
-    "item_transfers", "unresolved_questions", "realm", "power_breakthrough",
+    "item_transfers", "unresolved_questions",
 }
 
 
@@ -193,13 +193,16 @@ def analyze_phase2_files(chapter_path, extraction_path, reconciliation_path, *, 
     return report
 
 
-def aggregate_reports(reports, *, migration_evidence_complete=False, release_cohort_policy_present=False):
+def aggregate_reports(reports, *, candidate_categories=(), migration_evidence_complete=False, release_cohort_policy_present=False):
     """Apply the frozen minimum cohort and report missing project-mode/category cells."""
     projects = {row.get("project_id") for row in reports if row.get("project_id") != "unknown"}
     chapters = {(row.get("project_id"), row.get("chapter_id")) for row in reports}
     required_modes = {"story_system", "legacy"}
     present_modes = {row.get("project_mode") for row in reports}
     categories = REQUIRED_CATEGORIES
+    candidates = set(candidate_categories)
+    if not candidates <= REQUIRED_CATEGORIES:
+        raise ValueError("candidate_categories must be Phase 2 CHANGES fields")
     cells = {(row.get("project_mode"), category) for row in reports for category, counts in row.get("categories", {}).items()
              if counts.get("proposed", 0) or counts.get("observed", 0)}
     missing_cells = sorted(f"{mode}:{category}" for mode in required_modes for category in categories if (mode, category) not in cells)
@@ -212,17 +215,19 @@ def aggregate_reports(reports, *, migration_evidence_complete=False, release_coh
         totals.update(report.get("denominators", {}))
         for category, counts in report.get("categories", {}).items():
             for key, value in counts.items(): category_totals[(mode, category)][key] += value
-    coverage_values = []
-    for counts in category_totals.values():
-        for numerator, denominator in ((counts["proposed_comparable"], counts["proposed"]),
-                                       (counts["observed_comparable"], counts["observed"])):
-            if denominator:
-                coverage_values.append(numerator / denominator)
+    candidate_coverage = {}
+    for category in sorted(candidates):
+        relevant = [counts for (mode, name), counts in category_totals.items()
+                    if name == category and mode in required_modes]
+        numerator = sum(row["proposed_comparable"] + row["observed_comparable"] for row in relevant)
+        denominator = sum(row["proposed"] + row["observed"] for row in relevant)
+        candidate_coverage[category] = {"numerator": numerator, "denominator": denominator,
+                                        "rate": numerator / denominator if denominator else None}
     unresolved = sum(row.get("hard_conflict_adjudication", {}).get("unresolved", 0) for row in reports)
     false_blocks = sum(row.get("hard_conflict_adjudication", {}).get("false_block", 0) for row in reports)
     sufficient = (len(chapters) >= 60 and len(projects) >= 3 and required_modes <= present_modes
                   and bool(categories) and not missing_cells and not any(total_health.values())
-                  and bool(coverage_values) and min(coverage_values) >= 0.95 and unresolved == 0
+                  and bool(candidates) and all(row["rate"] is not None and row["rate"] >= 0.95 for row in candidate_coverage.values()) and unresolved == 0
                   and false_blocks == 0 and migration_evidence_complete and release_cohort_policy_present)
     per_mode = {}
     for (mode, category), counts in sorted(category_totals.items()):
@@ -239,7 +244,8 @@ def aggregate_reports(reports, *, migration_evidence_complete=False, release_coh
             "denominators": {"proposed_claims": totals["proposed_claims"], "observed_facts": totals["observed_facts"], "combined": totals["combined"]},
             "per_mode_category": per_mode,
             "missing_required_cells": missing_cells, "infrastructure_health": health,
-            "retirement_discussion_threshold": {"chapters": 60, "projects": 3, "category_mapping_coverage": 0.95,
+            "retirement_discussion_threshold": {"chapters": 60, "projects": 3, "category_mapping_coverage": 0.95, "candidate_categories": sorted(candidates),
+                                                  "candidate_category_coverage": candidate_coverage,
                                                   "migration_evidence_complete": migration_evidence_complete,
                                                   "release_cohort_policy_present": release_cohort_policy_present,
                                                   "unresolved_conflicts": unresolved, "known_false_blocks": false_blocks,
