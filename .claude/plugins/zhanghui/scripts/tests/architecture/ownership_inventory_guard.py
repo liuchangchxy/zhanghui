@@ -22,8 +22,8 @@ SQL_DOMAINS = {
                  "relationships", "chapter_reading_power", "invalid_facts",
                  "review_metrics", "writing_checklist_scores", "chase_debt",
                  "debt_events", "foreshadowing", "promise_ledger", "intent", "planning_horizon",
-                 "relationship_events", "timeline", "tool_call_stats"},
-    "VECTORS": {"vectors", "vectors_migrating", "bm25_index", "doc_stats", "rag_schema_meta", "rag_query_log"},
+                 "relationship_events", "timeline", "tool_call_stats", "locks", "rag_query_log"},
+    "VECTORS": {"vectors", "vectors_migrating", "bm25_index", "doc_stats", "rag_schema_meta"},
     "CRAFT": {"samples"},
     "EVENTS": {"story_events"},
     "WORKFLOW_METADATA": {"override_contracts", "gate_decisions", "workflow_events", "review_attempts", "projection_runs"},
@@ -262,7 +262,8 @@ def validate_inventory(inventory, repository_root):
                          f"{identity}: discovered source owner linkage mismatch")
                 if family == "writers":
                     coordinate_key = (_inventory_source_path(source_record["path"]),
-                                      source_record["symbol"], source_record["data_domain"])
+                                      source_record["symbol"], source_record["data_domain"],
+                                      source_record["sink"])
                     prior = writer_coordinate_owners.get(coordinate_key)
                     contract = (record.get("owner"),
                                 record.get("story_system_mode", {}).get("mode"),
@@ -392,7 +393,25 @@ def validate_inventory(inventory, repository_root):
                 _require(source.is_file(), f"{family}: evidence path missing: {source}")
                 _require(evidence.get("anchor") in source.read_text(encoding="utf-8", errors="replace"),
                          f"{family}: evidence anchor missing")
+    _validate_exception_drift(inventory, repository_root / ".claude/plugins/zhanghui")
     return True
+
+
+def _validate_exception_drift(inventory, plugin_root):
+    """Require each exception to remain anchored to a live scanner result."""
+    for family, records_key, writers in (("writer", "writer_exceptions", True),
+                                         ("reader", "reader_exceptions", False)):
+        candidates, unresolved = _protected_candidates(plugin_root, writers=writers)
+        exact_unresolved = {(path, symbol, domain, sink, target)
+                            for path, symbol, domain, sink, target in unresolved}
+        live_coordinates = {(path, symbol, domain, sink)
+                            for path, symbol, domain, sink in candidates}
+        for exception in inventory.get(records_key, []):
+            coordinate = (_inventory_source_path(exception["path"]), exception["symbol"],
+                          exception["domain"], exception["sink"])
+            unresolved_key = (*coordinate, exception["target_expression"])
+            if unresolved_key not in exact_unresolved and coordinate not in live_coordinates:
+                raise ValueError(f"stale exception in {records_key}: {unresolved_key}")
 
 
 def runtime_inventory_references(plugin_root):
@@ -419,18 +438,18 @@ def _inventory_source_path(path):
 
 
 def writer_coverage(inventory, plugin_root):
-    declared = {(_inventory_source_path(source["path"]), source["symbol"], source["data_domain"])
+    declared = {(_inventory_source_path(source["path"]), source["symbol"], source["data_domain"], source["sink"])
                 for row in inventory["writers"] for source in row.get("source_coordinates", [])}
     candidates, unresolved = _protected_candidates(plugin_root, writers=True)
     exceptions = {("writer", _inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"),
                    row.get("sink"), row.get("target_expression")) for row in inventory.get("writer_exceptions", [])}
-    pending = {(path, symbol, domain) for path, symbol, domain, sink, target in unresolved
+    pending = {(path, symbol, domain, sink) for path, symbol, domain, sink, target in unresolved
                if ("writer", path, symbol, domain, sink, target) not in exceptions}
     excluded = {(_inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"), row.get("sink"))
                 for row in inventory.get("writer_exceptions", [])}
-    missing = {(path, symbol, domain) for path, symbol, domain, _sink in candidates
-               if (path, symbol, domain) not in declared and
-               (path, symbol, domain, _sink) not in excluded}
+    missing = {(path, symbol, domain, sink) for path, symbol, domain, sink in candidates
+               if (path, symbol, domain, sink) not in declared and
+               (path, symbol, domain, sink) not in excluded}
     return sorted(missing | pending)
 
 def _exception_key(family, row):
@@ -438,18 +457,18 @@ def _exception_key(family, row):
 
 
 def reader_coverage(inventory, plugin_root):
-    declared = {(_inventory_source_path(source["path"]), source["symbol"], source["data_domain"])
+    declared = {(_inventory_source_path(source["path"]), source["symbol"], source["data_domain"], source["sink"])
                 for row in inventory["readers"] for source in row.get("source_coordinates", [])}
     candidates, unresolved = _protected_candidates(plugin_root, writers=False)
     exceptions = {("reader", _inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"),
                    row.get("sink"), row.get("target_expression")) for row in inventory.get("reader_exceptions", [])}
-    pending = {(path, symbol, domain) for path, symbol, domain, sink, target in unresolved
+    pending = {(path, symbol, domain, sink) for path, symbol, domain, sink, target in unresolved
                if ("reader", path, symbol, domain, sink, target) not in exceptions}
     excluded = {(_inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"), row.get("sink"))
                 for row in inventory.get("reader_exceptions", [])}
-    missing = {(path, symbol, domain) for path, symbol, domain, _sink in candidates
-               if (path, symbol, domain) not in declared and
-               (path, symbol, domain, _sink) not in excluded}
+    missing = {(path, symbol, domain, sink) for path, symbol, domain, sink in candidates
+               if (path, symbol, domain, sink) not in declared and
+               (path, symbol, domain, sink) not in excluded}
     return sorted(missing | pending)
 
 def reader_family_coverage(inventory):

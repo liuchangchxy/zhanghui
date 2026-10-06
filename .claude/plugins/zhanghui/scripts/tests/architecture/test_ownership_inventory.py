@@ -94,7 +94,7 @@ def test_reader_inventory_coordinate_removal_exposes_protected_read():
     broken = copy.deepcopy(inventory)
     for row in broken["readers"]:
         row["source_coordinates"] = [item for item in row.get("source_coordinates", []) if item != source]
-    assert (source["path"].removeprefix(".claude/plugins/zhanghui/"), source["symbol"], source["data_domain"]) in reader_coverage(
+    assert (source["path"].removeprefix(".claude/plugins/zhanghui/"), source["symbol"], source["data_domain"], source["sink"]) in reader_coverage(
         broken, ROOT / ".claude/plugins/zhanghui")
 
 
@@ -107,13 +107,13 @@ def test_unregistered_protected_writer_candidate_fails_until_classified():
         "def write_story_state(state_path, payload):\n"
         "    atomic_write_json(state_path, payload)\n", encoding="utf-8")
     try:
-        candidate = ("scripts/new_writer.py", "write_story_state", "STATE_JSON")
+        candidate = ("scripts/new_writer.py", "write_story_state", "STATE_JSON", "atomic_write_json")
         inventory = {"writers": [], "writer_exceptions": []}
         assert guard.writer_coverage(inventory, fixture_root) == [candidate]
         inventory["writers"].append({"writer_id": "new-owner", "implementation": {"path": candidate[0], "symbol": candidate[1]},
                                      "data_domains": [candidate[2]], "source_coordinates": [
                                          {"path": candidate[0], "symbol": candidate[1], "data_domain": candidate[2],
-                                          "sink": "atomic_write_json", "writer_id": "new-owner"}]})
+                                          "sink": candidate[3], "writer_id": "new-owner"}]})
         assert guard.writer_coverage(inventory, fixture_root) == []
     finally:
         import shutil
@@ -155,7 +155,7 @@ def test_reader_scanner_detects_new_protected_file_reader():
         encoding="utf-8",
     )
     try:
-        assert ("scripts/new_state_reader.py", "read_state", "STATE_JSON") in reader_coverage(
+        assert ("scripts/new_state_reader.py", "read_state", "STATE_JSON", "read_text") in reader_coverage(
             {"readers": [], "reader_exceptions": []}, fixture_root
         )
     finally:
@@ -174,12 +174,12 @@ def test_unresolved_protected_reader_source_requires_exact_classification():
         encoding="utf-8",
     )
     try:
-        candidate = ("scripts/data_modules/dynamic_reader.py", "read_state", "STATE_JSON")
+        candidate = ("scripts/data_modules/dynamic_reader.py", "read_state", "STATE_JSON", "load_json")
         inventory = {"readers": [], "reader_exceptions": []}
         assert candidate in reader_coverage(inventory, fixture_root)
         inventory["reader_exceptions"].append({
             "family": "reader", "path": candidate[0], "symbol": candidate[1], "domain": candidate[2],
-            "sink": "load_json", "target_expression": "source",
+            "sink": candidate[3], "target_expression": "source",
             "reason_code": "DYNAMIC_TARGET_REVIEWED",
             "rationale": "fixture source is explicitly reviewed as a non-Canon compatibility read",
         })
@@ -202,7 +202,7 @@ def test_writer_scanner_detects_new_protected_sql_mutator():
         encoding="utf-8",
     )
     try:
-        assert ("scripts/new_index_writer.py", "persist_entity", "INDEX_DB") in writer_coverage(
+        assert ("scripts/new_index_writer.py", "persist_entity", "INDEX_DB", "SQL:entities") in writer_coverage(
             {"writers": [], "writer_exceptions": []}, fixture_root
         )
     finally:
@@ -223,11 +223,11 @@ def test_unresolved_protected_writer_target_requires_exact_reason_coded_exceptio
     )
     try:
         inventory = {"writers": [], "writer_exceptions": []}
-        candidate = ("scripts/data_modules/dynamic_writer.py", "write_state", "STATE_JSON")
+        candidate = ("scripts/data_modules/dynamic_writer.py", "write_state", "STATE_JSON", "atomic_write_json")
         assert candidate in writer_coverage(inventory, fixture_root)
         inventory["writer_exceptions"].append({
             "family": "writer", "path": candidate[0], "symbol": candidate[1], "domain": candidate[2],
-            "sink": "atomic_write_json", "reason_code": "DYNAMIC_TARGET_REVIEWED",
+            "sink": candidate[3], "reason_code": "DYNAMIC_TARGET_REVIEWED",
             "target_expression": "target",
             "rationale": "fixture proves this parameter is outside protected roots",
         })
@@ -495,4 +495,69 @@ def test_generic_dynamic_exception_rationale_does_not_replace_ownership():
     target.pop("writer_id")
     target["rationale"] = "dynamic target reviewed"
     with pytest.raises(ValueError, match="owner"):
+        validate_inventory(broken, ROOT)
+
+
+def test_writer_coverage_requires_exact_sink_coordinate(tmp_path, monkeypatch):
+    import tests.architecture.ownership_inventory_guard as guard
+
+    monkeypatch.setitem(guard.SQL_DOMAINS, "INDEX_DB", guard.SQL_DOMAINS["INDEX_DB"] | {"table_a", "table_b"})
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "foo.py").write_text(
+        "def foo(conn):\n"
+        "    conn.execute('INSERT INTO table_a (id) VALUES (1)')\n"
+        "    conn.execute('INSERT INTO table_b (id) VALUES (1)')\n",
+        encoding="utf-8",
+    )
+    owner = {"writer_id": "foo-owner", "implementation": {"path": "scripts/foo.py", "symbol": "foo"},
+             "data_domains": ["INDEX_DB"], "source_coordinates": [
+                 {"path": "scripts/foo.py", "symbol": "foo", "data_domain": "INDEX_DB",
+                  "sink": "SQL:table_a", "writer_id": "foo-owner"}]}
+    inventory = {"writers": [owner], "writer_exceptions": []}
+    assert guard.writer_coverage(inventory, tmp_path) == [
+        ("scripts/foo.py", "foo", "INDEX_DB", "SQL:table_b")]
+    owner["source_coordinates"].append(
+        {"path": "scripts/foo.py", "symbol": "foo", "data_domain": "INDEX_DB",
+         "sink": "SQL:table_b", "writer_id": "foo-owner"})
+    assert guard.writer_coverage(inventory, tmp_path) == []
+
+
+def test_reader_coverage_requires_exact_sink_coordinate(tmp_path, monkeypatch):
+    import tests.architecture.ownership_inventory_guard as guard
+
+    monkeypatch.setitem(guard.SQL_DOMAINS, "INDEX_DB", guard.SQL_DOMAINS["INDEX_DB"] | {"table_a", "table_b"})
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "foo.py").write_text(
+        "def foo(conn):\n"
+        "    conn.execute('SELECT id FROM table_a')\n"
+        "    conn.execute('SELECT id FROM table_b')\n",
+        encoding="utf-8",
+    )
+    owner = {"reader_id": "foo-reader", "implementation": {"path": "scripts/foo.py", "symbol": "foo"},
+             "read_edges": [{"data_domain": "INDEX_DB", "read_edge_id": "foo-index-edge"}],
+             "source_coordinates": [{"path": "scripts/foo.py", "symbol": "foo", "data_domain": "INDEX_DB",
+                                     "sink": "SQL:table_a", "reader_id": "foo-reader",
+                                     "read_edge_id": "foo-index-edge"}]}
+    inventory = {"readers": [owner], "reader_exceptions": []}
+    assert guard.reader_coverage(inventory, tmp_path) == [
+        ("scripts/foo.py", "foo", "INDEX_DB", "SQL:table_b")]
+    owner["source_coordinates"].append(
+        {"path": "scripts/foo.py", "symbol": "foo", "data_domain": "INDEX_DB",
+         "sink": "SQL:table_b", "reader_id": "foo-reader", "read_edge_id": "foo-index-edge"})
+    assert guard.reader_coverage(inventory, tmp_path) == []
+
+
+def test_stale_dynamic_exception_is_rejected():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    broken["writer_exceptions"].append({
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+        "symbol": "append_projection_run", "domain": "WORKFLOW_METADATA", "sink": "open",
+        "target_expression": "'a'", "reason_code": "DYNAMIC_TARGET_REVIEWED",
+        "rationale": "Old append-mode exception retained after the scanner began resolving Path.open sinks.",
+        "evidence": [{"path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+                      "anchor": "append_projection_run"}], "writer_id": "projection-run-log"})
+    with pytest.raises(ValueError, match="stale exception"):
         validate_inventory(broken, ROOT)

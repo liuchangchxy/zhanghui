@@ -194,13 +194,13 @@
       "data_domains": [
         "INDEX_DB"
       ],
-      "owner": "ChapterCommitService projection coordinator",
+      "owner": "IndexProjectionWriter accepted-commit projection",
       "story_system_mode": {
-        "behavior": "validated commit projection only",
+        "behavior": "validated durable commit projection only",
         "mode": "projection_only"
       },
       "legacy_mode": {
-        "behavior": "supported rebuild/projection only",
+        "behavior": "supported rebuild or projection only",
         "mode": "projection_only"
       },
       "lifecycle_status": "allowed",
@@ -215,7 +215,72 @@
           "anchor": "IndexProjectionWriter"
         }
       ],
-      "source_coordinates": []
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
+          "writer_id": "index-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapter_reading_power",
+          "writer_id": "index-projection"
+        }
+      ],
+      "selector": "accepted Canon projection tables"
     },
     {
       "writer_id": "summary-projection",
@@ -320,10 +385,52 @@
           "writer_id": "vector-projection"
         },
         {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors",
+          "writer_id": "vector-projection"
+        },
+        {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
           "symbol": "RAGAdapter",
           "data_domain": "VECTORS",
           "sink": "SQL:bm25_index",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:rag_schema_meta",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors",
+          "writer_id": "vector-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors_migrating",
           "writer_id": "vector-projection"
         }
       ]
@@ -365,6 +472,13 @@
           "symbol": "StateManager",
           "data_domain": "STATE_JSON",
           "sink": "atomic_write_json",
+          "writer_id": "state-manager"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "symbol": "StateManager",
+          "data_domain": "STATE_JSON",
+          "sink": "process_chapter_entities",
           "writer_id": "state-manager"
         }
       ]
@@ -442,50 +556,7 @@
           "anchor": "IndexManager"
         }
       ],
-      "source_coordinates": [
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
-          "symbol": "IndexChapterMixin",
-          "data_domain": "INDEX_DB",
-          "sink": "SQL:appearances",
-          "writer_id": "index-manager"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
-          "symbol": "IndexDebtMixin",
-          "data_domain": "INDEX_DB",
-          "sink": "SQL:chase_debt",
-          "writer_id": "index-manager"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
-          "symbol": "IndexEntityMixin",
-          "data_domain": "INDEX_DB",
-          "sink": "SQL:aliases",
-          "writer_id": "index-manager"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
-          "symbol": "IndexObservabilityMixin",
-          "data_domain": "INDEX_DB",
-          "sink": "SQL:invalid_facts",
-          "writer_id": "index-manager"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
-          "symbol": "IndexReadingMixin",
-          "data_domain": "INDEX_DB",
-          "sink": "SQL:chapter_reading_power",
-          "writer_id": "index-manager"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
-          "symbol": "IndexObservabilityMixin",
-          "data_domain": "VECTORS",
-          "sink": "SQL:rag_query_log",
-          "writer_id": "index-manager"
-        }
-      ]
+      "source_coordinates": []
     },
     {
       "writer_id": "story-craft",
@@ -1108,6 +1179,13 @@
       ],
       "source_coordinates": [
         {
+          "path": ".claude/plugins/zhanghui/scripts/consistency/cli.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "write_text",
+          "writer_id": "consistency-state-save"
+        },
+        {
           "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
           "symbol": "ConsistencyRunner",
           "data_domain": "STATE_JSON",
@@ -1115,8 +1193,8 @@
           "writer_id": "consistency-state-save"
         },
         {
-          "path": ".claude/plugins/zhanghui/scripts/consistency/cli.py",
-          "symbol": "main",
+          "path": ".claude/plugins/zhanghui/scripts/consistency/core/runner.py",
+          "symbol": "ConsistencyRunner",
           "data_domain": "STATE_JSON",
           "sink": "write_text",
           "writer_id": "consistency-state-save"
@@ -1457,13 +1535,13 @@
       "data_domains": [
         "WORKFLOW_METADATA"
       ],
-      "owner": "Projection run audit log append owner",
+      "owner": "Append-only projection run telemetry",
       "story_system_mode": {
-        "behavior": "Canon buffers guarded; workflow fields owned here",
-        "mode": "guarded"
+        "behavior": "appends operational projection run metadata; does not claim Canon or coordinate a projection",
+        "mode": "allowed"
       },
       "legacy_mode": {
-        "behavior": "legacy state writes supported",
+        "behavior": "appends operational projection run metadata for legacy workflows",
         "mode": "allowed"
       },
       "lifecycle_status": "guarded",
@@ -1474,8 +1552,8 @@
       "retirement_criterion": "Retain while its documented callers remain supported.",
       "evidence": [
         {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
-          "anchor": "StateManager"
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+          "anchor": "append_projection_run"
         }
       ],
       "source_coordinates": [
@@ -1533,20 +1611,6 @@
           "data_domain": "WORKFLOW_METADATA",
           "sink": "SQL:override_contracts",
           "writer_id": "override-ledger"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
-          "symbol": "IndexDebtMixin",
-          "data_domain": "WORKFLOW_METADATA",
-          "sink": "SQL:override_contracts",
-          "writer_id": "override-ledger"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
-          "symbol": "IndexObservabilityMixin",
-          "data_domain": "WORKFLOW_METADATA",
-          "sink": "SQL:override_contracts",
-          "writer_id": "override-ledger"
         }
       ]
     },
@@ -1588,6 +1652,239 @@
           "data_domain": "CRAFT",
           "sink": "SQL:samples",
           "writer_id": "style-samples"
+        }
+      ]
+    },
+    {
+      "writer_id": "memory-direct-write",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+        "symbol": "ScratchpadManager"
+      },
+      "data_domains": [
+        "MEMORY"
+      ],
+      "owner": "ScratchpadManager direct memory lifecycle",
+      "story_system_mode": {
+        "behavior": "direct scratchpad memory writes; no durable commit required and no Canon authority",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "direct legacy memory writes through configured scratchpad path",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "Memory CLI update and memory bootstrap/update callers"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "anchor": "class ScratchpadManager"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "anchor": "if args.command == \"update\""
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/writer.py",
+          "anchor": "def update_from_chapter_result"
+        }
+      ],
+      "source_coordinates": []
+    },
+    {
+      "writer_id": "index-operational-ledgers",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+        "symbol": "IndexDebtMixin"
+      },
+      "data_domains": [
+        "INDEX_DB",
+        "WORKFLOW_METADATA",
+        "VECTORS"
+      ],
+      "owner": "Index operational debt, invalid-fact, and RAG telemetry tables",
+      "story_system_mode": {
+        "behavior": "operational workflow and observability writes; outside Canon projection",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "operational workflow and observability writes for legacy workflows",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "active plugin workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while its documented callers remain supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "anchor": "class IndexDebtMixin"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chase_debt",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:debt_events",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:invalid_facts",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:rag_query_log",
+          "writer_id": "index-operational-ledgers"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:tool_call_stats",
+          "writer_id": "index-operational-ledgers"
+        }
+      ]
+    },
+    {
+      "writer_id": "review-metrics-workflow",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+        "symbol": "IndexReadingMixin"
+      },
+      "data_domains": [
+        "INDEX_DB"
+      ],
+      "owner": "Review metrics and checklist workflow records",
+      "story_system_mode": {
+        "behavior": "review workflow metrics only; no Canon authority",
+        "mode": "allowed"
+      },
+      "legacy_mode": {
+        "behavior": "review workflow metrics supported in legacy workflows",
+        "mode": "allowed"
+      },
+      "lifecycle_status": "allowed",
+      "active_consumers": [
+        "review-pipeline metric persistence"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when review metric persistence is removed or replaced.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "anchor": "save_review_metrics"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:review_metrics",
+          "writer_id": "review-metrics-workflow"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:writing_checklist_scores",
+          "writer_id": "review-metrics-workflow"
+        }
+      ],
+      "selector": "review metrics and checklist workflow tables"
+    },
+    {
+      "writer_id": "test-db-fixtures",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+        "symbol": "test_db"
+      },
+      "data_domains": [
+        "INDEX_DB"
+      ],
+      "owner": "test-only temporary SQLite fixtures",
+      "story_system_mode": {
+        "behavior": "test fixture writes to isolated temporary databases; no project authority",
+        "mode": "not_applicable"
+      },
+      "legacy_mode": {
+        "behavior": "test fixture writes to isolated temporary databases; no project authority",
+        "mode": "not_applicable"
+      },
+      "lifecycle_status": "compatibility_only",
+      "active_consumers": [
+        "plugin pytest fixtures only"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when these isolated test database fixtures are removed.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "anchor": "def test_db"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "writer_id": "test-db-fixtures"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "writer_id": "test-db-fixtures"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:foreshadowing",
+          "writer_id": "test-db-fixtures"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "writer_id": "test-db-fixtures"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:timeline",
+          "writer_id": "test-db-fixtures"
         }
       ]
     }
@@ -1674,6 +1971,14 @@
         },
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
+          "symbol": "discover_validated_chapter_commits",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_validated_chapter_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/durable_projection.py",
           "symbol": "read_durable_commit",
           "data_domain": "CANON_COMMIT",
           "sink": "read_validated_chapter_commit",
@@ -1717,6 +2022,14 @@
           "symbol": "load_runtime_sources",
           "data_domain": "CANON_COMMIT",
           "sink": "_load_latest_accepted_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_runtime_sources.py",
+          "symbol": "load_runtime_sources",
+          "data_domain": "CANON_COMMIT",
+          "sink": "_load_latest_commit",
           "reader_id": "commit-reader",
           "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
         },
@@ -1770,22 +2083,6 @@
       "lifecycle_status": "allowed",
       "source_coordinates": [
         {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
-          "symbol": "_validate_outputs",
-          "data_domain": "EVENTS",
-          "sink": "read_events",
-          "reader_id": "event-reader",
-          "read_edge_id": "event-reader-edge-1"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/story_events.py",
-          "symbol": "main",
-          "data_domain": "EVENTS",
-          "sink": "read_events",
-          "reader_id": "event-reader",
-          "read_edge_id": "event-reader-edge-1"
-        },
-        {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
           "symbol": "EventLogStore",
           "data_domain": "EVENTS",
@@ -1806,6 +2103,22 @@
           "symbol": "_validate_outputs",
           "data_domain": "EVENTS",
           "sink": "SQL:story_events",
+          "reader_id": "event-reader",
+          "read_edge_id": "event-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "EVENTS",
+          "sink": "read_events",
+          "reader_id": "event-reader",
+          "read_edge_id": "event-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_events.py",
+          "symbol": "main",
+          "data_domain": "EVENTS",
+          "sink": "read_events",
           "reader_id": "event-reader",
           "read_edge_id": "event-reader-edge-1"
         }
@@ -2253,10 +2566,26 @@
           "read_edge_id": "state-reader-edge"
         },
         {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+          "symbol": "StateManager",
+          "data_domain": "STATE_JSON",
+          "sink": "read_json_safe",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/story_runtime_health.py",
           "symbol": "_resolve_chapter",
           "data_domain": "STATE_JSON",
           "sink": "read_text",
+          "reader_id": "state-reader",
+          "read_edge_id": "state-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "symbol": "cmd_story_craft",
+          "data_domain": "STATE_JSON",
+          "sink": "read_json_safe",
           "reader_id": "state-reader",
           "read_edge_id": "state-reader-edge"
         },
@@ -2339,22 +2668,6 @@
           "sink": "open",
           "reader_id": "state-reader",
           "read_edge_id": "state-reader-edge"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
-          "symbol": "StateManager",
-          "data_domain": "STATE_JSON",
-          "sink": "read_json_safe",
-          "reader_id": "state-reader",
-          "read_edge_id": "state-reader-edge"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
-          "symbol": "cmd_story_craft",
-          "data_domain": "STATE_JSON",
-          "sink": "read_json_safe",
-          "reader_id": "state-reader",
-          "read_edge_id": "state-reader-edge"
         }
       ]
     },
@@ -2415,6 +2728,14 @@
         },
         {
           "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
+          "symbol": "_load_entity_lookup",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/changes_gate.py",
           "symbol": "_load_foreshadowing_state",
           "data_domain": "INDEX_DB",
           "sink": "SQL:foreshadowing",
@@ -2438,10 +2759,66 @@
           "read_edge_id": "index-reader-edge-1"
         },
         {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:foreshadowing",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/conftest.py",
+          "symbol": "test_db",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:timeline",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
           "symbol": "IndexChapterMixin",
           "data_domain": "INDEX_DB",
           "sink": "SQL:appearances",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_chapter_mixin.py",
+          "symbol": "IndexChapterMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes",
           "reader_id": "index-reader",
           "read_edge_id": "index-reader-edge-1"
         },
@@ -2462,10 +2839,106 @@
           "read_edge_id": "index-reader-edge-1"
         },
         {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
+          "symbol": "IndexEntityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
           "symbol": "IndexObservabilityMixin",
           "data_domain": "INDEX_DB",
           "sink": "SQL:aliases",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:appearances",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapter_reading_power",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationship_events",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:relationships",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
           "reader_id": "index-reader",
           "read_edge_id": "index-reader-edge-1"
         },
@@ -2494,10 +2967,10 @@
           "read_edge_id": "index-reader-edge-1"
         },
         {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
-          "symbol": "SQLStateManager",
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/knowledge_query.py",
+          "symbol": "KnowledgeQuery",
           "data_domain": "INDEX_DB",
-          "sink": "SQL:aliases",
+          "sink": "SQL:state_changes",
           "reader_id": "index-reader",
           "read_edge_id": "index-reader-edge-1"
         },
@@ -2506,6 +2979,46 @@
           "symbol": "_validate_outputs",
           "data_domain": "INDEX_DB",
           "sink": "SQL:appearances",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chapters",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:scenes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_validate_outputs",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:state_changes",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "SQLStateManager",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:aliases",
+          "reader_id": "index-reader",
+          "read_edge_id": "index-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/sql_state_manager.py",
+          "symbol": "SQLStateManager",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:entities",
           "reader_id": "index-reader",
           "read_edge_id": "index-reader-edge-1"
         }
@@ -2656,6 +3169,14 @@
       "lifecycle_status": "allowed",
       "source_coordinates": [
         {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
+          "symbol": "ScratchpadManager",
+          "data_domain": "MEMORY",
+          "sink": "read_json_safe",
+          "reader_id": "memory-reader",
+          "read_edge_id": "memory-reader-edge"
+        },
+        {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_contract_adapter.py",
           "symbol": "MemoryContractAdapter",
           "data_domain": "MEMORY",
@@ -2668,14 +3189,6 @@
           "symbol": "_prepare_targets",
           "data_domain": "MEMORY",
           "sink": "read_text",
-          "reader_id": "memory-reader",
-          "read_edge_id": "memory-reader-edge"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
-          "symbol": "ScratchpadManager",
-          "data_domain": "MEMORY",
-          "sink": "read_json_safe",
           "reader_id": "memory-reader",
           "read_edge_id": "memory-reader-edge"
         }
@@ -2721,16 +3234,32 @@
       "lifecycle_status": "allowed",
       "source_coordinates": [
         {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
-          "symbol": "IndexObservabilityMixin",
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
           "data_domain": "VECTORS",
-          "sink": "SQL:rag_query_log",
+          "sink": "SQL:bm25_index",
           "reader_id": "vector-reader",
           "read_edge_id": "vector-reader-edge-1"
         },
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
           "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:doc_stats",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "_reset_vectors",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
           "data_domain": "VECTORS",
           "sink": "SQL:bm25_index",
           "reader_id": "vector-reader",
@@ -2740,7 +3269,31 @@
           "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
           "symbol": "RAGAdapter",
           "data_domain": "VECTORS",
-          "sink": "SQL:bm25_index",
+          "sink": "SQL:doc_stats",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:rag_schema_meta",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors",
+          "reader_id": "vector-reader",
+          "read_edge_id": "vector-reader-edge-1"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/rag_adapter.py",
+          "symbol": "RAGAdapter",
+          "data_domain": "VECTORS",
+          "sink": "SQL:vectors_migrating",
           "reader_id": "vector-reader",
           "read_edge_id": "vector-reader-edge-1"
         }
@@ -2844,17 +3397,17 @@
       "read_edges": [
         {
           "data_domain": "WORKFLOW_METADATA",
-          "resource": "event log",
+          "resource": "projection run audit log",
           "story_system": {
-            "primary_source": "index.db story_events",
-            "authority_claim": "VERIFIED_PROJECTION",
-            "condition": "matched durable commit",
+            "primary_source": "append-only projection run telemetry in index.db",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational diagnostics only; not story authority",
             "fallback": null
           },
           "legacy": {
-            "primary_source": "legacy event store",
-            "authority_claim": "LEGACY_COMPATIBILITY",
-            "condition": "legacy mode",
+            "primary_source": "append-only projection run telemetry in index.db",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational diagnostics only; not story authority",
             "fallback": null
           },
           "read_edge_id": "projection-run-log-reader-edge"
@@ -2867,8 +3420,8 @@
       "retirement_criterion": "Retain while the corresponding project mode and active consumers are supported.",
       "evidence": [
         {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/event_log_store.py",
-          "anchor": "EventLogStore"
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
+          "anchor": "read_projection_runs"
         }
       ],
       "reader_family": "projection-run-log",
@@ -2925,22 +3478,6 @@
       "lifecycle_status": "allowed",
       "source_coordinates": [
         {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
-          "symbol": "ensure_override_ledger_columns",
-          "data_domain": "WORKFLOW_METADATA",
-          "sink": "SQL:override_contracts",
-          "reader_id": "override-ledger-reader",
-          "read_edge_id": "override-ledger-reader-edge"
-        },
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
-          "symbol": "persist_amend_proposals",
-          "data_domain": "WORKFLOW_METADATA",
-          "sink": "SQL:override_contracts",
-          "reader_id": "override-ledger-reader",
-          "read_edge_id": "override-ledger-reader-edge"
-        },
-        {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
           "symbol": "IndexDebtMixin",
           "data_domain": "WORKFLOW_METADATA",
@@ -2951,6 +3488,22 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
           "symbol": "IndexObservabilityMixin",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "override-ledger-reader",
+          "read_edge_id": "override-ledger-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "ensure_override_ledger_columns",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "override-ledger-reader",
+          "read_edge_id": "override-ledger-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "persist_amend_proposals",
           "data_domain": "WORKFLOW_METADATA",
           "sink": "SQL:override_contracts",
           "reader_id": "override-ledger-reader",
@@ -3056,6 +3609,250 @@
           "read_edge_id": "archive-reader-edge"
         }
       ]
+    },
+    {
+      "reader_id": "story-craft-migration-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+        "symbol": "migrate_state_json"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CRAFT",
+          "resource": "raw legacy story_craft field",
+          "story_system": {
+            "primary_source": "raw state.json supplied to explicit migration command",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "only when migration CLI is explicitly invoked after its target and backup preflight; no commit verification is claimed",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "raw legacy state.json supplied to explicit migration command",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "only when migration CLI is explicitly invoked after its target and backup preflight",
+            "fallback": null
+          },
+          "read_edge_id": "story-craft-migration-reader-craft"
+        },
+        {
+          "data_domain": "STATE_JSON",
+          "resource": "raw legacy state.json migration input",
+          "story_system": {
+            "primary_source": "raw state.json supplied to explicit migration command",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "only when migration CLI is explicitly invoked after its target and backup preflight; no commit verification is claimed",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "raw legacy state.json supplied to explicit migration command",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "only when migration CLI is explicitly invoked after its target and backup preflight",
+            "fallback": null
+          },
+          "read_edge_id": "story-craft-migration-reader-state_json"
+        }
+      ],
+      "active_consumers": [
+        "explicit migrate-story-craft CLI only"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when the explicit legacy story_craft migration command is removed.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
+          "anchor": "def migrate_state_json"
+        }
+      ],
+      "reader_family": "explicit story craft migration input",
+      "lifecycle_status": "compatibility_only",
+      "source_coordinates": []
+    },
+    {
+      "reader_id": "index-operational-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+        "symbol": "IndexObservabilityMixin"
+      },
+      "read_edges": [
+        {
+          "data_domain": "INDEX_DB",
+          "resource": "operational workflow and observability tables",
+          "story_system": {
+            "primary_source": "index.db operational workflow and observability tables",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational reads only; not Canon authority",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "index.db operational workflow and observability tables",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational reads only; not story authority",
+            "fallback": null
+          },
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "operational workflow and observability tables",
+          "story_system": {
+            "primary_source": "index.db operational workflow and observability tables",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational reads only; not Canon authority",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "index.db operational workflow and observability tables",
+            "authority_claim": "WORKFLOW",
+            "condition": "operational reads only; not story authority",
+            "fallback": null
+          },
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "data_domain": "VECTORS",
+          "resource": "operational workflow and observability tables",
+          "story_system": {
+            "primary_source": "index.db RAG query telemetry table",
+            "authority_claim": "UNKNOWN",
+            "condition": "operational telemetry only; no story authority claim",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "index.db RAG query telemetry table",
+            "authority_claim": "UNKNOWN",
+            "condition": "operational telemetry only; no story authority claim",
+            "fallback": null
+          },
+          "read_edge_id": "index-operational-reader-vectors"
+        }
+      ],
+      "active_consumers": [
+        "review, debt, invalid-fact, and operational reporting workflows"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retire when operational index tables and readers are removed or replaced.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "anchor": "class IndexObservabilityMixin"
+        }
+      ],
+      "reader_family": "index operational ledger and telemetry readers",
+      "lifecycle_status": "allowed",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chase_debt",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:debt_events",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
+          "symbol": "IndexDebtMixin",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:chase_debt",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:invalid_facts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:rag_query_log",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:review_metrics",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:tool_call_stats",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_observability_mixin.py",
+          "symbol": "IndexObservabilityMixin",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:review_metrics",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_reading_mixin.py",
+          "symbol": "IndexReadingMixin",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:writing_checklist_scores",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "ensure_override_ledger_columns",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/override_ledger_service.py",
+          "symbol": "persist_amend_proposals",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "SQL:override_contracts",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-workflow_metadata"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/security_utils.py",
+          "symbol": "_sqlite_lock",
+          "data_domain": "INDEX_DB",
+          "sink": "SQL:locks",
+          "reader_id": "index-operational-reader",
+          "read_edge_id": "index-operational-reader-index_db"
+        }
+      ]
     }
   ],
   "migrations": [
@@ -3148,30 +3945,14 @@
       "sink": "atomic_write_json",
       "target_expression": "self.path",
       "reason_code": "DYNAMIC_TARGET_REVIEWED",
-      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "rationale": "ScratchpadManager persists project memory directly through its configured scratchpad path; this write can run outside a durable chapter commit.",
       "evidence": [
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
           "anchor": "ScratchpadManager"
         }
       ],
-      "writer_id": "memory-projection"
-    },
-    {
-      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
-      "symbol": "append_projection_run",
-      "domain": "WORKFLOW_METADATA",
-      "sink": "open",
-      "target_expression": "'a'",
-      "reason_code": "DYNAMIC_TARGET_REVIEWED",
-      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
-      "evidence": [
-        {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_log.py",
-          "anchor": "append_projection_run"
-        }
-      ],
-      "writer_id": "projection-run-log"
+      "writer_id": "memory-direct-write"
     },
     {
       "path": ".claude/plugins/zhanghui/scripts/data_modules/review_schema.py",
@@ -3187,7 +3968,7 @@
           "anchor": "_write_json"
         }
       ],
-      "writer_id": "state-manager"
+      "writer_id": "review-workflow"
     },
     {
       "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
@@ -3203,7 +3984,7 @@
           "anchor": "migrate_state_json"
         }
       ],
-      "writer_id": "story-craft"
+      "writer_id": "story-craft-migration"
     },
     {
       "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
@@ -3219,7 +4000,7 @@
           "anchor": "migrate_state_json"
         }
       ],
-      "writer_id": "state-projection"
+      "writer_id": "story-craft-migration"
     },
     {
       "path": ".claude/plugins/zhanghui/scripts/review_pipeline.py",
@@ -3235,7 +4016,7 @@
           "anchor": "main"
         }
       ],
-      "writer_id": "state-manager"
+      "writer_id": "review-workflow"
     },
     {
       "path": ".claude/plugins/zhanghui/scripts/revise_chapter.py",
@@ -3741,15 +4522,15 @@
       "sink": "read_text",
       "target_expression": "p",
       "reason_code": "DYNAMIC_TARGET_REVIEWED",
-      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "rationale": "The explicit migration command reads raw legacy state.json only when invoked to add or normalize story_craft; it is not a commit-verified projection read.",
       "evidence": [
         {
           "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
           "anchor": "migrate_state_json"
         }
       ],
-      "reader_id": "craft-reader",
-      "read_edge_id": "craft-reader-edge"
+      "reader_id": "story-craft-migration-reader",
+      "read_edge_id": "story-craft-migration-reader-craft"
     },
     {
       "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
@@ -3758,15 +4539,15 @@
       "sink": "read_text",
       "target_expression": "p",
       "reason_code": "DYNAMIC_TARGET_REVIEWED",
-      "rationale": "This exact variable target is dynamic; the source location and persistence API are recorded for manual review.",
+      "rationale": "The explicit migration command reads raw legacy state.json only when invoked to add or normalize story_craft; it is not a commit-verified projection read.",
       "evidence": [
         {
           "path": ".claude/plugins/zhanghui/scripts/migrate_story_craft.py",
           "anchor": "migrate_state_json"
         }
       ],
-      "reader_id": "state-reader",
-      "read_edge_id": "state-reader-edge"
+      "reader_id": "story-craft-migration-reader",
+      "read_edge_id": "story-craft-migration-reader-state_json"
     },
     {
       "path": ".claude/plugins/zhanghui/scripts/prepare_data_agent_input.py",
