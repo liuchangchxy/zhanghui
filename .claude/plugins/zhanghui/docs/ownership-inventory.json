@@ -1946,6 +1946,71 @@
           "writer_id": "canon-correction-staged-writer"
         }
       ]
+    },
+    {
+      "writer_id": "canon-projection-generation-writer",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+        "symbol": "ProjectionGeneration"
+      },
+      "owner": "Phase 9 immutable Canon projection generation and publication protocol",
+      "data_domains": [
+        "CANON_COMMIT"
+      ],
+      "story_system_mode": {
+        "behavior": "stages Canon-only projection files, immutable generation manifests, and monotonic publication records",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "no generation writer runs before activation enrollment",
+        "mode": "not_applicable"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "effective-history activation and same-semantic generation recovery"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while immutable Canon projection generations and publication records are the active correction boundary.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "class BuildHandle"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "def publish_generation"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "symbol": "BuildHandle",
+          "data_domain": "CANON_COMMIT",
+          "sink": "open",
+          "writer_id": "canon-projection-generation-writer"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "symbol": "_atomic_create_json",
+          "data_domain": "CANON_COMMIT",
+          "sink": "open",
+          "writer_id": "canon-projection-generation-writer"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "symbol": "_fsync_directory",
+          "data_domain": "CANON_COMMIT",
+          "sink": "open",
+          "writer_id": "canon-projection-generation-writer"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "symbol": "_write_bytes_atomic",
+          "data_domain": "CANON_COMMIT",
+          "sink": "open",
+          "writer_id": "canon-projection-generation-writer"
+        }
+      ]
     }
   ],
   "readers": [
@@ -4201,6 +4266,75 @@
           "read_edge_id": "effective-history-candidate-artifact-edge"
         }
       ]
+    },
+    {
+      "reader_id": "canon-projection-generation-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+        "symbol": "ProjectionGeneration"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CANON_COMMIT",
+          "resource": "exact active publication chain, generation manifest, and frozen dependency closure",
+          "story_system": {
+            "primary_source": ".story-system/publications and referenced immutable projection generations",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "validates publication chain, generation manifest, and exact file digests before pinning",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "no legacy publication generation",
+            "authority_claim": "UNKNOWN",
+            "condition": "base-only projects do not have a publication generation",
+            "fallback": null
+          },
+          "read_edge_id": "canon-projection-generation-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "active effective-history pinning"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while correction-aware runtime reads pin immutable publication records and generations.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "def pin_active_generation"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "def _records"
+        }
+      ],
+      "reader_family": "Story System commit and projection readers",
+      "lifecycle_status": "guarded",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "symbol": "ProjectionGeneration",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_bytes",
+          "reader_id": "canon-projection-generation-reader",
+          "read_edge_id": "canon-projection-generation-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "symbol": "ProjectionGeneration",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_text",
+          "reader_id": "canon-projection-generation-reader",
+          "read_edge_id": "canon-projection-generation-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "symbol": "_file_manifest",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_bytes",
+          "reader_id": "canon-projection-generation-reader",
+          "read_edge_id": "canon-projection-generation-reader-edge"
+        }
+      ]
     }
   ],
   "migrations": [
@@ -4531,6 +4665,70 @@
           "anchor": "def test_db"
         }
       ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "BuildHandle",
+      "domain": "CANON_COMMIT",
+      "sink": "open",
+      "target_expression": "os",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "os.open receives only validated files below a unique private staging directory and writes Canon-domain paths whose first segment is checked against the seven-domain allowlist.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "BuildHandle"
+        }
+      ],
+      "writer_id": "canon-projection-generation-writer"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "_atomic_create_json",
+      "domain": "CANON_COMMIT",
+      "sink": "open",
+      "target_expression": "os",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "os.open creates a private temporary file for immutable generation, enrollment, or publication records; no mutable owner data is written here.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "_atomic_create_json"
+        }
+      ],
+      "writer_id": "canon-projection-generation-writer"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "_fsync_directory",
+      "domain": "CANON_COMMIT",
+      "sink": "open",
+      "target_expression": "os",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "os.open obtains a directory descriptor solely to fsync parent metadata after a guarded Canon generation/publication write.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "_fsync_directory"
+        }
+      ],
+      "writer_id": "canon-projection-generation-writer"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "_write_bytes_atomic",
+      "domain": "CANON_COMMIT",
+      "sink": "open",
+      "target_expression": "os",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "os.open creates a private temporary file for a validated Canon generation path; rename happens only inside the unique staging generation.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "_write_bytes_atomic"
+        }
+      ],
+      "writer_id": "canon-projection-generation-writer"
     }
   ],
   "reader_exceptions": [
@@ -5182,6 +5380,108 @@
       ],
       "reader_id": "canon-correction-confirmation-reader",
       "read_edge_id": "canon-correction-confirmation-workflow-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "ProjectionGeneration",
+      "domain": "CANON_COMMIT",
+      "sink": "read_bytes",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The target is read only from the exact immutable generation or publication dependency path selected by the validated protocol; each dependency digest is checked before pinning.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "ProjectionGeneration"
+        }
+      ],
+      "reader_id": "canon-projection-generation-reader",
+      "read_edge_id": "canon-projection-generation-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "ProjectionGeneration",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "generation_root / 'generation-manifest.json'",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The target is the immutable generation manifest named by the active publication record and is rehashed before the generation is pinned.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "ProjectionGeneration"
+        }
+      ],
+      "reader_id": "canon-projection-generation-reader",
+      "read_edge_id": "canon-projection-generation-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "ProjectionGeneration",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The target is an immutable publication record or one exact frozen dependency path. Publication-chain and file digests are validated; the runtime does not scan candidate artifacts.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "ProjectionGeneration"
+        }
+      ],
+      "reader_id": "canon-projection-generation-reader",
+      "read_edge_id": "canon-projection-generation-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "_file_manifest",
+      "domain": "CANON_COMMIT",
+      "sink": "read_bytes",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The target is a file under one of the seven explicit Canon generation domain directories; all out-of-domain files are rejected.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "_file_manifest"
+        }
+      ],
+      "reader_id": "canon-projection-generation-reader",
+      "read_edge_id": "canon-projection-generation-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "ProjectionGeneration",
+      "domain": "CANON_COMMIT",
+      "sink": "read_text",
+      "target_expression": "self.enrollment_path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "Enrollment is parsed only to validate activation-managed mode; it is not a semantic authority source.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "def pin_active_generation"
+        }
+      ],
+      "reader_id": "canon-projection-generation-reader",
+      "read_edge_id": "canon-projection-generation-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+      "symbol": "_namespace_digest",
+      "domain": "CANON_COMMIT",
+      "sink": "read_bytes",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "Reads exact namespace artifacts to recheck the candidate snapshot under the activation lock.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "def _namespace_digest"
+        }
+      ],
+      "reader_id": "canon-projection-generation-reader",
+      "read_edge_id": "canon-projection-generation-reader-edge"
     }
   ]
 }

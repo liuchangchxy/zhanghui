@@ -18,6 +18,7 @@ class EventProjectionRouter:
         "vector": {"writer": "VectorProjectionWriter", "reset": "vector", "order": 60, "reproducibility": "regenerable"},
         "intent_diagnostics": {"writer": "ProjectionRebuild", "reset": "intent_diagnostics", "order": 70, "reproducibility": "strict"},
     }
+    CANON_GENERATION_DOMAINS = tuple(PROJECTION_MANIFEST)
     PROJECTION_ORDER = tuple(
         name for name, _ in sorted(PROJECTION_MANIFEST.items(), key=lambda row: row[1]["order"])
     )

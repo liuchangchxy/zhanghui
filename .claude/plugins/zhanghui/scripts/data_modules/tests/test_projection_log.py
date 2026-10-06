@@ -79,6 +79,24 @@ def test_projection_log_skips_bad_chapter_when_filtering(tmp_path):
     assert records[0]["chapter"] == 3
 
 
+def test_projection_log_records_generation_freshness_identity(tmp_path):
+    record = append_projection_run(
+        tmp_path,
+        {"meta": {"chapter": 9, "status": "accepted"}},
+        {"state": {"status": "done"}},
+        generation_id="generation-test",
+        base_set_digest="a" * 64,
+        effective_history_digest="b" * 64,
+        correction_lineage_digest="c" * 64,
+    )
+    assert record["generation_identity"] == {
+        "generation_id": "generation-test",
+        "base_set_digest": "a" * 64,
+        "effective_history_digest": "b" * 64,
+        "correction_lineage_digest": "c" * 64,
+    }
+
+
 def test_projection_run_pending_detects_overall_and_writer_pending():
     assert projection_run_pending({"status": "pending", "writers": {}}) is True
     assert projection_run_pending({"writers": {"state": {"status": "pending"}}}) is True

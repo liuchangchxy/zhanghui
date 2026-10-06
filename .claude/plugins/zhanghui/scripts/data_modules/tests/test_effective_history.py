@@ -10,6 +10,8 @@ from data_modules.canon_correction_store import (
     record_interactive_correction_decision, verify_phase9_correction_decision,
 )
 from data_modules.durable_projection import DurableCommitError
+from data_modules.event_projection_router import EventProjectionRouter
+from data_modules.projection_generation import ProjectionGeneration
 from data_modules.effective_history import (
     EffectiveHistoryStore, EffectiveProjectionInput,
     validate_effective_projection_input,
@@ -137,3 +139,30 @@ def test_sibling_candidate_conflict_does_not_change_base_active_snapshot(tmp_pat
     assert any("SIBLING" in item for item in candidate.diagnostics)
     assert active_after.effective_history_digest == active_before.effective_history_digest
     assert active_after.chapters[3].status == "accepted"
+
+
+def test_publication_pins_exact_active_dependencies_and_corruption_fails_closed(tmp_path):
+    _install_base(tmp_path)
+    store = EffectiveHistoryStore()
+    snapshot = store.read_active_snapshot(tmp_path)
+    protocol = ProjectionGeneration(tmp_path)
+    handle = protocol.begin(snapshot)
+    expected = {"domains": {}}
+    for domain in EventProjectionRouter.PROJECTION_MANIFEST:
+        relative = f"{domain}/slice.json"
+        data = json.dumps({"domain": domain}).encode()
+        digest = handle.write_domain_file(domain, relative, data)
+        expected["domains"][domain] = {relative: digest}
+    validated = protocol.validate_generation(handle, expected)
+    record = protocol.publish_generation(validated, None, snapshot.correction_lineage_digest)
+    active = store.read_active_snapshot(tmp_path)
+    assert active.ok
+    assert active.activation_record_id == record.publication_record_id
+    assert active.generation_id == validated.generation_id
+    assert active.effective_history_digest == snapshot.effective_history_digest
+
+    commit_path = tmp_path / ".story-system/commits/chapter_003.commit.json"
+    commit_path.write_text("{}", encoding="utf-8")
+    broken = store.read_active_snapshot(tmp_path)
+    assert not broken.ok
+    assert any("ACTIVE_DEPENDENCY_CORRUPT" in item for item in broken.diagnostics)

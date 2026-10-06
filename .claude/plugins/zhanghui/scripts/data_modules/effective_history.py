@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from .canon_correction_store import (
 from .durable_projection import (
     DurableCommitError, discover_validated_chapter_commits, read_durable_commit,
 )
+from .projection_generation import GenerationError, ProjectionGeneration
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,8 @@ class ActiveEffectiveHistorySnapshot:
     effective_history_digest: str
     generation_id: str | None
     diagnostics: tuple[str, ...] = ()
+    dependencies: tuple[dict[str, str], ...] = ()
+    lineage_namespace_checks: tuple[dict[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -51,6 +55,11 @@ class CandidateEffectiveHistorySnapshot:
     chapters: dict[int, EffectiveHistoryEntry]
     candidate_digest: str | None
     diagnostics: tuple[str, ...] = ()
+    dependencies: tuple[dict[str, str], ...] = ()
+    base_set_digest: str = ""
+    correction_lineage_digest: str = ""
+    effective_history_digest: str = ""
+    lineage_namespace_checks: tuple[dict[str, str], ...] = ()
 
 
 _PROJECTION_SEAL = object()
@@ -116,13 +125,108 @@ def _snapshot_digests(entries: dict[int, EffectiveHistoryEntry]):
     return artifact_sha256(base_rows), artifact_sha256(lineage_rows), artifact_sha256(effective_rows)
 
 
+def _namespace_digest(root: Path, relative: str, kind: str) -> str:
+    directory = root / relative
+    if not directory.exists():
+        paths = []
+    elif kind == "base_set":
+        paths = sorted(directory.glob("chapter_*.commit.json"))
+    else:
+        paths = sorted(path for path in directory.rglob("*.json") if path.is_file())
+    rows = [{"path": path.relative_to(root).as_posix(),
+             "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            for path in paths]
+    return artifact_sha256(rows)
+
+
 class EffectiveHistoryStore:
     def read_active_snapshot(self, project_root: str | Path) -> ActiveEffectiveHistorySnapshot:
         root = Path(project_root).expanduser().resolve()
-        publication_root = root / ".story-system" / "publications"
-        if publication_root.exists() and any(publication_root.iterdir()):
-            return ActiveEffectiveHistorySnapshot(False, {}, None, "", "", "", None,
-                                                  ("ACTIVATION_PROTOCOL_UNAVAILABLE",))
+        generation_protocol = ProjectionGeneration(root)
+        publication_records_exist = any(generation_protocol.publications_root.glob("publication-*.json"))
+        if generation_protocol.enrollment_path.exists() or publication_records_exist:
+            try:
+                pinned = generation_protocol.pin_active_generation()
+                if pinned is None:
+                    raise GenerationError("ENROLLED_PUBLICATION_MISSING")
+                record = pinned.record_body
+                dependencies = tuple(record.get("dependency_closure", ()))
+                dependency_bodies: dict[str, list[dict[str, Any]]] = {}
+                for dependency in dependencies:
+                    if dependency.get("kind") not in {"request", "authorization", "correction"}:
+                        continue
+                    path = root / dependency["path"]
+                    dependency_bodies.setdefault(dependency["kind"], []).append(
+                        json.loads(path.read_text(encoding="utf-8")))
+                entries: dict[int, EffectiveHistoryEntry] = {}
+                bases = {row["chapter"]: read_durable_commit(root, row["chapter"])
+                         for row in record.get("chapter_closure", [])}
+                for row in record.get("chapter_closure", []):
+                    chapter = row["chapter"]
+                    base = bases[chapter]
+                    if base_commit_digest(base) != row["base_sha256"]:
+                        raise GenerationError("ACTIVE_DEPENDENCY_CORRUPT")
+                    chapter_corrections = [item for item in dependency_bodies.get("correction", [])
+                                           if item.get("chapter") == chapter]
+                    if chapter_corrections:
+                        correction_ids = list(row.get("applied_correction_ids", []))
+                        if set(correction_ids) != {item.get("correction_id") for item in chapter_corrections}:
+                            raise GenerationError("ACTIVE_DEPENDENCY_CLOSURE_MISMATCH")
+                        requests = [item for item in dependency_bodies.get("request", [])
+                                    if item.get("chapter") == chapter]
+                        authorizations = [item for item in dependency_bodies.get("authorization", [])
+                                          if item.get("request_id") in {req.get("request_id") for req in requests}]
+                        verified = []
+                        current = _entry(chapter, base)
+                        ordered_corrections = []
+                        for correction_id in correction_ids:
+                            correction = next(item for item in chapter_corrections
+                                              if item.get("correction_id") == correction_id)
+                            req = next(item for item in requests
+                                       if artifact_sha256(item) == correction.get("request_sha256"))
+                            auth = next(item for item in authorizations
+                                        if item.get("authorization_id") == correction.get("authorization_ref")
+                                        and artifact_sha256(item) == correction.get("authorization_sha256"))
+                            package = build_correction_review_package(
+                                req, parent_status=current.status, parent_extraction=current.extraction_result,
+                            )
+                            verified.append(verify_phase9_correction_decision(req, auth, package))
+                            ordered_corrections.append(correction)
+                            partial = resolve_effective_history(base, ordered_corrections, requests,
+                                                               authorizations, verified)
+                            if not partial.ok:
+                                raise GenerationError("ACTIVE_LINEAGE_INVALID")
+                            current = _entry(chapter, base, partial)
+                        result = resolve_effective_history(base, chapter_corrections, requests,
+                                                           authorizations, verified)
+                        entry = _entry(chapter, base, result)
+                    else:
+                        entry = _entry(chapter, base)
+                    if (entry.effective_revision_id != row.get("effective_revision_id")
+                            or entry.status != row.get("status")
+                            or entry.effective_content_sha256 != row.get("effective_content_sha256")
+                            or list(entry.applied_correction_ids) != row.get("applied_correction_ids")):
+                        raise GenerationError("ACTIVE_HISTORY_DIGEST_MISMATCH")
+                    entries[chapter] = entry
+                base_digest, lineage_digest, history_digest = _snapshot_digests(entries)
+                if (base_digest != record.get("base_set_digest")
+                        or history_digest != record.get("effective_history_digest")):
+                    raise GenerationError("ACTIVE_HISTORY_DIGEST_MISMATCH")
+                artifact_dependencies = [item for item in dependencies
+                                         if item.get("kind") in {"correction", "request", "authorization"}]
+                exact_lineage_digest = artifact_sha256({
+                    "effective_lineage_digest": lineage_digest,
+                    "artifacts": artifact_dependencies,
+                })
+                if exact_lineage_digest != record.get("correction_lineage_digest"):
+                    raise GenerationError("ACTIVE_HISTORY_DIGEST_MISMATCH")
+                return ActiveEffectiveHistorySnapshot(
+                    True, entries, pinned.publication_record_id, base_digest, exact_lineage_digest,
+                    history_digest, pinned.generation_id, (), dependencies,
+                )
+            except Exception as exc:
+                return ActiveEffectiveHistorySnapshot(False, {}, None, "", "", "", None,
+                                                      (f"ACTIVE_HISTORY_INVALID:{exc}",))
         try:
             records = discover_validated_chapter_commits(root)
             entries = {
@@ -130,8 +234,16 @@ class EffectiveHistoryStore:
                 for row in records if row["payload"].get("meta", {}).get("status") == "accepted"
             }
             base_digest, lineage_digest, history_digest = _snapshot_digests(entries)
+            lineage_digest = artifact_sha256({"effective_lineage_digest": lineage_digest,
+                                              "artifacts": []})
+            dependencies = tuple(
+                {"path": row["path"].relative_to(root).as_posix(),
+                 "sha256": hashlib.sha256(row["path"].read_bytes()).hexdigest(),
+                 "kind": "base_commit"}
+                for row in records if row["payload"].get("meta", {}).get("status") == "accepted"
+            )
             return ActiveEffectiveHistorySnapshot(True, entries, None, base_digest,
-                                                  lineage_digest, history_digest, None)
+                                                  lineage_digest, history_digest, None, (), dependencies)
         except Exception as exc:
             return ActiveEffectiveHistorySnapshot(False, {}, None, "", "", "", None,
                                                   (f"ACTIVE_HISTORY_INVALID:{exc}",))
@@ -208,8 +320,41 @@ class EffectiveHistoryStore:
             }
             candidate_chapters[chapter] = entry
             _, _, digest = _snapshot_digests(candidate_chapters)
+            dependencies = []
+            for row in discover_validated_chapter_commits(root):
+                if row["payload"].get("meta", {}).get("status") == "accepted":
+                    path = row["path"]
+                    dependencies.append({"path": path.relative_to(root).as_posix(),
+                                         "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                                         "kind": "base_commit"})
+            for path in sorted((target / "corrections").glob("*.correction.json")):
+                dependencies.append({"path": path.relative_to(root).as_posix(),
+                                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                                     "kind": "correction"})
+            for path in sorted((target / "requests").glob("*.request.json")):
+                dependencies.append({"path": path.relative_to(root).as_posix(),
+                                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                                     "kind": "request"})
+            for path in sorted((target / "authorizations").glob("*.authorization.json")):
+                dependencies.append({"path": path.relative_to(root).as_posix(),
+                                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                                     "kind": "authorization"})
+            artifact_dependencies = [item for item in dependencies
+                                     if item.get("kind") in {"correction", "request", "authorization"}]
+            exact_lineage_digest = artifact_sha256({
+                "effective_lineage_digest": _snapshot_digests(candidate_chapters)[1],
+                "artifacts": artifact_dependencies,
+            })
+            candidate_base_digest, _, candidate_history_digest = _snapshot_digests(candidate_chapters)
+            namespace_checks = (
+                {"path": ".story-system/commits", "sha256": _namespace_digest(root, ".story-system/commits", "base_set"), "kind": "base_set"},
+                {"path": target.relative_to(root).as_posix(), "sha256": _namespace_digest(root, target.relative_to(root).as_posix(), "correction_namespace"), "kind": "correction_namespace"},
+            )
             return CandidateEffectiveHistorySnapshot(True, target_correction_id,
-                                                    candidate_chapters, digest)
+                                                    candidate_chapters, digest, (),
+                                                    tuple(dependencies), candidate_base_digest,
+                                                    exact_lineage_digest, candidate_history_digest,
+                                                    namespace_checks)
         except Exception as exc:
             return CandidateEffectiveHistorySnapshot(False, target_correction_id, {}, None,
                                                      (str(exc) or type(exc).__name__,))
