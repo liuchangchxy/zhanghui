@@ -102,6 +102,48 @@ def test_lineage_artifact_permutations_produce_identical_order_and_diagnostics()
     assert first.diagnostics == second.diagnostics == ()
 
 
+def test_lineage_rejects_rejected_base_missing_parent_and_cycles():
+    base, edge, req, auth, verification = edge_fixtures()
+    rejected = json.loads(json.dumps(base)); rejected["meta"]["status"] = "rejected"
+    assert "INVALID_BASE" in {item.code for item in validate_lineage(rejected, [edge], [req], [auth], [verification]).diagnostics}
+    missing_parent = f"correction:{edge['base_commit_sha256']}:absent"
+    missing_req = dict(req, parent_revision_id=missing_parent)
+    missing_req_digest = request_sha256(missing_req)
+    missing_auth = dict(auth, request_sha256=missing_req_digest)
+    missing_auth_digest = artifact_sha256(missing_auth)
+    missing = dict(edge, parent_revision_id=missing_parent, request_sha256=missing_req_digest,
+                   authorization_sha256=missing_auth_digest)
+    result = validate_lineage(base, [missing], [missing_req], [missing_auth],
+        [VerifiedCorrectionDecision("missing-parent", missing_req_digest, missing_auth_digest, "test-only", "VERIFIED_APPROVE")])
+    assert "LINEAGE_DISCONNECTED" in {item.code for item in result.diagnostics}
+
+    digest = edge["base_commit_sha256"]
+    content = effective_content_digest("accepted", base["extraction_result"])
+    edges, requests, authorizations, verifications = [], [], [], []
+    for cid, parent_cid in (("cycle-a", "cycle-b"), ("cycle-b", "cycle-a")):
+        rid, aid = f"r-{cid}", f"a-{cid}"
+        candidate = {"schema_version": "canon-correction-request/v1", "request_id": rid, "chapter": 3,
+                     "base_commit_sha256": digest, "parent_revision_id": f"correction:{digest}:{parent_cid}",
+                     "parent_effective_content_sha256": content, "operation": "SUPERSEDE",
+                     "proposed_effective_status": "accepted", "proposed_effective_extraction_result": base["extraction_result"],
+                     "proposed_effective_content_sha256": content, "changed_paths": [], "proposer_provenance": {}, "reason": "cycle"}
+        req_digest = request_sha256(candidate)
+        authorization = {"schema_version": "canon-correction-authorization/v1", "authorization_id": aid,
+                         "request_id": rid, "request_sha256": req_digest, "choice": "APPROVE",
+                         "actor_ref": "human", "decision_provenance": {}}
+        auth_digest = artifact_sha256(authorization)
+        correction = {"schema_version": "canon-correction/v1", "correction_id": cid, "chapter": 3,
+                      "base_commit_sha256": digest, "parent_revision_id": candidate["parent_revision_id"],
+                      "parent_effective_content_sha256": content, "operation": "SUPERSEDE",
+                      "effective_extraction_result": base["extraction_result"], "changed_paths": [],
+                      "request_sha256": req_digest, "authorization_ref": aid, "authorization_sha256": auth_digest,
+                      "provenance": {}, "actor_ref": "writer", "reason": "cycle"}
+        edges.append(correction); requests.append(candidate); authorizations.append(authorization)
+        verifications.append(VerifiedCorrectionDecision(cid, req_digest, auth_digest, "test-only", "VERIFIED_APPROVE"))
+    result = validate_lineage(base, edges, requests, authorizations, verifications)
+    assert result.ok is False and "LINEAGE_CYCLE" in {item.code for item in result.diagnostics}
+
+
 def test_backward_compatible_base_and_unverified_correction_have_exact_result_shape():
     base, edge, req, auth, verification = edge_fixtures()
     clean = resolve_effective_history(base, [], [], [], [])

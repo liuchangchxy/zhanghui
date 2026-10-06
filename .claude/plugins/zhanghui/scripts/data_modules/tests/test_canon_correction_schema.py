@@ -8,6 +8,9 @@ from data_modules.canon_correction_schema import (
     CanonCorrectionAuthorization,
     CanonCorrection,
     artifact_sha256,
+    request_sha256,
+    authorization_sha256,
+    correction_sha256,
     base_commit_digest,
     canonical_json,
     effective_content_digest,
@@ -79,6 +82,25 @@ def test_canonical_artifact_digests_and_effective_digest_are_stable():
     assert effective_content_digest("accepted", EXTRACTION) != effective_content_digest("retracted", None)
     with pytest.raises((ValueError, TypeError)):
         canonical_json({"bad": float("nan")})
+
+
+def test_each_versioned_artifact_digest_is_sha256_of_its_canonical_body():
+    req = request("RETRACT", proposed_effective_status="retracted",
+                  proposed_effective_extraction_result=None, changed_paths=[])
+    authorization = {"schema_version": "canon-correction-authorization/v1", "authorization_id": "auth-2",
+                     "request_id": "req-1", "request_sha256": "d" * 64, "choice": "REJECT",
+                     "actor_ref": "person", "decision_provenance": {"source": "fixture"}}
+    correction = {"schema_version": "canon-correction/v1", "correction_id": "cor-2", "chapter": 3,
+                  "base_commit_sha256": "a" * 64, "parent_revision_id": "base:" + "a" * 64,
+                  "parent_effective_content_sha256": "b" * 64, "operation": "RETRACT",
+                  "effective_extraction_result": None, "changed_paths": [], "request_sha256": "d" * 64,
+                  "authorization_ref": "auth-2", "authorization_sha256": "e" * 64,
+                  "provenance": {}, "actor_ref": "writer", "reason": "withdraw"}
+    assert request_sha256(req) == hashlib.sha256(canonical_json(req).encode()).hexdigest()
+    assert authorization_sha256(authorization) == hashlib.sha256(canonical_json(authorization).encode()).hexdigest()
+    assert correction_sha256(correction) == hashlib.sha256(canonical_json(correction).encode()).hexdigest()
+    envelope = {"effective_status": "retracted", "extraction_result": None}
+    assert effective_content_digest("retracted", None) == hashlib.sha256(canonical_json(envelope).encode()).hexdigest()
 
 
 def test_base_identity_uses_validated_commit_and_excludes_projection_status():

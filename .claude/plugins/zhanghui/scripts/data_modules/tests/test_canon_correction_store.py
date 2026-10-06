@@ -141,6 +141,11 @@ def test_append_authorized_correction_requires_typed_verification(tmp_path):
         append_correction(tmp_path, correction, request=req, authorization=auth,
                           decision_verifications=[verification, duplicate])
     assert not final_path.exists()
+    tampered = dict(correction, effective_extraction_result={**correction["effective_extraction_result"], "summary_text": "changed after approval"})
+    with pytest.raises(CorrectionStoreError, match="REQUEST_AUTHORIZATION_MISMATCH"):
+        append_correction(tmp_path, tampered, request=req, authorization=auth,
+                          decision_verifications=[verification])
+    assert not final_path.exists()
     assert append_correction(tmp_path, correction, request=req, authorization=auth,
                              decision_verifications=[verification])
     assert append_correction(tmp_path, correction, request=req, authorization=auth,
@@ -164,3 +169,69 @@ def test_proposal_and_runtime_producers_do_not_import_final_correction_writer():
         source = path.read_text(encoding="utf-8")
         assert "canon_correction_store" not in source
         assert "append_correction(" not in source
+
+
+def test_concurrent_final_appends_have_one_success_and_one_stale_parent(tmp_path):
+    base = setup_base(tmp_path)
+    base_bytes = (tmp_path / ".story-system/commits/chapter_003.commit.json").read_bytes()
+    bundles = []
+    from data_modules.canon_correction_schema import authorization_sha256
+    for index in (1, 2):
+        req = request(base)
+        req["request_id"] = f"race-r{index}"
+        req["operation"] = "SUPERSEDE"
+        append_correction_request(tmp_path, req)
+        auth = {"schema_version": "canon-correction-authorization/v1", "authorization_id": f"race-a{index}",
+                "request_id": req["request_id"], "request_sha256": request_sha256(req), "choice": "APPROVE",
+                "actor_ref": "human", "decision_provenance": {}}
+        append_correction_authorization(tmp_path, auth)
+        verification = VerifiedCorrectionDecision(f"race-v{index}", request_sha256(req),
+            authorization_sha256(auth), "test-only", "VERIFIED_APPROVE")
+        corr = {"schema_version": "canon-correction/v1", "correction_id": f"race-c{index}", "chapter": 3,
+                "base_commit_sha256": req["base_commit_sha256"], "parent_revision_id": req["parent_revision_id"],
+                "parent_effective_content_sha256": req["parent_effective_content_sha256"],
+                "operation": "SUPERSEDE", "effective_extraction_result": req["proposed_effective_extraction_result"],
+                "changed_paths": [], "request_sha256": request_sha256(req), "authorization_ref": auth["authorization_id"],
+                "authorization_sha256": authorization_sha256(auth), "provenance": {}, "actor_ref": "writer", "reason": "race"}
+        bundles.append((corr, req, auth, verification))
+    def append(bundle):
+        try:
+            append_correction(tmp_path, bundle[0], request=bundle[1], authorization=bundle[2],
+                              decision_verifications=[bundle[3]])
+            return "ok"
+        except CorrectionStoreError as exc:
+            return str(exc)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(append, bundles))
+    assert outcomes.count("ok") == 1
+    assert sum("STALE_PARENT" in item for item in outcomes) == 1
+    target = correction_target_dir(tmp_path, 3, bundles[0][1]["base_commit_sha256"])
+    assert len(list((target / "corrections").glob("*.correction.json"))) == 1
+    assert (tmp_path / ".story-system/commits/chapter_003.commit.json").read_bytes() == base_bytes
+
+
+def test_final_append_refuses_preexisting_authorization_conflict_without_correction_write(tmp_path):
+    base = setup_base(tmp_path)
+    req = request(base); req["operation"] = "SUPERSEDE"
+    append_correction_request(tmp_path, req)
+    from data_modules.canon_correction_schema import authorization_sha256
+    auth = {"schema_version": "canon-correction-authorization/v1", "authorization_id": "conflict-a1",
+            "request_id": req["request_id"], "request_sha256": request_sha256(req), "choice": "APPROVE",
+            "actor_ref": "human", "decision_provenance": {}}
+    append_correction_authorization(tmp_path, auth)
+    req_dir = correction_target_dir(tmp_path, 3, req["base_commit_sha256"])
+    second = {**auth, "authorization_id": "conflict-a2", "choice": "REJECT"}
+    path = req_dir / "authorizations/conflict-a2.authorization.json"
+    path.write_text(json.dumps(second), encoding="utf-8")
+    correction = {"schema_version": "canon-correction/v1", "correction_id": "conflict-c", "chapter": 3,
+                  "base_commit_sha256": req["base_commit_sha256"], "parent_revision_id": req["parent_revision_id"],
+                  "parent_effective_content_sha256": req["parent_effective_content_sha256"],
+                  "operation": "SUPERSEDE", "effective_extraction_result": req["proposed_effective_extraction_result"],
+                  "changed_paths": [], "request_sha256": request_sha256(req), "authorization_ref": auth["authorization_id"],
+                  "authorization_sha256": authorization_sha256(auth), "provenance": {}, "actor_ref": "writer", "reason": "conflict"}
+    verification = VerifiedCorrectionDecision("conflict-test", request_sha256(req), authorization_sha256(auth),
+                                               "test-only", "VERIFIED_APPROVE")
+    with pytest.raises(CorrectionStoreError, match="AUTHORIZATION_CONFLICT"):
+        append_correction(tmp_path, correction, request=req, authorization=auth,
+                          decision_verifications=[verification])
+    assert list((req_dir / "corrections").glob("*.correction.json")) == []

@@ -292,7 +292,9 @@ def resolve_effective_history(
                 return _unresolved(chapter, lineage.base_commit_sha256,
                                    (CorrectionDiagnostic("AMEND_CHANGED_PATHS_MISMATCH", correction.correction_id),))
             canonical_fields = set(ExtractionResult.model_fields)
-            unchanged = [name for name in canonical_fields if extraction.get(name) == replacement.get(name)]
+            before_fields = ExtractionResult.model_validate(extraction).model_dump(mode="json")
+            after_fields = ExtractionResult.model_validate(replacement).model_dump(mode="json")
+            unchanged = [name for name in canonical_fields if before_fields.get(name) == after_fields.get(name)]
             if not unchanged:
                 return _unresolved(chapter, lineage.base_commit_sha256,
                                    (CorrectionDiagnostic("AMEND_REPLACES_ALL_CANONICAL_FIELDS", correction.correction_id),))

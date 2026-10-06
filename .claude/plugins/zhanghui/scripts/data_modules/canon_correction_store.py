@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -63,24 +64,28 @@ def _load_base(root: Path, chapter: int, expected_digest: str) -> dict[str, Any]
 
 def _exclusive_create(path: Path, value: dict[str, Any]) -> None:
     data = (canonical_json(value) + "\n").encode("utf-8")
-    try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        try:
-            existing = json.loads(path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise CorrectionStoreError("ID_CONFLICT: existing artifact is unreadable") from exc
-        if canonical_json(existing) == canonical_json(value):
-            return
-        raise CorrectionStoreError("ID_CONFLICT: artifact ID already has different content")
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
-    except Exception:
-        # An interrupted partial write must never be overwritten automatically.
-        raise
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                raise CorrectionStoreError("ID_CONFLICT: existing artifact is unreadable") from exc
+            if canonical_json(existing) == canonical_json(value):
+                return
+            raise CorrectionStoreError("ID_CONFLICT: artifact ID already has different content")
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def _parent_is_base(request: CanonCorrectionRequest, commit: dict[str, Any]) -> None:
@@ -123,6 +128,15 @@ def append_correction_authorization(root: str | Path, authorization: CanonCorrec
     chapters_root = project_root / ".story-system" / "corrections"
     matches = list(chapters_root.glob(f"chapter_*/*/requests/{model.request_id}.request.json")) if chapters_root.exists() else []
     matches = [path for path in matches if path.is_file()]
+    exact_matches = []
+    for path in matches:
+        try:
+            body = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if artifact_sha256(body) == model.request_sha256:
+            exact_matches.append(path)
+    matches = exact_matches
     if len(matches) != 1:
         raise CorrectionStoreError("REQUEST_NOT_FOUND_OR_AMBIGUOUS")
     target = matches[0].parents[1]
@@ -250,7 +264,7 @@ def append_correction(root: str | Path, correction: CanonCorrection | dict[str, 
             raise CorrectionStoreError("REQUEST_OR_AUTHORIZATION_NOT_FOUND") from exc
         if artifact_sha256(stored_req) != artifact_sha256(req) or artifact_sha256(stored_auth) != artifact_sha256(auth):
             raise CorrectionStoreError("REQUEST_OR_AUTHORIZATION_MISMATCH")
-        _load_base(project_root, corr.chapter, corr.base_commit_sha256)
+        commit = _load_base(project_root, corr.chapter, corr.base_commit_sha256)
         auth_dir = target / "authorizations"
         distinct = set()
         for path in auth_dir.glob("*.authorization.json"):
@@ -262,13 +276,37 @@ def append_correction(root: str | Path, correction: CanonCorrection | dict[str, 
         correction_dir = target / "corrections"
         final_path = correction_dir / f"{corr.correction_id}.correction.json"
         body = corr.model_dump(mode="json")
-        if final_path.exists():
-            _exclusive_create(final_path, body)
-            return corr
-        commit = _load_base(project_root, corr.chapter, corr.base_commit_sha256)
         current_revision, current_digest = _current_tip(target, corr.base_commit_sha256, commit["extraction_result"])
+        if final_path.exists():
+            try:
+                existing = json.loads(final_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                raise CorrectionStoreError("ID_CONFLICT") from exc
+            if artifact_sha256(existing) == artifact_sha256(body):
+                # An exact retry is allowed only when the complete current chain is valid.
+                request_values = [json.loads(path.read_text(encoding="utf-8")) for path in (target / "requests").glob("*.request.json")]
+                authorization_values = [json.loads(path.read_text(encoding="utf-8")) for path in auth_dir.glob("*.authorization.json")]
+                correction_values = [json.loads(path.read_text(encoding="utf-8")) for path in correction_dir.glob("*.correction.json")]
+                from .canon_correction_resolver import validate_lineage
+                retry_lineage = validate_lineage(commit, correction_values, request_values, authorization_values, decision_verifications)
+                if not retry_lineage.ok:
+                    code = retry_lineage.diagnostics[0].code if retry_lineage.diagnostics else "LINEAGE_INVALID"
+                    raise CorrectionStoreError(code)
+                return corr
+            raise CorrectionStoreError("ID_CONFLICT")
         if req.parent_revision_id != current_revision or req.parent_effective_content_sha256 != current_digest:
             raise CorrectionStoreError("STALE_PARENT")
+        try:
+            all_requests = [json.loads(path.read_text(encoding="utf-8")) for path in (target / "requests").glob("*.request.json")]
+            all_authorizations = [json.loads(path.read_text(encoding="utf-8")) for path in auth_dir.glob("*.authorization.json")]
+            all_corrections = [json.loads(path.read_text(encoding="utf-8")) for path in correction_dir.glob("*.correction.json")] if correction_dir.exists() else []
+        except Exception as exc:
+            raise CorrectionStoreError("LINEAGE_INVALID: stored artifact cannot be read") from exc
+        from .canon_correction_resolver import validate_lineage
+        lineage = validate_lineage(commit, all_corrections, all_requests, all_authorizations, decision_verifications)
+        if not lineage.ok:
+            code = lineage.diagnostics[0].code if lineage.diagnostics else "LINEAGE_INVALID"
+            raise CorrectionStoreError(code)
         correction_dir.mkdir(parents=True, exist_ok=True)
         _exclusive_create(final_path, body)
     return corr

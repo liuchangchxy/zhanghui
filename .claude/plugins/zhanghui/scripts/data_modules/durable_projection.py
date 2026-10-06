@@ -94,40 +94,53 @@ def read_validated_chapter_commit(
             f"durable commit filename chapter {filename_chapter} does not match expected chapter {expected_chapter}"
         )
     payload = read_commit_file(path)
+    return validate_chapter_commit_payload(payload, expected_chapter=filename_chapter, source=str(path))
+
+
+def validate_chapter_commit_payload(
+    payload: Dict[str, Any], *, expected_chapter: int | None = None, source: str = "in-memory commit"
+) -> Dict[str, Any]:
+    """Validate a chapter commit payload without writing or reading project files."""
+    if not isinstance(payload, dict):
+        raise DurableCommitError(f"Durable chapter commit payload is not an object: {source}")
     meta = _meta(payload, label="Durable chapter commit")
     chapter = meta.get("chapter")
-    if isinstance(chapter, bool) or not isinstance(chapter, int) or chapter != filename_chapter:
+    if isinstance(chapter, bool) or not isinstance(chapter, int) or chapter < 1:
         raise DurableCommitError(
-            f"invalid durable commit {path}: meta.chapter does not match filename chapter {filename_chapter}"
+            f"invalid durable commit {source}: invalid meta.chapter"
+        )
+    if expected_chapter is not None and chapter != int(expected_chapter):
+        raise DurableCommitError(
+            f"invalid durable commit {source}: meta.chapter does not match expected chapter {expected_chapter}"
         )
     if meta.get("schema_version") != "story-system/v1":
         raise DurableCommitError(
-            f"invalid durable commit {path}: unsupported schema version {meta.get('schema_version')!r}"
+            f"invalid durable commit {source}: unsupported schema version {meta.get('schema_version')!r}"
         )
     if meta.get("status") not in {"accepted", "rejected"}:
         raise DurableCommitError(
-            f"invalid durable commit {path}: unsupported commit status {meta.get('status')!r}"
+            f"invalid durable commit {source}: unsupported commit status {meta.get('status')!r}"
         )
     binding = payload.get("gate_decision_binding")
     if binding is not None:
         if not isinstance(binding, dict) or set(binding) != {
             "gate_decision_ref", "input_fingerprint", "policy_version", "final_action"
         }:
-            raise DurableCommitError(f"invalid durable commit {path}: malformed GateDecision binding")
+            raise DurableCommitError(f"invalid durable commit {source}: malformed GateDecision binding")
         ref = binding.get("gate_decision_ref")
         fingerprint = binding.get("input_fingerprint")
         policy_version = binding.get("policy_version")
         final_action = binding.get("final_action")
         if not isinstance(ref, str) or not ref or ref.startswith("/") or ".." in Path(ref).parts:
-            raise DurableCommitError(f"invalid durable commit {path}: invalid GateDecision reference")
+            raise DurableCommitError(f"invalid durable commit {source}: invalid GateDecision reference")
         if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
-            raise DurableCommitError(f"invalid durable commit {path}: invalid GateDecision input fingerprint")
+            raise DurableCommitError(f"invalid durable commit {source}: invalid GateDecision input fingerprint")
         if not isinstance(policy_version, str) or not policy_version.strip():
-            raise DurableCommitError(f"invalid durable commit {path}: invalid GateDecision policy version")
+            raise DurableCommitError(f"invalid durable commit {source}: invalid GateDecision policy version")
         expected_action = "REJECT" if meta.get("status") == "rejected" else "ALLOW_WITH_ADVISORY"
         if final_action != expected_action:
             raise DurableCommitError(
-                f"invalid durable commit {path}: final_action {final_action!r} does not match status {meta.get('status')!r}"
+                f"invalid durable commit {source}: final_action {final_action!r} does not match status {meta.get('status')!r}"
             )
     try:
         ReviewResult.model_validate(payload.get("review_result"))
@@ -135,7 +148,7 @@ def read_validated_chapter_commit(
         DisambiguationResult.model_validate(payload.get("disambiguation_result"))
         ExtractionResult.model_validate(payload.get("extraction_result"))
     except Exception as exc:
-        raise DurableCommitError(f"invalid durable commit {path}: {exc}") from exc
+        raise DurableCommitError(f"invalid durable commit {source}: {exc}") from exc
     return payload
 
 

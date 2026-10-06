@@ -4,13 +4,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import tempfile
-from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .durable_projection import canonical_commit_json, read_validated_chapter_commit
+from .durable_projection import canonical_commit_json, validate_chapter_commit_payload
 from .chapter_commit_schema import ExtractionResult
 
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -169,10 +167,7 @@ def base_commit_digest(commit: dict[str, Any]) -> str:
     chapter = meta.get("chapter") if isinstance(meta, dict) else None
     if isinstance(chapter, bool) or not isinstance(chapter, int) or chapter < 1:
         raise ValueError("invalid commit chapter")
-    with tempfile.TemporaryDirectory(prefix="canon-correction-validation-") as tmp:
-        path = Path(tmp) / f"chapter_{chapter:03d}.commit.json"
-        path.write_text(canonical_json(commit), encoding="utf-8")
-        validated = read_validated_chapter_commit(path, expected_chapter=chapter)
+    validated = validate_chapter_commit_payload(commit, expected_chapter=chapter)
     if validated["meta"].get("status") != "accepted":
         raise ValueError("only accepted chapter commits may be correction bases")
     return hashlib.sha256(canonical_commit_json(validated).encode("utf-8")).hexdigest()

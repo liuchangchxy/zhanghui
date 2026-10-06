@@ -2040,6 +2040,22 @@
           "sink": "glob",
           "reader_id": "commit-reader",
           "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "symbol": "_load_base",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_preview.py",
+          "symbol": "preview_chapter_corrections",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
         }
       ]
     },

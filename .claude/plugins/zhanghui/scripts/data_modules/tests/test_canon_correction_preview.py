@@ -55,11 +55,30 @@ def test_zero_correction_preview_returns_clean_base_without_writes(tmp_path):
     assert before == snapshot(tmp_path)
 
 
+def test_preview_preserves_preexisting_sibling_corrections_and_never_selects_a_winner(tmp_path):
+    base, correction, request, authorization, verification = edge_fixtures()
+    write_json(tmp_path / ".story-system/commits/chapter_003.commit.json", base)
+    digest = base_commit_digest(base)
+    target = tmp_path / ".story-system/corrections/chapter_003" / digest
+    write_json(target / "requests/r1.request.json", request)
+    write_json(target / "authorizations/a1.authorization.json", authorization)
+    write_json(target / "corrections/c1.correction.json", correction)
+    sibling = {**correction, "correction_id": "c2"}
+    write_json(target / "corrections/c2.correction.json", sibling)
+    before = snapshot(tmp_path)
+    result = preview_chapter_corrections(tmp_path, 3, digest, [verification])
+    assert result.ok is False and result.effective_revision_id is None
+    assert "LINEAGE_SIBLING_CONFLICT" in {item.code for item in result.diagnostics}
+    assert before == snapshot(tmp_path)
+
+
 def test_normal_runtime_has_no_import_path_to_correction_modules():
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     blocked = ("canon_correction_store", "canon_correction_resolver", "canon_correction_preview")
-    for path in root.rglob("*.py"):
-        if "/tests/" in path.as_posix() or path.name.startswith("canon_correction_"):
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix not in {".py", ".md"}:
+            continue
+        if "/tests/" in path.as_posix() or "/6.4.0/" in path.as_posix() or "/docs/" in path.as_posix() or path.name.startswith("canon_correction_"):
             continue
         source = path.read_text(encoding="utf-8")
         assert not any(name in source for name in blocked), str(path)
