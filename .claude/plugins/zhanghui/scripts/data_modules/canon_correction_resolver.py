@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from typing import Any, Sequence
 
 from .canon_correction_schema import (
     CanonCorrection, CanonCorrectionRequest, CanonCorrectionAuthorization,
-    artifact_sha256, base_commit_digest, effective_content_digest,
+    artifact_sha256, base_commit_digest, effective_content_digest, canonical_json,
 )
 from .chapter_commit_schema import ExtractionResult
 from .canon_correction_store import VerifiedCorrectionDecision
@@ -26,6 +27,19 @@ class ValidatedLineage:
     ordered_corrections: tuple[dict[str, Any], ...]
     revision_ids: tuple[str, ...]
     effective_revision_id: str | None
+    diagnostics: tuple[CorrectionDiagnostic, ...]
+
+
+@dataclass(frozen=True)
+class EffectiveHistoryResult:
+    ok: bool
+    chapter: int
+    base_commit_sha256: str | None
+    effective_revision_id: str | None
+    effective_status: str | None
+    effective_extraction_result: dict[str, Any] | None
+    applied_correction_ids: tuple[str, ...]
+    effective_content_sha256: str | None
     diagnostics: tuple[CorrectionDiagnostic, ...]
 
 
@@ -131,6 +145,13 @@ def validate_lineage(
                     and correction.operation == req.operation
                     and correction.effective_extraction_result == req.proposed_effective_extraction_result
                     and correction.changed_paths == req.changed_paths)
+        try:
+            proposed_digest = effective_content_digest(req.proposed_effective_status, req.proposed_effective_extraction_result)
+        except Exception:
+            proposed_digest = ""
+        if proposed_digest != req.proposed_effective_content_sha256:
+            diagnostics.append(CorrectionDiagnostic("REQUEST_CONTENT_DIGEST_MISMATCH", cid))
+            continue
         if not semantic:
             diagnostics.append(CorrectionDiagnostic("REQUEST_CORRECTION_MISMATCH", cid))
             continue
@@ -193,3 +214,105 @@ def validate_lineage(
     return ValidatedLineage(True, base_digest,
                             tuple(item.model_dump(mode="json") for item in ordered),
                             tuple(revision_ids), revision, ())
+
+
+_ABSENT = {"$canon": "absent"}
+
+
+def _sha_value(value: Any) -> str:
+    return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _structural_changes(before: Any, after: Any, path: str = "") -> list[dict[str, str]]:
+    if before is _ABSENT or after is _ABSENT:
+        return [{"path": path or "/", "before_sha256": _sha_value(before), "after_sha256": _sha_value(after)}]
+    if isinstance(before, dict) and isinstance(after, dict):
+        result = []
+        for key in sorted(set(before) | set(after)):
+            escaped = str(key).replace("~", "~0").replace("/", "~1")
+            result.extend(_structural_changes(before.get(key, _ABSENT), after.get(key, _ABSENT), f"{path}/{escaped}"))
+        return result
+    if isinstance(before, list) and isinstance(after, list):
+        result = []
+        for index in range(max(len(before), len(after))):
+            left = before[index] if index < len(before) else _ABSENT
+            right = after[index] if index < len(after) else _ABSENT
+            result.extend(_structural_changes(left, right, f"{path}/{index}"))
+        return result
+    if before != after:
+        return [{"path": path or "/", "before_sha256": _sha_value(before), "after_sha256": _sha_value(after)}]
+    return []
+
+
+def _unresolved(chapter: int, base_digest: str | None, diagnostics: Sequence[CorrectionDiagnostic]) -> EffectiveHistoryResult:
+    return EffectiveHistoryResult(False, chapter, base_digest, None, None, None, (), None,
+                                  tuple(sorted(set(diagnostics))))
+
+
+def resolve_effective_history(
+    accepted_commit: dict[str, Any],
+    correction_artifacts: Sequence[dict[str, Any]],
+    correction_requests: Sequence[dict[str, Any]],
+    correction_authorizations: Sequence[dict[str, Any]],
+    decision_verifications: Sequence[VerifiedCorrectionDecision],
+) -> EffectiveHistoryResult:
+    meta = accepted_commit.get("meta", {}) if isinstance(accepted_commit, dict) else {}
+    chapter = meta.get("chapter", 0) if isinstance(meta, dict) else 0
+    lineage = validate_lineage(accepted_commit, correction_artifacts, correction_requests,
+                               correction_authorizations, decision_verifications)
+    if not lineage.ok:
+        return _unresolved(chapter, lineage.base_commit_sha256, lineage.diagnostics)
+    try:
+        ExtractionResult.model_validate(accepted_commit["extraction_result"])
+        extraction = dict(accepted_commit["extraction_result"])
+    except Exception as exc:
+        return _unresolved(chapter, lineage.base_commit_sha256,
+                           (CorrectionDiagnostic("INVALID_BASE_EXTRACTION", detail=str(exc)),))
+    status = "accepted"
+    content_digest = effective_content_digest(status, extraction)
+    applied: list[str] = []
+    for raw in lineage.ordered_corrections:
+        correction = CanonCorrection.model_validate(raw)
+        if correction.parent_effective_content_sha256 != content_digest:
+            return _unresolved(chapter, lineage.base_commit_sha256,
+                               (CorrectionDiagnostic("STALE_PARENT", correction.correction_id),))
+        if correction.operation == "AMEND":
+            if status != "accepted" or extraction is None:
+                return _unresolved(chapter, lineage.base_commit_sha256,
+                                   (CorrectionDiagnostic("INVALID_OPERATION_TRANSITION", correction.correction_id),))
+            try:
+                ExtractionResult.model_validate(correction.effective_extraction_result)
+                replacement = dict(correction.effective_extraction_result)
+            except Exception as exc:
+                return _unresolved(chapter, lineage.base_commit_sha256,
+                                   (CorrectionDiagnostic("INVALID_AMEND_EXTRACTION", correction.correction_id, str(exc)),))
+            expected_paths = _structural_changes(extraction, replacement)
+            declared = [item.model_dump(mode="json") for item in correction.changed_paths]
+            if not expected_paths or expected_paths != declared:
+                return _unresolved(chapter, lineage.base_commit_sha256,
+                                   (CorrectionDiagnostic("AMEND_CHANGED_PATHS_MISMATCH", correction.correction_id),))
+            canonical_fields = set(ExtractionResult.model_fields)
+            unchanged = [name for name in canonical_fields if extraction.get(name) == replacement.get(name)]
+            if not unchanged:
+                return _unresolved(chapter, lineage.base_commit_sha256,
+                                   (CorrectionDiagnostic("AMEND_REPLACES_ALL_CANONICAL_FIELDS", correction.correction_id),))
+            extraction = replacement
+            status = "accepted"
+        elif correction.operation == "RETRACT":
+            if status != "accepted":
+                return _unresolved(chapter, lineage.base_commit_sha256,
+                                   (CorrectionDiagnostic("INVALID_OPERATION_TRANSITION", correction.correction_id),))
+            extraction = None
+            status = "retracted"
+        elif correction.operation == "SUPERSEDE":
+            try:
+                ExtractionResult.model_validate(correction.effective_extraction_result)
+                extraction = dict(correction.effective_extraction_result)
+            except Exception as exc:
+                return _unresolved(chapter, lineage.base_commit_sha256,
+                                   (CorrectionDiagnostic("INVALID_SUPERSEDE_EXTRACTION", correction.correction_id, str(exc)),))
+            status = "accepted"
+        content_digest = effective_content_digest(status, extraction)
+        applied.append(correction.correction_id)
+    return EffectiveHistoryResult(True, chapter, lineage.base_commit_sha256, lineage.effective_revision_id,
+                                  status, extraction, tuple(applied), content_digest, ())

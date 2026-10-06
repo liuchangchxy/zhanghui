@@ -182,7 +182,7 @@ def effective_content_digest(status: Literal["accepted", "retracted"], extractio
     if status == "accepted":
         if extraction is None:
             raise ValueError("accepted content requires ExtractionResult")
-        extraction = ExtractionResult.model_validate(extraction).model_dump(mode="json")
+        ExtractionResult.model_validate(extraction)
     elif extraction is not None:
         raise ValueError("retracted content must be null")
     envelope = {"effective_status": status, "extraction_result": extraction}
