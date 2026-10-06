@@ -16,7 +16,7 @@ tags: ["phase-8", "canon-correction", "effective-history"]
 
 **Architecture:** Keep `story-system/v1` chapter commits immutable and add a separately versioned `canon-correction/v1` append-only chain. Validate correction identity, authorization, lineage, and materialized operations, then expose one pure resolver result through read-only staged APIs. Normal runtime and projections continue to consume existing accepted commits until Phase 9.
 
-**Tech Stack:** Existing Python/Pydantic/pytest stack, JSON artifacts, `hashlib.sha256`, existing durable commit canonicalizer/validator, existing gate human-response evidence, atomic file and lock utilities.
+**Tech Stack:** Existing Python/Pydantic/pytest stack, JSON artifacts, `hashlib.sha256`, existing durable commit canonicalizer/validator, atomic file and lock utilities. Correction requests and authorizations form their own durable authority protocol; GateDecisionStore is not part of it.
 
 **Spec:** `docs/superpowers/specs/2026-10-06-phase-8-canon-correction-contract-design.md`
 
@@ -46,10 +46,10 @@ tags: ["phase-8", "canon-correction", "effective-history"]
 | File | Responsibility |
 |---|---|
 | Create `.claude/plugins/zhanghui/scripts/data_modules/canon_correction_schema.py` | Pydantic models, strict operation-specific shape validation, canonical correction serialization and digests. |
-| Create `.claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py` | Append-only chapter correction artifact IO, locking, idempotent retry, and conflict-safe create. |
+| Create `.claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py` | Append-only request, authorization, and correction IO; staged APIs by task; locking, idempotent retry, and conflict-safe create. |
 | Create `.claude/plugins/zhanghui/scripts/data_modules/canon_correction_resolver.py` | Pure authorization/lineage validation and deterministic effective-history result. |
 | Create `.claude/plugins/zhanghui/scripts/data_modules/canon_correction_preview.py` | Read-only loading and preview/inspection API; no regular workflow or runtime wiring. |
-| Create `.claude/plugins/zhanghui/docs/canon-correction.schema.json` | Published `canon-correction/v1` artifact schema. |
+| Create `.claude/plugins/zhanghui/docs/canon-correction.schema.json` | Published request, authorization, and `canon-correction/v1` artifact schemas. |
 | Create `.claude/plugins/zhanghui/scripts/data_modules/tests/test_canon_correction_schema.py` | Schema, canonical identity, and immutability contract tests. |
 | Create `.claude/plugins/zhanghui/scripts/data_modules/tests/test_canon_correction_store.py` | Append, retries, stale parents, races, and no-overwrite tests. |
 | Create `.claude/plugins/zhanghui/scripts/data_modules/tests/test_canon_correction_resolver.py` | Operations, lineage, authorization, deterministic output, and failure diagnostics. |
@@ -59,25 +59,26 @@ tags: ["phase-8", "canon-correction", "effective-history"]
 
 All paths above are Phase 8 future implementation scope. The current design task creates none of these implementation files.
 
-## Task 1: Freeze correction schema and canonical identities
+## Task 1: Freeze all correction schemas and canonical identities
 
-**Files:** Create `canon_correction_schema.py`, `canon-correction.schema.json`, `tests/test_canon_correction_schema.py`; reuse `durable_projection.canonical_commit_json()`.
+**Files:** Create `canon_correction_schema.py`, schemas for all three artifact types, `canon-correction.schema.json`, and `tests/test_canon_correction_schema.py`; reuse `durable_projection.canonical_commit_json()`.
 
 **Interfaces:**
-- `canonical_correction_json(artifact: dict) -> str`: deterministic sorted-key compact UTF-8 JSON; rejects non-JSON/non-finite values.
-- `correction_digest(artifact: dict) -> str`: SHA-256 of that canonical serialization.
+- Models for `canon-correction-request/v1`, `canon-correction-authorization/v1`, and `canon-correction/v1` with strict operation-specific shapes.
+- Shared canonical serialization: sorted-key compact UTF-8 JSON; rejects non-JSON/non-finite values.
+- `request_sha256`, `authorization_sha256`, and `correction_sha256`: SHA-256 of each artifact's canonical serialization.
 - `base_commit_digest(commit: dict) -> str`: first validates a durable accepted commit, then hashes existing `canonical_commit_json(commit)`.
 - `effective_content_digest(status: Literal["accepted", "retracted"], extraction: dict | None) -> str`: hashes the canonical status/content envelope from the spec.
-- `CorrectionArtifact` validates common fields, operation, and operation-specific payload shape.
+- No Task 1 API persists any artifact or writes a semantic correction.
 
 - [ ] **Step 1: Write failing schema and identity tests**
 
-Add tests for valid/invalid schema version, required target/lineage/provenance/authorization fields, positive chapter, safe correction ID, and operation-specific `effective_extraction_result` and `changed_paths`. Add digest vectors proving key-order/whitespace independence, projection-status exclusion for base commits, and digest change for a substantive canonical field change.
+Add tests for valid/invalid schema versions; required fields and path-safe IDs for each artifact; operation-specific request/correction content and changed paths; exact request/authorization references; and digest vectors for all three artifacts. Prove key-order/whitespace independence, projection-status exclusion for base commits, and digest change for substantive content changes.
 
 - [ ] **Step 2: Run tests to confirm they fail for missing contract**
 
 Run: `PYTHONPATH=.claude/plugins/zhanghui/scripts pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_canon_correction_schema.py -q`
-Expected: FAIL because the correction model and helpers do not exist.
+Expected: FAIL because the three correction artifact models and identity helpers do not exist.
 
 - [ ] **Step 3: Implement only schema and digest primitives**
 
@@ -92,89 +93,90 @@ Expected: both PASS; old commit schema and behavior remain unchanged.
 
 Commit only schema/helper/tests/docs-schema changes with message `feat: define canon correction artifact schema`.
 
-## Task 2: Implement append-only artifact storage and retry behavior
+## Task 2: Implement correction-specific request and authorization persistence
 
-**Files:** Create `canon_correction_store.py`, `tests/test_canon_correction_store.py`; use `StoryContractPaths` adjacency, existing `FileLock` and atomic-write patterns.
+**Files:** Extend `canon_correction_store.py`; create/extend `tests/test_canon_correction_store.py`; use the fixed namespace from the spec, existing `FileLock` and atomic-create patterns.
 
 **Interfaces:**
-- `correction_dir(root: Path, chapter: int, base_sha256: str) -> Path` resolves `.story-system/corrections/chapter_NNN/<base_sha256>/`, keeping same-chapter, different-base targets physically distinct.
-- `append_correction(root: Path, artifact: CorrectionArtifact, *, authorization_evidence: Mapping) -> StoredCorrection` validates target/authorization and current parent under a per-chapter lock, then atomically creates one artifact.
-- `list_corrections(root: Path, chapter: int, base_sha256: str) -> list[dict]` reads artifacts without mutation in deterministic ID order (resolver order is independent of this listing order).
+- `correction_target_dir(root, chapter, base_sha256)` resolves `.story-system/corrections/chapter_NNN/<base_commit_sha256>/`.
+- `append_correction_request(...)` stores only an immutable request at `requests/<request_id>.request.json`.
+- `append_correction_authorization(...)` resolves and verifies the exact request, validates human actor/durable provenance and `APPROVE`/`REJECT`, then stores only an immutable authorization at `authorizations/<authorization_id>.authorization.json`.
+- Request and authorization APIs enforce path-safe IDs, canonical-digest binding, idempotent exact retries, and same-ID/different-body conflicts.
+- Task 2 exposes no API capable of writing `corrections/*.correction.json`.
 
 - [ ] **Step 1: Write failing append contract tests**
 
-Cover accepted-base required, rejected/missing base refusal, create immutable path, unchanged base commit bytes, exact retry returns same artifact, same ID/different canonical body rejection, malformed/unauthorized artifact leaves no file, and path traversal IDs are rejected.
+Cover request persistence, accepted-base and valid-parent requirements, exact request resolution, authorization for another request/base rejection, both `APPROVE` and `REJECT`, invalid human provenance, immutable request/authorization paths, exact retry, same-ID/different-body conflict, and path traversal rejection. Assert these APIs cannot create a final correction artifact.
 
 - [ ] **Step 2: Run tests to confirm they fail**
 
 Run: `PYTHONPATH=.claude/plugins/zhanghui/scripts pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_canon_correction_store.py -q`
-Expected: FAIL because the store is not implemented.
+Expected: FAIL because correction request/authorization persistence is not implemented.
 
 - [ ] **Step 3: Implement atomic append under chapter lock**
 
-Before acquiring or while holding the chapter lock, validate the immutable accepted base and artifact structure. Under lock, load and validate existing chain, compare the named parent with current unique tip, then use create-if-absent semantics. If the path exists, compare canonical artifact digests: exact match is idempotent; mismatch is rejected without rewriting bytes. Do not call generic overwrite-capable JSON write helpers.
+Implement append-only request and authorization storage only. Validate schema, namespace, durable human provenance, request digest, and decision semantics before writes. Use atomic create-if-absent behavior; identical canonical artifact is an idempotent retry, while different content under the same ID is rejected without rewriting. Do not implement `append_correction()` in this task.
 
 - [ ] **Step 4: Test concurrent stale-parent behavior and pre-existing sibling files separately**
 
-Add a controlled concurrent API test where two requests target one parent. Under the per-chapter lock, one append succeeds and the other returns `STALE_PARENT` without writing an artifact. Separately seed two pre-existing immutable sibling files (representing corruption, import, old/broken storage, or API bypass) and assert resolution returns `LINEAGE_SIBLING_CONFLICT`, `ok=false`, and no effective result while preserving both files byte-for-byte. Also assert ordinary `append_correction()` refuses the conflicted chain. Phase 8 has no sibling repair protocol.
+Do not test or implement final-correction concurrency here. Verify request and authorization artifacts remain immutable and that this task's APIs cannot create sibling correction edges or any final correction.
 
 - [ ] **Step 5: Run store and file-integrity tests**
 
-Run the store test module and the existing `test_gate_decision_store.py` module.
-Expected: PASS; correction storage does not mutate gate evidence or chapter commits.
+Run correction request/authorization storage tests.
+Expected: PASS; ChapterCommit gate storage and chapter commit bytes remain untouched.
 
 - [ ] **Step 6: Commit append-only store**
 
-Commit store and focused tests with message `feat: add append-only canon correction store`.
+Commit request/authorization persistence and focused tests with message `feat: persist correction requests and authorizations`.
 
-## Task 3: Implement exact request-to-human-authorization binding and proposal-only boundaries
+## Task 3: Implement final correction append after authority is complete
 
-**Files:** Extend `canon_correction_schema.py`, `canon_correction_store.py`, `tests/test_canon_correction_store.py`, and `tests/test_canon_correction_resolver.py`; add durable request and authorization artifact schemas/storage as needed within the correction-specific authority boundary.
+**Files:** Extend `canon_correction_store.py` and `tests/test_canon_correction_store.py`. This task depends on completed Task 2 request/authorization persistence and validation.
 
 **Interfaces:**
-- `canon-correction-request/v1` records request ID, chapter, exact accepted base digest, parent revision/content digest, operation, full proposed effective content/digest, AMEND changed paths, proposer provenance, and reason. Its canonical digest is `request_sha256`.
-- `canon-correction-authorization/v1` records authorization ID, request ID and exact `request_sha256`, `APPROVE`/`REJECT`, human actor reference, and durable identity/provenance. Its canonical digest is `authorization_sha256`.
-- `validate_authorization(request, authorization) -> None` verifies the exact request digest, durable human provenance, and explicit choice. Only `APPROVE` permits final append.
-- `validate_final_correction(request, authorization, artifact) -> None` verifies that final operation/content/changed paths match the approved request exactly and binds both request and authorization digests.
-- Authorization failure raises typed validation error before correction file creation. GateDecisionStore responses may be cited only as supplementary provenance; they are not correction authority.
+- `append_correction(root, correction, *, request, authorization)` accepts the exact already-persisted request and authorization artifacts, not a generic evidence mapping.
+- Under the chapter/exact-base lock, re-resolve request and authorization from their fixed namespace and revalidate canonical digests, `APPROVE`, actor/provenance, and same chapter/base namespace.
+- Require correction semantic content, operation, and changed paths to exactly equal the approved request; require request parent revision/content digest still equals the unique current tip.
+- Any failed check occurs before creating `corrections/<correction_id>.correction.json`. Exact retry is idempotent; same-ID/different-content is rejected. Concurrent requests to the same parent yield one success and one `STALE_PARENT`, with no artifact for the stale request.
+- GateDecisionStore responses may be cited only as supplementary provenance; they are not correction authority.
 
-- [ ] **Step 1: Add failing authorization tests**
+- [ ] **Step 1: Add failing final-append authorization and lineage tests**
 
-Test missing request/authorization, wrong request digest, `REJECT`, invalid durable human provenance, authorization bound to another base/parent/operation/proposed content, changed final content after approval, and a correct exact-scope approval. Assert rejection leaves directory and artifacts unchanged.
+Test absent/mismatched request, absent/mismatched authorization, wrong digest, `REJECT`, invalid human provenance, cross-base reference, changed final content after approval, stale parent, exact retry, ID collision, and successful exact-scope append. Assert every failure leaves the final correction path absent or unchanged.
 
-- [ ] **Step 2: Run authorization tests to confirm they fail**
+- [ ] **Step 2: Run final-append tests to confirm they fail**
 
-Run: `PYTHONPATH=.claude/plugins/zhanghui/scripts pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_canon_correction_resolver.py -q -k authorization`
-Expected: FAIL because correction authorization validation does not exist.
+Run: `PYTHONPATH=.claude/plugins/zhanghui/scripts pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_canon_correction_store.py -q -k append_authorized`
+Expected: FAIL because the final correction writer does not exist.
 
-- [ ] **Step 3: Implement correction-specific durable request and authorization artifacts**
+- [ ] **Step 3: Implement the final correction writer**
 
-Persist immutable `canon-correction-request/v1` and `canon-correction-authorization/v1` records under correction-specific storage. Compute canonical digests and validate exact request binding before final append. Do not extend GateDecision, gate finding persistence, or `GateDecisionStore` for correction authorization; existing gate responses may be optional supplementary provenance only.
+Implement `append_correction()` only after Task 2 authority APIs exist. Under the lineage lock, reload and validate the persisted request and authorization, require `APPROVE`, verify exact digests and semantic equality, re-scan the unique chain tip, then atomically create the final correction artifact. No failure path may create a partial or unauthorized correction. Do not extend GateDecision, gate finding persistence, or `GateDecisionStore`.
 
-- [ ] **Step 4: Assert proposal producers have no append authority**
+- [ ] **Step 4: Test concurrent stale-parent behavior**
+
+Add the controlled concurrent API test: one final append succeeds and the stale request returns `STALE_PARENT` without writing an artifact. The pre-existing sibling resolver case is tested in Task 4 after lineage validation exists.
+
+- [ ] **Step 5: Assert proposal producers have no append authority**
 
 Add tests proving `AmendProposalTrigger`, consistency findings, reviewer findings, extraction output, and projection repair output do not call the correction store or create correction artifacts. Keep these components proposal/finding-only.
 
-- [ ] **Step 5: Run focused correction authorization tests**
+- [ ] **Step 6: Run and commit final append boundary**
 
-Run the correction authorization selection above and correction storage/resolver suites.
-Expected: PASS; ChapterCommit gate storage and human-response semantics remain untouched.
-
-- [ ] **Step 6: Commit request and authorization boundary**
-
-Commit with message `feat: bind canon corrections to exact human authorization`.
+Run request/authorization, append, and stale-parent tests. Expected: only exact approved requests can produce final correction artifacts; gate storage remains untouched. Commit with message `feat: append authorized canon corrections`.
 
 ## Task 4: Build deterministic lineage validation
 
 **Files:** Create `canon_correction_resolver.py`, extend `tests/test_canon_correction_resolver.py`.
 
 **Interfaces:**
-- `validate_lineage(accepted_commit: dict, artifacts: Sequence[dict], authorization_evidence: Mapping) -> ValidatedLineage`.
+- `validate_lineage(accepted_commit, correction_artifacts, correction_requests, correction_authorizations) -> ValidatedLineage`; correction requests and authorizations are correction-specific typed collections, never generic `authorization_evidence`.
 - `ValidatedLineage` contains immutable base digest, ordered edge artifacts, deterministic revision IDs, and diagnostics; invalid/conflicted lineage contains no chosen tip.
 
 - [ ] **Step 1: Write failing graph tests**
 
-Test base-only path, two-step chain, shuffled input determinism, missing parent, wrong chapter, wrong base digest, stale parent content hash, duplicate ID/same content, duplicate ID/different content, sibling children, disconnected edge, and cycle.
+Test base-only path, two-step chain, shuffled input determinism, missing/mismatched request or authorization, request digest mismatch, rejected authorization, correction content differing from approved request, wrong chapter/base digest, stale parent content hash, duplicate ID/same content, duplicate ID/different content, sibling children, pre-existing immutable sibling files preserved byte-for-byte with `LINEAGE_SIBLING_CONFLICT`/`ok=false`/no effective result, ordinary append refusal on a conflicted chain, disconnected edge, and cycle. These are pre-existing files from corruption/import/old or bypassed storage, distinct from concurrent API append.
 
 - [ ] **Step 2: Run graph tests to confirm failure**
 
@@ -199,11 +201,12 @@ Commit with message `feat: validate linear canon correction lineage`.
 **Files:** Extend `canon_correction_resolver.py`, `tests/test_canon_correction_resolver.py`; use current `ExtractionResult` validation.
 
 **Interfaces:**
-- `resolve_effective_history(accepted_commit, correction_artifacts, authorization_evidence) -> EffectiveHistoryResult` returns the exact spec fields: `ok`, `chapter`, `base_commit_sha256`, `effective_revision_id`, `effective_status`, `effective_extraction_result`, `applied_correction_ids`, `effective_content_sha256`, `diagnostics`.
+- `resolve_effective_history(accepted_commit, correction_artifacts, correction_requests, correction_authorizations) -> EffectiveHistoryResult` returns the exact spec fields: `ok`, `chapter`, `base_commit_sha256`, `effective_revision_id`, `effective_status`, `effective_extraction_result`, `applied_correction_ids`, `effective_content_sha256`, `diagnostics`.
+- Resolve each correction's `request_sha256` to its exact request and each request to its exact authorization digest/identity; require `APPROVE` and exact semantic equality before applying lineage.
 
 - [ ] **Step 1: Write operation tests before implementation**
 
-Add zero-correction backward-compatibility; deterministic AMEND; exhaustive changed-path/before-after digest validation; AMEND rejects changes to every canonical top-level extraction field; RETRACT output and preserved source artifacts; SUPERSEDE full replacement; correction-of-correction; and invalid result never exposes clean effective Canon.
+Add zero-correction backward-compatibility; deterministic AMEND; exhaustive changed-path/before-after digest validation; AMEND rejects changes to every canonical top-level extraction field and cannot count an unchanged arbitrary/extra key as a preserved canonical field; RETRACT output and preserved source artifacts; SUPERSEDE full replacement; correction-of-correction; and invalid result never exposes clean effective Canon.
 
 - [ ] **Step 2: Confirm the operation tests fail**
 
@@ -212,7 +215,7 @@ Expected: FAIL because resolution operations are not implemented.
 
 - [ ] **Step 3: Implement pure resolver application**
 
-First validate accepted base, all artifacts, authorization, and the complete unique lineage. Then apply each materialized operation in order. AMEND verifies the recomputed structural diff and preserves at least one canonical top-level extraction field; RETRACT sets status and extraction to retracted/null; SUPERSEDE validates and replaces the whole extraction. Never mutate input dictionaries.
+First validate accepted base, all correction artifacts, requests, authorizations, and the complete unique lineage. Then apply each materialized operation in order. AMEND verifies the recomputed structural diff and preserves at least one field declared by the active `ExtractionResult` schema; arbitrary instance keys and `extra="allow"` extensions do not count. RETRACT sets status and extraction to retracted/null; SUPERSEDE validates and replaces the whole extraction. Never mutate input dictionaries.
 
 - [ ] **Step 4: Verify determinism and immutability**
 
@@ -233,7 +236,7 @@ Commit with message `feat: resolve staged effective canon history`.
 **Files:** Create `canon_correction_preview.py`, `tests/test_canon_correction_preview.py`; update architecture tests only for activation guards.
 
 **Interfaces:**
-- `preview_chapter_corrections(project_root: Path, chapter: int) -> EffectiveHistoryResult` reads validated base, correction artifacts, and referenced authorization evidence, then calls the canonical resolver.
+- `preview_chapter_corrections(project_root: Path, chapter: int, base_commit_sha256: str) -> EffectiveHistoryResult` reads the accepted base plus corrections, correction requests, and correction authorizations from the fixed namespace, then calls `resolve_effective_history(accepted_commit, correction_artifacts, correction_requests, correction_authorizations)`.
 - No function in this task writes a correction, gate response, commit, event, or projection file.
 
 - [ ] **Step 1: Write failing read-only and non-activation tests**
@@ -247,7 +250,7 @@ Expected: FAIL because the staged preview and inactive-path guard are absent.
 
 - [ ] **Step 3: Implement read-only discovery and preview**
 
-Load only the specified chapter/base chain and authorization references; call `resolve_effective_history`. Do not register a normal user command, skill step, runtime source, Context input, or projection hook.
+Load only the specified chapter/base namespace and its typed request/authorization/correction artifacts; call the same four-input resolver contract. Do not register a normal user command, skill step, runtime source, Context input, or projection hook.
 
 - [ ] **Step 4: Prove runtime and projections are unchanged**
 

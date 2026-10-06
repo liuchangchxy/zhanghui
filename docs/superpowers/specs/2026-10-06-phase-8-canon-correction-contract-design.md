@@ -38,11 +38,21 @@ Phase 8 must not connect effective corrections to normal writing, query, context
 
 Use schema identifier `canon-correction/v1`. Do not add correction fields to old `story-system/v1` commits or reinterpret their historical meaning.
 
-Suggested append-only path:
+Use this fixed append-only namespace for all three artifact types:
 
 ```text
-.story-system/corrections/chapter_NNN/<base_commit_sha256>/<correction_id>.correction.json
+.story-system/corrections/
+  chapter_NNN/
+    <base_commit_sha256>/
+      requests/
+        <request_id>.request.json
+      authorizations/
+        <authorization_id>.authorization.json
+      corrections/
+        <correction_id>.correction.json
 ```
+
+All three IDs are path-safe. All three artifact types are append-only: same ID plus the same canonical body is an idempotent retry; same ID plus different canonical body is a conflict. A final correction may reference only a request and authorization in this exact chapter/base namespace; cross-base authorization references are invalid. The per-chapter/exact-base lineage lock covers final request, authorization, parent/tip, and correction consistency checks.
 
 One artifact is one immutable edge in a correction chain. The canonical artifact contains:
 
@@ -73,7 +83,7 @@ base_commit_sha256 = SHA256(UTF8(canonical_commit_json(validated_commit)))
 
 First validate the commit using the existing durable commit validator and require `meta.status == "accepted"`. Do not use mtime, path timestamps, or formatted file bytes as identity. A same-chapter commit with another canonical digest is a different target; corrections for it cannot attach to this chain.
 
-Canonicalize correction artifacts independently with sorted keys, compact separators, UTF-8, and no non-finite JSON numbers. `correction_artifact_sha256` is SHA-256 of that serialization. The effective content digest is SHA-256 of canonical JSON for the pair:
+Canonicalize request, authorization, and correction artifacts independently with sorted keys, compact separators, UTF-8, and no non-finite JSON numbers. Their derived digests are respectively `request_sha256`, `authorization_sha256`, and `correction_sha256`, each SHA-256 of that artifact's canonical body. These derived digests are computed identities, not fields inside the artifact body, so no digest hashes itself. References to those digests may be stored in later-stage artifacts. The request's proposed effective content digest uses the effective-content rule below. The effective content digest is SHA-256 of canonical JSON for the pair:
 
 ```json
 {"effective_status":"accepted|retracted","extraction_result":{...}|null}
@@ -105,7 +115,7 @@ On any conflict or invalid edge, return diagnostics and an unresolved result; do
 
 AMEND corrects part of the chapter's canonical extraction while retaining the rest of the effective parent result. The artifact stores the complete materialized resulting `ExtractionResult`; the resolver does not replay JSON Patch operations or unstable list indices.
 
-The validator recomputes a structural diff from the parent result. Its changed path set and each before/after digest must exactly match `changed_paths`. At least one canonical top-level extraction field remains unchanged, and no unlisted path changes. If the interpretation requires replacing every canonical extraction field, use SUPERSEDE. The materialized result must validate under the current extraction-result schema. Each before/after digest is SHA-256 over canonical JSON for the addressed value; additions and removals use an explicit canonical absent-value marker so they cannot collide with JSON null.
+The validator recomputes a structural diff from the parent result. Its changed path set and each before/after digest must exactly match `changed_paths`. At least one canonical top-level extraction field remains unchanged, and no unlisted path changes. “Canonical top-level extraction fields” means exactly the fields declared by the active `ExtractionResult` schema; arbitrary or `extra="allow"` keys do not count. The field set comes from the schema model, not from the instance's supplied keys. If the interpretation requires replacing every canonical extraction field, use SUPERSEDE. The materialized result must validate under the current extraction-result schema. Each before/after digest is SHA-256 over canonical JSON for the addressed value; additions and removals use an explicit canonical absent-value marker so they cannot collide with JSON null.
 
 The correction has its own provenance and authorization. The resolver must not represent the original commit's review, reconciliation, or extraction provenance as evidence that the amended result passed those original checks. This Phase 8 result is staged and is not a newly gate-approved CHAPTER_COMMIT.
 
@@ -144,6 +154,8 @@ The canonical request digest, `request_sha256`, is SHA-256 over its canonical JS
 
 This is a separate immutable durable artifact recording a human decision on one exact request. It contains at least `authorization_id`, `request_id`, `request_sha256`, `choice` (`APPROVE` or `REJECT`), `actor_ref`, and durable identity/provenance for the human decision. Its own canonical digest is `authorization_sha256`. Only `APPROVE` authorizes a final correction; `REJECT` never does. The authorization must identify the exact request digest, not merely a chapter or generic proposal.
 
+Requests and authorizations are persisted and validated before the final correction writer is introduced. Their persistence and validation APIs do not write `canon-correction/v1` artifacts.
+
 ### 9.3 Exact binding of final correction
 
 `canon-correction/v1` must bind both `request_sha256` and the exact authorization artifact identity/digest. Before append, validate that the authorization approves that request and that every final semantic field is identical to the approved request. An authorization for request A cannot authorize different content B. Missing, rejected, mismatched, or unverifiable authorization fails before filesystem side effects. Automated agents and repair services cannot be the authorizing actor.
@@ -172,11 +184,12 @@ Provide one pure resolver boundary in the Phase 8 implementation, conceptually:
 resolve_effective_history(
     accepted_commit: dict[str, Any],
     correction_artifacts: Sequence[dict[str, Any]],
-    authorization_evidence: Mapping[str, dict[str, Any]],
+    correction_requests: Mapping[str, dict[str, Any]],
+    correction_authorizations: Mapping[str, dict[str, Any]],
 ) -> EffectiveHistoryResult
 ```
 
-Inputs are already discovered/read; the resolver performs schema, identity, authorization, graph, digest, and operation validation without filesystem writes. Store and preview layers may load data but must not mutate commits, corrections, events, projections, or workflow evidence during resolution.
+The mappings are correction-specific typed artifact collections, indexed by their canonical digest or stable identity; they are not generic evidence maps. Each correction must resolve to its exact request by `request_sha256`; that request must resolve to its exact authorization by identity and `authorization_sha256`; the authorization must be `APPROVE`; and the correction semantics must equal the approved request. `validate_lineage()` and preview use the same four inputs/authority validation contract. Inputs are already discovered/read; the resolver performs schema, identity, authorization, graph, digest, and operation validation without filesystem writes. Store and preview layers may load data but must not mutate commits, requests, authorizations, corrections, events, projections, or workflow evidence during resolution.
 
 The result contains at least:
 
@@ -190,7 +203,7 @@ The result contains at least:
 
 With zero corrections, the result equals the validated accepted base extraction and is backward-compatible. Invalid or ambiguous inputs never return a result that appears clean. Output ordering and bytes are deterministic independent of directory order, file iteration, and timestamps.
 
-Expose this only through staged/internal libraries and read-only validate/preview/inspect functions. Do not wire it to `story_runtime_sources`, Context, query, write flows, ChapterCommitService, EventLogStore, projection writers, or `projection_rebuild.py` in Phase 8.
+Expose this only through staged/internal libraries and read-only validate/preview/inspect functions. `preview_chapter_corrections()` loads correction artifacts, correction requests, and correction authorizations from the fixed namespace and supplies them to the same resolver contract. Do not wire it to `story_runtime_sources`, Context, query, write flows, ChapterCommitService, EventLogStore, projection writers, or `projection_rebuild.py` in Phase 8.
 
 ## 12. Phase 9 handoff
 
