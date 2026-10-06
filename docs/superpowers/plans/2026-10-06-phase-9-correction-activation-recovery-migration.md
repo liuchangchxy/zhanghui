@@ -4,7 +4,7 @@
 
 **Goal:** Activate explicitly human-confirmed append-only Canon corrections through separate active/candidate histories, immutable publication records, Canon-only projection generations, live mutable owner overlays, and opt-in project migration.
 
-**Architecture:** Keep accepted commits and correction artifacts immutable. Require an explicit interactive user decision in the normal activation workflow and persist a durable, exact-bound confirmation record under the single-user workflow trust model. Separate active and candidate snapshots; freeze activation dependencies in monotonic publication records. Build Canon-only generations, preserve mutable Intent/Craft/Workflow owners in live overlays, and let runtime pin both. Migration preflight, backup, dry-run, and same-semantic recovery use the same ownership-aware publication protocol.
+**Architecture:** Keep accepted commits and correction artifacts immutable. Require an explicit interactive user decision in the normal activation workflow and persist it only as the existing exact-bound `CanonCorrectionAuthorization` with a Phase 9 `decision_provenance` envelope. Separate active and candidate snapshots; freeze activation dependencies in monotonic publication records. Build Canon-only generations, preserve mutable Intent/Craft/Workflow owners in live overlays, and let runtime pin both. Migration preflight, backup, dry-run, and same-semantic recovery use the same ownership-aware publication protocol.
 
 **Tech Stack:** Existing Python data modules, Pydantic schemas, JSON artifacts, SQLite, filesystem atomic rename/fsync, existing pytest architecture and projection suites; no new runtime dependency unless implementation proves a specific gap.
 
@@ -16,7 +16,7 @@
 - Canonical implementation root is `.claude/plugins/zhanghui/`; never edit `.claude/plugins/zhanghui/6.4.0/**`.
 - Never rewrite accepted commits or edit/delete correction artifacts to activate, rebuild, migrate, or roll back.
 - Normal writing/planning/review/query flows and agents must not infer or supply APPROVE; correction activation must go through the explicit interactive confirmation workflow. The workflow trust model does not defend against a malicious agent with project-file write authority.
-- Production Python validates durable confirmation record structure, exact bindings, content/diff digests, lineage, freshness, decision consistency, one-request/one-decision and activation invariants. It does not authenticate the confirmer's identity or prove the record came from a particular host UI event.
+- Production Python validates the existing authorization's structure, exact bindings, content/challenge digests, lineage, freshness, decision consistency, one-request/one-decision and activation invariants. It does not authenticate the confirmer's identity or prove the record came from a particular host UI event.
 - All effective-history semantics remain in `canon_correction_resolver.py`; consumers do not reinterpret correction artifacts. Rejected proposals remain non-edges and cannot poison active history.
 - Active and candidate snapshots are separate. Proposal append never changes active runtime; active referenced-artifact corruption fails closed.
 - Initial correction activation/recovery builds the full sparse history because no verified suffix checkpoint exists.
@@ -41,7 +41,7 @@
 
 | Area | Active files and responsibility |
 |---|---|
-| Human confirmation | `scripts/data_modules/canon_correction_store.py` for immutable correction persistence; new or adapted `correction_decision_provider.py` for challenge construction/record validation; correction skill/host orchestration for the interactive prompt and focused workflow tests |
+| Human confirmation | Existing authorization writer/reader in `scripts/data_modules/canon_correction_store.py`; correction skill/host orchestration for the interactive prompt; Phase 9 challenge/provenance validation; no additional persisted decision owner |
 | Effective source | New `effective_history.py` for validated snapshot facade and typed entries; existing `canon_correction_resolver.py` remains the sole semantic interpreter; `durable_projection.py` validates base/effective projection inputs |
 | Generation protocol | New `projection_generation.py` for journal, Canon-only manifests, staging validation and monotonic publication records; `projection_rebuild.py`, `projection_log.py`, `projections.py`, and router adapt to generation targets |
 | Writers/readers | `chapter_commit_service.py`, state/index/summary/memory/vector writers, `event_log_store.py`, `event_projection_router.py`, `context_provenance.py`, `context_manager.py`, query/recovery entrypoints consume typed snapshot/generation interfaces |
@@ -61,25 +61,28 @@ Exact helper names below are the cross-task contract; keep them stable or update
 ## Task 1: Implement explicit interactive correction confirmation
 
 **Files:**
-- Create or minimally adapt: `.claude/plugins/zhanghui/scripts/data_modules/correction_decision_provider.py`
 - Modify: `.claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py`
 - Modify: correction review skill/host orchestration and CLI persistence path identified in the active source audit
-- Create: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_correction_decision_provider.py`
 - Modify: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_canon_correction_store.py`
-- Add workflow integration tests under `.claude/plugins/zhanghui/scripts/data_modules/tests/`
+- Add: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_correction_authorization_workflow.py`
 
 **Interfaces:**
-- Workflow contract: render the exact challenge, invoke the current host's explicit user-input UI, then pass the answer and challenge digest to the Python confirmation-record API. Python does not invoke or authenticate the UI.
-- The immutable record binds request/auth IDs and SHA-256 digests, operation, target chapter/base digest, parent revision, proposed/effective content digest, AMEND changed paths, displayed challenge digest, `APPROVE|REJECT`, unique interaction/audit ID, recorded provenance, and timestamp (audit only).
-- Python validates canonical digests, exact payload equality, current parent/lineage, decision consistency, unique interaction and one-request/one-decision rules. This validates application state, not confirmer identity or host origin.
+- Workflow contract: construct the canonical review package, render it, invoke the current host's explicit user-input UI, then append the answer as the existing `CanonCorrectionAuthorization` with a namespaced Phase 9 envelope under `decision_provenance`. Python does not invoke or authenticate the UI. No separate confirmation artifact or second persisted decision is created.
+- The review package includes request ID/digest, chapter/base digest, parent revision/content digest, operation, proposed effective status/content digest, AMEND changed paths, and semantic before/after details. `challenge_sha256` is SHA-256 over canonical JSON for this package; render the UI from the same package.
+- The fixed `decision_provenance.phase9_confirmation` envelope contains `kind = interactive-workflow-confirmation/v1`, `challenge_sha256`, workflow-generated `interaction_id`, `interaction_surface`, and `confirmed_at`; timestamp and surface are audit metadata. Preserve unrelated provenance keys.
+- The existing authorization binds request ID/digest and `APPROVE|REJECT`. Its digest covers the provenance envelope and therefore the challenge binding.
+- Python validates canonical digests, exact payload equality, current parent/lineage, decision consistency, unique interaction and one-request/one-decision rules. It creates `VerifiedCorrectionDecision` only as a transient validation result. This validates application state, not confirmer identity or host origin.
+
+Implementation constraint: add challenge/provenance validation beside the existing authorization path; do not add a second authorization or confirmation store.
 
 - [ ] Require the normal activation flow to display operation, target/base, parent, changed paths, semantic before/after or full diff, and request/auth identities before asking for a decision.
-- [ ] Add failing tests for no answer/pending, APPROVE, REJECT, stale parent, cross-request/auth/content, changed payload after confirmation, conflicting decisions, replay, and unavailable interaction UI.
+- [ ] Add failing tests for no answer/pending, APPROVE, REJECT, stale parent, cross-request/auth/content, changed payload after authorization, conflicting decisions, replay, and unavailable interaction UI.
 - [ ] Test that normal write/planning/review/query flows cannot enter activation or infer/supply an APPROVE through workflow routing; do not claim resistance to malicious arbitrary project-file writers.
-- [ ] Persist the immutable audit record and verify retries are idempotent, REJECT is terminal, and final correction bytes exactly match the confirmed proposal.
+- [ ] Persist the answer only through `append_correction_authorization`; scan existing authorization artifacts to reject interaction ID reuse across requests; verify identical authorization retries are idempotent, different decisions conflict, REJECT is terminal, and final correction bytes exactly match the reviewed proposal.
+- [ ] Verify pre-Phase-9 authorizations without the envelope remain immutable historical/staged evidence and cannot activate. A new confirmation requires a new request identity; never edit or supplement an old authorization.
 - [ ] Exercise the actual Local interactive confirmation workflow end-to-end for acceptance; use mocked input only for deterministic unit tests. Do not claim Python verified the UI origin.
 - [ ] Keep Phase 8 compatibility with the smallest needed adapter; do not rewrite Phase 8 artifact schemas or call Python dataclasses authentication.
-- [ ] Run focused provider/store/workflow tests and commit.
+- [ ] Run focused authorization/store/workflow tests and commit.
 
 ## Task 2: Pin the Phase 9 source and inventory all live boundaries
 
@@ -92,7 +95,7 @@ Exact helper names below are the cross-task contract; keep them stable or update
 
 **Interfaces:**
 - Consumes: marketplace-selected active plugin root and current inventory schema.
-- Produces: explicit records for effective-history writer/readers, correction confirmation record/provider workflow, activation marker, projection-generation writer/readers, and migration paths. Writer, reader, and migration records remain separate.
+- Produces: explicit records for effective-history writer/readers, the existing correction authorization writer/reader, interactive workflow and provenance/challenge validation path, activation marker, projection-generation writer/readers, and migration paths. Do not add a parallel durable human-decision owner.
 
 - [ ] Add failing inventory assertions proving each Canon reader, correction artifact producer, activation writer, and migration path has an owner, authority, mode, fallback, and evidence.
 - [ ] Run the focused architecture tests and confirm they fail for missing Phase 9 records.
@@ -114,7 +117,7 @@ Exact helper names below are the cross-task contract; keep them stable or update
 - `EffectiveHistoryEntry(chapter, base_commit, base_sha256, status, extraction_result, effective_revision_id, effective_content_sha256, applied_correction_ids)`.
 - `ActiveEffectiveHistorySnapshot(ok, chapters, activation_record_id, base_set_digest, correction_lineage_digest, effective_history_digest, generation_id, diagnostics)` and `CandidateEffectiveHistorySnapshot(target_correction_id, chapters, candidate_digest, diagnostics)`.
 - `EffectiveHistoryStore.read_active_snapshot(project_root) -> ActiveEffectiveHistorySnapshot`; validates only the frozen active dependency closure.
-- `EffectiveHistoryStore.resolve_candidate(project_root, target_correction_id, confirmation_store) -> CandidateEffectiveHistorySnapshot`; proposal append never mutates active state.
+- `EffectiveHistoryStore.resolve_candidate(project_root, target_correction_id) -> CandidateEffectiveHistorySnapshot`; it reads existing authorization artifacts, validates Phase 9 provenance/challenge bindings and creates only transient `VerifiedCorrectionDecision` values. Proposal append never mutates active state.
 - `EffectiveProjectionInput(base_commit, effective_entry, snapshot_id, snapshot_digest)` is constructible only through the facade.
 - `validate_effective_projection_input(root, value) -> EffectiveProjectionInput` revalidates the on-disk base and effective digests.
 
@@ -140,7 +143,7 @@ Exact helper names below are the cross-task contract; keep them stable or update
 - `BuildHandle.root` is the only Canon projection destination; mutable owner data never enters it. `record_writer(chapter, writer, result)` records snapshot-bound progress.
 - `validate_generation(handle, expected_manifest) -> ValidatedGeneration` checks all seven Canon-owned projection domains and output digests.
 - `publish_generation(validated, expected_previous_publication, expected_lineage_digest) -> PublicationRecord` atomically creates a monotonic record only after lock-time recheck.
-- Each record freezes the base/correction/request/auth/confirmation-record identities and digests, effective revisions/content and generation manifest. Semantic activation ID advances only for a new effective-history digest; same-snapshot replacement retains it.
+- Each record freezes the base/correction/request/authorization identities and digests, effective revisions/content and generation manifest. The authorization digest includes its Phase 9 provenance envelope. Semantic activation ID advances only for a new effective-history digest; same-snapshot replacement retains it.
 - Reader: `pin_active_generation(project_root) -> PinnedGeneration`; validates the record chain/closure and pins one immutable publication record plus its generation.
 
 - [ ] Add failure tests for manifest fsync, generation rename, publication-record atomic create, monotonic sequence, lock contention and concurrent candidate append.
@@ -253,7 +256,7 @@ Exact helper names below are the cross-task contract; keep them stable or update
 - `replace_generation(root, generation_id) -> PublicationRecord` accepts only a verified generation with current semantic activation ID and identical effective-history digest; older semantic IDs are rejected.
 - Filesystem restore requires backup manifest plus explicit post-backup conflict report; it never removes newer corrections, activation enrollment, or current semantic history.
 
-- [ ] Add failing tests for source hash changes after preflight, unresolved human conflict, unavailable confirmation workflow, failed generation writer, and stale build digest.
+- [ ] Add failing tests for source hash changes after preflight, unresolved human conflict, unavailable interactive confirmation, failed generation writer, and stale build digest.
 - [ ] Implement revalidation, verified-backup prerequisite, owner-overlay setup, activation-mode enrollment, staged full-history Canon generation, final source/lineage recheck, and immutable publication-record creation.
 - [ ] Add legacy/partial/mixed test fixtures proving no silent delete, overwrite, sibling choice or Craft promotion.
 - [ ] Add crash tests before/after publication-record creation and same-semantic generation replacement; prove prior semantic activation cannot be selected.
@@ -270,7 +273,7 @@ Exact helper names below are the cross-task contract; keep them stable or update
 - Add: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_correction_activation.py`
 
 **Interfaces:**
-- `activate_correction(project_root, correction_id, confirmation_record) -> ActivationResult` validates the exact workflow confirmation record, resolves the candidate, builds/validates a full Canon-only generation, rechecks candidate/active digests under lock, and creates one immutable publication record.
+- `activate_correction(project_root, correction_id, authorization) -> ActivationResult` validates the existing authorization and its Phase 9 provenance/challenge envelope, resolves the candidate, builds/validates a full Canon-only generation, rechecks candidate/active digests under lock, and creates one immutable publication record.
 - A staged append never changes active history; activation failure leaves the active publication and pinned operations unchanged.
 
 - [ ] Add failing end-to-end tests that observe active publication identity, runtime snapshot, mutable owner overlays and every Canon projection domain before/after the explicit interactive confirmation path and every failure class.
