@@ -139,15 +139,19 @@ Commit request/authorization persistence and focused tests with message `feat: p
 **Files:** Extend `canon_correction_store.py` and `tests/test_canon_correction_store.py`. This task depends on completed Task 2 request/authorization persistence and validation.
 
 **Interfaces:**
-- `append_correction(root, correction, *, request, authorization, decision_verification)` accepts the exact already-persisted request and authorization artifacts plus a trusted decision-verification result from an authority source; it never upgrades raw actor/provenance fields or a caller-supplied dictionary to trusted approval.
-- Under the chapter/exact-base lock, re-resolve request and authorization from their fixed namespace and revalidate canonical digests, `APPROVE`, one-request-one-decision uniqueness/no conflict, and same chapter/base namespace.
+- Define typed `VerifiedCorrectionDecision` with at least `verification_id`, `request_sha256`, `authorization_sha256`, `authority_identity`, and verified human decision status (`VERIFIED_APPROVE` or `VERIFIED_REJECT`). It is a transient value, not a persisted field; raw dictionaries cannot substitute for it.
+- `append_correction(root, correction, *, request, authorization, decision_verifications: Sequence[VerifiedCorrectionDecision])` accepts the exact persisted request/authorization and the complete typed verification sequence. It never upgrades raw actor/provenance fields or a caller-supplied dictionary to trusted approval.
+- Under the chapter/exact-base lock, re-resolve request and authorization from their fixed namespace and revalidate canonical digests, `APPROVE`, one-request-one-decision uniqueness/no conflict, same chapter/base namespace, and exactly one matching verification for both digests and decision choice.
+- Missing/mismatched verification fails as `HUMAN_AUTHORITY_UNVERIFIED`; duplicate/conflicting/ambiguous verification fails as `HUMAN_AUTHORITY_CONFLICT`. No winner is selected.
 - Require correction semantic content, operation, and changed paths to exactly equal the approved request; require request parent revision/content digest still equals the unique current tip.
 - Any failed check occurs before creating `corrections/<correction_id>.correction.json`. Exact retry is idempotent; same-ID/different-content is rejected. Concurrent requests to the same parent yield one success and one `STALE_PARENT`, with no artifact for the stale request.
-- In Phase 8, `decision_verification` is available only through an explicit test fixture for exercising complete lineage; no production provider or minting workflow exists. GateDecisionStore responses may be cited only as supplementary provenance and do not satisfy this requirement.
+- In Phase 8, `decision_verifications` is available only through an explicit test fixture/provider for exercising complete lineage; no production verifier/provider or minting workflow exists. GateDecisionStore responses may be cited only as supplementary provenance and do not satisfy this requirement.
 
 - [ ] **Step 1: Add failing final-append authorization and lineage tests**
 
-Test absent/mismatched request, absent/mismatched authorization, wrong digest, `REJECT`, missing trusted-decision verification despite `actor_ref="human"`, arbitrary provenance dictionary, GateDecisionStore/gate-human-response evidence alone, cross-base reference, changed final content after approval, authorization conflict, stale parent, exact retry, ID collision, and successful exact-scope test-fixture append. Assert every failure, especially authorization conflict, leaves the final correction path absent or unchanged.
+Test absent/mismatched request, absent/mismatched authorization, wrong digest, `REJECT`, missing verification despite `actor_ref="human"`, arbitrary verification dict, wrong request digest, wrong authorization digest, duplicate/conflicting verification records, GateDecisionStore/gate-human-response evidence alone, cross-base reference, changed final content after approval, authorization conflict, stale parent, exact retry, ID collision, and successful exact-scope test-fixture append. Assert every failure, especially verification/authorization conflict, leaves the final correction path absent or unchanged.
+
+Run the same missing, mismatched, duplicate, and conflicting verification fixtures through final append and resolver/lineage validation; require matching authority classifications, and require append to leave correction storage untouched on every failure.
 
 - [ ] **Step 2: Run final-append tests to confirm they fail**
 
@@ -156,7 +160,7 @@ Expected: FAIL because the final correction writer does not exist.
 
 - [ ] **Step 3: Implement the final correction writer**
 
-Implement `append_correction()` only after Task 2 persistence exists. Under the lineage lock, reload and validate the persisted request and authorization, require a trusted decision-verification result (test fixture only in Phase 8), require `APPROVE` and authorization uniqueness/no conflict, verify exact digests and semantic equality, re-scan the unique chain tip, then atomically create the final correction artifact. Any failed check, including authorization conflict, leaves zero correction filesystem side effects. Do not extend GateDecision, gate finding persistence, or `GateDecisionStore`.
+Implement `append_correction()` only after Task 2 persistence exists. Under the lineage lock, reload and validate the persisted request and authorization; require exactly one matching `VerifiedCorrectionDecision` from the complete sequence (test fixture only in Phase 8); require verified APPROVE and authorization uniqueness/no conflict; verify exact digests and semantic equality; re-scan the unique chain tip; then atomically create the final correction artifact. Any failed check, including missing/mismatched/duplicate verification or authorization conflict, leaves zero correction filesystem side effects. Do not extend GateDecision, gate finding persistence, or `GateDecisionStore`.
 
 - [ ] **Step 4: Test concurrent stale-parent behavior**
 
@@ -175,12 +179,12 @@ Run request/authorization, append, stale-parent, non-authority-path, and fixture
 **Files:** Create `canon_correction_resolver.py`, extend `tests/test_canon_correction_resolver.py`.
 
 **Interfaces:**
-- `validate_lineage(accepted_commit, correction_artifacts, correction_requests: Sequence, correction_authorizations: Sequence) -> ValidatedLineage`; these correction-specific sequences retain duplicates for ambiguity detection and never use generic evidence maps.
+- `validate_lineage(accepted_commit, correction_artifacts, correction_requests: Sequence, correction_authorizations: Sequence, decision_verifications: Sequence[VerifiedCorrectionDecision]) -> ValidatedLineage`; all sequences retain duplicates for ambiguity detection and never use generic evidence maps.
 - `ValidatedLineage` contains immutable base digest, ordered edge artifacts, deterministic revision IDs, and diagnostics; invalid/conflicted lineage contains no chosen tip.
 
 - [ ] **Step 1: Write failing graph tests**
 
-Test base-only path, two-step chain, shuffled input determinism, missing/mismatched request or authorization, request digest mismatch, rejected authorization, correction content differing from approved request, duplicate/conflicting decisions for one request (APPROVE+REJECT and two APPROVE artifacts), arbitrary provenance/`actor_ref` without trusted fixture using an injected test-only authority verifier, wrong chapter/base digest, stale parent content hash, duplicate ID/same content, duplicate ID/different content, sibling children, pre-existing immutable sibling files preserved byte-for-byte with `LINEAGE_SIBLING_CONFLICT`/`ok=false`/no effective result, pre-existing authorization conflicts with `AUTHORIZATION_CONFLICT`/`ok=false`/no effective result, ordinary append refusal on either conflict, disconnected edge, and cycle. These are pre-existing files from corruption/import/old or bypassed storage, distinct from concurrent API append.
+Test base-only path, two-step chain, shuffled input determinism, missing/mismatched request or authorization, request digest mismatch, rejected authorization, correction content differing from approved request, missing verification (`HUMAN_AUTHORITY_UNVERIFIED`), arbitrary verification dict rejected, wrong request or authorization digest in verification rejected, duplicate/conflicting verification (`HUMAN_AUTHORITY_CONFLICT`) with deterministic failure/no winner, exact test-only verification resolves, duplicate/conflicting decisions for one request (APPROVE+REJECT and two APPROVE artifacts), arbitrary provenance/`actor_ref` without trusted fixture using an injected test-only authority verifier, wrong chapter/base digest, stale parent content hash, duplicate ID/same content, duplicate ID/different content, sibling children, pre-existing immutable sibling files preserved byte-for-byte with `LINEAGE_SIBLING_CONFLICT`/`ok=false`/no effective result, pre-existing authorization conflicts with `AUTHORIZATION_CONFLICT`/`ok=false`/no effective result, ordinary append refusal on either conflict, disconnected edge, and cycle. These are pre-existing files from corruption/import/old or bypassed storage, distinct from concurrent API append.
 
 - [ ] **Step 2: Run graph tests to confirm failure**
 
@@ -189,7 +193,7 @@ Expected: FAIL because no lineage validator exists.
 
 - [ ] **Step 3: Implement graph validation without winner selection**
 
-Build request-to-authorization indexes from the complete sequences and detect conflicting decisions before lineage resolution. Exact same ID/body retry counts once; any second distinct decision for the same request is `AUTHORIZATION_CONFLICT`. Reject REJECTed requests and corrections whose authorization reference is not the unique matching APPROVE. Then build parent-to-children adjacency and enforce one distinct child per parent plus operation transitions. Walk only the unique base-to-tip chain after proving all artifacts are connected and valid. Sort diagnostics for deterministic output; sorting never resolves authorization or lineage conflicts.
+Build request-to-authorization and request/authorization-to-verification indexes from the complete sequences and detect missing, duplicate, mismatched, or conflicting records before lineage resolution. Require exactly one verification matching both exact digests and the recorded choice; missing/mismatch is `HUMAN_AUTHORITY_UNVERIFIED`, duplicate/conflicting is `HUMAN_AUTHORITY_CONFLICT`, with no winner selection. Exact verified APPROVE is required; exact test-only verifier fixture is the only Phase 8 source. Exact same authorization ID/body retry counts once; any second distinct decision for the same request is `AUTHORIZATION_CONFLICT`. Reject REJECTed requests and corrections whose references do not resolve uniquely. Then build parent-to-children adjacency and enforce one distinct child per parent plus operation transitions. Walk only the unique base-to-tip chain after proving all artifacts are connected and valid. Sort diagnostics for deterministic output; sorting never resolves authority or lineage conflicts.
 
 - [ ] **Step 4: Run graph tests with permutations**
 
@@ -205,13 +209,14 @@ Commit with message `feat: validate linear canon correction lineage`.
 **Files:** Extend `canon_correction_resolver.py`, `tests/test_canon_correction_resolver.py`; use current `ExtractionResult` validation.
 
 **Interfaces:**
-- `resolve_effective_history(accepted_commit, correction_artifacts, correction_requests: Sequence, correction_authorizations: Sequence) -> EffectiveHistoryResult` returns the exact spec fields: `ok`, `chapter`, `base_commit_sha256`, `effective_revision_id`, `effective_status`, `effective_extraction_result`, `applied_correction_ids`, `effective_content_sha256`, `diagnostics`.
+- `resolve_effective_history(accepted_commit, correction_artifacts, correction_requests: Sequence, correction_authorizations: Sequence, decision_verifications: Sequence[VerifiedCorrectionDecision]) -> EffectiveHistoryResult` returns the exact spec fields: `ok`, `chapter`, `base_commit_sha256`, `effective_revision_id`, `effective_status`, `effective_extraction_result`, `applied_correction_ids`, `effective_content_sha256`, `diagnostics`.
 - Resolve each correction's `request_sha256` to its exact request and each request to its exact authorization digest/identity; require `APPROVE` and exact semantic equality before applying lineage.
 - The resolver's internal authority-validation seam may receive an explicit test-only verified-decision fixture in tests; persisted `actor_ref`/provenance alone is never interpreted as human identity proof, and Phase 8 supplies no production verifier.
+- A correction with no matching verification returns `HUMAN_AUTHORITY_UNVERIFIED`, `ok=false`, and no effective Canon. Zero corrections with no verification still return the clean accepted base.
 
 - [ ] **Step 1: Write operation tests before implementation**
 
-Add zero-correction backward-compatibility; deterministic AMEND; exhaustive changed-path/before-after digest validation; AMEND rejects changes to every canonical top-level extraction field and cannot count an unchanged arbitrary/extra key as a preserved canonical field; resolver detects missing, rejected, wrong-request, ambiguous, APPROVE+REJECT, and two-APPROVE authorization cases with `ok=false` and no effective Canon; exact duplicate authorization retry is idempotent; RETRACT output and preserved source artifacts; SUPERSEDE full replacement; correction-of-correction; and invalid result never exposes clean effective Canon.
+Add zero-correction/no-verification clean backward-compatibility; correction/no verification yields `HUMAN_AUTHORITY_UNVERIFIED`, `ok=false`; arbitrary dict, wrong request digest, wrong authorization digest, and duplicate/conflicting verification fail deterministically with no winner; exact test-only verification resolves staged AMEND/RETRACT/SUPERSEDE; preview without verification cannot expose corrected Canon; append and resolver enforce the same verification contract; plus deterministic AMEND, exhaustive changed-path/before-after digest validation, canonical-field AMEND checks, authorization conflict/REJECT behavior, RETRACT output, SUPERSEDE replacement, correction-of-correction, and no clean result on invalid input.
 
 - [ ] **Step 2: Confirm the operation tests fail**
 
@@ -220,7 +225,7 @@ Expected: FAIL because resolution operations are not implemented.
 
 - [ ] **Step 3: Implement pure resolver application**
 
-First validate accepted base, all correction artifacts, requests, authorizations, unique authorization decisions, and the complete unique lineage. Then apply each materialized operation in order. AMEND verifies the recomputed structural diff and preserves at least one field declared by the active `ExtractionResult` schema; arbitrary instance keys and `extra="allow"` extensions do not count. RETRACT sets status and extraction to retracted/null; SUPERSEDE validates and replaces the whole extraction. This validates persisted structure and bindings, not real-world human identity. Never mutate input dictionaries.
+First validate accepted base, all correction artifacts, requests, authorizations, unique authorization decisions, exactly one matching typed verification per corrected request, and the complete unique lineage. Then apply each materialized operation in order. AMEND verifies the recomputed structural diff and preserves at least one field declared by the active `ExtractionResult` schema; arbitrary instance keys and `extra="allow"` extensions do not count. RETRACT sets status and extraction to retracted/null; SUPERSEDE validates and replaces the whole extraction. Missing/mismatched verification yields `HUMAN_AUTHORITY_UNVERIFIED`; duplicate/conflicting verification yields `HUMAN_AUTHORITY_CONFLICT`. Never mutate input dictionaries.
 
 - [ ] **Step 4: Verify determinism and immutability**
 
@@ -241,7 +246,8 @@ Commit with message `feat: resolve staged effective canon history`.
 **Files:** Create `canon_correction_preview.py`, `tests/test_canon_correction_preview.py`; update architecture tests only for activation guards.
 
 **Interfaces:**
-- `preview_chapter_corrections(project_root: Path, chapter: int, base_commit_sha256: str) -> EffectiveHistoryResult` reads the accepted base plus corrections, correction requests, and correction authorizations from the fixed namespace, then calls `resolve_effective_history(accepted_commit, correction_artifacts, correction_requests, correction_authorizations)`.
+- `preview_chapter_corrections(project_root: Path, chapter: int, base_commit_sha256: str, decision_verifications: Sequence[VerifiedCorrectionDecision] = ()) -> EffectiveHistoryResult` reads the accepted base plus corrections, correction requests, and correction authorizations from the fixed namespace, then calls the same five-input `resolve_effective_history(...)` contract.
+- Normal Phase 8 preview has no production verifier: zero corrections cleanly return the accepted base; corrections without exact test/trusted verification return `HUMAN_AUTHORITY_UNVERIFIED`, `ok=false`, and no effective result. Valid-correction preview tests explicitly inject the test-only fixture.
 - No function in this task writes a correction, gate response, commit, event, or projection file.
 
 - [ ] **Step 1: Write failing read-only and non-activation tests**
@@ -259,7 +265,7 @@ Load only the specified chapter/base namespace and its typed request/authorizati
 
 - [ ] **Step 4: Prove runtime and projections are unchanged**
 
-Run preview on fixtures with no correction, a valid correction, and conflicting correction artifacts. In every case compare commit, correction, response, event, SQLite, and projection snapshots; require unchanged bytes/rows and unchanged normal runtime source output.
+Run preview on zero-correction/no-verification, correction/no-verification, valid correction with explicit test-only verification, and authorization-conflict fixtures. Require respectively clean base, `HUMAN_AUTHORITY_UNVERIFIED` with no clean result, staged resolved output, and deterministic failure. In every case compare commit, request, authorization, correction, response, event, SQLite, and projection snapshots; require unchanged bytes/rows and unchanged normal runtime source output.
 Expected: PASS.
 
 - [ ] **Step 5: Commit staged inspection boundary**
@@ -272,6 +278,7 @@ Commit with message `feat: add read-only canon correction preview`.
 
 **Interfaces:**
 - Phase 9 integration consumes `EffectiveHistoryResult`; it does not parse correction artifacts itself.
+- The Phase 9 correction integration boundary owns trusted human-decision capture and the production provider that converts its exact request/authorization capture into `VerifiedCorrectionDecision`, then calls the Phase 8 resolver. It does not reimplement correction parsing, lineage selection, or authorization-conflict policy.
 - Acceptance template has identity and command slots but no results or implementation SHA filled into H1.
 
 - [ ] **Step 1: Add failing handoff and acceptance-template tests**
@@ -302,7 +309,7 @@ Commit with message `test: add Phase 8 acceptance binding template`. After indep
 
 ## Implementation acceptance checklist
 
-- [ ] All 21 test categories in the design's Section 13 pass.
+- [ ] All 22 test categories in the design's Section 13 pass.
 - [ ] Accepted base commit bytes never change.
 - [ ] No runtime, projection, rebuild, or user-workflow activation exists in Phase 8.
 - [ ] Phase 9 consumes only the canonical resolver output.

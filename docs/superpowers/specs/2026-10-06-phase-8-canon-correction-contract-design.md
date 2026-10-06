@@ -165,7 +165,11 @@ Keep four concerns distinct:
 
 Phase 8 tests may inject an explicit verified decision fixture to exercise complete correction lineage. Such a fixture is test-only and is not evidence that a project or user opted into or approved a real correction. Phase 8 structural validation can report the recorded decision and its exact bindings, but cannot claim production human identity verification. Accordingly, Phase 8 freezes the durable authorization contract and staged validation semantics; trusted production human-decision capture is an activation prerequisite owned by Phase 9.
 
-### 9.3 One request, one immutable decision
+### 9.3 Typed decision verification input
+
+Define a correction-specific typed value such as `VerifiedCorrectionDecision`, containing at least `verification_id`, exact `request_sha256`, exact `authorization_sha256`, `authority_identity`, and a verified human-decision status that binds the verified choice (`VERIFIED_APPROVE` or `VERIFIED_REJECT`). It is a transient verifier result, not a persisted authorization field. A deserialized authorization, arbitrary dictionary, `actor_ref`, provenance string, or GateDecisionStore response cannot be cast into this value by structural validation alone. In Phase 8, only an explicit test fixture/provider can construct valid instances; Phase 9's accepted trusted capture/provider is the only planned production source.
+
+### 9.4 One request, one immutable decision
 
 For one exact `request_sha256`, at most one distinct authorization artifact/decision is valid. Same authorization ID plus the same canonical body is an idempotent retry. Same authorization ID plus a different body is an ID conflict. A second distinct authorization artifact for the same request, including APPROVE+REJECT or two APPROVE records, produces `AUTHORIZATION_CONFLICT`; no timestamp, filename, directory order, or last-write-wins rule may choose a winner. Exact duplicate copies of the same ID/body represent one retry, not a second decision.
 
@@ -173,13 +177,40 @@ If a request is REJECTed, it remains rejected forever. A later change of mind re
 
 Request and authorization persistence are staged/internal and precede the final correction writer. Authorization persistence uses the same chapter/exact-base lock, re-scans the request's complete authorization set under that lock, and atomically creates only when no distinct decision already exists. This closes concurrent APPROVE/REJECT races. These APIs do not write `canon-correction/v1` artifacts or authenticate the decision source.
 
-### 9.4 Exact binding of final correction
+### 9.5 Exact binding of final correction
 
-`canon-correction/v1` must bind both `request_sha256` and the exact unique authorization artifact identity/digest. Before append, validate that the authorization approves that request and that every final semantic field is identical to the approved request. An authorization for request A cannot authorize different content B. Missing, rejected, mismatched, untrusted for production use, or conflicting authorization fails before filesystem side effects. Automated agents and repair services cannot be the authorizing actor.
+`canon-correction/v1` must bind both `request_sha256` and the exact unique authorization artifact identity/digest. `append_correction()`, `validate_lineage()`, and `resolve_effective_history()` receive the same complete `Sequence[VerifiedCorrectionDecision]` and require exactly one matching verification for each correction's exact request and authorization digest; the verified choice must match the authorization choice and be `VERIFIED_APPROVE`. Missing or mismatched verification returns `HUMAN_AUTHORITY_UNVERIFIED`; duplicate, conflicting, or ambiguous verification returns `HUMAN_AUTHORITY_CONFLICT`. No timestamp, input order, or winner-selection rule applies. Before append, also validate that every final semantic field is identical to the approved request. An authorization for request A cannot authorize different content B. Any failed check stops before filesystem side effects. Automated agents and repair services cannot be the authorizing actor.
 
 Proposal, decision recording, and final append are separate stages. A proposal can be rejected or superseded without altering Canon. Gate human responses may be included only as supplementary provenance and never as the sole correction authority.
 
 ## 10. Append, retry, concurrency, and failure behavior
+
+The final writer uses the same typed verification contract as the resolver:
+
+```python
+append_correction(
+    root,
+    correction,
+    *,
+    request,
+    authorization,
+    decision_verifications: Sequence[VerifiedCorrectionDecision],
+)
+```
+
+`validate_lineage()` has the matching explicit inputs:
+
+```python
+validate_lineage(
+    accepted_commit,
+    correction_artifacts,
+    correction_requests,
+    correction_authorizations,
+    decision_verifications: Sequence[VerifiedCorrectionDecision],
+) -> ValidatedLineage
+```
+
+Both paths require exactly one verification matching the exact request digest, authorization digest, and recorded decision. Missing or mismatched verification is `HUMAN_AUTHORITY_UNVERIFIED`; multiple, duplicate, or conflicting verification records are `HUMAN_AUTHORITY_CONFLICT`. Neither path chooses a winner. Phase 8 can satisfy this only with an explicit test fixture; the production verification provider is Phase 9 work.
 
 The append contract is:
 
@@ -204,10 +235,11 @@ resolve_effective_history(
     correction_artifacts: Sequence[dict[str, Any]],
     correction_requests: Sequence[dict[str, Any]],
     correction_authorizations: Sequence[dict[str, Any]],
+    decision_verifications: Sequence[VerifiedCorrectionDecision],
 ) -> EffectiveHistoryResult
 ```
 
-These are correction-specific typed artifact collections, not generic evidence maps. They are passed as sequences so the resolver can detect duplicate and conflicting authorization records rather than losing them during map construction. Each correction must resolve to its exact request by `request_sha256`; that request must resolve to exactly one distinct authorization decision by request identity/digest; the authorization must be `APPROVE`; and the correction semantics must equal the approved request. Missing, rejected, conflicting, or ambiguous authorization produces `ok=false` and no effective Canon. `validate_lineage()` and preview use the same four inputs/authority validation contract. The pure resolver validates the durable decision contract, not real-world human identity. Resolver fixture tests may inject an explicit test-only verifier at the internal authority-validation seam; a persisted fixture or its fields alone are not production identity proof. Inputs are already discovered/read; the resolver performs structural, digest, authority-contract, graph, and operation validation without filesystem writes. Store and preview layers may load data but must not mutate commits, requests, authorizations, corrections, events, projections, or workflow evidence during resolution.
+The request and authorization inputs are correction-specific typed artifact collections, not generic evidence maps; sequences preserve duplicate decisions for conflict detection. `decision_verifications` is a sequence of `VerifiedCorrectionDecision`, never a generic mapping. Each correction must resolve to its exact request and exactly one authorization decision, plus exactly one verification matching both digests and the recorded choice. Missing/mismatched verification yields `HUMAN_AUTHORITY_UNVERIFIED`; duplicate/conflicting/ambiguous verification yields `HUMAN_AUTHORITY_CONFLICT`; no winner is selected. Missing/REJECTed/conflicting authorization remains an authorization diagnostic, and any invalid authority makes the result `ok=false` with no effective Canon. `validate_lineage()` and preview use the same five inputs and exact verification semantics. The pure resolver validates the typed authority contract; Phase 8 production human identity remains unverified. Inputs are already discovered/read; the resolver performs structural, digest, authority-contract, graph, and operation validation without filesystem writes. Store and preview layers may load data but must not mutate commits, requests, authorizations, corrections, events, projections, or workflow evidence during resolution.
 
 The result contains at least:
 
@@ -221,13 +253,13 @@ The result contains at least:
 
 With zero corrections, the result equals the validated accepted base extraction and is backward-compatible. Invalid or ambiguous inputs never return a result that appears clean. Output ordering and bytes are deterministic independent of directory order, file iteration, and timestamps.
 
-Expose this only through staged/internal libraries and read-only validate/preview/inspect functions. `preview_chapter_corrections()` loads correction artifacts, correction requests, and correction authorizations from the fixed namespace and supplies them to the same resolver contract. Do not wire it to `story_runtime_sources`, Context, query, write flows, ChapterCommitService, EventLogStore, projection writers, or `projection_rebuild.py` in Phase 8.
+Expose this only through staged/internal libraries and read-only validate/preview/inspect functions. `preview_chapter_corrections(project_root, chapter, base_commit_sha256, decision_verifications: Sequence[VerifiedCorrectionDecision])` passes the explicit complete sequence with correction artifacts, requests, and authorizations to the same resolver contract. The normal Phase 8 preview has no production verifier: zero corrections cleanly return the accepted base; any correction without exact verification returns `HUMAN_AUTHORITY_UNVERIFIED` and no effective result. Valid-correction preview tests must explicitly inject the test-only verification fixture. Do not wire it to `story_runtime_sources`, Context, query, write flows, ChapterCommitService, EventLogStore, projection writers, or `projection_rebuild.py` in Phase 8.
 
 ## 12. Phase 9 handoff
 
 Phase 9 consumes the `EffectiveHistoryResult` contract above as its single input for chapter-effective Canon. It must not implement another correction parser or choose lineage independently.
 
-Phase 9 owns correction-aware projection rebuild, event JSON and SQLite mirror rebuild, runtime source integration, recovery, full historical rebuild, existing-project migration, and activation of a user-visible semantic correction workflow. Before activation it must prevent mixed output in which the resolver says corrected history while state/index/events/memory/vector still represent the old history. Phase 9 must also provide and accept trusted human-decision capture before any correction enters live effective Canon; it must bind exact `request_id`, exact `request_sha256`, human actor identity/provenance, and explicit `APPROVE`/`REJECT`. Phase 9 must verify that trust boundary itself and must not infer verified human identity merely from `actor_ref` or provenance fields in a Phase 8 artifact. Until then, Phase 8 authorization records and test fixtures remain staged and inactive.
+Phase 9 owns correction-aware projection rebuild, event JSON and SQLite mirror rebuild, runtime source integration, recovery, full historical rebuild, existing-project migration, and activation of a user-visible semantic correction workflow. Before activation it must prevent mixed output in which the resolver says corrected history while state/index/events/memory/vector still represent the old history. Phase 9 must provide and accept trusted human-decision capture before any correction enters live effective Canon; it must bind exact `request_id`, exact `request_sha256`, human actor identity/provenance, and explicit `APPROVE`/`REJECT`. Its production verifier/provider converts that trusted capture into the same `VerifiedCorrectionDecision` contract and supplies it to the Phase 8 resolver. Phase 9 must verify that trust boundary itself and must not infer verified human identity merely from `actor_ref` or provenance fields in a Phase 8 artifact. Downstream runtime/projection consumers use only `EffectiveHistoryResult`; they do not re-parse artifacts or repeat verification/lineage/conflict policy. Until then, Phase 8 authorization records and test fixtures remain staged and inactive.
 
 ## 13. Implementation acceptance coverage
 
@@ -254,3 +286,4 @@ The Phase 8 plan must add tests for all of the following:
 19. `.claude/plugins/zhanghui/6.4.0/**` remains unchanged.
 20. Acceptance binding avoids self-reference: implementation H1 is tested first, and any result-filled H2 record binds explicitly to H1 in a separate record-only commit.
 21. Authorization trust is not inferred from `actor_ref`, provenance strings, arbitrary dictionaries, or GateDecisionStore/gate-human-response evidence. No normal runtime/skill/CLI/agent/ChapterCommit/projection path can mint approval. Exact authorization retries are idempotent; every distinct second decision for one request causes `AUTHORIZATION_CONFLICT` without a winner; REJECT requires a new request identity to try again; final append has zero correction writes on trust/authorization conflict; and test-fixture decisions are never reported as real project/user approval evidence.
+22. `VerifiedCorrectionDecision` is an explicit typed input shared by append, lineage, resolver, and preview. Missing/mismatched verification yields `HUMAN_AUTHORITY_UNVERIFIED`; duplicate/conflicting verification yields `HUMAN_AUTHORITY_CONFLICT`; arbitrary dicts fail; exact test-only verification permits staged tests; zero-correction resolution remains clean without verification; preview cannot expose unverified corrected Canon; append/resolver classifications agree; and Phase 9 production capture/provider is an activation prerequisite.
