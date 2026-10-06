@@ -2,9 +2,9 @@
 
 > **For agentic workers:** This plan is execution-ready only after the design is reviewed. Implement task-by-task with test-first changes and focused review. Do not begin until the user approves this design and separately authorizes implementation.
 
-**Goal:** Activate trusted append-only Canon corrections through one effective-history snapshot and one atomic, fully validated projection-generation pointer, with safe recovery and opt-in project migration.
+**Goal:** Activate trusted append-only Canon corrections through separate active/candidate histories, immutable publication records, Canon-only projection generations, live mutable owner overlays, and opt-in project migration.
 
-**Architecture:** Keep accepted commits and correction artifacts immutable. Add a host-backed trusted decision capability, one production effective-history facade, typed correction-aware projection inputs, and generation-scoped projection writers. Build and validate a complete generation off-path, then atomically publish one pointer; readers pin one generation per operation. Migration preflight, backup, dry-run, and rollback use that same generation protocol.
+**Architecture:** Keep accepted commits and correction artifacts immutable. Gate production approval on a real host-origin human interaction capability. Separate active and candidate snapshots; freeze activation dependencies in monotonic publication records. Build Canon-only generations, preserve mutable Intent/Craft/Workflow owners in live overlays, and let runtime pin both. Migration preflight, backup, dry-run, and same-semantic recovery use the same ownership-aware publication protocol.
 
 **Tech Stack:** Existing Python data modules, Pydantic schemas, JSON artifacts, SQLite, filesystem atomic rename/fsync, existing pytest architecture and projection suites; no new runtime dependency unless implementation proves a specific gap.
 
@@ -15,15 +15,15 @@
 - Baseline implementation starts from `63f3cef58090f399e6e8b740e3efebe6e5f3e459`.
 - Canonical implementation root is `.claude/plugins/zhanghui/`; never edit `.claude/plugins/zhanghui/6.4.0/**`.
 - Never rewrite accepted commits or edit/delete correction artifacts to activate, rebuild, migrate, or roll back.
-- No caller-supplied dict, CLI flag, actor_ref, ordinary GateDecision response, skill, or agent artifact may be trusted correction approval.
-- If no direct unsynthesizable human interaction capability is available, activation stays disabled and verifier-unavailable fails closed.
-- All effective-history semantics remain in `canon_correction_resolver.py`; consumers do not reinterpret correction artifacts.
-- Every consumer pins one effective snapshot/generation; no partial or mixed generation may report healthy.
+- No caller-supplied dict, CLI flag, actor_ref, ordinary GateDecision response, skill, or agent artifact may be trusted correction approval; Python types are not a security boundary.
+- If no real production host-origin direct-human confirmation capability is available, activation stays disabled and Phase 9 cannot be declared complete/CLOSED.
+- All effective-history semantics remain in `canon_correction_resolver.py`; consumers do not reinterpret correction artifacts. Rejected proposals remain non-edges and cannot poison active history.
+- Active and candidate snapshots are separate. Proposal append never changes active runtime; active referenced-artifact corruption fails closed.
 - Initial correction activation/recovery builds the full sparse history because no verified suffix checkpoint exists.
 - Preflight and dry-run are read-only; migration needs a verified backup and a reviewed conflict-free plan.
 - Do not bump package or marketplace version without an explicit existing release-policy decision; do not conflate package and project schema versions.
 - No Phase 10 Intent/Craft reconciliation, CHANGES retirement, or legacy-support deletion.
-- H1 is the exact implementation plus result-free acceptance template; run acceptance on H1, independently review, then create record-only H2.
+- H1 contains implementation plus a result-free template with no H1 SHA/results. Test exact H1 externally, independently review, then create record-only H2 that names tested H1 and evidence.
 
 ## Review Focus
 
@@ -41,13 +41,29 @@
 |---|---|
 | Trusted decision | `scripts/data_modules/canon_correction_store.py` for immutable correction persistence; new `correction_decision_provider.py` for host capability and verifier evidence; correction CLI/command and focused provider tests |
 | Effective source | New `effective_history.py` for validated snapshot facade and typed entries; existing `canon_correction_resolver.py` remains the sole semantic interpreter; `durable_projection.py` validates base/effective projection inputs |
-| Generation protocol | New `projection_generation.py` for journal, generation manifests, staging validation and atomic pointer; `projection_rebuild.py`, `projection_log.py`, `projections.py`, and router adapt to generation targets |
+| Generation protocol | New `projection_generation.py` for journal, Canon-only manifests, staging validation and monotonic publication records; `projection_rebuild.py`, `projection_log.py`, `projections.py`, and router adapt to generation targets |
 | Writers/readers | `chapter_commit_service.py`, state/index/summary/memory/vector writers, `event_log_store.py`, `event_projection_router.py`, `context_provenance.py`, `context_manager.py`, query/recovery entrypoints consume typed snapshot/generation interfaces |
-| Migration | New `project_migration.py` and CLI subcommands for preflight/report, backup verification, dry-run, migration and operational rollback |
+| Mutable owners | New `owned_project_view.py` composes pinned Canon slices with mutable state/index/memory/RAG owner stores |
+| Migration | New `project_migration.py` and CLI subcommands for active/candidate preflight, backup verification, dry-run, migration and same-semantic recovery |
 | Governance and instructions | `docs/ownership-inventory.json`, `docs/ownership-inventory.schema.json` only if schema needs new fields, active ownership guard/tests, active write/query/resume/recovery instructions and package docs |
 | Acceptance | Focused tests in active `scripts/data_modules/tests/`; adversarial integration/recovery tests; H1 result-free template and H2 evidence record created at their respective acceptance stages |
 
 Exact helper names below are the cross-task contract; keep them stable or update all later tasks in the same reviewed change.
+
+## Task 0: Verify production host capability before activation implementation
+
+**Files:**
+- Read-only audit: host/plugin API documentation and installed host callback surface available at implementation time
+- Evidence: production capability audit record in the acceptance evidence packet (no repository artifact required at this design stage)
+
+**Interfaces:**
+- Consumes: actual host API/callback documentation and callable invocation surface.
+- Produces: `CAPABILITY_EXISTS` or `CAPABILITY_ABSENT`, with API source, invocation authority, forgery/replay analysis, exact request/auth binding, and unavailable behavior.
+
+- [ ] Trace a callable direct-human confirmation API from the production plugin boundary to a host-origin event. Current repository code does not expose one; do not infer support from a prompt-shaped API.
+- [ ] Test whether agents/skills/tool arguments/local files can invoke or synthesize the event. State separately whether this is human-mediated confirmation or cryptographic identity proof.
+- [ ] If capability exists, proceed to Task 2 and require tests through that actual production API.
+- [ ] If absent, implement only the provider interface/unavailable result and explicitly authorized non-activation infrastructure. Stop activation work and report `PHASE_9_BLOCKED_ON_TRUSTED_HOST_CAPABILITY`; Phase 9 cannot be declared complete/CLOSED. Obtain user direction before adopting a weaker threat model or splitting scope.
 
 ## Task 1: Pin the Phase 9 source and inventory all live boundaries
 
@@ -68,7 +84,7 @@ Exact helper names below are the cross-task contract; keep them stable or update
 - [ ] Run focused architecture tests and confirm expected records pass and a synthetic bypass fails.
 - [ ] Commit the inventory boundary before implementation tasks use it.
 
-## Task 2: Define provider-issued, request-bound human decision evidence
+## Task 2: Implement provider-origin evidence only after the capability gate
 
 **Files:**
 - Create: `.claude/plugins/zhanghui/scripts/data_modules/correction_decision_provider.py`
@@ -80,13 +96,13 @@ Exact helper names below are the cross-task contract; keep them stable or update
 
 **Interfaces:**
 - Consumes: `CanonCorrectionRequest`, `CanonCorrectionAuthorization`, exact artifact hashes, and a configured host interaction capability.
-- Produces: `CorrectionDecisionProvider.review(request, authorization) -> VerifiedCorrectionDecision`; provider evidence binds request ID/hash, authorization ID/hash, choice, provider/version, interaction ID, and declared identity/provenance strength.
-- Provider failure: typed `CorrectionDecisionUnavailable`; never return a synthetic verified result.
+- Produces only if Task 0 is positive: `CorrectionDecisionProvider.review(request, authorization) -> VerifiedCorrectionDecision` carrying evidence validated against the actual host-origin event and exact request/auth IDs, digests and choice. Provider unavailable remains typed and fail-closed.
+- A local dataclass, private constructor, token, CLI, file, or TTY does not qualify as host evidence.
 
 - [ ] Write failing tests showing dicts, `actor_ref`, GateDecisionStore response JSON, CLI `--approve`, and agent-created files cannot satisfy `append_correction`.
 - [ ] Add provider contract tests for APPROVE, REJECT, stale parent, wrong request digest, wrong authorization digest, reused interaction, and unavailable capability.
-- [ ] Verify host documentation/source for the actual direct human interaction callback supported at implementation time. If none exists, implement an unavailable provider and keep activation disabled; do not substitute TTY, flag, or file-based evidence.
-- [ ] Implement the narrow host adapter, exact full-content challenge, opaque provider evidence, and process-local verified result. Do not claim cryptographic identity unless the host actually supplies it.
+- [ ] Implement the narrow adapter for the exact audited host callback, full-content challenge and provider-origin evidence verifier. Do not claim cryptographic identity unless the host supplies it.
+- [ ] Exercise the real production provider path end-to-end; test fixtures cannot satisfy production activation acceptance.
 - [ ] Route the correction review command through the provider; ordinary skills can submit a request but cannot call a constructor or inject verification values.
 - [ ] Retain Phase 8 fixture-only tests through an explicit test verifier fixture; ensure production imports cannot select it.
 - [ ] Run focused provider/store tests and adversarial CLI tests; commit.
@@ -103,19 +119,20 @@ Exact helper names below are the cross-task contract; keep them stable or update
 
 **Interfaces:**
 - `EffectiveHistoryEntry(chapter, base_commit, base_sha256, status, extraction_result, effective_revision_id, effective_content_sha256, applied_correction_ids)`.
-- `EffectiveHistorySnapshot(ok, chapters, base_set_digest, correction_lineage_digest, effective_history_digest, snapshot_id, diagnostics)`.
-- `EffectiveHistoryStore.read_snapshot(project_root, decision_provider) -> EffectiveHistorySnapshot`.
+- `ActiveEffectiveHistorySnapshot(ok, chapters, activation_record_id, base_set_digest, correction_lineage_digest, effective_history_digest, generation_id, diagnostics)` and `CandidateEffectiveHistorySnapshot(target_correction_id, chapters, candidate_digest, diagnostics)`.
+- `EffectiveHistoryStore.read_active_snapshot(project_root) -> ActiveEffectiveHistorySnapshot`; validates only the frozen active dependency closure.
+- `EffectiveHistoryStore.resolve_candidate(project_root, target_correction_id, provider) -> CandidateEffectiveHistorySnapshot`; proposal append never mutates active state.
 - `EffectiveProjectionInput(base_commit, effective_entry, snapshot_id, snapshot_digest)` is constructible only through the facade.
 - `validate_effective_projection_input(root, value) -> EffectiveProjectionInput` revalidates the on-disk base and effective digests.
 
-- [ ] Add failing tests for sparse commits, base-only digest stability, exact correction resolution, all namespaces including unreferenced/staged artifacts, sibling conflict, corrupt artifact, stale authorization, provider unavailable, and concurrent artifact digest change.
-- [ ] Add tests proving a namespace with invalid staged artifacts cannot silently fall back to base-only history.
+- [ ] Test: pending request leaves active unchanged; retained REJECTED request does not poison active/unrelated candidate; valid staged correction is not live; candidate conflict blocks activation while prior active remains usable; mutation/deletion of active-referenced artifact fails closed; append after pin does not change that operation.
+- [ ] Candidate-only tests prove malformed/sibling correction artifacts block candidate activation without poisoning a separately verified active snapshot.
 - [ ] Implement deterministic full-set discovery and digest computation; delegate operation/lineage semantics only to the existing resolver.
 - [ ] Extend durable validation so the immutable disk base must match and effective output must independently match the resolver snapshot; arbitrary dicts fail.
 - [ ] Verify rejected commits remain non-effective and correction bases remain accepted-only.
 - [ ] Run focused tests plus Phase 8 schema/store/resolver tests; commit.
 
-## Task 4: Introduce immutable projection generations and freshness manifests
+## Task 4: Introduce Canon-only generations and monotonic publication records
 
 **Files:**
 - Create: `.claude/plugins/zhanghui/scripts/data_modules/projection_generation.py`
@@ -127,17 +144,18 @@ Exact helper names below are the cross-task contract; keep them stable or update
 
 **Interfaces:**
 - `ProjectionGeneration.begin(snapshot, previous_generation) -> BuildHandle`.
-- `BuildHandle.root` is the only writer destination; `record_writer(chapter, writer, result)` records snapshot-bound progress.
-- `validate_generation(handle, expected_manifest) -> ValidatedGeneration` checks all seven domains and output digests.
-- `publish_generation(validated, expected_previous_pointer, expected_lineage_digest) -> ActivationPointer` atomically publishes only after lock-time recheck.
-- Reader: `pin_active_generation(project_root) -> PinnedGeneration`; returned handle does not reread the pointer mid-operation.
+- `BuildHandle.root` is the only Canon projection destination; mutable owner data never enters it. `record_writer(chapter, writer, result)` records snapshot-bound progress.
+- `validate_generation(handle, expected_manifest) -> ValidatedGeneration` checks all seven Canon-owned projection domains and output digests.
+- `publish_generation(validated, expected_previous_publication, expected_lineage_digest) -> PublicationRecord` atomically creates a monotonic record only after lock-time recheck.
+- Each record freezes the base/correction/request/auth/provider evidence, effective revisions/content and generation manifest. Semantic activation ID advances only for a new effective-history digest; same-snapshot replacement retains it.
+- Reader: `pin_active_generation(project_root) -> PinnedGeneration`; validates the record chain/closure and pins one immutable publication record plus its generation.
 
-- [ ] Add failing crash-boundary tests for temporary manifest write, fsync failure, staging rename, lock contention, pointer rename, and concurrent correction append.
-- [ ] Add tests proving one missing required writer, missing tombstone/absence row, or mismatched digest prevents validation.
-- [ ] Implement unique staging directories, append-only build journal, canonical generation manifest and file hashing for events JSON, story-event/index SQLite, state, summaries, memory, vectors/BM25, and diagnostics.
-- [ ] Implement fsync/atomic rename on the project filesystem, activation lock, previous-pointer comparison, and exact lineage digest recheck.
+- [ ] Add failure tests for manifest fsync, generation rename, publication-record atomic create, monotonic sequence, lock contention and concurrent candidate append.
+- [ ] Prove missing writer/tombstone or digest mismatch prevents publication, and a request to roll back to older semantic activation is rejected.
+- [ ] Implement unique staging directories and append-only publication records. Generation includes only Canon slices; mutable owner overlays are separate. Hash all seven Canon projection domains.
+- [ ] Implement fsync/atomic create, activation lock, previous-publication comparison and exact lineage digest recheck. Any current-head file is a cache, never semantic authority.
 - [ ] Add generation identity fields to projection run logs; legacy commit hash-only logs cannot mark a correction generation healthy.
-- [ ] Prove incomplete staging is invisible to readers and a reader pins exactly one pointer/generation.
+- [ ] Prove incomplete staging is invisible to readers and a reader pins exactly one publication record/generation pair.
 - [ ] Run focused generation/log tests on supported platforms and commit.
 
 ## Task 5: Make all projection writers consume typed effective inputs
@@ -165,52 +183,70 @@ Exact helper names below are the cross-task contract; keep them stable or update
 - [ ] Make the rebuild coordinator consume one snapshot for every writer and validate the full generation before it can be published.
 - [ ] Run focused writer and Phase 8 provenance regressions; commit.
 
-## Task 6: Route runtime, context, query and recovery reads through a pinned snapshot
+## Task 6: Keep existing mutable owners live beside immutable Canon slices
 
 **Files:**
-- Modify: `.claude/plugins/zhanghui/scripts/data_modules/context_provenance.py`
-- Modify: `.claude/plugins/zhanghui/scripts/data_modules/context_manager.py`
-- Modify: query/RAG and runtime-source builders enumerated by Task 1
-- Modify: `.claude/plugins/zhanghui/scripts/data_modules/projections.py`
-- Modify: `.claude/plugins/zhanghui/scripts/data_modules/doctor.py` and health/report code
-- Modify: active `webnovel-query`, `webnovel-resume`, write/recovery skill docs as needed
-- Add focused context/query/recovery tests under `.claude/plugins/zhanghui/scripts/data_modules/tests/`
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py`
+- Modify: `state_manager.py`, `story_craft.py`, `data_modules/webnovel.py`, `volume_state.py`, `promise_ledger.py`, `update_state.py`, and `consistency/core/runner.py`
+- Modify: `index_manager.py`, `sql_state_manager.py`, `memory/store.py`, `memory/writer.py`, `rag_adapter.py`, and every direct writer/reader in the Phase 7 inventory
+- Create: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_owned_project_view.py`
+- Modify focused state, index, memory and RAG tests under active `scripts/data_modules/tests/`
 
 **Interfaces:**
-- Runtime entrypoint obtains `PinnedGeneration` once and passes it through context assembly, Canon facts, event retrieval, summaries, and RAG source attribution.
-- `retry` may refresh operationally failed writers only when the current generation/snapshot identity matches; correction freshness mismatch routes to generation recovery, never raw commit replay.
-- `replay(start, end)` is base-only incremental recovery or a staged candidate build; correction activation still builds all seven domains in a full generation.
+- `OwnedStateStore.read_view(PinnedGeneration) -> merged state`; owner writes persist only `.webnovel/state-overlay.json` paths allowed by the inventory.
+- `OwnedIndexView` reads Canon tables from a generation-local SQLite slice and routes operational/workflow writes to `.webnovel/index.db`.
+- `OwnedMemoryView` merges commit-evidence rows from the generation with mutable scratchpad rows; direct writers cannot edit reserved Canon rows.
+- `OwnedRAGView` queries Canon commit vectors and mutable non-Canon vectors separately, then merges ranked hits without mutating either store.
 
-- [ ] Add failing integration tests that put a correction in one namespace and prove no context/query/resume path returns base chapter N with corrected projections or the inverse.
-- [ ] Inventory and test every Canon reader and direct `.webnovel`/commit read; route to the pinned generation or return an explicit unsupported/blocked result.
-- [ ] Make base-only path preserve current behavior where no activation marker/correction namespace exists.
-- [ ] On invalid active pointer/generation or staged conflict, block Canon runtime reads and explain recovery; never silently fallback.
-- [ ] Update Doctor and recovery reports to show base digest, effective revision/tip, generation identity, and complete-set health.
-- [ ] Update active skills to distinguish correction proposal/review from ordinary GateDecision workflow and prohibit agent-issued semantic approval.
-- [ ] Run context/query/recovery and existing projection regression tests; commit.
+- [ ] Add failing tests for a new planning/Craft/workflow write after activation; the next runtime view must see it while generation digest and Canon slices stay unchanged.
+- [ ] Test row/table/field collisions. Ambiguous existing overlap blocks migration instead of choosing a winner.
+- [ ] Route state writes to mutable overlay, retain old `state.json` unchanged, and compose the familiar merged view for existing reader APIs.
+- [ ] Split Canon chapter/index/event/entity outputs into generation-local stores; preserve operational/workflow rows in the mutable index DB.
+- [ ] Split commit-derived memory/vector rows from direct/non-Canon rows; preserve provenance and merge query results with explicit authority labels.
+- [ ] Prove StateManager, Craft, Promise Ledger, workflow, SQL/IndexManager, direct memory and non-Canon RAG writes/readers continue working after activation.
+- [ ] Commit the ownership adapter before changing runtime reader routing.
 
-## Task 7: Implement read-only migration preflight, deterministic dry run and verified backup
+## Task 7: Route runtime/context/query/recovery through pinned Canon plus owner views
+
+**Files:**
+- Modify: `.claude/plugins/zhanghui/scripts/data_modules/context_provenance.py` and `context_manager.py`
+- Modify: query/RAG and runtime-source readers enumerated by Task 1
+- Modify: `projections.py`, `doctor.py`, recovery reports, and active query/resume/write/recovery instructions
+- Add focused context/query/recovery integration tests under active `scripts/data_modules/tests/`
+
+**Interfaces:**
+- Runtime pins one active publication and generation and captures each owner-overlay revision once; all reads use this composite view.
+- Retry refreshes only failed writers for the exact active semantic ID/digest; correction mismatch stages a same-semantic generation replacement or a new candidate, never raw commit replay.
+- Existing owner writes after activation appear in the next operation through mutable overlays without changing Canon generation.
+
+- [ ] Test all inventory reader families, candidate append after pin, active evidence corruption, and owner-overlay update after pin.
+- [ ] Route every Canon reader/direct store read through `OwnedProjectView` or return explicit unsupported/blocked state; candidate API is unavailable to runtime.
+- [ ] Preserve base-only behavior before activation enrollment. After enrollment, missing active record or active digest mismatch fails closed; no base fallback.
+- [ ] Update Doctor/recovery reports with separate active/candidate status, semantic activation ID, effective revision/tip, generation and overlay revisions.
+- [ ] Distinguish correction proposal/reject/review/activation in active skills; prohibit agent-issued semantic approval.
+- [ ] Test legitimate state, index, memory and RAG owner writes remain visible without changing active Canon; commit.
+
+## Task 8: Implement read-only migration preflight, dry run and verified backup
 
 **Files:**
 - Create: `.claude/plugins/zhanghui/scripts/data_modules/project_migration.py`
-- Modify: `.claude/plugins/zhanghui/scripts/webnovel.py` or the active CLI dispatcher discovered in Task 1
+- Modify: active CLI dispatcher in `.claude/plugins/zhanghui/scripts/webnovel.py`
 - Create: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_project_migration.py`
-- Modify: migration/schema compatibility tests in active `scripts/data_modules/tests/`
+- Modify: active schema/migration tests only as required by the report contract
 
 **Interfaces:**
-- `preflight_project(root) -> PreflightReport` is read-only and returns stable category, evidence hashes, conflicts and report digest.
-- `dry_run_migration(root, report_digest) -> MigrationPlan` is read-only and lists exact generated outputs/retained sources/conflicts.
-- `create_verified_backup(root, plan) -> BackupManifest` validates copied files, hashes, SQLite integrity and temporary restore.
-- No migration write interface is exposed until report and backup are valid.
+- `preflight_project(root) -> PreflightReport` reports separate active health and selected-candidate status, evidence hashes, owner mappings and conflicts.
+- `dry_run_migration(root, report_digest) -> MigrationPlan` lists exact Canon slices, mutable overlays, preserved sources, output hashes and unresolved decisions; it is read-only.
+- `create_verified_backup(root, plan) -> BackupManifest` verifies files, SQLite integrity, vector sidecars and temporary restore.
 
-- [ ] Add failing read-only tests: hash whole project before/after preflight and dry run; include corrupt commits, correction conflicts, stale mirrors, mixed Craft data, unknown schema and valid clean base-only project.
-- [ ] Add backup tests for every owned source class, SQLite/vector sidecars, hash mismatch, disk failure, and restore verification failure.
-- [ ] Implement deterministic project classification and preserve unknown/unowned data as conflicts.
-- [ ] Implement backup manifest and verified temporary restore; fail before any write on incomplete backup.
-- [ ] Implement exact dry-run report with required human decisions, retained data, outputs and rollback target.
-- [ ] Run migration preflight/dry-run/backup tests and ensure no input mutation; commit.
+- [ ] Hash the project before/after preflight and dry run; test pending, rejected, active correction plus conflicted candidate, active evidence corruption, dirty shared stores, and clean base-only project.
+- [ ] Prove pending/rejected proposals do not change `active_status`; candidate conflicts do not invalidate a healthy active record.
+- [ ] Implement deterministic classifications and exact ownership/source evidence; preflight and dry run write no project files.
+- [ ] Verify backup for `.story-system`, `.webnovel`, vector DB sidecars, overlay inputs and configured source files; any integrity/hash/restore failure stops migration.
+- [ ] Report overlay field/table mapping and required human decisions; ambiguous ownership blocks instead of choosing a winner.
+- [ ] Run focused preflight/dry-run/backup tests and commit.
 
-## Task 8: Execute opt-in migration and operational rollback through the generation pointer
+## Task 9: Execute opt-in migration and same-semantic operational recovery
 
 **Files:**
 - Modify: `.claude/plugins/zhanghui/scripts/data_modules/project_migration.py`
@@ -221,17 +257,17 @@ Exact helper names below are the cross-task contract; keep them stable or update
 
 **Interfaces:**
 - `migrate_project(root, expected_report_digest, reviewed_plan_digest, backup_manifest) -> MigrationResult` rechecks source hashes and publishes only a validated complete generation.
-- `rollback_projection(root, generation_id) -> ActivationPointer` only points to a validated immutable generation.
-- Filesystem restore requires backup manifest plus explicit post-backup conflict report; it never removes newer corrections.
+- `replace_generation(root, generation_id) -> PublicationRecord` accepts only a verified generation with current semantic activation ID and identical effective-history digest; older semantic IDs are rejected.
+- Filesystem restore requires backup manifest plus explicit post-backup conflict report; it never removes newer corrections, activation enrollment, or current semantic history.
 
 - [ ] Add failing tests for source hash changes after preflight, human unresolved conflict, unavailable provider, failed generation writer, and stale build digest.
-- [ ] Implement revalidation, verified-backup prerequisite, staged full-history generation, final source/lineage recheck, and pointer-only publish.
+- [ ] Implement revalidation, verified-backup prerequisite, owner-overlay setup, activation-mode enrollment, staged full-history Canon generation, final source/lineage recheck, and immutable publication-record creation.
 - [ ] Add legacy/partial/mixed test fixtures proving no silent delete, overwrite, sibling choice or Craft promotion.
-- [ ] Add crash tests before/after pointer rename and recovery to prior verified generation.
-- [ ] Add filesystem rollback conflict tests proving a newer human file/correction is preserved and restore blocks for explicit review.
+- [ ] Add crash tests before/after publication-record creation and same-semantic generation replacement; prove prior semantic activation cannot be selected.
+- [ ] Add filesystem migration rollback tests proving activation enrollment, current semantic activation and new corrections remain intact; newer files are preserved and conflicts block restore.
 - [ ] Run full migration/recovery focused suites; commit.
 
-## Task 9: Integrate production correction activation last
+## Task 10: Integrate production correction activation last
 
 **Files:**
 - Modify: correction command/CLI and `canon_correction_store.py`
@@ -241,18 +277,18 @@ Exact helper names below are the cross-task contract; keep them stable or update
 - Add: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_correction_activation.py`
 
 **Interfaces:**
-- `activate_correction(project_root, correction_id, provider) -> ActivationResult` re-resolves the entire snapshot, builds/validates a full generation, rechecks the candidate lineage under lock, and publishes one pointer.
-- A staged append never changes the active pointer; an activation failure leaves it byte-identical.
+- `activate_correction(project_root, correction_id, provider) -> ActivationResult` resolves the exact candidate, builds/validates a full Canon-only generation, rechecks candidate/active digests under lock, and creates one immutable publication record.
+- A staged append never changes active history; activation failure leaves the active publication and pinned operations unchanged.
 
-- [ ] Add failing end-to-end tests that observe the active pointer, runtime snapshot and every projection domain before/after valid approval and every failure class.
-- [ ] Prove no consumer can observe correction live before a complete pointer publication and every post-publication consumer reports the identical effective revision/tip/generation.
-- [ ] Implement activation by composing Tasks 2–8; do not introduce per-consumer feature flags or duplicate resolver logic.
-- [ ] Add process-crash and correction-added-during-build tests; prove pointer and correction artifacts obey the specified invariants.
+- [ ] Add failing end-to-end tests that observe active publication identity, runtime snapshot, mutable owner overlays and every Canon projection domain before/after valid production approval and every failure class.
+- [ ] Prove no consumer can observe correction live before a complete publication record and every post-publication consumer reports identical semantic activation/revision/tip/generation.
+- [ ] Implement activation by composing Tasks 0 and 2–9; do not introduce per-consumer flags or duplicate resolver logic. A test-only verifier cannot satisfy production acceptance.
+- [ ] Add process-crash and candidate-added-during-build tests; prove publication records advance monotonically and correction artifacts obey the specified invariants.
 - [ ] Update ownership inventory, drift guard evidence and operator recovery documentation.
-- [ ] Run Phase 8 regressions, architecture/projection suite, activation adversarial suite and acceptance-template checks.
+- [ ] Run Phase 8 regressions, architecture/projection and owner-overlay suites, real-provider activation attacks and acceptance-template guard. If Task 0 was negative, stop and report `PHASE_9_BLOCKED_ON_TRUSTED_HOST_CAPABILITY`; do not claim closure.
 - [ ] Inspect the exact production diff and confirm `.claude/plugins/zhanghui/6.4.0/**` is unchanged; commit implementation candidate H1 with a result-free acceptance template.
 
-## Task 10: Run exact-H1 acceptance, independent review, and record-only H2
+## Task 11: Run exact-H1 acceptance, independent review, and record-only H2
 
 **Files:**
 - Create in H1: `docs/superpowers/acceptance/phase-9-h1-acceptance-template.md` (result-free)
@@ -260,20 +296,20 @@ Exact helper names below are the cross-task contract; keep them stable or update
 - No production implementation changes in H2.
 
 **Interfaces:**
-- H1 template names exact H1 SHA, acceptance commands, environments, required outputs, migration fixtures, and evidence locations without claiming results.
+- H1 template contains commands, suites, environments, evidence fields and binding structure only. It must not contain its own SHA/tree, run/node IDs, results, or PASS/FAIL.
 - H2 records only H1 verification/review result, immutable artifact hashes, and reviewer disposition.
 
-- [ ] Freeze exact H1 SHA and verify H1 contains implementation plus result-free template only.
-- [ ] Run the complete acceptance matrix against H1, including independent-project e2e attacks and recovery/migration scenarios; save raw outputs and artifact hashes.
-- [ ] Obtain independent review of H1 and its evidence; record requested changes as a new implementation commit/H1 before acceptance if needed.
-- [ ] Create H2 containing only final evidence and review records referring to exact H1; prove H2 is not included in the tested H1 and contains no production changes.
+- [ ] Verify H1 contains implementation plus result-free template; add a guard test rejecting H1 SHA/tree/results/node IDs/PASS/FAIL in the template.
+- [ ] Run the full matrix against exact H1; record H1 SHA, parent/tree, commands, results and node IDs in external/local ignored evidence, not H1.
+- [ ] Obtain independent review of exact H1 and external evidence; requested implementation changes create a new H1 and require rerun.
+- [ ] Create H2 record-only with `tested_implementation_head = H1`, H1 parent/tree, commands, results, node IDs, hashes and review disposition. Prove H2 is not tested as H1 and contains no production changes.
 - [ ] Verify final mainline integration requirements separately; no PR or merge mechanics are implied by this design plan.
 
 ## Plan self-review
 
-- Trusted-human authority precedes effective history, writers and runtime. If it cannot be supplied, the typed provider stays unavailable and Task 9's activation tests must prove fail-closed behavior.
-- Generation staging/provenance lands before any consumer can use corrections; runtime reader routing lands before the activation orchestrator. Activation is the last production switch.
-- The plan tests correction-at-N effects on suffix state, memory, vectors and cross-chapter intent; first release does full history because there is no proven checkpoint.
+- Task 0 is a hard closure gate: absent production host capability means Phase 9 is blocked, not complete. Test-only verifier evidence cannot pass production activation acceptance.
+- Active/candidate state, rejected proposals, active evidence corruption, monotonic semantic activation, and same-semantic generation replacement have distinct tests/statuses.
+- Canon generations contain only Canon slices; state/index/memory/vector owners remain writable and visible after activation without mutating generations.
 - Migration is separated into read-only classification/backup and later opt-in execution; every write follows a verified backup and generation validation.
 - Phase 8 artifacts stay immutable, Phase 10 and CHANGES stay out of scope, and `6.4.0/**` remains outside the active source set.
-- H1/H2 acceptance explicitly prevents self-reference and separates tested implementation from evidence recording.
+- H1 template is result/self-reference-free; exact H1 results and independent disposition are recorded only in H2.
