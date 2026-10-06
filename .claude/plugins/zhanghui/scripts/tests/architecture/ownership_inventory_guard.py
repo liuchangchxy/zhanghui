@@ -19,12 +19,14 @@ CLAIMS = {
 REASON_CODES = {"DYNAMIC_TARGET_REVIEWED", "OPAQUE_ADAPTER_REVIEWED", "NON_STORY_STORE"}
 SQL_DOMAINS = {
     "INDEX_DB": {"chapters", "scenes", "appearances", "entities", "aliases", "state_changes",
-                 "relationships", "story_events", "chapter_reading_power", "invalid_facts",
-                 "review_metrics", "writing_checklist_scores", "override_contracts", "chase_debt",
+                 "relationships", "chapter_reading_power", "invalid_facts",
+                 "review_metrics", "writing_checklist_scores", "chase_debt",
                  "debt_events", "foreshadowing", "promise_ledger", "intent", "planning_horizon",
-                 "relationship_events", "timeline", "locks", "samples", "tool_call_stats"},
+                 "relationship_events", "timeline", "tool_call_stats"},
     "VECTORS": {"vectors", "vectors_migrating", "bm25_index", "doc_stats", "rag_schema_meta", "rag_query_log"},
-    "WORKFLOW_METADATA": {"gate_decisions", "workflow_events", "review_attempts", "projection_runs"},
+    "CRAFT": {"samples"},
+    "EVENTS": {"story_events"},
+    "WORKFLOW_METADATA": {"override_contracts", "gate_decisions", "workflow_events", "review_attempts", "projection_runs"},
 }
 PROTECTED_SOURCE_HINTS = (
     "state", "index", "commit", "event", "projection", "summary", "memory", "vector",
@@ -160,7 +162,7 @@ def _protected_candidates(plugin_root, *, writers):
                     found.append(("CANON_COMMIT", name))
                 if not writers and name in {"read_events", "load_events", "get_events"}:
                     found.append(("EVENTS", name))
-                if name in {"read_text", "read_bytes", "read_json", "load_json", "write_text", "write_bytes", "open", "glob", "rglob", "iterdir"}:
+                if name in {"read_text", "read_bytes", "read_json", "read_json_safe", "load_json", "write_text", "write_bytes", "open", "glob", "rglob", "iterdir"}:
                     is_path_open = name == "open" and isinstance(node.func, ast.Attribute)
                     is_builtin_open = name == "open" and isinstance(node.func, ast.Name)
                     if is_path_open:
@@ -177,7 +179,7 @@ def _protected_candidates(plugin_root, *, writers):
                         is_write = any(flag in mode for flag in ("w", "a", "x", "+"))
                         if is_write != writers:
                             target_nodes = []
-                    elif name in {"read_text", "read_bytes", "read_json", "load_json", "glob", "rglob", "iterdir"} and writers:
+                    elif name in {"read_text", "read_bytes", "read_json", "read_json_safe", "load_json", "glob", "rglob", "iterdir"} and writers:
                         target_nodes = []
                     elif name in {"write_text", "write_bytes"} and not writers:
                         target_nodes = []
@@ -188,7 +190,7 @@ def _protected_candidates(plugin_root, *, writers):
                             unresolved_domains.add("COMPATIBILITY")
                         elif domains:
                             found.extend((domain, "Path.open" if is_path_open else name) for domain in domains)
-                        elif (path_hints or any(token in (function_name or "").lower() for token in PROTECTED_SOURCE_HINTS)) and name in {"read_text", "read_bytes", "read_json", "load_json", "open"}:
+                        elif (path_hints or any(token in (function_name or "").lower() for token in PROTECTED_SOURCE_HINTS)) and name in {"read_text", "read_bytes", "read_json", "read_json_safe", "load_json", "open"}:
                             unresolved_domains |= _domain_for_text(relative + " " + (class_name or "") + " " + (function_name or "")) or {"COMPATIBILITY"}
                 for domain, sink in found:
                     candidates.add((coordinate[0], coordinate[1], domain, sink))
@@ -219,6 +221,8 @@ def validate_inventory(inventory, repository_root):
     """Validate required contracts without importing plugin runtime modules."""
     _require(inventory.get("schema_version") == 1, "schema_version must be 1")
     _require(len(inventory.get("baseline", "")) >= 7, "baseline is required")
+    writer_coordinate_owners = {}
+    writer_implementation_contracts = {}
     for family, id_key in (("writers", "writer_id"), ("readers", "reader_id"),
                            ("migrations", "migration_id")):
         records = inventory.get(family)
@@ -256,9 +260,21 @@ def validate_inventory(inventory, repository_root):
                 expected_id = id_key
                 _require(source_record.get(expected_id) == identity,
                          f"{identity}: discovered source owner linkage mismatch")
-                _require(_inventory_source_path(source_record.get("path", "")) == _inventory_source_path(implementation.get("path", ""))
-                         and source_record.get("symbol") == implementation.get("symbol"),
-                         f"{identity}: discovered source is assigned to a different owner implementation")
+                if family == "writers":
+                    coordinate_key = (_inventory_source_path(source_record["path"]),
+                                      source_record["symbol"], source_record["data_domain"])
+                    prior = writer_coordinate_owners.get(coordinate_key)
+                    contract = (record.get("owner"),
+                                record.get("story_system_mode", {}).get("mode"),
+                                record.get("legacy_mode", {}).get("mode"),
+                                record.get("lifecycle_status"), record.get("selector"))
+                    if prior and prior[:4] != contract[:4]:
+                        _require(prior[4] and contract[4] and prior[4] != contract[4],
+                                 f"{identity}: conflicting Story System ownership for {coordinate_key}; distinct selectors required")
+                    if prior and prior[:4] == contract[:4]:
+                        _require(not (prior[4] and contract[4] and prior[4] == contract[4]),
+                                 f"{identity}: duplicate selector for {coordinate_key}")
+                    writer_coordinate_owners[coordinate_key] = contract
                 if family == "readers":
                     edge_id = source_record.get("read_edge_id")
                     _require(edge_id and any(edge.get("read_edge_id") == edge_id
@@ -269,6 +285,19 @@ def validate_inventory(inventory, repository_root):
                 _require(record.get("owner"), f"{identity}: owner required")
                 domains = record.get("data_domains", [])
                 _require(domains and set(domains) <= DOMAINS, f"{identity}: data_domains invalid")
+                for domain in domains:
+                    implementation_key = (_inventory_source_path(implementation.get("path", "")), symbol, domain)
+                    prior = writer_implementation_contracts.get(implementation_key)
+                    contract = (record.get("owner"), record.get("story_system_mode", {}).get("mode"),
+                                record.get("legacy_mode", {}).get("mode"), record.get("lifecycle_status"),
+                                record.get("selector"))
+                    if prior and prior[:4] != contract[:4]:
+                        _require(prior[4] and contract[4] and prior[4] != contract[4],
+                                 f"{identity}: conflicting Story System ownership for {implementation_key}; distinct selectors required")
+                    if prior and prior[:4] == contract[:4]:
+                        _require(not (prior[4] and contract[4] and prior[4] == contract[4]),
+                                 f"{identity}: duplicate selector for {implementation_key}")
+                    writer_implementation_contracts[implementation_key] = contract
                 _require(record.get("lifecycle_status") in STATUSES,
                          f"{identity}: lifecycle_status invalid")
                 for mode in ("story_system_mode", "legacy_mode"):
@@ -286,6 +315,9 @@ def validate_inventory(inventory, repository_root):
                 _require(all(item.get("data_domain") in edge_domains for item in record.get("source_coordinates", [])),
                          f"{identity}: discovered reader source has no matching mode-aware read edge")
                 for edge in edges:
+                    edge_ids = [item.get("read_edge_id") for item in edges]
+                    _require(len(edge_ids) == len(set(edge_ids)),
+                             f"{identity}: each read edge must have a unique read_edge_id")
                     for mode in ("story_system", "legacy"):
                         details = edge.get(mode, {})
                         for field in ("primary_source", "authority_claim", "condition", "fallback"):
@@ -293,6 +325,29 @@ def validate_inventory(inventory, repository_root):
                         claim = details["authority_claim"]
                         _require(claim in CLAIMS, f"{identity}: authority_claim invalid")
                         source = details["primary_source"].lower()
+                        _require(claim != "CANON_AUTHORITY" or edge.get("data_domain") == "CANON_COMMIT",
+                                 f"{identity}: CANON_AUTHORITY is only valid for CANON_COMMIT edges")
+                        allowed_claims = {
+                            "CANON_COMMIT": {"CANON_AUTHORITY", "LEGACY_COMPATIBILITY", "UNKNOWN"},
+                            "EVENTS": {"VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY", "UNKNOWN"},
+                            "STATE_JSON": {"VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY", "INTENT", "CRAFT", "UNKNOWN"},
+                            "INDEX_DB": {"VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY", "WORKFLOW", "UNKNOWN"},
+                            "SUMMARIES": {"VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY", "UNKNOWN"},
+                            "MEMORY": {"VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY", "UNKNOWN"},
+                            "VECTORS": {"VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY", "UNKNOWN"},
+                            "INTENT": {"INTENT", "LEGACY_COMPATIBILITY", "UNKNOWN"},
+                            "CRAFT": {"CRAFT", "LEGACY_COMPATIBILITY", "UNKNOWN"},
+                            "WORKFLOW_METADATA": {"WORKFLOW", "VERIFIED_PROJECTION", "LEGACY_COMPATIBILITY", "UNKNOWN"},
+                            "REFERENCE": {"REFERENCE", "UNKNOWN"},
+                        }
+                        if edge.get("data_domain") in allowed_claims:
+                            _require(claim in allowed_claims[edge["data_domain"]],
+                                     f"{identity}: {edge['data_domain']} reader authority claim is incompatible with its domain")
+                        if edge.get("data_domain") != "REFERENCE" and (
+                                source.startswith("legacy ") or any(token in source for token in
+                                                                     ("legacy state", "legacy index", "legacy summary", "legacy memory", "legacy vector", "legacy event"))):
+                            _require(claim == "LEGACY_COMPATIBILITY",
+                                     f"{identity}: legacy source must retain LEGACY_COMPATIBILITY semantics")
                         _require(not (claim == "CANON_AUTHORITY" and
                                       ("legacy" in source or "state.json" in source)),
                                  f"{identity}: legacy source cannot claim CANON_AUTHORITY")
@@ -325,10 +380,13 @@ def validate_inventory(inventory, repository_root):
                     _require(edge_id and any(edge.get("read_edge_id") == edge_id and edge.get("data_domain") == exception.get("domain") for edge in owner.get("read_edges", [])),
                              f"{family}: protected exception read edge missing")
             else:
-                _require("non-story" in exception.get("rationale", "").lower()
-                         or "test" in exception.get("rationale", "").lower()
-                         or "operational" in exception.get("rationale", "").lower(),
-                         f"{family}: NON_STORY_STORE classification rationale required")
+                rationale = exception.get("rationale", "").lower()
+                generic = {
+                    "non-story operational or external artifact; does not persist protected story authority",
+                    "non-story operational or external artifact; does not read protected story authority",
+                }
+                _require(rationale not in generic and len(rationale.split()) >= 12,
+                         f"{family}: NON_STORY_STORE requires target-specific classification")
             for evidence in exception.get("evidence", []):
                 source = repository_root / evidence.get("path", "")
                 _require(source.is_file(), f"{family}: evidence path missing: {source}")
@@ -368,8 +426,11 @@ def writer_coverage(inventory, plugin_root):
                    row.get("sink"), row.get("target_expression")) for row in inventory.get("writer_exceptions", [])}
     pending = {(path, symbol, domain) for path, symbol, domain, sink, target in unresolved
                if ("writer", path, symbol, domain, sink, target) not in exceptions}
+    excluded = {(_inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"), row.get("sink"))
+                for row in inventory.get("writer_exceptions", [])}
     missing = {(path, symbol, domain) for path, symbol, domain, _sink in candidates
-               if (path, symbol, domain) not in declared}
+               if (path, symbol, domain) not in declared and
+               (path, symbol, domain, _sink) not in excluded}
     return sorted(missing | pending)
 
 def _exception_key(family, row):
@@ -384,8 +445,11 @@ def reader_coverage(inventory, plugin_root):
                    row.get("sink"), row.get("target_expression")) for row in inventory.get("reader_exceptions", [])}
     pending = {(path, symbol, domain) for path, symbol, domain, sink, target in unresolved
                if ("reader", path, symbol, domain, sink, target) not in exceptions}
+    excluded = {(_inventory_source_path(row.get("path")), row.get("symbol"), row.get("domain"), row.get("sink"))
+                for row in inventory.get("reader_exceptions", [])}
     missing = {(path, symbol, domain) for path, symbol, domain, _sink in candidates
-               if (path, symbol, domain) not in declared}
+               if (path, symbol, domain) not in declared and
+               (path, symbol, domain, _sink) not in excluded}
     return sorted(missing | pending)
 
 def reader_family_coverage(inventory):

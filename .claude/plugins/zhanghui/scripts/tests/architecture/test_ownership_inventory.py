@@ -328,10 +328,128 @@ def test_source_coordinate_cannot_be_attached_to_wrong_same_domain_owner():
     wrong_owner = next(row for row in broken["writers"] if row["writer_id"] != source["writer_id"]
                        and source["data_domain"] in row.get("data_domains", []))
     moved = copy.deepcopy(source)
-    moved["writer_id"] = wrong_owner["writer_id"]
     wrong_owner["source_coordinates"].append(moved)
-    with pytest.raises(ValueError, match="different owner implementation"):
+    with pytest.raises(ValueError, match="source owner linkage mismatch"):
         validate_inventory(broken, ROOT)
+
+
+def test_state_manager_cannot_have_conflicting_shadow_writer_contract():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    owner = next(row for row in broken["writers"] if row["writer_id"] == "state-manager")
+    coordinate = {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/state_manager.py",
+        "symbol": "StateManager", "data_domain": "STATE_JSON", "sink": "atomic_write_json",
+        "writer_id": "generic-shadow",
+    }
+    owner["source_coordinates"].append({**coordinate, "writer_id": "state-manager"})
+    shadow = copy.deepcopy(owner)
+    shadow["writer_id"] = "generic-shadow"
+    shadow["implementation"] = {"path": coordinate["path"], "symbol": coordinate["symbol"]}
+    shadow["owner"] = "Direct source owner StateManager"
+    shadow["story_system_mode"] = {"mode": "allowed", "behavior": "Direct source owner allows writing"}
+    shadow["source_coordinates"] = [coordinate]
+    broken["writers"].append(shadow)
+    with pytest.raises(ValueError, match="conflicting Story System ownership"):
+        validate_inventory(broken, ROOT)
+
+
+def test_conflicting_same_implementation_domain_requires_distinct_selector():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    assert validate_inventory(inventory, ROOT)
+    broken = copy.deepcopy(inventory)
+    for row in broken["writers"]:
+        if row["writer_id"].startswith("update-state-"):
+            row.pop("selector", None)
+    with pytest.raises(ValueError, match="distinct selectors required"):
+        validate_inventory(broken, ROOT)
+
+
+def test_inventory_has_no_mechanically_generated_source_records():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    assert not [row["writer_id"] for row in inventory["writers"]
+                if row["writer_id"].startswith("source-writer-")]
+    assert not [row["reader_id"] for row in inventory["readers"]
+                if row["reader_id"].startswith("source-reader-")]
+
+
+@pytest.mark.parametrize("reader_id,domain", [
+    ("plan-reader", "INTENT"),
+    ("state-reader", "STATE_JSON"),
+    ("review-reader", "WORKFLOW_METADATA"),
+    ("index-reader", "INDEX_DB"),
+])
+def test_non_commit_reader_edges_cannot_claim_canon_authority(reader_id, domain):
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    record = next(row for row in broken["readers"] if row["reader_id"] == reader_id)
+    edge = next(row for row in record["read_edges"] if row["data_domain"] == domain)
+    edge["story_system"].update(primary_source=".story-system/commits", authority_claim="CANON_AUTHORITY")
+    with pytest.raises(ValueError, match="CANON_COMMIT"):
+        validate_inventory(broken, ROOT)
+
+
+def test_style_samples_table_is_not_misclassified_as_index_db():
+    from tests.architecture.ownership_inventory_guard import _sql_resources
+
+    assert _sql_resources("SELECT content FROM samples") == [("CRAFT", "samples", "read")]
+
+
+def test_override_proposals_and_style_samples_have_distinct_owner_contracts():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    override = next(row for row in inventory["writers"] if row["writer_id"] == "override-ledger")
+    samples = next(row for row in inventory["writers"] if row["writer_id"] == "style-samples")
+    assert override["implementation"]["symbol"] == "persist_amend_proposals"
+    assert "WORKFLOW_METADATA" in override["data_domains"]
+    assert samples["implementation"]["symbol"] == "StyleSampler"
+    assert "CRAFT" in samples["data_domains"]
+
+
+def test_state_manager_state_json_reader_is_discovered_and_bound_to_projection_edge():
+    from tests.architecture.ownership_inventory_guard import _protected_candidates
+
+    discovered, _ = _protected_candidates(PLUGIN, writers=False)
+    candidate = ("scripts/data_modules/state_manager.py", "StateManager", "STATE_JSON", "read_json_safe")
+    assert candidate in discovered
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    state_reader = next(row for row in inventory["readers"] if row["reader_id"] == "state-reader")
+    assert any(row["path"].endswith("/state_manager.py") and row["symbol"] == "StateManager"
+               and row["data_domain"] == "STATE_JSON" for row in state_reader["source_coordinates"])
+
+
+def test_consistency_runner_intent_reader_uses_intent_authority():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    plan_reader = next(row for row in inventory["readers"] if row["reader_id"] == "plan-reader")
+    coordinate = next(row for row in plan_reader["source_coordinates"]
+                      if row["path"].endswith("/consistency/core/runner.py")
+                      and row["symbol"] == "ConsistencyRunner" and row["data_domain"] == "INTENT")
+    edge = next(row for row in plan_reader["read_edges"] if row["read_edge_id"] == coordinate["read_edge_id"])
+    assert edge["story_system"]["authority_claim"] == "INTENT"
+    assert edge["story_system"]["primary_source"] != ".story-system/commits"
+
+
+@pytest.mark.parametrize("reader_id,domain,source_fragment,expected_claim", [
+    ("state-reader", "STATE_JSON", "/state_manager.py", "VERIFIED_PROJECTION"),
+    ("review-reader", "WORKFLOW_METADATA", "/review_pipeline.py", "WORKFLOW"),
+    ("index-reader", "INDEX_DB", "/sql_state_manager.py", "VERIFIED_PROJECTION"),
+])
+def test_discovered_projection_readers_keep_domain_authority(reader_id, domain, source_fragment, expected_claim):
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    record = next(row for row in inventory["readers"] if row["reader_id"] == reader_id)
+    assert any(source_fragment in coordinate["path"] and coordinate["data_domain"] == domain
+               for coordinate in record["source_coordinates"])
+    edge = next(row for row in record["read_edges"] if row["data_domain"] == domain)
+    assert edge["story_system"]["authority_claim"] == expected_claim
+    assert edge["story_system"]["primary_source"] != ".story-system/commits"
+
+
+def test_non_story_exceptions_have_distinct_target_specific_rationales():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    for family in ("writer_exceptions", "reader_exceptions"):
+        rationales = [row["rationale"] for row in inventory[family]
+                     if row["reason_code"] == "NON_STORY_STORE"]
+        assert len(rationales) == len(set(rationales)), family
+        assert all(len(value.split()) >= 12 for value in rationales)
 
 
 def test_dynamic_protected_exception_requires_owner_link_and_classification():
