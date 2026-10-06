@@ -356,6 +356,7 @@ def validate_inventory(inventory, repository_root):
                 for field in ("source", "target", "supported_project_modes", "preflight", "backup",
                               "idempotency", "postcondition", "rollback", "ambiguity_handling"):
                     _require(record.get(field), f"{identity}: migration {field} missing")
+    _validate_reader_coordinate_authority(inventory)
     for family in ("writer_exceptions", "reader_exceptions"):
         seen_exceptions = set()
         for exception in inventory.get(family, []):
@@ -395,6 +396,33 @@ def validate_inventory(inventory, repository_root):
                          f"{family}: evidence anchor missing")
     _validate_exception_drift(inventory, repository_root / ".claude/plugins/zhanghui")
     return True
+
+
+def _validate_reader_coordinate_authority(inventory):
+    """Reject conflicting Story System authority claims for one exact read sink.
+
+    Human-readable condition prose does not distinguish two registrations of the
+    same machine-discovered coordinate. No authority-discriminator mechanism is
+    currently defined, so differing claims for an exact coordinate always fail.
+    """
+    claims = {}
+    for reader in inventory.get("readers", []):
+        edges = {edge.get("read_edge_id"): edge for edge in reader.get("read_edges", [])}
+        for source in reader.get("source_coordinates", []):
+            edge = edges.get(source.get("read_edge_id"))
+            if edge is None:
+                continue  # The normal linkage validator reports this separately.
+            coordinate = (_inventory_source_path(source.get("path", "")),
+                          source.get("symbol"), source.get("data_domain"),
+                          source.get("sink"))
+            claim = edge.get("story_system", {}).get("authority_claim")
+            claims.setdefault(coordinate, set()).add(claim)
+    for coordinate, authorities in claims.items():
+        if len(authorities) > 1:
+            raise ValueError(
+                f"conflicting Story System authority for reader coordinate {coordinate}: "
+                f"{sorted(str(authority) for authority in authorities)}"
+            )
 
 
 def _validate_exception_drift(inventory, plugin_root):

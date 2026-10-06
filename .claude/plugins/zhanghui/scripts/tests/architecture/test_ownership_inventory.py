@@ -100,6 +100,31 @@ def test_direct_memory_store_reader_cannot_claim_verified_projection():
     assert direct_writer["implementation"]["symbol"] == shared_source["symbol"]
     assert edge["story_system"]["authority_claim"] != "VERIFIED_PROJECTION"
     assert edge["story_system"]["authority_claim"] != "CANON_AUTHORITY"
+    verified_reader = next(row for row in inventory["readers"]
+                           if row["reader_id"] == "memory-reader")
+    exact = (shared_source["path"], shared_source["symbol"], shared_source["data_domain"],
+             shared_source["sink"])
+    assert exact not in {
+        (source["path"], source["symbol"], source["data_domain"], source["sink"])
+        for source in verified_reader["source_coordinates"]
+    }
+
+
+def test_reader_exact_coordinate_authority_conflict_requires_machine_discriminator():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    direct = next(row for row in broken["readers"]
+                  if row["reader_id"] == "memory-direct-reader")
+    direct_source = next(source for source in direct["source_coordinates"]
+                         if source["symbol"] == "ScratchpadManager"
+                         and source["sink"] == "read_json_safe")
+    duplicate = copy.deepcopy(direct_source)
+    duplicate.update(reader_id="memory-reader", read_edge_id="memory-reader-edge")
+    verified = next(row for row in broken["readers"]
+                    if row["reader_id"] == "memory-reader")
+    verified["source_coordinates"].append(duplicate)
+    with pytest.raises(ValueError, match="conflicting Story System authority"):
+        validate_inventory(broken, ROOT)
 
 
 def test_reader_inventory_coordinate_removal_exposes_protected_read():

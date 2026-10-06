@@ -2823,14 +2823,6 @@
           "read_edge_id": "index-reader-edge-1"
         },
         {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/index_debt_mixin.py",
-          "symbol": "IndexDebtMixin",
-          "data_domain": "INDEX_DB",
-          "sink": "SQL:chase_debt",
-          "reader_id": "index-reader",
-          "read_edge_id": "index-reader-edge-1"
-        },
-        {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/index_entity_mixin.py",
           "symbol": "IndexEntityMixin",
           "data_domain": "INDEX_DB",
@@ -3173,10 +3165,10 @@
       "lifecycle_status": "allowed",
       "source_coordinates": [
         {
-          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/store.py",
-          "symbol": "ScratchpadManager",
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory_projection_writer.py",
+          "symbol": "MemoryProjectionWriter",
           "data_domain": "MEMORY",
-          "sink": "read_json_safe",
+          "sink": "apply_commit_projection",
           "reader_id": "memory-reader",
           "read_edge_id": "memory-reader-edge"
         }
