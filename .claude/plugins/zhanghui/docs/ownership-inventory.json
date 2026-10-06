@@ -3455,7 +3455,7 @@
           "resource": "projection run audit log",
           "story_system": {
             "primary_source": "append-only projection run telemetry in index.db",
-            "authority_claim": "WORKFLOW",
+            "authority_claim": "UNKNOWN",
             "condition": "operational diagnostics only; not story authority",
             "fallback": null
           },
@@ -4026,6 +4026,92 @@
           "sink": "read_text",
           "reader_id": "canon-correction-staged-reader",
           "read_edge_id": "canon-correction-staged-reader-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "canon-correction-confirmation-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+        "symbol": "_load_request"
+      },
+      "read_edges": [
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "persisted correction request, exact confirmation package, and temporary parent snapshot input",
+          "story_system": {
+            "primary_source": "stored request artifacts plus caller-supplied effective parent JSON validated against the request digest",
+            "authority_claim": "WORKFLOW",
+            "condition": "interactive confirmation preparation and persistence only; this reader does not activate Canon",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "no legacy correction confirmation input",
+            "authority_claim": "UNKNOWN",
+            "condition": "unsupported in legacy mode",
+            "fallback": null
+          },
+          "read_edge_id": "canon-correction-confirmation-workflow-edge"
+        },
+        {
+          "data_domain": "STATE_JSON",
+          "resource": "temporary parent semantic snapshot supplied for exact request binding",
+          "story_system": {
+            "primary_source": "caller-supplied parent state JSON; content digest must match the immutable request",
+            "authority_claim": "UNKNOWN",
+            "condition": "used only to render/revalidate the explicit confirmation challenge",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "no legacy correction confirmation input",
+            "authority_claim": "UNKNOWN",
+            "condition": "unsupported in legacy mode",
+            "fallback": null
+          },
+          "read_edge_id": "canon-correction-confirmation-parent-edge"
+        }
+      ],
+      "active_consumers": [
+        "Phase 9 correction review and decision workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while the interactive correction confirmation workflow reads stored requests or exact parent snapshots.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+          "anchor": "def _load_request"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+          "anchor": "def prepare_review"
+        }
+      ],
+      "reader_family": "staged correction artifact readers",
+      "lifecycle_status": "guarded",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+          "symbol": "_load_request",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "read_text",
+          "reader_id": "canon-correction-confirmation-reader",
+          "read_edge_id": "canon-correction-confirmation-workflow-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+          "symbol": "main",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "read_text",
+          "reader_id": "canon-correction-confirmation-reader",
+          "read_edge_id": "canon-correction-confirmation-workflow-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+          "symbol": "main",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "canon-correction-confirmation-reader",
+          "read_edge_id": "canon-correction-confirmation-parent-edge"
         }
       ]
     }
@@ -4975,6 +5061,40 @@
       ],
       "reader_id": "canon-correction-staged-reader",
       "read_edge_id": "canon-correction-staged-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+      "symbol": "_load_request",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "read_text",
+      "target_expression": "paths[0]",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "paths[0] is selected only after an exact request ID search below the correction request namespace and unique-match validation; this is confirmation-workflow metadata and never active Canon authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+          "anchor": "def _load_request"
+        }
+      ],
+      "reader_id": "canon-correction-confirmation-reader",
+      "read_edge_id": "canon-correction-confirmation-workflow-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+      "symbol": "main",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "read_text",
+      "target_expression": "Path(args.review_package_file)",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The exact review package file is an explicit temporary CLI input produced from the displayed canonical package; it is revalidated against the stored request before an authorization is appended.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+          "anchor": "review_package_file"
+        }
+      ],
+      "reader_id": "canon-correction-confirmation-reader",
+      "read_edge_id": "canon-correction-confirmation-workflow-edge"
     }
   ]
 }

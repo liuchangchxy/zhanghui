@@ -51,6 +51,134 @@ def correction_target_dir(root: str | Path, chapter: int, base_sha256: str) -> P
     return Path(root).expanduser().resolve() / ".story-system" / "corrections" / f"chapter_{chapter:03d}" / base_sha256
 
 
+def build_correction_review_package(
+    request: CanonCorrectionRequest | dict[str, Any], *,
+    parent_status: str,
+    parent_extraction: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build the canonical semantic payload that the interactive workflow displays."""
+    try:
+        req = request if isinstance(request, CanonCorrectionRequest) else CanonCorrectionRequest.model_validate(request)
+    except Exception as exc:
+        raise CorrectionStoreError(f"INVALID_REQUEST: {exc}") from exc
+    parent_digest = effective_content_digest(parent_status, parent_extraction)
+    if parent_digest != req.parent_effective_content_sha256:
+        raise CorrectionStoreError("STALE_PARENT")
+    body = {
+        "request_id": req.request_id,
+        "request_sha256": artifact_sha256(req),
+        "chapter": req.chapter,
+        "base_commit_sha256": req.base_commit_sha256,
+        "parent_revision_id": req.parent_revision_id,
+        "parent_effective_content_sha256": req.parent_effective_content_sha256,
+        "operation": req.operation,
+        "changed_paths": [item.model_dump(mode="json") for item in req.changed_paths],
+        "before": {"status": parent_status, "extraction_result": parent_extraction},
+        "after": {
+            "status": req.proposed_effective_status,
+            "extraction_result": req.proposed_effective_extraction_result,
+            "content_sha256": req.proposed_effective_content_sha256,
+        },
+        "reason": req.reason,
+    }
+    return {**body, "challenge_sha256": artifact_sha256(body)}
+
+
+def verify_phase9_correction_decision(
+    request: CanonCorrectionRequest | dict[str, Any],
+    authorization: CanonCorrectionAuthorization | dict[str, Any],
+    review_package: dict[str, Any],
+) -> VerifiedCorrectionDecision:
+    """Validate exact request/auth/challenge bindings and return a transient result."""
+    try:
+        req = request if isinstance(request, CanonCorrectionRequest) else CanonCorrectionRequest.model_validate(request)
+        auth = authorization if isinstance(authorization, CanonCorrectionAuthorization) else CanonCorrectionAuthorization.model_validate(authorization)
+    except Exception as exc:
+        raise CorrectionStoreError(f"INVALID_DECISION: {exc}") from exc
+    confirmation = auth.decision_provenance.get("phase9_confirmation")
+    if not isinstance(confirmation, dict):
+        raise CorrectionStoreError("PHASE9_CONFIRMATION_REQUIRED")
+    required = {"kind", "challenge_sha256", "interaction_id", "interaction_surface", "confirmed_at"}
+    if set(confirmation) != required or confirmation.get("kind") != "interactive-workflow-confirmation/v1":
+        raise CorrectionStoreError("INVALID_PHASE9_CONFIRMATION")
+    if not all(isinstance(confirmation.get(key), str) and confirmation[key].strip()
+               for key in ("interaction_id", "interaction_surface", "confirmed_at")):
+        raise CorrectionStoreError("INVALID_PHASE9_CONFIRMATION")
+    if (auth.request_id != req.request_id
+            or auth.request_sha256 != artifact_sha256(req)):
+        raise CorrectionStoreError("REQUEST_AUTHORIZATION_MISMATCH")
+    canonical = dict(review_package)
+    supplied_digest = canonical.pop("challenge_sha256", None)
+    if supplied_digest != artifact_sha256(canonical) or review_package != {
+        **canonical, "challenge_sha256": supplied_digest,
+    }:
+        raise CorrectionStoreError("CHALLENGE_MISMATCH")
+    if (review_package.get("request_id") != req.request_id
+            or review_package.get("request_sha256") != artifact_sha256(req)
+            or review_package.get("base_commit_sha256") != req.base_commit_sha256
+            or review_package.get("parent_revision_id") != req.parent_revision_id
+            or review_package.get("parent_effective_content_sha256") != req.parent_effective_content_sha256
+            or review_package.get("operation") != req.operation
+            or review_package.get("after", {}).get("status") != req.proposed_effective_status
+            or review_package.get("after", {}).get("extraction_result") != req.proposed_effective_extraction_result
+            or review_package.get("after", {}).get("content_sha256") != req.proposed_effective_content_sha256
+            or review_package.get("changed_paths") != [item.model_dump(mode="json") for item in req.changed_paths]
+            or confirmation.get("challenge_sha256") != supplied_digest):
+        raise CorrectionStoreError("CHALLENGE_MISMATCH")
+    before = review_package.get("before")
+    if not isinstance(before, dict) or set(before) != {"status", "extraction_result"}:
+        raise CorrectionStoreError("CHALLENGE_MISMATCH")
+    try:
+        expected_package = build_correction_review_package(
+            req, parent_status=before["status"], parent_extraction=before["extraction_result"],
+        )
+    except Exception as exc:
+        raise CorrectionStoreError("CHALLENGE_MISMATCH") from exc
+    if expected_package != review_package:
+        raise CorrectionStoreError("CHALLENGE_MISMATCH")
+    return VerifiedCorrectionDecision(
+        f"phase9-{secrets.token_hex(16)}", artifact_sha256(req), artifact_sha256(auth),
+        "interactive-workflow", "VERIFIED_" + auth.choice,
+    )
+
+
+def record_interactive_correction_decision(
+    root: str | Path,
+    request: CanonCorrectionRequest | dict[str, Any],
+    review_package: dict[str, Any],
+    *,
+    choice: str | None,
+    authorization_id: str,
+    interaction_id: str,
+    interaction_surface: str,
+    confirmed_at: str,
+    actor_ref: str = "local-user-workflow",
+) -> CanonCorrectionAuthorization:
+    """Persist a user workflow answer as the existing immutable authorization."""
+    if choice not in {"APPROVE", "REJECT"}:
+        raise CorrectionStoreError("DECISION_REQUIRED")
+    req = request if isinstance(request, CanonCorrectionRequest) else CanonCorrectionRequest.model_validate(request)
+    auth = CanonCorrectionAuthorization.model_validate({
+        "schema_version": "canon-correction-authorization/v1",
+        "authorization_id": authorization_id,
+        "request_id": req.request_id,
+        "request_sha256": artifact_sha256(req),
+        "choice": choice,
+        "actor_ref": actor_ref,
+        "decision_provenance": {
+            "phase9_confirmation": {
+                "kind": "interactive-workflow-confirmation/v1",
+                "challenge_sha256": review_package.get("challenge_sha256"),
+                "interaction_id": interaction_id,
+                "interaction_surface": interaction_surface,
+                "confirmed_at": confirmed_at,
+            }
+        },
+    })
+    verify_phase9_correction_decision(req, auth, review_package)
+    return append_correction_authorization(root, auth)
+
+
 def _load_base(root: Path, chapter: int, expected_digest: str) -> dict[str, Any]:
     try:
         commit = read_durable_commit(root, chapter)
@@ -183,25 +311,35 @@ def append_correction_authorization(root: str | Path, authorization: CanonCorrec
     if request_model.chapter != int(target.parent.name.removeprefix("chapter_")) or request_model.base_commit_sha256 != target.name:
         raise CorrectionStoreError("CROSS_BASE_REFERENCE")
     _load_base(project_root, request_model.chapter, request_model.base_commit_sha256)
-    lock = target.parent / f"{target.name}.lock"
-    with FileLock(str(lock)):
-        auth_dir = target / "authorizations"
-        auth_dir.mkdir(parents=True, exist_ok=True)
-        existing_decisions: dict[str, dict[str, Any]] = {}
-        for path in sorted(auth_dir.glob("*.authorization.json")):
-            try:
-                item = json.loads(path.read_text(encoding="utf-8"))
-                valid = CanonCorrectionAuthorization.model_validate(item)
-            except Exception as exc:
-                raise CorrectionStoreError("AUTHORIZATION_CONFLICT: invalid stored authorization") from exc
-            if valid.request_sha256 == model.request_sha256:
-                existing_decisions[artifact_sha256(item)] = item
-        body = model.model_dump(mode="json")
-        body_digest = artifact_sha256(body)
-        if existing_decisions and body_digest not in existing_decisions:
-            raise CorrectionStoreError("AUTHORIZATION_CONFLICT")
-        path = auth_dir / f"{model.authorization_id}.authorization.json"
-        _exclusive_create(path, body)
+    corrections_root = project_root / ".story-system" / "corrections"
+    interaction_lock = corrections_root / ".authorization-interactions.lock"
+    with FileLock(str(interaction_lock)):
+        lock = target.parent / f"{target.name}.lock"
+        with FileLock(str(lock)):
+            auth_dir = target / "authorizations"
+            auth_dir.mkdir(parents=True, exist_ok=True)
+            existing_decisions: dict[str, dict[str, Any]] = {}
+            new_confirmation = model.decision_provenance.get("phase9_confirmation")
+            new_interaction_id = new_confirmation.get("interaction_id") if isinstance(new_confirmation, dict) else None
+            for path in sorted(corrections_root.glob("chapter_*/*/authorizations/*.authorization.json")):
+                try:
+                    item = json.loads(path.read_text(encoding="utf-8"))
+                    valid = CanonCorrectionAuthorization.model_validate(item)
+                except Exception as exc:
+                    raise CorrectionStoreError("AUTHORIZATION_CONFLICT: invalid stored authorization") from exc
+                if path.parent == auth_dir and valid.request_sha256 == model.request_sha256:
+                    existing_decisions[artifact_sha256(item)] = item
+                existing_confirmation = valid.decision_provenance.get("phase9_confirmation")
+                if (new_interaction_id and isinstance(existing_confirmation, dict)
+                        and existing_confirmation.get("interaction_id") == new_interaction_id
+                        and valid.request_sha256 != model.request_sha256):
+                    raise CorrectionStoreError("INTERACTION_REPLAY")
+            body = model.model_dump(mode="json")
+            body_digest = artifact_sha256(body)
+            if existing_decisions and body_digest not in existing_decisions:
+                raise CorrectionStoreError("AUTHORIZATION_CONFLICT")
+            path = auth_dir / f"{model.authorization_id}.authorization.json"
+            _exclusive_create(path, body)
     return model
 
 

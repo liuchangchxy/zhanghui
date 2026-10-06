@@ -89,6 +89,7 @@ PASSTHROUGH_TOOLS = {
     "story-system",
     "memory-contract",
     "project-memory",
+    "correction",
 }
 
 
@@ -872,6 +873,9 @@ def main() -> None:
     p_project_memory = sub.add_parser("project-memory", help="转发到 project_memory.py")
     p_project_memory.add_argument("args", nargs=argparse.REMAINDER)
 
+    p_correction = sub.add_parser("correction", help="Phase 9 human-reviewed Canon correction workflow")
+    p_correction.add_argument("args", nargs=argparse.REMAINDER)
+
     p_review_pipeline = sub.add_parser("review-pipeline", help="转发到 review_pipeline.py")
     p_review_pipeline.add_argument("--chapter", type=int, required=True, help="目标章节号")
     p_review_pipeline.add_argument("--review-results", required=True, help="reviewer 原始结果 JSON 文件")
@@ -943,6 +947,8 @@ def main() -> None:
         raise SystemExit(_run_data_module("context_manager", [*forward_args, *rest]))
     if tool == "memory":
         raise SystemExit(_run_data_module("memory.store", [*forward_args, *rest]))
+    if tool == "correction":
+        raise SystemExit(_run_data_module("canon_correction_workflow", [*forward_args, *rest]))
     if tool == "migrate":
         raise SystemExit(_run_data_module("migrate_state_to_sqlite", [*forward_args, *rest]))
 
