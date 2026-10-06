@@ -95,7 +95,7 @@ def test_phase9_confirmation_reuses_existing_correction_decision_owner():
     assert staged_writers[0]["implementation"]["path"].endswith("canon_correction_store.py")
     confirmation_reader = next(
         row for row in inventory["readers"]
-        if row["reader_id"] == "canon-correction-confirmation-reader"]
+        if row["reader_id"] == "canon-correction-confirmation-reader"
     )
     assert confirmation_reader["implementation"]["path"].endswith("canon_correction_workflow.py")
     assert {edge["data_domain"] for edge in confirmation_reader["read_edges"]} == {
@@ -108,7 +108,7 @@ def test_phase9_confirmation_reuses_existing_correction_decision_owner():
     missing_confirmation_owner = copy.deepcopy(inventory)
     missing_confirmation_owner["readers"] = [
         row for row in missing_confirmation_owner["readers"]
-        if row["reader_id"] != "canon-correction-confirmation-reader"]
+        if row["reader_id"] != "canon-correction-confirmation-reader"
     ]
     assert any(item[0].endswith("canon_correction_workflow.py")
                for item in reader_coverage(missing_confirmation_owner, ROOT / ".claude/plugins/zhanghui"))
