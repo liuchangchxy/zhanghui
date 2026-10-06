@@ -54,8 +54,12 @@ One artifact is one immutable edge in a correction chain. The canonical artifact
 - `operation`: `AMEND`, `RETRACT`, or `SUPERSEDE`.
 - `effective_extraction_result`: complete validated `ExtractionResult` for AMEND and SUPERSEDE; null for RETRACT.
 - `changed_paths`: required for AMEND; an exhaustive sorted set of changed JSON paths relative to the parent ExtractionResult. Each path carries before/after SHA-256 digests. It is empty for RETRACT and SUPERSEDE.
+- `request_sha256`: digest of the exact approved `canon-correction-request/v1` artifact.
+- `authorization_ref` and `authorization_sha256`: identity and digest of the exact `canon-correction-authorization/v1` artifact approving that request.
 - `provenance`: correction-specific source/evidence references and the producing actor/tool; never copy the base commit's review, reconciliation, or extraction provenance as if it described the corrected material.
-- `actor_ref`, `authorization_ref`, and `reason`: required non-empty human attribution, durable authorization reference, and explanation.
+- `actor_ref` and `reason`: authoring attribution and explanation. The author need not be the human authorizer.
+
+The final correction's operation, proposed effective content/digest, and `changed_paths` must exactly match the approved request. The request and authorization artifacts are immutable durable records and are retained with the correction history.
 
 Correction artifacts are Canon history/audit lineage, not replacement commit files. Creation is append-only and collision-safe. No API edits or deletes a committed artifact.
 
@@ -89,11 +93,11 @@ The resolver constructs a graph from the base and all candidate correction artif
 - Every parent exists and is either that base or a valid correction revision in the same root chain.
 - The parent content digest matches exactly.
 - A correction ID has one canonical artifact identity. Identical retries are the same edge; different content under the same ID is an error.
-- There is at most one distinct child of any parent. Two sibling children are a lineage conflict; never choose by file order, creation time, or last-write-wins.
+- There is at most one distinct child of any parent. Two already-existing sibling files are a lineage conflict; never choose by file order, creation time, or last-write-wins.
 - Cycles, disconnected edges, missing parents, stale parents, malformed artifacts, and unknown schema versions fail resolution.
 - The valid chain is the unique path from base to its sole tip. It is applied in parent order, not directory or timestamp order.
 
-On any conflict or invalid edge, return diagnostics and an unresolved result; do not expose a clean effective Canon while silently ignoring the problem. Operator repair must append a new authorized correction after resolving the conflict or preserve the chain for manual inspection; artifacts are not rewritten to hide the conflict.
+On any conflict or invalid edge, return diagnostics and an unresolved result; do not expose a clean effective Canon while silently ignoring the problem. Phase 8 provides no sibling repair. Ordinary append refuses a conflicted chain. A future administrative conflict-repair/merge protocol must be designed separately; artifacts are not deleted, overwritten, or bypassed with a single-parent correction.
 
 ## 7. Operation semantics
 
@@ -121,13 +125,30 @@ A rejected commit is never a correction target. Correction validation requires a
 
 Consistency, reviewer, extraction, projection recovery, and `AmendProposalTrigger` can produce proposals or findings only. None can create a durable semantic correction. The existing `AmendProposal` name remains reserved for its current workflow/planning proposal meaning.
 
-## 9. Human authorization contract
+## 9. Correction request and human authorization contract
 
-Every semantic correction must reference durable human-response/workflow evidence and preserve `actor_ref`, `authorization_ref`, `reason`, and source/evidence provenance. Automated agents and repair services cannot be the authorizing actor.
+Correction authorization is an independent post-acceptance protocol. `GateDecisionStore` and `gate-human-response/v1` belong to ChapterCommit gate workflow; neither is the authority for changing accepted Canon. Existing gate responses may be cited as provenance/source evidence, but cannot alone authorize a correction. Do not extend GateDecision or finding persistence for correction authorization, and do not use `GateSeverityPolicy` to decide it.
 
-Prefer the existing append-only `gate-human-response/v1` evidence under `StoryContractPaths.gate_response_json()` rather than a parallel approval ledger. A correction is valid only when the referenced response is immutable, belongs to the same chapter and a `pending_human` gate attempt, identifies an existing finding whose durable evidence binds the correction request (operation, base digest, parent revision/content digest, and proposed correction identity), and records an explicit authorizing choice plus actor reference. The implementation must verify that binding; a prose statement or an unscoped generic “approve” response is insufficient. If current gate finding evidence cannot carry this exact scope, extend that existing evidence path/schema compatibly rather than creating another confirmation system.
+### 9.1 `canon-correction-request/v1`
 
-Proposal generation and authorization are separate. A proposal can be reviewed, rejected, or superseded without altering Canon. A correction artifact without verifiable authorization is invalid before any filesystem side effect.
+A request means “propose this exact change”; it does not authorize Canon mutation. It is immutable and contains at least:
+
+- `request_id`, `chapter`, `base_commit_sha256`, `parent_revision_id`, and `parent_effective_content_sha256`.
+- `operation` and the complete proposed effective content (null for RETRACT) plus its canonical digest.
+- `changed_paths` for AMEND, following the final correction contract.
+- `proposer_provenance` and non-empty `reason`.
+
+The canonical request digest, `request_sha256`, is SHA-256 over its canonical JSON serialization. A human, reviewer, consistency process, or other proposer may create a request; proposal authorship has no mutation authority.
+
+### 9.2 `canon-correction-authorization/v1`
+
+This is a separate immutable durable artifact recording a human decision on one exact request. It contains at least `authorization_id`, `request_id`, `request_sha256`, `choice` (`APPROVE` or `REJECT`), `actor_ref`, and durable identity/provenance for the human decision. Its own canonical digest is `authorization_sha256`. Only `APPROVE` authorizes a final correction; `REJECT` never does. The authorization must identify the exact request digest, not merely a chapter or generic proposal.
+
+### 9.3 Exact binding of final correction
+
+`canon-correction/v1` must bind both `request_sha256` and the exact authorization artifact identity/digest. Before append, validate that the authorization approves that request and that every final semantic field is identical to the approved request. An authorization for request A cannot authorize different content B. Missing, rejected, mismatched, or unverifiable authorization fails before filesystem side effects. Automated agents and repair services cannot be the authorizing actor.
+
+Proposal, decision, and final append are separate stages. A proposal can be rejected or superseded without altering Canon. Gate human responses may be included only as supplementary provenance and never as the sole correction authority.
 
 ## 10. Append, retry, concurrency, and failure behavior
 
@@ -136,7 +157,8 @@ The append contract is:
 - Same correction ID plus byte-equivalent canonical artifact: idempotent retry; return the existing artifact identity without another edge.
 - Same correction ID plus different canonical content: reject and preserve the original bytes.
 - Parent digest differing from the current unique chain tip: reject as stale; caller must resolve again and obtain fresh authorization.
-- Two different children of one parent: preserve both append-only artifacts but mark the chain conflicted and refuse effective resolution. Never overwrite one or choose a winner.
+- Concurrent API appends targeting the same parent: serialize by per-chapter lock, re-scan the unique tip, let the first valid append create one artifact, and return `STALE_PARENT` to the later request; the stale request writes no artifact. Normal API concurrency must not create siblings.
+- Two sibling files already present when resolving: preserve both, return `LINEAGE_SIBLING_CONFLICT` with `ok=false` and no effective Canon, and do not select a winner. Ordinary `append_correction()` refuses to write to this conflicted chain. This pre-existing state can result only from manual corruption, external/imported files, an old/broken implementation, or bypass of the storage API. Phase 8 does not repair it.
 - Missing base/parent, rejected base, invalid authorization, malformed artifact, unsafe ID/path, or cycle: reject before writes when detectable; invalid pre-existing artifacts make resolution fail with diagnostics.
 - Serialize per-chapter append/lineage checks with a lock and use atomic create semantics that cannot replace an existing artifact. Re-scan and verify the chain under the lock before final append to close races.
 
