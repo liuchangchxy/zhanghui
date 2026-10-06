@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "canon-correction/v1",
+  "title": "Canon correction artifacts",
+  "description": "Phase 8 staged request, authorization, and correction artifacts. Human identity is not established by these schemas.",
+  "oneOf": [
+    {"$ref": "#/$defs/request"},
+    {"$ref": "#/$defs/authorization"},
+    {"$ref": "#/$defs/correction"}
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "request_id", "chapter", "base_commit_sha256", "parent_revision_id", "parent_effective_content_sha256", "operation", "proposed_effective_status", "proposed_effective_extraction_result", "proposed_effective_content_sha256", "changed_paths", "proposer_provenance", "reason"],
+      "properties": {"schema_version": {"const": "canon-correction-request/v1"}, "request_id": {"$ref": "#/$defs/id"}, "chapter": {"type": "integer", "minimum": 1}, "base_commit_sha256": {"$ref": "#/$defs/digest"}, "parent_revision_id": {"type": "string"}, "parent_effective_content_sha256": {"$ref": "#/$defs/digest"}, "operation": {"enum": ["AMEND", "RETRACT", "SUPERSEDE"]}, "proposed_effective_status": {"enum": ["accepted", "retracted"]}, "proposed_effective_extraction_result": {"type": ["object", "null"]}, "proposed_effective_content_sha256": {"$ref": "#/$defs/digest"}, "changed_paths": {"type": "array"}, "proposer_provenance": {"type": "object"}, "reason": {"type": "string", "minLength": 1}}
+    },
+    "authorization": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "authorization_id", "request_id", "request_sha256", "choice", "actor_ref", "decision_provenance"],
+      "properties": {"schema_version": {"const": "canon-correction-authorization/v1"}, "authorization_id": {"$ref": "#/$defs/id"}, "request_id": {"$ref": "#/$defs/id"}, "request_sha256": {"$ref": "#/$defs/digest"}, "choice": {"enum": ["APPROVE", "REJECT"]}, "actor_ref": {"type": "string", "minLength": 1}, "decision_provenance": {"type": "object"}}
+    },
+    "correction": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "correction_id", "chapter", "base_commit_sha256", "parent_revision_id", "parent_effective_content_sha256", "operation", "effective_extraction_result", "changed_paths", "request_sha256", "authorization_ref", "authorization_sha256", "provenance", "actor_ref", "reason"],
+      "properties": {"schema_version": {"const": "canon-correction/v1"}, "correction_id": {"$ref": "#/$defs/id"}, "chapter": {"type": "integer", "minimum": 1}, "base_commit_sha256": {"$ref": "#/$defs/digest"}, "parent_revision_id": {"type": "string"}, "parent_effective_content_sha256": {"$ref": "#/$defs/digest"}, "operation": {"enum": ["AMEND", "RETRACT", "SUPERSEDE"]}, "effective_extraction_result": {"type": ["object", "null"]}, "changed_paths": {"type": "array"}, "request_sha256": {"$ref": "#/$defs/digest"}, "authorization_ref": {"$ref": "#/$defs/id"}, "authorization_sha256": {"$ref": "#/$defs/digest"}, "provenance": {"type": "object"}, "actor_ref": {"type": "string", "minLength": 1}, "reason": {"type": "string", "minLength": 1}}
+    }
+  }
+}
