@@ -52,7 +52,7 @@ Use this fixed append-only namespace for all three artifact types:
         <correction_id>.correction.json
 ```
 
-All three IDs are path-safe. All three artifact types are append-only: same ID plus the same canonical body is an idempotent retry; same ID plus different canonical body is a conflict. A final correction may reference only a request and authorization in this exact chapter/base namespace; cross-base authorization references are invalid. The per-chapter/exact-base lineage lock covers final request, authorization, parent/tip, and correction consistency checks.
+All three IDs are path-safe. All three artifact types are append-only: same ID plus the same canonical body is an idempotent retry; same ID plus different canonical body is a conflict. A final correction may reference only a request and authorization in this exact chapter/base namespace; cross-base authorization references are invalid. Each exact `request_sha256` may have at most one distinct authorization decision in its namespace. The per-chapter/exact-base lineage lock covers final request, authorization, parent/tip, and correction consistency checks.
 
 One artifact is one immutable edge in a correction chain. The canonical artifact contains:
 
@@ -150,17 +150,34 @@ A request means “propose this exact change”; it does not authorize Canon mut
 
 The canonical request digest, `request_sha256`, is SHA-256 over its canonical JSON serialization. A human, reviewer, consistency process, or other proposer may create a request; proposal authorship has no mutation authority.
 
-### 9.2 `canon-correction-authorization/v1`
+### 9.2 `canon-correction-authorization/v1` and human trust boundary
 
-This is a separate immutable durable artifact recording a human decision on one exact request. It contains at least `authorization_id`, `request_id`, `request_sha256`, `choice` (`APPROVE` or `REJECT`), `actor_ref`, and durable identity/provenance for the human decision. Its own canonical digest is `authorization_sha256`. Only `APPROVE` authorizes a final correction; `REJECT` never does. The authorization must identify the exact request digest, not merely a chapter or generic proposal.
+This is a separate immutable durable artifact recording an asserted human decision on one exact request. It contains at least `authorization_id`, `request_id`, `request_sha256`, `choice` (`APPROVE` or `REJECT`), `actor_ref`, and identity/provenance references for the decision. Its own canonical digest is `authorization_sha256`. The authorization must identify the exact request digest, not merely a chapter or generic proposal.
 
-Requests and authorizations are persisted and validated before the final correction writer is introduced. Their persistence and validation APIs do not write `canon-correction/v1` artifacts.
+Keep four concerns distinct:
 
-### 9.3 Exact binding of final correction
+1. **Structure and digest validation** proves that the artifact is well-formed, immutable, and bound to the stated request.
+2. **Trusted human-decision source** establishes that a real human made that decision.
+3. **Authority persistence** stores the decision record durably without changing its trust level.
+4. **Live Canon activation** consumes the result in runtime and projections.
 
-`canon-correction/v1` must bind both `request_sha256` and the exact authorization artifact identity/digest. Before append, validate that the authorization approves that request and that every final semantic field is identical to the approved request. An authorization for request A cannot authorize different content B. Missing, rejected, mismatched, or unverifiable authorization fails before filesystem side effects. Automated agents and repair services cannot be the authorizing actor.
+`actor_ref`, provenance strings, and arbitrary caller-supplied dictionaries prove none of item 2 by themselves. `append_correction_authorization()` is a staged/internal persistence boundary: it may persist a structurally valid decision record, but it must not mint or imply trusted human approval from caller-supplied fields. Phase 8 defines no production approval UI, skill, CLI, agent workflow, credential mechanism, or other human-approval minting path. Do not invent a cryptographic identity system to fill this gap.
 
-Proposal, decision, and final append are separate stages. A proposal can be rejected or superseded without altering Canon. Gate human responses may be included only as supplementary provenance and never as the sole correction authority.
+Phase 8 tests may inject an explicit verified decision fixture to exercise complete correction lineage. Such a fixture is test-only and is not evidence that a project or user opted into or approved a real correction. Phase 8 structural validation can report the recorded decision and its exact bindings, but cannot claim production human identity verification. Accordingly, Phase 8 freezes the durable authorization contract and staged validation semantics; trusted production human-decision capture is an activation prerequisite owned by Phase 9.
+
+### 9.3 One request, one immutable decision
+
+For one exact `request_sha256`, at most one distinct authorization artifact/decision is valid. Same authorization ID plus the same canonical body is an idempotent retry. Same authorization ID plus a different body is an ID conflict. A second distinct authorization artifact for the same request, including APPROVE+REJECT or two APPROVE records, produces `AUTHORIZATION_CONFLICT`; no timestamp, filename, directory order, or last-write-wins rule may choose a winner. Exact duplicate copies of the same ID/body represent one retry, not a second decision.
+
+If a request is REJECTed, it remains rejected forever. A later change of mind requires a new correction request with a new request identity/digest and a new decision; an APPROVE cannot be appended to or substituted for the rejected request. Preserve both the request and its REJECT artifact.
+
+Request and authorization persistence are staged/internal and precede the final correction writer. Authorization persistence uses the same chapter/exact-base lock, re-scans the request's complete authorization set under that lock, and atomically creates only when no distinct decision already exists. This closes concurrent APPROVE/REJECT races. These APIs do not write `canon-correction/v1` artifacts or authenticate the decision source.
+
+### 9.4 Exact binding of final correction
+
+`canon-correction/v1` must bind both `request_sha256` and the exact unique authorization artifact identity/digest. Before append, validate that the authorization approves that request and that every final semantic field is identical to the approved request. An authorization for request A cannot authorize different content B. Missing, rejected, mismatched, untrusted for production use, or conflicting authorization fails before filesystem side effects. Automated agents and repair services cannot be the authorizing actor.
+
+Proposal, decision recording, and final append are separate stages. A proposal can be rejected or superseded without altering Canon. Gate human responses may be included only as supplementary provenance and never as the sole correction authority.
 
 ## 10. Append, retry, concurrency, and failure behavior
 
@@ -171,6 +188,7 @@ The append contract is:
 - Parent digest differing from the current unique chain tip: reject as stale; caller must resolve again and obtain fresh authorization.
 - Concurrent API appends targeting the same parent: serialize by per-chapter lock, re-scan the unique tip, let the first valid append create one artifact, and return `STALE_PARENT` to the later request; the stale request writes no artifact. Normal API concurrency must not create siblings.
 - Two sibling files already present when resolving: preserve both, return `LINEAGE_SIBLING_CONFLICT` with `ok=false` and no effective Canon, and do not select a winner. Ordinary `append_correction()` refuses to write to this conflicted chain. This pre-existing state can result only from manual corruption, external/imported files, an old/broken implementation, or bypass of the storage API. Phase 8 does not repair it.
+- Missing authorization, REJECT, wrong request digest, duplicate/conflicting decisions for one request, or a correction reference that does not resolve to exactly one APPROVE authorization: return explicit diagnostics (including `AUTHORIZATION_CONFLICT` for distinct decisions), `ok=false`, and no effective Canon. `append_correction()` refuses before any correction write.
 - Missing base/parent, rejected base, invalid authorization, malformed artifact, unsafe ID/path, or cycle: reject before writes when detectable; invalid pre-existing artifacts make resolution fail with diagnostics.
 - Serialize per-chapter append/lineage checks with a lock and use atomic create semantics that cannot replace an existing artifact. Re-scan and verify the chain under the lock before final append to close races.
 
@@ -184,12 +202,12 @@ Provide one pure resolver boundary in the Phase 8 implementation, conceptually:
 resolve_effective_history(
     accepted_commit: dict[str, Any],
     correction_artifacts: Sequence[dict[str, Any]],
-    correction_requests: Mapping[str, dict[str, Any]],
-    correction_authorizations: Mapping[str, dict[str, Any]],
+    correction_requests: Sequence[dict[str, Any]],
+    correction_authorizations: Sequence[dict[str, Any]],
 ) -> EffectiveHistoryResult
 ```
 
-The mappings are correction-specific typed artifact collections, indexed by their canonical digest or stable identity; they are not generic evidence maps. Each correction must resolve to its exact request by `request_sha256`; that request must resolve to its exact authorization by identity and `authorization_sha256`; the authorization must be `APPROVE`; and the correction semantics must equal the approved request. `validate_lineage()` and preview use the same four inputs/authority validation contract. Inputs are already discovered/read; the resolver performs schema, identity, authorization, graph, digest, and operation validation without filesystem writes. Store and preview layers may load data but must not mutate commits, requests, authorizations, corrections, events, projections, or workflow evidence during resolution.
+These are correction-specific typed artifact collections, not generic evidence maps. They are passed as sequences so the resolver can detect duplicate and conflicting authorization records rather than losing them during map construction. Each correction must resolve to its exact request by `request_sha256`; that request must resolve to exactly one distinct authorization decision by request identity/digest; the authorization must be `APPROVE`; and the correction semantics must equal the approved request. Missing, rejected, conflicting, or ambiguous authorization produces `ok=false` and no effective Canon. `validate_lineage()` and preview use the same four inputs/authority validation contract. The pure resolver validates the durable decision contract, not real-world human identity. Resolver fixture tests may inject an explicit test-only verifier at the internal authority-validation seam; a persisted fixture or its fields alone are not production identity proof. Inputs are already discovered/read; the resolver performs structural, digest, authority-contract, graph, and operation validation without filesystem writes. Store and preview layers may load data but must not mutate commits, requests, authorizations, corrections, events, projections, or workflow evidence during resolution.
 
 The result contains at least:
 
@@ -209,7 +227,7 @@ Expose this only through staged/internal libraries and read-only validate/previe
 
 Phase 9 consumes the `EffectiveHistoryResult` contract above as its single input for chapter-effective Canon. It must not implement another correction parser or choose lineage independently.
 
-Phase 9 owns correction-aware projection rebuild, event JSON and SQLite mirror rebuild, runtime source integration, recovery, full historical rebuild, existing-project migration, and activation of a user-visible semantic correction workflow. Before activation it must prevent mixed output in which the resolver says corrected history while state/index/events/memory/vector still represent the old history.
+Phase 9 owns correction-aware projection rebuild, event JSON and SQLite mirror rebuild, runtime source integration, recovery, full historical rebuild, existing-project migration, and activation of a user-visible semantic correction workflow. Before activation it must prevent mixed output in which the resolver says corrected history while state/index/events/memory/vector still represent the old history. Phase 9 must also provide and accept trusted human-decision capture before any correction enters live effective Canon; it must bind exact `request_id`, exact `request_sha256`, human actor identity/provenance, and explicit `APPROVE`/`REJECT`. Phase 9 must verify that trust boundary itself and must not infer verified human identity merely from `actor_ref` or provenance fields in a Phase 8 artifact. Until then, Phase 8 authorization records and test fixtures remain staged and inactive.
 
 ## 13. Implementation acceptance coverage
 
@@ -235,3 +253,4 @@ The Phase 8 plan must add tests for all of the following:
 18. Phase 9 consumes one canonical resolver result contract.
 19. `.claude/plugins/zhanghui/6.4.0/**` remains unchanged.
 20. Acceptance binding avoids self-reference: implementation H1 is tested first, and any result-filled H2 record binds explicitly to H1 in a separate record-only commit.
+21. Authorization trust is not inferred from `actor_ref`, provenance strings, arbitrary dictionaries, or GateDecisionStore/gate-human-response evidence. No normal runtime/skill/CLI/agent/ChapterCommit/projection path can mint approval. Exact authorization retries are idempotent; every distinct second decision for one request causes `AUTHORIZATION_CONFLICT` without a winner; REJECT requires a new request identity to try again; final append has zero correction writes on trust/authorization conflict; and test-fixture decisions are never reported as real project/user approval evidence.
