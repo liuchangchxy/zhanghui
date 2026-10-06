@@ -1887,6 +1887,65 @@
           "writer_id": "test-db-fixtures"
         }
       ]
+    },
+    {
+      "writer_id": "canon-correction-staged-writer",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+        "symbol": "_exclusive_create"
+      },
+      "data_domains": [
+        "WORKFLOW_METADATA"
+      ],
+      "owner": "Phase 8 canon_correction_store append-only staged artifact persistence",
+      "story_system_mode": {
+        "behavior": "append-only staged correction request, authorization, and correction artifacts; not live runtime Canon authority",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "no legacy correction artifact writer or Canon authority",
+        "mode": "not_applicable"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "Phase 8 correction request, authorization, and staged correction APIs"
+      ],
+      "replacement": null,
+      "retirement_criterion": "When Phase 9 activates correction-aware Canon, re-audit and reclassify this staged writer before runtime activation; Phase 8 persistence remains workflow metadata and cannot create live Canon authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "anchor": "_exclusive_create"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "anchor": "append_correction_request"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "anchor": "append_correction_authorization"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "anchor": "append_correction"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "symbol": "_exclusive_create",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "handle.write",
+          "writer_id": "canon-correction-staged-writer"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "symbol": "_exclusive_create",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "os.link",
+          "writer_id": "canon-correction-staged-writer"
+        }
+      ]
     }
   ],
   "readers": [
@@ -2038,6 +2097,22 @@
           "symbol": "is_story_system_project",
           "data_domain": "CANON_COMMIT",
           "sink": "glob",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "symbol": "_load_base",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit",
+          "reader_id": "commit-reader",
+          "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_preview.py",
+          "symbol": "preview_chapter_corrections",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_durable_commit",
           "reader_id": "commit-reader",
           "read_edge_id": "source-reader-story-system-mode-is-story-system-project-canon-commit-edge"
         }
@@ -3904,6 +3979,55 @@
           "read_edge_id": "memory-direct-reader-edge"
         }
       ]
+    },
+    {
+      "reader_id": "canon-correction-staged-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_preview.py",
+        "symbol": "preview_chapter_corrections"
+      },
+      "read_edges": [
+        {
+          "data_domain": "WORKFLOW_METADATA",
+          "resource": "Phase 8 staged correction request, authorization, and correction artifacts",
+          "story_system": {
+            "primary_source": ".story-system/corrections/{chapter}/{base_sha256}/{requests,authorizations,corrections}",
+            "authority_claim": "WORKFLOW",
+            "condition": "Phase 8 staged correction validation/preview only; not live Canon authority",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "no legacy correction artifact source",
+            "authority_claim": "UNKNOWN",
+            "condition": "unsupported; legacy mode has no correction artifact reader",
+            "fallback": null
+          },
+          "read_edge_id": "canon-correction-staged-reader-edge"
+        }
+      ],
+      "active_consumers": [
+        "Phase 8 staged preview and resolver"
+      ],
+      "replacement": null,
+      "retirement_criterion": "When Phase 9 activates correction-aware Canon, re-audit and reclassify this staged workflow reader before any runtime authority claim; Phase 8 WORKFLOW status never implies live Canon authority.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_preview.py",
+          "anchor": "_read_artifacts"
+        }
+      ],
+      "reader_family": "staged correction artifact readers",
+      "lifecycle_status": "guarded",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_preview.py",
+          "symbol": "_read_artifacts",
+          "data_domain": "WORKFLOW_METADATA",
+          "sink": "read_text",
+          "reader_id": "canon-correction-staged-reader",
+          "read_edge_id": "canon-correction-staged-reader-edge"
+        }
+      ]
     }
   ],
   "migrations": [
@@ -4834,6 +4958,23 @@
       ],
       "reader_id": "memory-reader",
       "read_edge_id": "memory-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_preview.py",
+      "symbol": "_read_artifacts",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The dynamic target is read only from Phase 8 correction artifact directories already constrained by the chapter and exact base namespace, and contains staged request, authorization, or correction artifacts. These are governed WORKFLOW_METADATA used only for staged validation and preview, not live Canon authority. I reviewed the dynamic path and assigned ownership to the staged correction reader and its WORKFLOW_METADATA read edge.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_preview.py",
+          "anchor": "_read_artifacts"
+        }
+      ],
+      "reader_id": "canon-correction-staged-reader",
+      "read_edge_id": "canon-correction-staged-reader-edge"
     }
   ]
 }
