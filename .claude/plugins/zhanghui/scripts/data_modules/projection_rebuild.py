@@ -590,3 +590,36 @@ def rebuild_projections(project_root: str | Path) -> dict[str, Any]:
         "project_root": str(root), "chapters": [row["chapter"] for row in commits],
         "error": None, "results": results,
     }
+
+
+def build_effective_generation(project_root: str | Path, snapshot: Any, *,
+                              previous_generation_id: str | None = None):
+    """Build every Canon projection from one sealed snapshot without publishing it."""
+    from .effective_history import (
+        ActiveEffectiveHistorySnapshot, EffectiveHistoryStore,
+    )
+    from .chapter_commit_service import ChapterCommitService
+    from .projection_generation import ProjectionGeneration
+
+    root = Path(project_root).expanduser().resolve()
+    protocol = ProjectionGeneration(root)
+    handle = protocol.begin(snapshot, previous_generation_id)
+    history = EffectiveHistoryStore()
+    service = ChapterCommitService(root)
+    results = {}
+    for chapter, entry in sorted(snapshot.chapters.items()):
+        effective_input = (history.projection_input(snapshot, chapter)
+                          if isinstance(snapshot, ActiveEffectiveHistorySnapshot)
+                          else history.candidate_projection_input(snapshot, chapter))
+        chapter_results = service.apply_effective_projection(effective_input, handle)
+        results.update({f"{chapter}:{name}": value for name, value in chapter_results.items()})
+    domains = {domain: {} for domain in EventProjectionRouter.PROJECTION_MANIFEST}
+    for path in sorted(p for p in handle.staging_root.rglob("*") if p.is_file()):
+        relative = path.relative_to(handle.staging_root).as_posix()
+        domain = relative.split("/", 1)[0]
+        if domain in domains:
+            domains[domain][relative] = __import__("hashlib").sha256(path.read_bytes()).hexdigest()
+    validated = protocol.validate_generation(handle, {"domains": domains})
+    return {"validated_generation": validated, "results": results,
+            "effective_history_digest": snapshot.effective_history_digest,
+            "generation_id": validated.generation_id}

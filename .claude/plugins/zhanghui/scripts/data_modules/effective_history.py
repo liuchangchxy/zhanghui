@@ -367,6 +367,14 @@ class EffectiveHistoryStore:
         return EffectiveProjectionInput(entry.base_commit, entry, snapshot.effective_history_digest,
                                         snapshot.effective_history_digest, _PROJECTION_SEAL)
 
+    def candidate_projection_input(self, snapshot: CandidateEffectiveHistorySnapshot,
+                                   chapter: int) -> EffectiveProjectionInput:
+        if not snapshot.ok or chapter not in snapshot.chapters or not snapshot.effective_history_digest:
+            raise CorrectionStoreError("CANDIDATE_SNAPSHOT_UNAVAILABLE")
+        entry = snapshot.chapters[chapter]
+        return EffectiveProjectionInput(entry.base_commit, entry, snapshot.effective_history_digest,
+                                        snapshot.effective_history_digest, _PROJECTION_SEAL)
+
 
 def validate_effective_projection_input(project_root: str | Path,
                                         value: EffectiveProjectionInput) -> EffectiveProjectionInput:
@@ -378,12 +386,47 @@ def validate_effective_projection_input(project_root: str | Path,
         disk_digest = base_commit_digest(disk_base)
     except Exception as exc:
         raise DurableCommitError("BASE_COMMIT_MISMATCH") from exc
-    if (disk_digest != entry.base_sha256
-            or base_commit_digest(value.base_commit) != entry.base_sha256
-            or base_commit_digest(value.base_commit) != disk_digest):
+    try:
+        supplied_digest = base_commit_digest(value.base_commit)
+    except Exception as exc:
+        raise DurableCommitError("BASE_COMMIT_MISMATCH") from exc
+    if disk_digest != entry.base_sha256 or supplied_digest != entry.base_sha256 or supplied_digest != disk_digest:
         raise DurableCommitError("BASE_COMMIT_MISMATCH")
     if effective_content_digest(entry.status, entry.extraction_result) != entry.effective_content_sha256:
         raise DurableCommitError("EFFECTIVE_CONTENT_MISMATCH")
     if value.snapshot_digest != value.snapshot_id or not value.snapshot_id:
         raise DurableCommitError("EFFECTIVE_SNAPSHOT_BINDING_MISMATCH")
     return value
+
+
+def write_effective_projection(project_root: str | Path, value: EffectiveProjectionInput,
+                               build_handle: Any, domain: str, writer: str,
+                               projection: dict[str, Any]) -> dict[str, Any]:
+    """Write a typed effective slice into one isolated Canon generation."""
+    validate_effective_projection_input(project_root, value)
+    snapshot = build_handle.snapshot
+    if (value.snapshot_id != snapshot.effective_history_digest
+            or value.snapshot_digest != snapshot.effective_history_digest
+            or value.effective_entry.chapter not in snapshot.chapters
+            or snapshot.chapters[value.effective_entry.chapter] != value.effective_entry):
+        raise DurableCommitError("EFFECTIVE_GENERATION_BINDING_MISMATCH")
+    entry = value.effective_entry
+    document = {
+        "schema_version": "story-system-effective-projection/v1",
+        "chapter": entry.chapter,
+        "writer": writer,
+        "base_sha256": entry.base_sha256,
+        "effective_revision_id": entry.effective_revision_id,
+        "effective_content_sha256": entry.effective_content_sha256,
+        "effective_status": entry.status,
+        "effective_history_digest": value.snapshot_digest,
+        "projection": projection,
+    }
+    path = f"{domain}/chapter_{entry.chapter:03d}.json"
+    from .canon_correction_schema import canonical_json
+    digest = build_handle.write_domain_file(domain, path,
+                                            (canonical_json(document) + "\n").encode("utf-8"))
+    return {"applied": True, "writer": writer, "base_sha256": entry.base_sha256,
+            "effective_revision_id": entry.effective_revision_id,
+            "effective_content_sha256": entry.effective_content_sha256,
+            "generation_id": build_handle.generation_id, "output_sha256": digest}

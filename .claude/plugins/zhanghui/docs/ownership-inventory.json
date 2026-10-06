@@ -4333,6 +4333,14 @@
           "sink": "read_bytes",
           "reader_id": "canon-projection-generation-reader",
           "read_edge_id": "canon-projection-generation-reader-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "symbol": "build_effective_generation",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_bytes",
+          "reader_id": "canon-projection-generation-reader",
+          "read_edge_id": "canon-projection-generation-reader-edge"
         }
       ]
     }
@@ -5478,6 +5486,23 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
           "anchor": "def _namespace_digest"
+        }
+      ],
+      "reader_id": "canon-projection-generation-reader",
+      "read_edge_id": "canon-projection-generation-reader-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+      "symbol": "build_effective_generation",
+      "domain": "CANON_COMMIT",
+      "sink": "read_bytes",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "Hashes exact staged Canon generation files into the seven-domain manifest before immutable generation validation.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "anchor": "def build_effective_generation"
         }
       ],
       "reader_id": "canon-projection-generation-reader",

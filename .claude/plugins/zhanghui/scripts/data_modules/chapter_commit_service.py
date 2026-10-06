@@ -448,6 +448,36 @@ class ChapterCommitService:
             return f"failed:{reason[6:] or 'writer_error'}"
         return "skipped"
 
+    def apply_effective_projection(self, effective_input, build_handle) -> dict[str, Any]:
+        """Run all Canon writers from one validated effective snapshot and generation."""
+        from .effective_history import validate_effective_projection_input, write_effective_projection
+        from .intent_reconciliation import reconcile_intent_events
+
+        validate_effective_projection_input(self.project_root, effective_input)
+        entry = effective_input.effective_entry
+        if build_handle.snapshot.effective_history_digest != effective_input.snapshot_digest:
+            raise ChapterCommitError("effective input does not match projection generation")
+        writers = self._projection_writers()
+        results = {}
+        event_writer = EventLogStore(self.project_root)
+        ordered = EventProjectionRouter().PROJECTION_ORDER
+        for name in ordered:
+            if name == "intent_diagnostics":
+                extraction = entry.extraction_result or {}
+                events = extraction.get("accepted_events", []) if entry.status == "accepted" else []
+                diagnostics = reconcile_intent_events(events if isinstance(events, list) else [])
+                results[name] = write_effective_projection(
+                    self.project_root, effective_input, build_handle, name, name,
+                    {"tombstone": entry.status != "accepted",
+                     "diagnostics": diagnostics.get("diagnostics", [])},
+                )
+            else:
+                writer = event_writer if name == "events" else writers.get(name)
+                if writer is None:
+                    raise ChapterCommitError(f"effective projection writer missing: {name}")
+                results[name] = writer.apply_effective(effective_input, build_handle)
+        return results
+
     def apply_projection_writers(
         self,
         payload: Dict[str, Any],

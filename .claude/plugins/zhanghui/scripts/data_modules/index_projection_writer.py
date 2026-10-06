@@ -391,3 +391,18 @@ class IndexProjectionWriter:
                     }
                 )
         return deltas
+
+    def apply_effective(self, effective_input, build_handle) -> dict:
+        from .effective_history import EffectiveProjectionInput, write_effective_projection
+        if not isinstance(effective_input, EffectiveProjectionInput):
+            raise TypeError("apply_effective requires EffectiveProjectionInput")
+        entry = effective_input.effective_entry
+        extraction = entry.extraction_result or {}
+        return write_effective_projection(
+            self.project_root, effective_input, build_handle, "index", "index",
+            {"tombstone": entry.status != "accepted",
+             "chapter_meta": extraction.get("chapter_meta", {}),
+             "accepted_events": extraction.get("accepted_events", []),
+             "state_deltas": extraction.get("state_deltas", []),
+             "entity_deltas": extraction.get("entity_deltas", [])},
+        )

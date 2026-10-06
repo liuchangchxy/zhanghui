@@ -41,7 +41,7 @@ def _domain_for_text(value):
     if any(token in text for token in (
         ".story-system/commits", "commits/", "commit_path", "commit_dir",
         ".story-system/projection-generations", ".story-system/publications",
-        ".story-system/effective-history", "projection_generation.py",
+        ".story-system/effective-history", "projection_generation.py", "projection_rebuild.py",
     )):
         domains.add("CANON_COMMIT")
     if any(token in text for token in ("events/", ".story-system/events", "event_path", "event_file")):
