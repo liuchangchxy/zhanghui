@@ -3455,7 +3455,7 @@
           "resource": "projection run audit log",
           "story_system": {
             "primary_source": "append-only projection run telemetry in index.db",
-            "authority_claim": "UNKNOWN",
+            "authority_claim": "WORKFLOW",
             "condition": "operational diagnostics only; not story authority",
             "fallback": null
           },
