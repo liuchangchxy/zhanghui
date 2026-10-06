@@ -2011,6 +2011,50 @@
           "writer_id": "canon-projection-generation-writer"
         }
       ]
+    },
+    {
+      "writer_id": "phase9-owned-state-overlay-writer",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+        "symbol": "OwnedStateStore"
+      },
+      "owner": "Explicitly scoped Intent, Craft, and Workflow fields in the Phase 9 mutable owner overlay",
+      "data_domains": [
+        "STATE_JSON"
+      ],
+      "story_system_mode": {
+        "behavior": "writes only inventory-approved owner paths to .webnovel/state-overlay.json; Canon state paths are rejected",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "legacy state.json writes remain with existing owners before activation enrollment",
+        "mode": "not_applicable"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "OwnedProjectView runtime composition"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while activation-managed state owner fields are stored in the scoped overlay.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+          "anchor": "def write_owner_values"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+          "anchor": "def read_view"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+          "symbol": "write_owner_values",
+          "data_domain": "STATE_JSON",
+          "sink": "replace",
+          "writer_id": "phase9-owned-state-overlay-writer"
+        }
+      ]
     }
   ],
   "readers": [
@@ -4341,6 +4385,84 @@
           "sink": "read_bytes",
           "reader_id": "canon-projection-generation-reader",
           "read_edge_id": "canon-projection-generation-reader-edge"
+        }
+      ]
+    },
+    {
+      "reader_id": "phase9-owned-project-view-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+        "symbol": "OwnedStateStore"
+      },
+      "read_edges": [
+        {
+          "data_domain": "CANON_COMMIT",
+          "resource": "one pinned immutable Canon generation",
+          "story_system": {
+            "primary_source": ".story-system/projection-generations referenced by the pinned publication",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "publication and generation digests are verified before view construction",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy projections before activation enrollment",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "base-only compatibility mode",
+            "fallback": null
+          },
+          "read_edge_id": "phase9-owned-canon-view-edge"
+        },
+        {
+          "data_domain": "STATE_JSON",
+          "resource": "mutable owner-scoped state overlay",
+          "story_system": {
+            "primary_source": ".webnovel/state-overlay.json",
+            "authority_claim": "CRAFT",
+            "condition": "only explicitly owned overlay paths are merged; Canon collisions fail closed",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy .webnovel/state.json",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode only",
+            "fallback": null
+          },
+          "read_edge_id": "phase9-owned-state-overlay-edge"
+        }
+      ],
+      "active_consumers": [
+        "activation-managed State, Index, Memory, and RAG view adapters"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while runtime reads compose immutable Canon slices with live owner-scoped stores.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+          "anchor": "class OwnedStateStore"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+          "anchor": "class OwnedIndexView"
+        }
+      ],
+      "reader_family": "Story System commit and projection readers",
+      "lifecycle_status": "guarded",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+          "symbol": "_chapter_documents",
+          "data_domain": "CANON_COMMIT",
+          "sink": "read_text",
+          "reader_id": "phase9-owned-project-view-reader",
+          "read_edge_id": "phase9-owned-canon-view-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+          "symbol": "_overlay",
+          "data_domain": "STATE_JSON",
+          "sink": "read_text",
+          "reader_id": "phase9-owned-project-view-reader",
+          "read_edge_id": "phase9-owned-state-overlay-edge"
         }
       ]
     }
