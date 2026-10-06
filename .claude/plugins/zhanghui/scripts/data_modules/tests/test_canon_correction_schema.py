@@ -2,6 +2,7 @@ import hashlib
 import json
 
 import pytest
+jsonschema = pytest.importorskip("jsonschema")
 
 from data_modules.canon_correction_schema import (
     CanonCorrectionRequest,
@@ -113,3 +114,32 @@ def test_base_identity_uses_validated_commit_and_excludes_projection_status():
     changed["meta"]["status"] = "rejected"
     with pytest.raises(ValueError):
         base_commit_digest(changed)
+
+
+def test_published_json_schema_enforces_artifact_shapes_and_tracks_pydantic():
+    from pathlib import Path
+
+    schema_path = Path(__file__).parents[3] / "docs/canon-correction.schema.json"
+    schema = json.loads(schema_path.resolve().read_text(encoding="utf-8"))
+    jsonschema.Draft202012Validator.check_schema(schema)
+    validator = jsonschema.Draft202012Validator(schema)
+    valid_request = request()
+    valid_retract = request("RETRACT", proposed_effective_status="retracted",
+                            proposed_effective_extraction_result=None, changed_paths=[])
+    assert validator.is_valid(valid_request)
+    assert validator.is_valid(valid_retract)
+    invalid_values = [
+        request("RETRACT"),
+        request(changed_paths=[{"path": "p", "before_sha256": "x", "after_sha256": "y"}]),
+        request(parent_revision_id="correction:foreign:bad"),
+        request(proposed_effective_extraction_result={"accepted_events": []}),
+    ]
+    for value in invalid_values:
+        assert not validator.is_valid(value)
+        with pytest.raises(ValueError):
+            CanonCorrectionRequest.model_validate(value)
+    malformed_changed_path = request(changed_paths=[{"path": "p", "before_sha256": "a" * 64,
+                                                     "after_sha256": "a" * 64}])
+    assert validator.is_valid(malformed_changed_path)  # cross-field equality is enforced by Pydantic
+    with pytest.raises(ValueError):
+        CanonCorrectionRequest.model_validate(malformed_changed_path)

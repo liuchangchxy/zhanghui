@@ -222,3 +222,50 @@ def test_amend_requires_exact_exhaustive_changed_path_digests_and_preserves_sche
         [VerifiedCorrectionDecision("bad-amend", bad_req_hash, bad_auth_hash, "test-only", "VERIFIED_APPROVE")])
     assert invalid.ok is False and invalid.effective_extraction_result is None
     assert "AMEND_CHANGED_PATHS_MISMATCH" in {item.code for item in invalid.diagnostics}
+
+
+@pytest.mark.parametrize("artifact_kind", ["request", "authorization", "correction"])
+def test_same_id_different_bodies_are_permutation_independent_and_select_no_winner(artifact_kind):
+    base, edge, req, auth, verification = edge_fixtures()
+    if artifact_kind == "request":
+        conflicting = dict(req, reason="different request body")
+        values = ([req, conflicting], [conflicting, req])
+        results = [validate_lineage(base, [edge], requests, [auth], [verification])
+                   for requests in values]
+        expected_code = "REQUEST_ID_CONFLICT"
+    elif artifact_kind == "authorization":
+        conflicting = dict(auth, choice="REJECT")
+        values = ([auth, conflicting], [conflicting, auth])
+        results = [validate_lineage(base, [edge], [req], authorizations, [verification])
+                   for authorizations in values]
+        expected_code = "AUTHORIZATION_ID_CONFLICT"
+    else:
+        conflicting = dict(edge, reason="different correction body")
+        values = ([edge, conflicting], [conflicting, edge])
+        results = [validate_lineage(base, corrections, [req], [auth], [verification])
+                   for corrections in values]
+        expected_code = "CORRECTION_ID_CONFLICT"
+    assert results[0] == results[1]
+    assert results[0].ok is False and results[0].effective_revision_id is None
+    assert [item.code for item in results[0].diagnostics] == [expected_code]
+
+
+def test_resolver_rejects_unreferenced_cross_chapter_request_and_orphan_authorization():
+    base, edge, req, auth, verification = edge_fixtures()
+    foreign_request = dict(req, request_id="other-chapter", chapter=4)
+    result = validate_lineage(base, [edge], [req, foreign_request], [auth], [verification])
+    assert result.ok is False and "CROSS_BASE_REFERENCE" in {d.code for d in result.diagnostics}
+
+    orphan = dict(auth, authorization_id="orphan-auth", request_id="not-present",
+                  request_sha256="f" * 64)
+    result = validate_lineage(base, [], [req], [orphan], [])
+    assert result.ok is False and "AUTHORIZATION_REQUEST_NOT_FOUND" in {d.code for d in result.diagnostics}
+
+
+def test_resolver_rejects_unreferenced_artifact_with_foreign_revision_namespace():
+    base, _edge, req, _auth, _verification = edge_fixtures()
+    foreign_parent = dict(req, request_id="foreign-parent",
+                          parent_revision_id=f"correction:{'b' * 64}:other-correction")
+    result = validate_lineage(base, [], [foreign_parent], [], [])
+    assert result.ok is False
+    assert "INVALID_NAMESPACE_BINDING" in {item.code for item in result.diagnostics}

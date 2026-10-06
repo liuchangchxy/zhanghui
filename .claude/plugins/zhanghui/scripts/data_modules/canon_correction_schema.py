@@ -13,6 +13,7 @@ from .chapter_commit_schema import ExtractionResult
 
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SHA = re.compile(r"^[0-9a-f]{64}$")
+_REVISION = re.compile(r"^(base:[0-9a-f]{64}|correction:[0-9a-f]{64}:[A-Za-z0-9][A-Za-z0-9._-]{0,127})$")
 
 
 class CorrectionModel(BaseModel):
@@ -57,6 +58,8 @@ class CanonCorrectionRequest(CorrectionModel):
     @model_validator(mode="after")
     def validate_request(self):
         self._check_id(self.request_id)
+        if not _REVISION.fullmatch(self.parent_revision_id):
+            raise ValueError("parent_revision_id must be a namespaced base or correction revision")
         for digest in (self.base_commit_sha256, self.parent_effective_content_sha256,
                        self.proposed_effective_content_sha256):
             if not _SHA.fullmatch(digest):
@@ -119,6 +122,8 @@ class CanonCorrection(CorrectionModel):
     def validate_correction(self):
         self._check_id(self.correction_id)
         self._check_id(self.authorization_ref)
+        if not _REVISION.fullmatch(self.parent_revision_id):
+            raise ValueError("parent_revision_id must be a namespaced base or correction revision")
         for digest in (self.base_commit_sha256, self.parent_effective_content_sha256,
                        self.request_sha256, self.authorization_sha256):
             if not _SHA.fullmatch(digest):

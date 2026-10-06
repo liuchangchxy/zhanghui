@@ -54,15 +54,26 @@ def _typed_models(values: Sequence[Any], cls, label: str, diagnostics: list[Corr
 
 
 def _unique_by_id(models, id_field: str, diagnostics: list[CorrectionDiagnostic], label: str):
-    result = {}
+    groups = {}
     for model in models:
         identity = getattr(model, id_field)
-        previous = result.get(identity)
-        if previous is None:
-            result[identity] = model
-        elif artifact_sha256(previous) != artifact_sha256(model):
+        groups.setdefault(identity, []).append(model)
+    result = {}
+    for identity, group in groups.items():
+        digests = {artifact_sha256(model) for model in group}
+        if len(digests) > 1:
             diagnostics.append(CorrectionDiagnostic(f"{label}_ID_CONFLICT", identity))
+        else:
+            result[identity] = group[0]
     return result
+
+
+def _revision_in_namespace(value: str, base_digest: str) -> bool:
+    if value == f"base:{base_digest}":
+        return True
+    prefix = f"correction:{base_digest}:"
+    suffix = value[len(prefix):] if value.startswith(prefix) else ""
+    return bool(suffix) and suffix not in {".", ".."} and all(c.isalnum() or c in "._-" for c in suffix)
 
 
 def _verified_for(req_digest: str, auth_digest: str, verifications: Sequence[Any],
@@ -104,6 +115,25 @@ def validate_lineage(
     reqs = _unique_by_id(_typed_models(correction_requests, CanonCorrectionRequest, "REQUEST", diagnostics), "request_id", diagnostics, "REQUEST")
     auths = _unique_by_id(_typed_models(correction_authorizations, CanonCorrectionAuthorization, "AUTHORIZATION", diagnostics), "authorization_id", diagnostics, "AUTHORIZATION")
     corrections = _unique_by_id(_typed_models(correction_artifacts, CanonCorrection, "CORRECTION", diagnostics), "correction_id", diagnostics, "CORRECTION")
+    if any(item.code.endswith("_ID_CONFLICT") for item in diagnostics):
+        return ValidatedLineage(False, base_digest, (), (), None, tuple(sorted(set(diagnostics))))
+
+    # Validate every staged artifact, including artifacts that are not referenced by
+    # a correction edge. The full namespace is chapter + exact accepted base commit.
+    for req in reqs.values():
+        if req.chapter != chapter or req.base_commit_sha256 != base_digest:
+            diagnostics.append(CorrectionDiagnostic("CROSS_BASE_REFERENCE", req.request_id))
+        if not _revision_in_namespace(req.parent_revision_id, base_digest):
+            diagnostics.append(CorrectionDiagnostic("INVALID_NAMESPACE_BINDING", req.request_id))
+    for auth in auths.values():
+        referenced = reqs.get(auth.request_id)
+        if referenced is None:
+            diagnostics.append(CorrectionDiagnostic("AUTHORIZATION_REQUEST_NOT_FOUND", auth.authorization_id))
+        elif artifact_sha256(referenced) != auth.request_sha256:
+            diagnostics.append(CorrectionDiagnostic("AUTHORIZATION_REQUEST_NOT_FOUND", auth.authorization_id))
+    for correction in corrections.values():
+        if not _revision_in_namespace(correction.parent_revision_id, base_digest):
+            diagnostics.append(CorrectionDiagnostic("INVALID_NAMESPACE_BINDING", correction.correction_id))
 
     auth_by_request: dict[str, list[CanonCorrectionAuthorization]] = {}
     for auth in auths.values():
