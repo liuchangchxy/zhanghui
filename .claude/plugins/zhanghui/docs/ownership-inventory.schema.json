@@ -9,7 +9,8 @@
     "baseline",
     "writers",
     "readers",
-    "migrations"
+    "migrations",
+    "semantic_ownership"
   ],
   "properties": {
     "schema_version": {
@@ -77,6 +78,13 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/sourceException"
+      }
+    },
+    "semantic_ownership": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/semanticOwnership"
       }
     }
   },
@@ -620,6 +628,107 @@
           }
         }
       ]
+    },
+    "semanticOwnership": {
+      "type": "object",
+      "required": [
+        "ownership_id",
+        "field_path",
+        "semantic_class",
+        "current_writers",
+        "target_writer",
+        "storage",
+        "readers",
+        "source_relationship",
+        "source_owner",
+        "compatibility_status",
+        "replacement",
+        "retirement_criterion",
+        "evidence"
+      ],
+      "properties": {
+        "ownership_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "semantic_class": {
+          "enum": [
+            "CANON",
+            "CANON_DERIVED_OBLIGATION",
+            "INTENT",
+            "CRAFT",
+            "WORKFLOW",
+            "PROJECT_CONFIG",
+            "DERIVED_REFERENCE",
+            "REFERENCE",
+            "UNKNOWN"
+          ]
+        },
+        "current_writers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/coordinate"
+          }
+        },
+        "target_writer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "storage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "readers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/coordinate"
+          }
+        },
+        "source_relationship": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "AUTHORITATIVE_SOURCE",
+                "SCOPED_AUTHORED_OVERRIDE",
+                "DERIVED_RUNTIME_COPY"
+              ]
+            }
+          ]
+        },
+        "source_owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compatibility_status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "replacement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retirement_criterion": {
+          "type": "string",
+          "minLength": 8
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

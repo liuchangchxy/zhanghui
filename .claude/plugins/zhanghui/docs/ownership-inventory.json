@@ -6304,5 +6304,807 @@
       "reader_id": "effective-history-reader",
       "read_edge_id": "effective-history-base-commit-edge"
     }
+  ],
+  "semantic_ownership": [
+    {
+      "ownership_id": "canon-derived-open-loop",
+      "field_path": "memory.open_loops[]",
+      "semantic_class": "CANON_DERIVED_OBLIGATION",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/writer.py",
+          "symbol": "reconcile_intent_events"
+        }
+      ],
+      "target_writer": "effective accepted Canon event projection",
+      "storage": "memory_scratchpad.json projection",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "effective accepted Canon event projection",
+      "compatibility_status": "projection_rebuilt_from_effective_history",
+      "replacement": "MemoryWriter rebuild from effective accepted events.",
+      "retirement_criterion": "Retire compatibility rows only after correction replay is verified.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/intent_reconciliation.py",
+          "anchor": "def reconcile_intent_events"
+        }
+      ]
+    },
+    {
+      "ownership_id": "canon-derived-reader-promise",
+      "field_path": "memory.reader_promises[]",
+      "semantic_class": "CANON_DERIVED_OBLIGATION",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/memory/writer.py",
+          "symbol": "reconcile_intent_events"
+        }
+      ],
+      "target_writer": "effective accepted Canon event projection",
+      "storage": "memory_scratchpad.json projection",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "effective accepted Canon event projection",
+      "compatibility_status": "projection_rebuilt_from_effective_history",
+      "replacement": "MemoryWriter rebuild from effective accepted events.",
+      "retirement_criterion": "Retire compatibility rows only after correction replay is verified.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/intent_reconciliation.py",
+          "anchor": "def reconcile_intent_events"
+        }
+      ]
+    },
+    {
+      "ownership_id": "planner-promise-ledger",
+      "field_path": "project_info.promise_ledger[]",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+          "symbol": "VolumeStateManager"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py",
+          "symbol": "class PromiseLedger"
+        }
+      ],
+      "target_writer": "project_info owner root",
+      "storage": "state.json.project_info.promise_ledger; state-overlay.json when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+          "symbol": "VolumeStateManager"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "project_info owner root",
+      "compatibility_status": "legacy_compatible_exact_schema",
+      "replacement": "VolumeStateManager and PromiseLedger preserve planner-only transitions and optional exact cross-reference.",
+      "retirement_criterion": "Retire direct compatibility only after enrolled routing and read-after-write acceptance.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/promise_ledger.py",
+          "anchor": "class PromiseLedger"
+        }
+      ]
+    },
+    {
+      "ownership_id": "story-craft-foreshadow-intent",
+      "field_path": "story_craft.foreshadow_chain[].planned_setup|planned_payoff",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def add_foreshadow"
+        }
+      ],
+      "target_writer": "story_craft Intent subfields",
+      "storage": "state.json.story_craft; owner overlay when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "story_craft Intent subfields",
+      "compatibility_status": "known_fields_only",
+      "replacement": "Keep planned target separate from occurrence evidence.",
+      "retirement_criterion": "Retire legacy mutation only after field routing and exact schema coverage.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def add_foreshadow"
+        }
+      ]
+    },
+    {
+      "ownership_id": "story-craft-timed-lock-intent",
+      "field_path": "story_craft.timed_locks[].description|trigger|deadline",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def add_timed_lock"
+        }
+      ],
+      "target_writer": "story_craft Intent subfields",
+      "storage": "state.json.story_craft; owner overlay when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "story_craft Intent subfields",
+      "compatibility_status": "known_fields_only",
+      "replacement": "Keep deadline/defer in planner owner; no Canon lifecycle sync.",
+      "retirement_criterion": "Retire legacy mutation only after field routing and exact schema coverage.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def add_timed_lock"
+        }
+      ]
+    },
+    {
+      "ownership_id": "story-craft-rhythm-craft",
+      "field_path": "story_craft.rhythm_curve",
+      "semantic_class": "CRAFT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def record_emotion_peak"
+        }
+      ],
+      "target_writer": "story_craft Craft subfields",
+      "storage": "state.json.story_craft; owner overlay when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "story_craft Craft subfields",
+      "compatibility_status": "advisory_compatibility",
+      "replacement": "Retain as advisory craft measurement.",
+      "retirement_criterion": "Retire only after Craft advisory consumers are verified.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "rhythm_curve"
+        }
+      ]
+    },
+    {
+      "ownership_id": "chapter-meta-hook-craft",
+      "field_path": "chapter_meta.hook_type|beat_position|scene_sequel",
+      "semantic_class": "CRAFT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def set_chapter_meta"
+        }
+      ],
+      "target_writer": "chapter_meta field classifier",
+      "storage": "commit metadata / state compatibility",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "chapter_meta field classifier",
+      "compatibility_status": "commit_containment_not_authority",
+      "replacement": "Keep craft fields craft-classified even when commit-carried.",
+      "retirement_criterion": "Retire root-level Canon classification after field reader migration.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def set_chapter_meta"
+        }
+      ]
+    },
+    {
+      "ownership_id": "chapter-meta-plan-intent",
+      "field_path": "chapter_meta.must_cover|forbidden|planned_nodes|targets",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def set_chapter_meta"
+        }
+      ],
+      "target_writer": "authored plan field owner",
+      "storage": "state compatibility / commit plan snapshot",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/chapter_outline_loader.py",
+          "symbol": "load_chapter_plot_structure"
+        }
+      ],
+      "source_relationship": "DERIVED_RUNTIME_COPY",
+      "source_owner": "authored plan field owner",
+      "compatibility_status": "source_link_required_for_copies",
+      "replacement": "Preserve plan history without factual promotion.",
+      "retirement_criterion": "Retire compatibility mapping after source-bound plan reader is verified.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def set_chapter_meta"
+        }
+      ]
+    },
+    {
+      "ownership_id": "chapter-meta-occurrence-reference",
+      "field_path": "chapter_meta.foreshadow_buried|paid_off",
+      "semantic_class": "DERIVED_REFERENCE",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def set_chapter_meta"
+        }
+      ],
+      "target_writer": "accepted factual evidence link",
+      "storage": "commit metadata reference",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "accepted factual evidence link",
+      "compatibility_status": "requires_accepted_evidence_link",
+      "replacement": "Reference links to event; event remains factual authority.",
+      "retirement_criterion": "Retire unresolved occurrence claims only after explicit evidence binding.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def set_chapter_meta"
+        }
+      ]
+    },
+    {
+      "ownership_id": "chapter-meta-unknown-legacy",
+      "field_path": "chapter_meta.unknown_or_unlinked_occurrence",
+      "semantic_class": "UNKNOWN",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def set_chapter_meta"
+        }
+      ],
+      "target_writer": "no assigned owner pending explicit mapping",
+      "storage": "legacy state/commit metadata",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "no assigned owner pending explicit mapping",
+      "compatibility_status": "preserve_and_diagnose",
+      "replacement": "Preserve original mixed value and emit diagnostic.",
+      "retirement_criterion": "No retirement until exact schema and evidence mapping is approved.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def _owner_inventory"
+        }
+      ]
+    },
+    {
+      "ownership_id": "project-info-plan",
+      "field_path": "project_info.story_pitch|story_premise|theme|target_reader|target_words",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "symbol": "def _owner_inventory"
+        }
+      ],
+      "target_writer": "project_info owner root",
+      "storage": "state.json.project_info; owner overlay when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "project_info owner root",
+      "compatibility_status": "exact_field_identity",
+      "replacement": "Preserve distinct authored fields at their declared scope.",
+      "retirement_criterion": "Retire compatibility paths after exact owner routing.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def _owner_inventory"
+        }
+      ]
+    },
+    {
+      "ownership_id": "confirmed-volume-plan",
+      "field_path": "volumes[].title|range|conflict|climax|cool_points",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+          "symbol": "VolumeStateManager"
+        }
+      ],
+      "target_writer": "volumes owner root",
+      "storage": "state.json.volumes; owner overlay when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+          "symbol": "VolumeStateManager"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "volumes owner root",
+      "compatibility_status": "confirmed_records_protected",
+      "replacement": "Confirmed/deferred volume planning remains author-owned.",
+      "retirement_criterion": "Retire legacy direct writes after owner routing tests.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/volume_state.py",
+          "anchor": "class VolumeStateManager"
+        }
+      ]
+    },
+    {
+      "ownership_id": "volume-outline-source",
+      "field_path": "authored_volume_outline.nodes",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/chapter_outline_loader.py",
+          "symbol": "load_chapter_plot_structure"
+        }
+      ],
+      "target_writer": "authored outline source",
+      "storage": "outline markdown files",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/runtime_contract_builder.py",
+          "symbol": "RuntimeContractBuilder"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "authored outline source",
+      "compatibility_status": "authored_source",
+      "replacement": "Keep authored outline as source for scoped runtime copies.",
+      "retirement_criterion": "Retire copy authority only after source bindings are consumed.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/chapter_outline_loader.py",
+          "anchor": "def load_chapter_plot_structure"
+        }
+      ]
+    },
+    {
+      "ownership_id": "volume-brief-runtime-copy",
+      "field_path": "VOLUME_BRIEF.plan_nodes",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/runtime_contract_builder.py",
+          "symbol": "RuntimeContractBuilder"
+        }
+      ],
+      "target_writer": "authored plan source; generated contract is derived",
+      "storage": "VOLUME_BRIEF runtime file",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "DERIVED_RUNTIME_COPY",
+      "source_owner": "authored plan source; generated contract is derived",
+      "compatibility_status": "generated_copy",
+      "replacement": "Compare to source and diagnose stale runtime copy.",
+      "retirement_criterion": "Never retire source authority in favor of generated artifact.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/runtime_contract_builder.py",
+          "anchor": "class RuntimeContractBuilder"
+        }
+      ]
+    },
+    {
+      "ownership_id": "chapter-brief-runtime-copy",
+      "field_path": "CHAPTER_BRIEF.directive_nodes",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_system_engine.py",
+          "symbol": "class StorySystemEngine"
+        }
+      ],
+      "target_writer": "authored chapter directive source",
+      "storage": "CHAPTER_BRIEF runtime file",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "DERIVED_RUNTIME_COPY",
+      "source_owner": "authored chapter directive source",
+      "compatibility_status": "generated_copy",
+      "replacement": "Retain source provenance in generated chapter brief.",
+      "retirement_criterion": "Never retire source authority in favor of generated artifact.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/story_system_engine.py",
+          "anchor": "class StorySystemEngine"
+        }
+      ]
+    },
+    {
+      "ownership_id": "review-contract-plan-copy",
+      "field_path": "REVIEW_CONTRACT.must_check|blocking_rules",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/runtime_contract_builder.py",
+          "symbol": "class RuntimeContractBuilder"
+        }
+      ],
+      "target_writer": "authored mandatory nodes / prohibitions",
+      "storage": "review contract file",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "DERIVED_RUNTIME_COPY",
+      "source_owner": "authored mandatory nodes / prohibitions",
+      "compatibility_status": "generated_copy",
+      "replacement": "Copy disagreement is stale_runtime_copy absent independent authored binding.",
+      "retirement_criterion": "Never treat generated contract as independent author source.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/runtime_contract_builder.py",
+          "anchor": "class RuntimeContractBuilder"
+        }
+      ]
+    },
+    {
+      "ownership_id": "review-contract-craft-copy",
+      "field_path": "REVIEW_CONTRACT.quality|method|thresholds",
+      "semantic_class": "CRAFT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/runtime_contract_builder.py",
+          "symbol": "class RuntimeContractBuilder"
+        }
+      ],
+      "target_writer": "review method / craft guidance",
+      "storage": "review contract file",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "DERIVED_RUNTIME_COPY",
+      "source_owner": "review method / craft guidance",
+      "compatibility_status": "advisory_generated_copy",
+      "replacement": "Keep generated quality heuristics advisory.",
+      "retirement_criterion": "Retire only after gate policy consumers verified.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/runtime_contract_builder.py",
+          "anchor": "class RuntimeContractBuilder"
+        }
+      ]
+    },
+    {
+      "ownership_id": "context-source-composition",
+      "field_path": "ContextManager governed source composition",
+      "semantic_class": "REFERENCE",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "target_writer": "Context composition boundary (read only)",
+      "storage": "runtime composition only",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "Context composition boundary (read only)",
+      "compatibility_status": "provenance_required",
+      "replacement": "Compose CANON/INTENT/CRAFT/REFERENCE with owner and provenance; duplicates diagnose.",
+      "retirement_criterion": "No persistence lifecycle exists to retire.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "anchor": "class ContextManager"
+        }
+      ]
+    },
+    {
+      "ownership_id": "legacy-story-craft-cli-writer",
+      "field_path": "state.json.story_craft direct CLI mutation",
+      "semantic_class": "UNKNOWN",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "symbol": "cmd_story_craft"
+        }
+      ],
+      "target_writer": "field-specific Story Craft owner operations; no root-level class",
+      "storage": "legacy state.json compatibility path",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "mixed legacy source pending field classification",
+      "compatibility_status": "mixed_root_preserved_field_semantics_required",
+      "replacement": "Dispatch each exact field to its field owner; preserve unknown values with diagnostics.",
+      "retirement_criterion": "Retire direct writer after enrolled read-after-write routing verified.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/webnovel.py",
+          "anchor": "def cmd_story_craft"
+        }
+      ]
+    },
+    {
+      "ownership_id": "story-craft-character-arc-intent",
+      "field_path": "story_craft.character_arc.starting_state|ending_state|transformation|key_moments",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def set_character_arc"
+        }
+      ],
+      "target_writer": "story_craft Intent subfields",
+      "storage": "state.json.story_craft; owner overlay when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "story_craft Intent subfields",
+      "compatibility_status": "exact_field_only",
+      "replacement": "Field-specific owner preserves the source relation and semantic class.",
+      "retirement_criterion": "Retire compatibility path only after exact field consumers and migration coverage pass.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def set_character_arc"
+        }
+      ]
+    },
+    {
+      "ownership_id": "story-craft-character-arc-craft",
+      "field_path": "story_craft.character_arc.evaluation|quality",
+      "semantic_class": "CRAFT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def set_character_arc"
+        }
+      ],
+      "target_writer": "story_craft Craft subfields",
+      "storage": "state.json.story_craft; owner overlay when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "story_craft Craft subfields",
+      "compatibility_status": "exact_field_only",
+      "replacement": "Field-specific owner preserves the source relation and semantic class.",
+      "retirement_criterion": "Retire compatibility path only after exact field consumers and migration coverage pass.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def set_character_arc"
+        }
+      ]
+    },
+    {
+      "ownership_id": "story-craft-thematic-target",
+      "field_path": "story_craft.thematic_echoes.premise",
+      "semantic_class": "INTENT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def add_thematic_echo"
+        }
+      ],
+      "target_writer": "story_craft Intent subfields",
+      "storage": "state.json.story_craft; owner overlay when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "story_craft Intent subfields",
+      "compatibility_status": "exact_field_only",
+      "replacement": "Field-specific owner preserves the source relation and semantic class.",
+      "retirement_criterion": "Retire compatibility path only after exact field consumers and migration coverage pass.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def add_thematic_echo"
+        }
+      ]
+    },
+    {
+      "ownership_id": "story-craft-thematic-manifestation",
+      "field_path": "story_craft.thematic_echoes.echoes[].manifestation",
+      "semantic_class": "UNKNOWN",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def add_thematic_echo"
+        }
+      ],
+      "target_writer": "no authority until evidence link",
+      "storage": "state.json.story_craft; preserved as unverified annotation",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "no authority until evidence link",
+      "compatibility_status": "unknown_without_exact_event_reference",
+      "replacement": "Field-specific owner preserves the source relation and semantic class.",
+      "retirement_criterion": "Retire compatibility path only after exact field consumers and migration coverage pass.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def add_thematic_echo"
+        }
+      ]
+    },
+    {
+      "ownership_id": "story-craft-volume-beats",
+      "field_path": "story_craft.volume_beat|volume_beats",
+      "semantic_class": "CRAFT",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def init_volume_beat"
+        }
+      ],
+      "target_writer": "story_craft Craft subfields",
+      "storage": "state.json.story_craft; owner overlay when enrolled",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": "AUTHORITATIVE_SOURCE",
+      "source_owner": "story_craft Craft subfields",
+      "compatibility_status": "advisory_framework",
+      "replacement": "Field-specific owner preserves the source relation and semantic class.",
+      "retirement_criterion": "Retire compatibility path only after exact field consumers and migration coverage pass.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def init_volume_beat"
+        }
+      ]
+    },
+    {
+      "ownership_id": "chapter-meta-document-metadata",
+      "field_path": "chapter_meta.title|word_count|summary",
+      "semantic_class": "DERIVED_REFERENCE",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def set_chapter_meta"
+        }
+      ],
+      "target_writer": "document metadata projection",
+      "storage": "commit snapshot / legacy state reference",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "document metadata projection",
+      "compatibility_status": "provenance_required",
+      "replacement": "Field-specific owner preserves the source relation and semantic class.",
+      "retirement_criterion": "Retire compatibility path only after exact field consumers and migration coverage pass.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def set_chapter_meta"
+        }
+      ]
+    },
+    {
+      "ownership_id": "chapter-meta-extracted-mentions",
+      "field_path": "chapter_meta.characters|location",
+      "semantic_class": "UNKNOWN",
+      "current_writers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "symbol": "def set_chapter_meta"
+        }
+      ],
+      "target_writer": "no factual owner without validated evidence",
+      "storage": "commit snapshot / legacy state preserved",
+      "readers": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/context_manager.py",
+          "symbol": "ContextManager"
+        }
+      ],
+      "source_relationship": null,
+      "source_owner": "no factual owner without validated evidence",
+      "compatibility_status": "preserve_without_factual_schema",
+      "replacement": "Field-specific owner preserves the source relation and semantic class.",
+      "retirement_criterion": "Retire compatibility path only after exact field consumers and migration coverage pass.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/story_craft.py",
+          "anchor": "def set_chapter_meta"
+        }
+      ]
+    }
   ]
 }

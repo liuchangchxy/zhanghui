@@ -628,3 +628,49 @@ def test_stale_dynamic_exception_is_rejected():
                       "anchor": "append_projection_run"}], "writer_id": "projection-run-log"})
     with pytest.raises(ValueError, match="stale exception"):
         validate_inventory(broken, ROOT)
+
+
+def test_phase10_semantic_ownership_records_cover_r1_sources_and_are_governance_only():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    records = inventory["semantic_ownership"]
+    by_id = {row["ownership_id"]: row for row in records}
+    expected = {
+        "canon-derived-open-loop", "canon-derived-reader-promise", "planner-promise-ledger",
+        "story-craft-foreshadow-intent", "story-craft-timed-lock-intent",
+        "story-craft-rhythm-craft", "chapter-meta-hook-craft", "chapter-meta-plan-intent",
+        "chapter-meta-occurrence-reference", "chapter-meta-unknown-legacy",
+        "project-info-plan", "confirmed-volume-plan", "volume-outline-source",
+        "volume-brief-runtime-copy", "chapter-brief-runtime-copy",
+        "review-contract-plan-copy", "review-contract-craft-copy",
+        "context-source-composition", "legacy-story-craft-cli-writer",
+    }
+    assert expected <= set(by_id)
+    assert all(row["field_path"] and row["semantic_class"] and row["current_writers"]
+               and row["target_writer"] and row["storage"] and row["readers"]
+               and row["compatibility_status"] and row["replacement"]
+               and row["retirement_criterion"] and row["evidence"] for row in records)
+    assert by_id["volume-brief-runtime-copy"]["source_relationship"] == "DERIVED_RUNTIME_COPY"
+    assert by_id["chapter-brief-runtime-copy"]["source_relationship"] == "DERIVED_RUNTIME_COPY"
+    assert by_id["review-contract-plan-copy"]["source_relationship"] == "DERIVED_RUNTIME_COPY"
+    assert runtime_inventory_references(PLUGIN) == []
+
+
+def test_semantic_owner_record_requires_exact_field_and_retirement_criterion():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    del broken["semantic_ownership"][0]["field_path"]
+    with pytest.raises(ValueError, match="field_path"):
+        validate_inventory(broken, ROOT)
+
+    broken = copy.deepcopy(inventory)
+    broken["semantic_ownership"][0]["retirement_criterion"] = ""
+    with pytest.raises(ValueError, match="retirement_criterion"):
+        validate_inventory(broken, ROOT)
+
+
+def test_semantic_owner_source_relationship_uses_frozen_r1_vocabulary():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    broken = copy.deepcopy(inventory)
+    broken["semantic_ownership"][0]["source_relationship"] = "PICK_LATEST"
+    with pytest.raises(ValueError, match="source_relationship"):
+        validate_inventory(broken, ROOT)
