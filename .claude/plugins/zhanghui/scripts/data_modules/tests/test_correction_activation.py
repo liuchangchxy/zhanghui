@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 
 from data_modules.canon_correction_schema import (
-    artifact_sha256, base_commit_digest, effective_content_digest, request_sha256,
+    artifact_sha256, base_commit_digest, effective_content_digest, request_sha256, canonical_json,
 )
 from data_modules.canon_correction_store import (
     CorrectionStoreError, append_correction, append_correction_request,
@@ -17,7 +17,8 @@ from data_modules.project_migration import (
 )
 from data_modules.projection_generation import GenerationError, ProjectionGeneration
 from data_modules.projection_rebuild import build_effective_generation
-from data_modules.owned_project_view import OwnedProjectView
+from data_modules.chapter_commit_service import ChapterCommitService, ChapterCommitError
+from data_modules.owned_project_view import OwnedProjectView, OwnedRAGView, OwnedStateStore
 from data_modules.config import DataModulesConfig
 from data_modules.context_manager import ContextManager
 
@@ -33,10 +34,16 @@ def _commit(chapter):
     }
 
 
-def _active_root(root, chapters=2):
+def _active_root(root, chapters=2, include_state=False):
     commits = []
     for chapter in range(1, chapters + 1):
         body = _commit(chapter)
+        body["extraction_result"]["summary_text"] = f"Original Canon summary chapter {chapter}"
+        if include_state:
+            body["extraction_result"]["entity_deltas"] = [
+                {"entity_id": "hero", "canonical_name": "Hero", "is_protagonist": True}]
+            body["extraction_result"]["state_deltas"] = [
+                {"entity_id": "hero", "field": "realm", "new": "Initial"}]
         path = root / f".story-system/commits/chapter_{chapter:03d}.commit.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(body), encoding="utf-8")
@@ -55,7 +62,8 @@ def _active_root(root, chapters=2):
     return commits
 
 
-def _stage_retract(root, chapter, base, correction_id, *, interaction_id=None):
+def _stage_retract(root, chapter, base, correction_id, *, interaction_id=None, prior_verifications=(),
+                   return_verification=False):
     active = EffectiveHistoryStore().read_active_snapshot(root)
     entry = active.chapters[chapter]
     digest = base_commit_digest(base)
@@ -69,7 +77,7 @@ def _stage_retract(root, chapter, base, correction_id, *, interaction_id=None):
         "proposed_effective_content_sha256": effective_content_digest("retracted", None),
         "changed_paths": [], "proposer_provenance": {"fixture": "TEST ONLY"}, "reason": "TEST ONLY",
     }
-    append_correction_request(root, request)
+    append_correction_request(root, request, decision_verifications=prior_verifications)
     package = build_correction_review_package(
         request, parent_status=entry.status, parent_extraction=entry.extraction_result)
     authorization = record_interactive_correction_decision(
@@ -88,8 +96,87 @@ def _stage_retract(root, chapter, base, correction_id, *, interaction_id=None):
         "provenance": {"fixture": "TEST ONLY"}, "actor_ref": "TEST ONLY", "reason": "TEST ONLY",
     }
     append_correction(root, correction, request=request, authorization=authorization,
+                      decision_verifications=[*prior_verifications, decision])
+    return (authorization, decision) if return_verification else authorization
+
+
+def _stage_amend_summary(root, chapter, base, correction_id, new_summary):
+    from data_modules.canon_correction_resolver import _structural_changes
+    active = EffectiveHistoryStore().read_active_snapshot(root)
+    entry = active.chapters[chapter]
+    digest = base_commit_digest(base)
+    updated = {**entry.extraction_result, "summary_text": new_summary,
+               "state_deltas": [{"entity_id": "hero", "field": "realm", "new": "Corrected"}]}
+    request = {
+        "schema_version": "canon-correction-request/v1", "request_id": f"{correction_id}-request",
+        "chapter": chapter, "base_commit_sha256": digest,
+        "parent_revision_id": entry.effective_revision_id,
+        "parent_effective_content_sha256": entry.effective_content_sha256,
+        "operation": "AMEND", "proposed_effective_status": "accepted",
+        "proposed_effective_extraction_result": updated,
+        "proposed_effective_content_sha256": effective_content_digest("accepted", updated),
+        "changed_paths": _structural_changes(entry.extraction_result, updated),
+        "proposer_provenance": {"fixture": "TEST ONLY"}, "reason": "TEST ONLY",
+    }
+    append_correction_request(root, request)
+    package = build_correction_review_package(
+        request, parent_status=entry.status, parent_extraction=entry.extraction_result)
+    authorization = record_interactive_correction_decision(
+        root, request, package, choice="APPROVE", authorization_id=f"{correction_id}-auth",
+        interaction_id=f"{correction_id}-interaction", interaction_surface="test fixture",
+        confirmed_at="2026-10-07T00:00:00Z")
+    decision = verify_phase9_correction_decision(request, authorization, package)
+    correction = {
+        "schema_version": "canon-correction/v1", "correction_id": correction_id,
+        "chapter": chapter, "base_commit_sha256": digest,
+        "parent_revision_id": request["parent_revision_id"],
+        "parent_effective_content_sha256": request["parent_effective_content_sha256"],
+        "operation": "AMEND", "effective_extraction_result": updated,
+        "changed_paths": request["changed_paths"],
+        "request_sha256": request_sha256(request), "authorization_ref": authorization.authorization_id,
+        "authorization_sha256": artifact_sha256(authorization),
+        "provenance": {"fixture": "TEST ONLY"}, "actor_ref": "TEST ONLY", "reason": "TEST ONLY",
+    }
+    append_correction(root, correction, request=request, authorization=authorization,
                       decision_verifications=[decision])
-    return authorization
+    return authorization, decision
+
+
+def _stage_supersede(root, chapter, base, correction_id, extraction, prior_verifications):
+    active = EffectiveHistoryStore().read_active_snapshot(root)
+    entry = active.chapters[chapter]
+    digest = base_commit_digest(base)
+    request = {
+        "schema_version": "canon-correction-request/v1", "request_id": f"{correction_id}-request",
+        "chapter": chapter, "base_commit_sha256": digest,
+        "parent_revision_id": entry.effective_revision_id,
+        "parent_effective_content_sha256": entry.effective_content_sha256,
+        "operation": "SUPERSEDE", "proposed_effective_status": "accepted",
+        "proposed_effective_extraction_result": extraction,
+        "proposed_effective_content_sha256": effective_content_digest("accepted", extraction),
+        "changed_paths": [], "proposer_provenance": {"fixture": "TEST ONLY"}, "reason": "TEST ONLY",
+    }
+    append_correction_request(root, request, decision_verifications=prior_verifications)
+    package = build_correction_review_package(
+        request, parent_status=entry.status, parent_extraction=entry.extraction_result)
+    authorization = record_interactive_correction_decision(
+        root, request, package, choice="APPROVE", authorization_id=f"{correction_id}-auth",
+        interaction_id=f"{correction_id}-interaction", interaction_surface="test fixture",
+        confirmed_at="2026-10-07T00:00:00Z")
+    decision = verify_phase9_correction_decision(request, authorization, package)
+    correction = {
+        "schema_version": "canon-correction/v1", "correction_id": correction_id,
+        "chapter": chapter, "base_commit_sha256": digest,
+        "parent_revision_id": request["parent_revision_id"],
+        "parent_effective_content_sha256": request["parent_effective_content_sha256"],
+        "operation": "SUPERSEDE", "effective_extraction_result": extraction, "changed_paths": [],
+        "request_sha256": request_sha256(request), "authorization_ref": authorization.authorization_id,
+        "authorization_sha256": artifact_sha256(authorization),
+        "provenance": {"fixture": "TEST ONLY"}, "actor_ref": "TEST ONLY", "reason": "TEST ONLY",
+    }
+    append_correction(root, correction, request=request, authorization=authorization,
+                      decision_verifications=[*prior_verifications, decision])
+    return authorization, decision
 
 
 def test_activation_publishes_only_after_complete_generation_and_keeps_owner_overlay(tmp_path, monkeypatch):
@@ -99,6 +186,7 @@ def test_activation_publishes_only_after_complete_generation_and_keeps_owner_ove
     authorization = _stage_retract(tmp_path, 1, commits[0][0], "TEST-ONLY-activate")
     protocol = ProjectionGeneration(tmp_path)
     before = protocol.pin_active_generation()
+    legacy_state_bytes = (tmp_path / ".webnovel/state.json").read_bytes()
     active_before = EffectiveHistoryStore().read_active_snapshot(tmp_path)
     candidate = EffectiveHistoryStore().resolve_candidate(tmp_path, "TEST-ONLY-activate")
     assert candidate.ok
@@ -139,6 +227,108 @@ def test_activation_publishes_only_after_complete_generation_and_keeps_owner_ove
     assert retry.activated is False
     assert retry.publication_record_id == result.publication_record_id
     assert len(protocol._records()) == 2
+
+
+def test_normal_chapter_commit_publishes_complete_activation_generation(tmp_path):
+    _active_root(tmp_path, chapters=1)
+    protocol = ProjectionGeneration(tmp_path)
+    before = protocol.pin_active_generation()
+    legacy_state_bytes = (tmp_path / ".webnovel/state.json").read_bytes()
+    payload = _commit(2)
+    payload["extraction_result"]["summary_text"] = "chapter two Canon summary"
+    committed = ChapterCommitService(tmp_path).apply_projections(payload)
+    after = protocol.pin_active_generation()
+    active = EffectiveHistoryStore().read_active_snapshot(tmp_path)
+    assert after.publication_record_id != before.publication_record_id
+    assert active.ok and set(active.chapters) == {1, 2}
+    assert committed["publication_record_id"] == after.publication_record_id
+    for domain in ("events", "state", "index", "summary", "memory", "vector", "intent_diagnostics"):
+        assert (after.generation_root / domain / "chapter_002.json").is_file()
+    assert (tmp_path / ".webnovel/state.json").read_bytes() == legacy_state_bytes
+
+
+def test_activation_publication_supports_sparse_and_rejected_commits(tmp_path):
+    _active_root(tmp_path, chapters=1)
+    service = ChapterCommitService(tmp_path)
+    sparse = service.apply_projections(_commit(3))
+    assert sparse["publication_record_id"] == "publication-00000002"
+    assert set(EffectiveHistoryStore().read_active_snapshot(tmp_path).chapters) == {1, 3}
+
+    rejected = _commit(4)
+    rejected["meta"]["status"] = "rejected"
+    rejected["extraction_result"]["accepted_events"] = []
+    result = service.apply_projections(rejected)
+    assert result["publication_record_id"] == "publication-00000003"
+    active = EffectiveHistoryStore().read_active_snapshot(tmp_path)
+    assert active.ok and active.chapters[4].status == "rejected"
+    view = OwnedStateStore(tmp_path).read_view(ProjectionGeneration(tmp_path).pin_active_generation())
+    assert view["progress"]["chapter_status"]["4"] == "chapter_rejected"
+
+
+def test_failed_normal_publication_blocks_next_commit_and_retry_recovers_pending(tmp_path, monkeypatch):
+    _active_root(tmp_path, chapters=1)
+    protocol = ProjectionGeneration(tmp_path)
+    before = protocol.pin_active_generation()
+    publish = ProjectionGeneration.publish_generation
+    monkeypatch.setattr(ProjectionGeneration, "publish_generation",
+                        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("TEST ONLY publish failure")))
+    with pytest.raises(ChapterCommitError, match="pending recovery"):
+        ChapterCommitService(tmp_path).apply_projections(_commit(2))
+    pending_path = tmp_path / ".story-system/workflow/activation-publication-pending.json"
+    assert json.loads(pending_path.read_text())["chapter"] == 2
+    assert protocol.pin_active_generation().publication_record_id == before.publication_record_id
+    assert (tmp_path / ".story-system/commits/chapter_002.commit.json").is_file()
+    with pytest.raises(ChapterCommitError, match="recovery required"):
+        ChapterCommitService(tmp_path).apply_projections(_commit(3))
+    monkeypatch.setattr(ProjectionGeneration, "publish_generation", publish)
+    from data_modules.projections import retry_projection
+    recovered = retry_projection(tmp_path, chapter=2)
+    assert recovered["ok"] is True
+    assert not pending_path.exists()
+    assert set(EffectiveHistoryStore().read_active_snapshot(tmp_path).chapters) == {1, 2}
+
+
+def test_amend_replaces_generation_rag_chunks_and_retract_removes_them(tmp_path):
+    from data_modules.canon_correction_store import activate_correction
+
+    commits = _active_root(tmp_path, chapters=1, include_state=True)
+    protocol = ProjectionGeneration(tmp_path)
+    initial = protocol.pin_active_generation()
+    initial_view = OwnedRAGView(initial, lambda _query: [])
+    assert any("Original Canon summary" in row["content"]
+               for row in initial_view.search("Original", strategy="bm25"))
+
+    amend_auth, amend_verification = _stage_amend_summary(
+        tmp_path, 1, commits[0][0], "TEST-ONLY-amend-rag", "Revised Canon summary")
+    amended = activate_correction(tmp_path, "TEST-ONLY-amend-rag", amend_auth)
+    amended_pin = protocol.pin_active_generation()
+    amended_rows = OwnedRAGView(amended_pin, lambda _query: []).search("Revised", strategy="bm25")
+    assert amended.activated is True
+    assert any("Revised Canon summary" in row["content"] for row in amended_rows)
+    assert all("Original Canon summary" not in row["content"] for row in amended_rows)
+    assert OwnedStateStore(tmp_path).read_view(amended_pin)["protagonist_state"]["realm"] == "Corrected"
+
+    retract_auth, retract_verification = _stage_retract(
+        tmp_path, 1, commits[0][0], "TEST-ONLY-retract-rag",
+        prior_verifications=(amend_verification,), return_verification=True)
+    retracted = activate_correction(tmp_path, "TEST-ONLY-retract-rag", retract_auth)
+    retracted_pin = protocol.pin_active_generation()
+    assert retracted.activated is True
+    assert OwnedRAGView(retracted_pin, lambda _query: []).search("Revised", strategy="bm25") == []
+    state_after_retract = OwnedStateStore(tmp_path).read_view(retracted_pin)
+    assert "hero" not in state_after_retract["entity_state"]
+
+    amended_extraction = {**commits[0][0]["extraction_result"], "summary_text": "Revised Canon summary",
+                          "state_deltas": [{"entity_id": "hero", "field": "realm", "new": "Corrected"}]}
+    supersede_auth, _supersede_verification = _stage_supersede(
+        tmp_path, 1, commits[0][0], "TEST-ONLY-supersede-rag", amended_extraction,
+        (amend_verification, retract_verification))
+    superseded = activate_correction(tmp_path, "TEST-ONLY-supersede-rag", supersede_auth)
+    superseded_pin = protocol.pin_active_generation()
+    assert superseded.activated is True
+    assert "Revised Canon summary" in OwnedRAGView(
+        superseded_pin, lambda _query: []).search("Revised", strategy="bm25")[0]["content"]
+    assert OwnedStateStore(tmp_path).read_view(superseded_pin)["protagonist_state"]["realm"] == "Corrected"
 
 
 def test_activation_composes_prior_active_corrections_in_other_chapters(tmp_path):

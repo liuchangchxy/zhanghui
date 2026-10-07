@@ -62,25 +62,20 @@ class OwnedStateStore:
         return data
 
     def read_view(self, pinned: PinnedGeneration) -> dict[str, Any]:
+        from .state_projection_writer import StateProjectionWriter
+
         canon: dict[str, Any] = {"entity_state": {}, "progress": {"chapter_status": {}},
                                  "protagonist_state": {}, "strand_tracker": {}}
+        reducer = StateProjectionWriter(self.project_root)
         for doc in _chapter_documents(pinned, "state"):
             projection = doc.get("projection", {})
             if projection.get("tombstone"):
                 canon["progress"]["chapter_status"][str(doc["chapter"])] = "retracted"
                 continue
-            canon["progress"]["chapter_status"][str(doc["chapter"])] = doc.get("effective_status")
-            for delta in projection.get("state_deltas", []):
-                entity = str(delta.get("entity_id") or "").strip()
-                field = str(delta.get("field") or "").strip()
-                if not entity or not field:
-                    continue
-                target = canon["entity_state"].setdefault(entity, {})
-                parts = [part for part in field.split(".") if part]
-                for part in parts[:-1]:
-                    target = target.setdefault(part, {})
-                if parts:
-                    target[parts[-1]] = delta.get("new")
+            payload = projection.get("commit_payload")
+            if not isinstance(payload, dict):
+                raise OwnedViewError("CANON_STATE_SLICE_INCOMPLETE")
+            reducer.reduce_state(canon, payload)
         overlay = self._overlay()
         values = overlay["values"]
         collision = _CANON_STATE_ROOTS.intersection(values)
@@ -236,25 +231,125 @@ class OwnedRAGView:
         self.pinned = pinned
         self.owner_search = owner_search
 
-    def search(self, query: str) -> list[dict[str, Any]]:
-        canon = []
-        terms = {token.lower() for token in re.findall(r"[\w\u3400-\u9fff]+", query) if token}
+    def search(self, query: str, *, strategy: str = "hybrid",
+               query_embedding: list[float] | None = None,
+               chunk_type: str | None = None, chapter: int | None = None,
+               center_entities: list[str] | None = None) -> list[dict[str, Any]]:
+        canon_docs = []
         for doc in _chapter_documents(self.pinned, "vector"):
             if doc.get("projection", {}).get("tombstone"):
                 continue
-            content = canonical_json(doc["projection"])
-            words = {token.lower() for token in re.findall(r"[\w\u3400-\u9fff]+", content) if token}
-            score = len(terms.intersection(words)) / max(1, len(terms))
-            if terms and score == 0:
+            for chunk in doc.get("projection", {}).get("chunks", []):
+                if chapter is not None and int(doc["chapter"]) > int(chapter):
+                    continue
+                if chunk_type and chunk.get("chunk_type") != chunk_type:
+                    continue
+                canon_docs.append({**chunk, "chapter": int(doc["chapter"]),
+                                   "generation_id": self.pinned.generation_id,
+                                   "authority_claim": "CANON_AUTHORITY"})
+        query_terms = [token.lower() for token in re.findall(r"[\w\u3400-\u9fff]+", query) if token]
+        query_counts = {term: query_terms.count(term) for term in set(query_terms)}
+        lengths = [int(item.get("doc_length") or 0) for item in canon_docs]
+        average_length = sum(lengths) / len(lengths) if lengths else 1.0
+        document_frequency = {term: sum(term in set(item.get("terms", [])) for item in canon_docs)
+                              for term in query_counts}
+        bm25_scores = {}
+        for item in canon_docs:
+            terms = item.get("terms", [])
+            counts = {term: terms.count(term) for term in query_counts}
+            length = max(1, int(item.get("doc_length") or 0))
+            score = 0.0
+            for term in query_counts:
+                tf = counts.get(term, 0)
+                df = document_frequency.get(term, 0)
+                if tf and df:
+                    idf = __import__("math").log((len(canon_docs) - df + 0.5) / (df + 0.5) + 1)
+                    normalized_tf = tf / length
+                    score += idf * (normalized_tf * 2.5) / (
+                        normalized_tf + 1.5 * (1 - 0.75 + 0.75 * length / average_length))
+            bm25_scores[item["chunk_id"]] = score
+        vector_scores = {}
+        if query_embedding:
+            for item in canon_docs:
+                vector = item.get("embedding")
+                if not vector:
+                    continue
+                dot = sum(float(a) * float(b) for a, b in zip(query_embedding, vector))
+                norm_a = sum(float(a) ** 2 for a in query_embedding) ** 0.5
+                norm_b = sum(float(b) ** 2 for b in vector) ** 0.5
+                vector_scores[item["chunk_id"]] = dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
+        def rank(scores):
+            return {key: rank for rank, (key, _score) in enumerate(
+                sorted(scores.items(), key=lambda pair: pair[1], reverse=True), start=1)}
+        bm25_rank, vector_rank = rank(bm25_scores), rank(vector_scores)
+        related_entities: set[str] = set()
+        entity_terms: dict[str, set[str]] = {}
+        for entity_doc in _chapter_documents(self.pinned, "index"):
+            if entity_doc.get("projection", {}).get("tombstone"):
                 continue
-            canon.append({"chapter": doc["chapter"], "payload": doc["projection"],
-                          "content": content, "score": score, "authority_claim": "CANON_AUTHORITY",
-                          "generation_id": self.pinned.generation_id})
+            for entity in entity_doc.get("projection", {}).get("entity_deltas", []):
+                if not isinstance(entity, dict):
+                    continue
+                entity_id = str(entity.get("entity_id") or entity.get("id") or "").strip()
+                if not entity_id:
+                    continue
+                terms = {entity_id}
+                canonical_name = str(entity.get("canonical_name") or "").strip()
+                if canonical_name:
+                    terms.add(canonical_name)
+                aliases = entity.get("aliases", [])
+                if isinstance(aliases, list):
+                    terms.update(str(alias).strip() for alias in aliases if str(alias).strip())
+                entity_terms.setdefault(entity_id, set()).update(terms)
+        seed_terms: set[str] = set()
+        max_chapter = max((int(doc["chapter"]) for doc in _chapter_documents(self.pinned, "vector")),
+                          default=0)
+        if strategy == "graph_hybrid" and center_entities:
+            seeds = {str(item).strip() for item in center_entities if str(item).strip()}
+            for seed in seeds:
+                seed_terms.update(entity_terms.get(seed, {seed}))
+            for event_doc in _chapter_documents(self.pinned, "events"):
+                if event_doc.get("projection", {}).get("tombstone"):
+                    continue
+                for event in event_doc.get("projection", {}).get("accepted_events", []):
+                    if not isinstance(event, dict) or event.get("event_type") != "relationship_changed":
+                        continue
+                    body = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+                    left = str(event.get("subject") or body.get("from_entity") or "").strip()
+                    right = str(body.get("to_entity") or body.get("to") or "").strip()
+                    if left in seeds and right:
+                        related_entities.add(right)
+                    if right in seeds and left:
+                        related_entities.add(left)
+            related_terms = set().union(*(entity_terms.get(item, {item}) for item in related_entities)) if related_entities else set()
+        else:
+            related_terms = set()
+        rows = []
+        for item in canon_docs:
+            cid = item["chunk_id"]
+            if strategy == "bm25":
+                score, source = bm25_scores.get(cid, 0.0), "bm25"
+            elif strategy == "vector":
+                score, source = vector_scores.get(cid, 0.0), "vector"
+            else:
+                score = (1 / (60 + bm25_rank[cid]) if cid in bm25_rank else 0.0)
+                score += (1 / (60 + vector_rank[cid]) if cid in vector_rank else 0.0)
+                source = "graph_hybrid" if strategy == "graph_hybrid" else "hybrid"
+                if strategy == "graph_hybrid" and center_entities:
+                    text = str(item.get("content") or "")
+                    if any(entity in text for entity in seed_terms):
+                        score += 0.1
+                    elif any(entity in text for entity in related_terms):
+                        score += 0.05
+                    gap = max(0, max_chapter - int(item.get("chapter") or 0))
+                    score += max(0.0, 1.0 - min(gap, 100) / 100.0) * 0.02
+            if score > 0:
+                rows.append({**item, "score": score, "source": source})
         owner = self.owner_search(query)
         if any(row.get("authority_claim") == "CANON_AUTHORITY" for row in owner):
             raise OwnedViewError("OWNER_RAG_CANNOT_CLAIM_CANON")
-        merged = canon + [{**row, "authority_claim": row.get("authority_claim", "OWNER_AUTHORITY")}
-                          for row in owner]
+        merged = rows + [{**row, "authority_claim": row.get("authority_claim", "OWNER_AUTHORITY")}
+                         for row in owner]
         return sorted(merged, key=lambda row: float(row.get("score", 0)), reverse=True)
 
 

@@ -91,13 +91,35 @@ def _read_json_artifacts(directory: Path, pattern: str) -> list[dict[str, Any]]:
     return result
 
 
+def _base_digest(base: dict[str, Any]) -> str:
+    source_status = str((base.get("meta") or {}).get("status") or "")
+    if source_status == "accepted":
+        return base_commit_digest(base)
+    elif source_status == "rejected":
+        from .durable_projection import canonical_commit_json
+        return hashlib.sha256(canonical_commit_json(base).encode("utf-8")).hexdigest()
+    raise CorrectionStoreError("INVALID_BASE_COMMIT_STATUS")
+
+
+def _entry_content_digest(status: str, extraction: dict[str, Any] | None, base_digest: str) -> str:
+    if status == "rejected":
+        return artifact_sha256({"status": "rejected", "base_commit_sha256": base_digest})
+    return effective_content_digest(status, extraction)
+
+
 def _entry(chapter: int, base: dict[str, Any], result: EffectiveHistoryResult | None = None):
-    base_digest = base_commit_digest(base)
+    source_status = str((base.get("meta") or {}).get("status") or "")
+    base_digest = _base_digest(base)
     if result is None:
-        status = "accepted"
-        extraction = base["extraction_result"]
+        status = source_status
+        if status not in {"accepted", "rejected"}:
+            raise CorrectionStoreError("INVALID_BASE_COMMIT_STATUS")
+        extraction = (base.get("extraction_result") or {}) if status == "accepted" else {
+            "accepted_events": [], "state_deltas": [], "entity_deltas": [],
+            "chapter_meta": {}, "summary_text": "", "scenes": [],
+        }
         revision = f"base:{base_digest}"
-        content_digest = effective_content_digest(status, extraction)
+        content_digest = _entry_content_digest(status, extraction, base_digest)
         applied = ()
     else:
         if not result.ok or result.base_commit_sha256 != base_digest:
@@ -109,6 +131,43 @@ def _entry(chapter: int, base: dict[str, Any], result: EffectiveHistoryResult | 
         applied = result.applied_correction_ids
     return EffectiveHistoryEntry(chapter, dict(base), base_digest, status, extraction,
                                  revision, content_digest, tuple(applied))
+
+
+def append_base_commits(snapshot: ActiveEffectiveHistorySnapshot,
+                        project_root: str | Path) -> ActiveEffectiveHistorySnapshot:
+    """Extend active semantic history with durable commits absent from its closure."""
+    root = Path(project_root).expanduser().resolve()
+    records = discover_validated_chapter_commits(root)
+    entries = dict(snapshot.chapters)
+    dependencies = {item["path"]: item for item in snapshot.dependencies}
+    for row in records:
+        chapter = row["chapter"]
+        if chapter in entries:
+            continue
+        entry = _entry(chapter, row["payload"])
+        entries[chapter] = entry
+        relative = row["path"].relative_to(root).as_posix()
+        commit_path = root / relative
+        dependencies[relative] = {"path": relative,
+                                  "sha256": hashlib.sha256(commit_path.read_bytes()).hexdigest(),
+                                  "kind": "base_commit"}
+    base_digest, lineage_digest, history_digest = _snapshot_digests(entries)
+    artifact_dependencies = [item for item in dependencies.values()
+                             if item.get("kind") in {"correction", "request", "authorization"}]
+    exact_lineage = artifact_sha256({"effective_lineage_digest": lineage_digest,
+                                     "artifacts": artifact_dependencies})
+    namespaces = tuple({"path": ".story-system/commits",
+                        "sha256": _namespace_digest(root, ".story-system/commits", "base_set"),
+                        "kind": "base_set"} if item.get("kind") == "base_set" else item
+                       for item in snapshot.lineage_namespace_checks)
+    if not any(item.get("kind") == "base_set" for item in namespaces):
+        namespaces += ({"path": ".story-system/commits",
+                        "sha256": _namespace_digest(root, ".story-system/commits", "base_set"),
+                        "kind": "base_set"},)
+    return ActiveEffectiveHistorySnapshot(
+        True, entries, snapshot.activation_record_id, base_digest, exact_lineage, history_digest,
+        snapshot.generation_id, (), tuple(dependencies.values()), namespaces,
+    )
 
 
 def _snapshot_digests(entries: dict[int, EffectiveHistoryEntry]):
@@ -195,7 +254,7 @@ class EffectiveHistoryStore:
                 for row in record.get("chapter_closure", []):
                     chapter = row["chapter"]
                     base = bases[chapter]
-                    if base_commit_digest(base) != row["base_sha256"]:
+                    if _base_digest(base) != row["base_sha256"]:
                         raise GenerationError("ACTIVE_DEPENDENCY_CORRUPT")
                     chapter_corrections = [item for item in dependency_bodies.get("correction", [])
                                            if item.get("chapter") == chapter]
@@ -418,16 +477,16 @@ def validate_effective_projection_input(project_root: str | Path,
     entry = value.effective_entry
     try:
         disk_base = read_durable_commit(project_root, entry.chapter)
-        disk_digest = base_commit_digest(disk_base)
+        disk_digest = _base_digest(disk_base)
     except Exception as exc:
         raise DurableCommitError("BASE_COMMIT_MISMATCH") from exc
     try:
-        supplied_digest = base_commit_digest(value.base_commit)
+        supplied_digest = _base_digest(value.base_commit)
     except Exception as exc:
         raise DurableCommitError("BASE_COMMIT_MISMATCH") from exc
     if disk_digest != entry.base_sha256 or supplied_digest != entry.base_sha256 or supplied_digest != disk_digest:
         raise DurableCommitError("BASE_COMMIT_MISMATCH")
-    if effective_content_digest(entry.status, entry.extraction_result) != entry.effective_content_sha256:
+    if _entry_content_digest(entry.status, entry.extraction_result, entry.base_sha256) != entry.effective_content_sha256:
         raise DurableCommitError("EFFECTIVE_CONTENT_MISMATCH")
     if value.snapshot_digest != value.snapshot_id or not value.snapshot_id:
         raise DurableCommitError("EFFECTIVE_SNAPSHOT_BINDING_MISMATCH")

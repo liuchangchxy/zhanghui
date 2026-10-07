@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -87,7 +88,7 @@ def retry_projection(project_root: str | Path, *, chapter: int) -> dict[str, Any
 
 
 def _active_generation_recovery(root: Path, *, chapter: int | None = None) -> dict[str, Any] | None:
-    from .effective_history import EffectiveHistoryStore
+    from .effective_history import EffectiveHistoryStore, append_base_commits
     from .projection_generation import ProjectionGeneration
     from .projection_rebuild import build_effective_generation
 
@@ -95,10 +96,20 @@ def _active_generation_recovery(root: Path, *, chapter: int | None = None) -> di
     if not protocol.enrollment_path.exists():
         return None
     try:
+        pending_path = root / ".story-system" / "workflow" / "activation-publication-pending.json"
+        pending = None
+        if pending_path.exists():
+            pending = json.loads(pending_path.read_text(encoding="utf-8"))
+            if pending.get("schema_version") != "activation-publication-pending/v1":
+                raise RuntimeError("PENDING_PUBLICATION_MARKER_INVALID")
+            pending_commit = root / ".story-system" / "commits" / f"chapter_{int(pending['chapter']):03d}.commit.json"
+            if hashlib.sha256(pending_commit.read_bytes()).hexdigest() != pending.get("commit_sha256"):
+                raise RuntimeError("PENDING_PUBLICATION_COMMIT_MISMATCH")
         active = EffectiveHistoryStore().read_active_snapshot(
             root, allow_unhealthy_generation_for_recovery=True)
         if not active.ok:
             raise RuntimeError(";".join(active.diagnostics))
+        active = append_base_commits(active, root)
         if chapter is not None and chapter not in active.chapters:
             raise RuntimeError("chapter is not in the active effective history")
         publication_head = protocol.latest_publication_for_recovery()
@@ -108,6 +119,8 @@ def _active_generation_recovery(root: Path, *, chapter: int | None = None) -> di
             built["validated_generation"], publication_head.record_sha256,
             active.correction_lineage_digest,
         )
+        if pending_path.exists():
+            pending_path.unlink()
         return {
             "schema_version": SCHEMA_VERSION, "action": "same_semantic_recovery", "ok": True,
             "project_root": str(root), "chapter": chapter,

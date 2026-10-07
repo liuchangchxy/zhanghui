@@ -396,6 +396,21 @@ class ChapterCommitService:
                 f"Conflict policy rejected: overwrite is forbidden for canonical chapter commits: {path}"
             )
         if not path.exists():
+            from .projection_generation import ProjectionGeneration
+            if ProjectionGeneration(self.project_root).enrollment_path.exists():
+                from .effective_history import EffectiveHistoryStore
+                from .durable_projection import discover_validated_chapter_commits
+                if (self.project_root / ".story-system" / "workflow" / "activation-publication-pending.json").exists():
+                    raise ChapterCommitError("activation-managed publication recovery required by pending marker")
+                active = EffectiveHistoryStore().read_active_snapshot(self.project_root)
+                if not active.ok:
+                    raise ChapterCommitError("activation-managed Canon is unhealthy; writes are blocked")
+                committed = {row["chapter"] for row in discover_validated_chapter_commits(self.project_root)}
+                pending = committed - set(active.chapters)
+                if pending:
+                    raise ChapterCommitError(
+                        f"activation-managed publication recovery required for chapters {sorted(pending)}"
+                    )
             higher = self._higher_commit_chapters(int(payload["meta"]["chapter"]))
             if higher:
                 chapter = int(payload["meta"]["chapter"])
@@ -588,7 +603,65 @@ class ChapterCommitService:
         commit_path = self.persist_commit(payload, on_conflict=on_conflict)
         if on_conflict == "skip":
             payload = self._read_commit(commit_path)
+        from .projection_generation import ProjectionGeneration
+        if ProjectionGeneration(self.project_root).enrollment_path.exists():
+            return self._publish_activation_managed_commit(payload)
         return self.apply_projection_writers(payload)
+
+    def _publish_activation_managed_commit(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Publish the durable commit through the active-generation protocol only."""
+        from .effective_history import EffectiveHistoryStore, append_base_commits
+        from .projection_generation import ProjectionGeneration
+        from .projection_rebuild import build_effective_generation
+
+        root = self.project_root
+        protocol = ProjectionGeneration(root)
+        active = EffectiveHistoryStore().read_active_snapshot(root)
+        if not active.ok:
+            raise ChapterCommitError("activation-managed Canon is unhealthy; publication is blocked")
+        expanded = append_base_commits(active, root)
+        if not set(active.chapters).issubset(expanded.chapters):
+            raise ChapterCommitError("active Canon history was not preserved")
+        head = None
+        try:
+            head = protocol.latest_publication()
+            built = build_effective_generation(
+                root, expanded, previous_generation_id=head.body["generation_id"] if head else None,
+            )
+            publication = protocol.publish_generation(
+                built["validated_generation"], head.record_sha256 if head else None,
+                expanded.correction_lineage_digest,
+            )
+        except Exception as exc:
+            # The immutable commit remains on disk and is discoverable as pending;
+            # persist_commit refuses later writes until retry publishes it.
+            import hashlib
+            pending_path = root / ".story-system" / "workflow" / "activation-publication-pending.json"
+            write_json(pending_path, {
+                "schema_version": "activation-publication-pending/v1",
+                "chapter": int((payload.get("meta") or {}).get("chapter") or 0),
+                "commit_sha256": hashlib.sha256(self._commit_path(payload).read_bytes()).hexdigest(),
+                "previous_publication_record_id": head.publication_record_id if head else None,
+                "reason": str(exc),
+            })
+            raise ChapterCommitError(f"activation-managed publication pending recovery: {exc}") from exc
+        pending_path = root / ".story-system" / "workflow" / "activation-publication-pending.json"
+        if pending_path.exists():
+            pending_path.unlink()
+        payload["projection_status"] = {
+            name: "done" for name in EventProjectionRouter.PROJECTION_ORDER
+        }
+        payload["publication_record_id"] = publication.publication_record_id
+        payload["generation_id"] = publication.body["generation_id"]
+        try:
+            from .projection_log import append_projection_run
+            append_projection_run(root, payload,
+                                  {name: {"status": "done", "result": {"applied": True}}
+                                   for name in EventProjectionRouter.PROJECTION_ORDER},
+                                  commit_path=self._commit_path(payload))
+        except Exception:
+            pass
+        return payload
 
     def _commit_path(self, payload: Dict[str, Any]) -> Path:
         chapter = int((payload.get("meta") or {}).get("chapter") or 0)

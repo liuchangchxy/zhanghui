@@ -21,6 +21,8 @@ from data_modules.memory.store import ScratchpadManager
 from data_modules.memory.schema import MemoryItem, ScratchpadData
 from data_modules.canon_correction_schema import base_commit_digest, effective_content_digest
 from data_modules.canon_correction_store import append_correction_request
+from data_modules.state_projection_writer import StateProjectionWriter
+from data_modules.context_manager import ContextManager
 
 
 def _activate(root):
@@ -92,6 +94,76 @@ def test_memory_and_rag_owner_results_cannot_claim_canon(tmp_path):
     assert {row["authority_claim"] for row in results} == {"CANON_AUTHORITY", "OWNER_AUTHORITY"}
 
 
+def test_generation_rag_has_distinct_bm25_vector_hybrid_and_graph_paths(tmp_path):
+    _commit, _snapshot, pinned, _publication = _activate(tmp_path)
+    projection = json.loads((pinned.generation_root / "vector/chapter_001.json").read_text(encoding="utf-8"))["projection"]
+    chunk = projection["chunks"][0]
+    assert chunk["terms"] and chunk["doc_length"] > 0 and chunk["embedding"]
+    view = OwnedRAGView(pinned, lambda _query: [])
+    bm25 = view.search("Canon summary", strategy="bm25")
+    vector = view.search("unrelated", strategy="vector", query_embedding=chunk["embedding"])
+    hybrid = view.search("Canon summary", strategy="hybrid", query_embedding=chunk["embedding"])
+    graph = view.search("Canon summary", strategy="graph_hybrid", query_embedding=chunk["embedding"],
+                        center_entities=["Canon"])
+    assert bm25 and bm25[0]["source"] == "bm25"
+    assert vector and vector[0]["source"] == "vector"
+    assert hybrid and hybrid[0]["source"] == "hybrid"
+    assert graph and graph[0]["source"] == "graph_hybrid"
+    assert all(row["generation_id"] == pinned.generation_id for row in graph)
+
+
+def test_rag_generation_excludes_stale_commit_rows_but_keeps_mutable_owner_rows(tmp_path):
+    _activate(tmp_path)
+    adapter = RAGAdapter.__new__(RAGAdapter)
+    adapter.config = SimpleNamespace(project_root=tmp_path)
+    adapter.bm25_search = lambda *_args, **_kwargs: [
+        SearchResult("stale", 1, 0, "stale Canon", 1.0, "bm25", source_file="commit:chapter_001"),
+        SearchResult("owner", 1, 0, "mutable planning note", 0.4, "bm25", source_file="owner"),
+    ]
+    results = asyncio.run(adapter.search("Canon", strategy="bm25", top_k=10))
+    assert any(row.chunk_id == "ch0001_summary" for row in results)
+    assert any(row.chunk_id == "owner" for row in results)
+    assert all(row.chunk_id != "stale" for row in results)
+
+
+def test_generation_bm25_matches_base_only_canon_bm25(tmp_path, monkeypatch):
+    from data_modules.vector_projection_writer import VectorProjectionWriter
+
+    commit = {
+        "meta": {"schema_version": "story-system/v1", "chapter": 1, "status": "accepted"},
+        "review_result": {"blocking_count": 0},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
+        "extraction_result": {"accepted_events": [], "state_deltas": [], "entity_deltas": [],
+                              "chapter_meta": {"title": "Canon title"},
+                              "summary_text": "Canon summary for BM25 parity"},
+    }
+    path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(commit), encoding="utf-8")
+    config = DataModulesConfig.from_project_root(tmp_path)
+    adapter = RAGAdapter(config)
+    monkeypatch.setattr(adapter.api_client, "embed_batch", lambda texts: _async_values([[0.25] * 16 for _ in texts]))
+    chunks = VectorProjectionWriter(tmp_path)._collect_chunks(commit)
+    asyncio.run(adapter.store_chunks(chunks))
+    base_only = adapter.bm25_search("Canon summary", log_query=False)
+    snapshot = EffectiveHistoryStore().read_active_snapshot(tmp_path)
+    built = build_effective_generation(tmp_path, snapshot)
+    protocol = ProjectionGeneration(tmp_path)
+    protocol.publish_generation(built["validated_generation"], None, snapshot.correction_lineage_digest)
+    pinned = protocol.pin_active_generation()
+    generation = OwnedRAGView(pinned, lambda _query: []).search("Canon summary", strategy="bm25")
+    legacy_score = next(row.score for row in base_only if row.chunk_id == "ch0001_summary")
+    generation_score = next(row["score"] for row in generation if row["chunk_id"] == "ch0001_summary")
+    assert generation_score == pytest.approx(legacy_score)
+
+
+def _async_values(value):
+    async def result():
+        return value
+    return result()
+
+
 def test_candidate_request_append_does_not_change_operation_pin(tmp_path):
     commit, _snapshot, pinned, _publication = _activate(tmp_path)
     original = OwnedProjectView.pin_active(tmp_path)
@@ -145,7 +217,7 @@ def test_rag_runtime_reads_pinned_canon_and_labels_legacy_owner_results(tmp_path
         source="bm25", chunk_type="planning", source_file="owner",
     )]
     results = asyncio.run(adapter.search("Canon", top_k=5))
-    assert any(row.chunk_id == "canon-chapter-1" for row in results)
+    assert any(row.chunk_id == "ch0001_summary" for row in results)
     assert any(row.chunk_id == "legacy" for row in results)
 
 
@@ -156,7 +228,7 @@ def test_state_manager_reads_pinned_view_and_writes_workflow_overlay(tmp_path):
     legacy_bytes = b'{"legacy_snapshot":true}\n'
     state_path.write_bytes(legacy_bytes)
     manager = StateManager(DataModulesConfig.from_project_root(tmp_path), enable_sqlite_sync=False)
-    assert manager.get_chapter_status(1) == "accepted"
+    assert manager.get_chapter_status(1) == "chapter_committed"
     manager.set_chapter_status(2, "chapter_drafted")
     assert state_path.read_bytes() == legacy_bytes
     view = OwnedStateStore(tmp_path).read_view(OwnedProjectView.pin_active(tmp_path).pinned)
@@ -195,3 +267,49 @@ def test_scratchpad_keeps_owner_writes_and_rejects_new_canon_owned_rows(tmp_path
     ))
     with pytest.raises(RuntimeError, match="Canon memory rows are immutable"):
         store.save(data)
+
+
+def test_generation_state_matches_legacy_reducer_and_context_semantics(tmp_path):
+    for chapter in range(1, 4):
+        events = []
+        if chapter == 1:
+            events.append({"event_id": "loop-create", "chapter": chapter,
+                           "event_type": "open_loop_created", "subject": "hero",
+                           "payload": {"description": "旧约"}})
+        if chapter == 3:
+            events.append({"event_id": "loop-close", "chapter": chapter,
+                           "event_type": "open_loop_closed", "subject": "hero",
+                           "payload": {"loop_id": "loop-create", "description": "旧约"}})
+        commit = {
+            "meta": {"schema_version": "story-system/v1", "chapter": chapter, "status": "accepted"},
+            "review_result": {"blocking_count": 0},
+            "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+            "disambiguation_result": {"pending": []},
+            "extraction_result": {
+                "accepted_events": events,
+                "entity_deltas": ([{"entity_id": "hero", "canonical_name": "林青", "is_protagonist": True}]
+                                   if chapter == 1 else []),
+                "state_deltas": [{"entity_id": "hero", "field": "location.city", "new": ["青城", "北港", "天都"][chapter - 1]},
+                                 {"entity_id": "hero", "field": "realm", "new": ["炼气", "筑基", "金丹"][chapter - 1]}],
+                "chapter_meta": {"title": f"第{chapter}章", "dominant_strand": ["quest", "fire", "constellation"][chapter - 1]},
+                "summary_text": f"第{chapter}章 林青 {chapter}",
+            },
+        }
+        path = tmp_path / f".story-system/commits/chapter_{chapter:03d}.commit.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(commit, ensure_ascii=False), encoding="utf-8")
+        StateProjectionWriter(tmp_path).apply(commit)
+
+    legacy = json.loads((tmp_path / ".webnovel/state.json").read_text(encoding="utf-8"))
+    snapshot = EffectiveHistoryStore().read_active_snapshot(tmp_path)
+    built = build_effective_generation(tmp_path, snapshot)
+    protocol = ProjectionGeneration(tmp_path)
+    protocol.publish_generation(built["validated_generation"], None, snapshot.correction_lineage_digest)
+    pinned = protocol.pin_active_generation()
+    actual = OwnedStateStore(tmp_path).read_view(pinned)
+    for key in ("entity_state", "protagonist_state", "strand_tracker", "plot_threads", "progress"):
+        assert actual.get(key) == legacy.get(key)
+    context = ContextManager(DataModulesConfig.from_project_root(tmp_path)).build_context(4)
+    assert context["core"]["protagonist_snapshot"]["name"] == "林青"
+    assert context["scene"]["location_context"]["city"] == "天都"
+    assert actual["plot_threads"]["foreshadowing"][0]["status"] == "resolved"

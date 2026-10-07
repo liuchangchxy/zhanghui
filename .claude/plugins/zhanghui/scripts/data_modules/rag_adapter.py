@@ -1112,14 +1112,69 @@ class RAGAdapter:
 
         owned_view = OwnedProjectView.pin_active(self.config.project_root)
         if owned_view is not None:
-            owner_results = self.bm25_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter)
+            strategy = str(strategy or "auto").lower()
+            if strategy == "auto":
+                intent_payload = (self.query_router.route_intent(query)
+                                  if hasattr(self, "query_router") else {})
+                strategy = ("graph_hybrid" if bool(getattr(self.config, "graph_rag_enabled", False))
+                            and bool(intent_payload.get("needs_graph")) else "hybrid")
+                if strategy == "graph_hybrid" and not center_entities:
+                    center_entities = list(intent_payload.get("entities") or [])
+            if strategy not in {"vector", "bm25", "hybrid", "graph_hybrid"}:
+                strategy = "hybrid"
+            if not hasattr(self, "api_client"):
+                owner_results = self.bm25_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter)
+            elif strategy == "vector":
+                owner_results = await self.vector_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter)
+            elif strategy == "bm25":
+                owner_results = self.bm25_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter)
+            elif strategy == "graph_hybrid":
+                owner_results = await self.graph_hybrid_search(
+                    query, top_k=top_k, chunk_type=chunk_type, chapter=chapter,
+                    center_entities=center_entities,
+                )
+            else:
+                owner_results = await self.hybrid_search(
+                    query, vector_top_k=top_k, bm25_top_k=top_k, rerank_top_n=top_k,
+                    chunk_type=chunk_type, chapter=chapter,
+                )
+            # Mutable compatibility rows carrying durable-commit provenance are
+            # not active Canon. Their generation-local replacements are below.
+            owner_results = [row for row in owner_results
+                             if not str(row.source_file or "").startswith("commit:")]
             owner_rows = [{"chunk_id": row.chunk_id, "chapter": row.chapter,
                            "scene_index": row.scene_index, "content": row.content,
                            "score": row.score, "source": row.source,
                            "chunk_type": row.chunk_type, "source_file": row.source_file,
                            "authority_claim": "LEGACY_COMPATIBILITY"}
                           for row in owner_results]
-            merged = OwnedRAGView(owned_view.pinned, lambda _query: owner_rows).search(query)
+            query_embedding = None
+            if strategy in {"vector", "hybrid", "graph_hybrid"} and hasattr(self, "api_client"):
+                embedded = await self.api_client.embed([query])
+                query_embedding = embedded[0] if embedded else None
+            merged = OwnedRAGView(owned_view.pinned, lambda _query: owner_rows).search(
+                query, strategy=strategy, query_embedding=query_embedding,
+                chunk_type=chunk_type, chapter=chapter, center_entities=center_entities,
+            )
+            if strategy in {"hybrid", "graph_hybrid"} and merged and hasattr(self, "api_client"):
+                candidates = merged[:max(top_k * 3, int(getattr(self.config, "rerank_top_n", top_k)))]
+                reranked = await self.api_client.rerank(
+                    query, [str(row.get("content") or "") for row in candidates], top_n=top_k,
+                )
+                if reranked:
+                    ordered = []
+                    for item in reranked:
+                        try:
+                            index = int(item.get("index"))
+                            if index < 0 or index >= len(candidates):
+                                continue
+                            row = dict(candidates[index])
+                            row["score"] = float(item.get("relevance_score", row.get("score") or 0.0))
+                            ordered.append(row)
+                        except (TypeError, ValueError, AttributeError):
+                            continue
+                    if ordered:
+                        merged = ordered + merged[len(candidates):]
             return [SearchResult(
                 chunk_id=str(row.get("chunk_id") or f"canon-chapter-{row['chapter']}"),
                 chapter=int(row["chapter"]), scene_index=int(row.get("scene_index") or 0),
