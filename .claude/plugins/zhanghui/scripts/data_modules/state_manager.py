@@ -451,6 +451,10 @@ class StateManager:
 
         baseline = getattr(self, "_activation_state_base", {})
         effective = view.state_view()
+        baseline_revision = (baseline.get("_view") or {}).get("owner_overlay_revision")
+        current_revision = (effective.get("_view") or {}).get("owner_overlay_revision")
+        if baseline_revision != current_revision:
+            raise RuntimeError("OWNER_STATE_REVISION_CONFLICT")
 
         def merge_owner_delta(base: Any, changed: Any, current: Any) -> Any:
             if changed == base:
@@ -497,7 +501,7 @@ class StateManager:
         if not values:
             return {"saved": False, "sqlite_sync_ok": True}
         revision = view.write_owner_values(
-            values, expected_revision=effective.get("_view", {}).get("owner_overlay_revision", 0))
+            values, expected_revision=baseline_revision)
         verified = view.state_view()
         for key, expected in values.items():
             target: Any = verified
@@ -508,6 +512,7 @@ class StateManager:
             if not matches:
                 raise RuntimeError(f"OWNER_STATE_READ_AFTER_WRITE_MISMATCH:{key}")
         view.assert_still_active()
+        self._state["_view"] = deepcopy(verified.get("_view", {}))
         self._activation_state_base = deepcopy(self._state)
         self._pending_disambiguation_warnings.clear()
         self._pending_disambiguation_pending.clear()

@@ -490,7 +490,28 @@ def _save_state_via_atomic(project_root: Path, state: dict) -> None:
         from .owned_project_view import OwnedViewError
         from story_craft import classify_story_craft_field
 
+        read_view = state.get("_view")
+        required_snapshot_fields = ("generation_id", "semantic_activation_id", "publication_record_id",
+                                    "publication_record_sha256", "owner_overlay_revision")
+        if (not isinstance(read_view, dict)
+                or any(field not in read_view for field in required_snapshot_fields)
+                or any(not isinstance(read_view.get(field), str) or not read_view[field]
+                       for field in required_snapshot_fields[:-1])
+                or not isinstance(read_view.get("owner_overlay_revision"), int)
+                or isinstance(read_view.get("owner_overlay_revision"), bool)
+                or read_view["owner_overlay_revision"] < 0):
+            raise OwnedViewError("OWNER_READ_SNAPSHOT_REQUIRED")
+        pinned = view.pinned
+        if (read_view.get("generation_id") != pinned.generation_id
+                or read_view.get("semantic_activation_id") != pinned.semantic_activation_id
+                or read_view.get("publication_record_id") != pinned.publication_record_id
+                or read_view.get("publication_record_sha256") != pinned.publication_record_sha256):
+            raise OwnedViewError("ACTIVE_PUBLICATION_CHANGED_DURING_OPERATION")
         current = view.state_view()
+        read_revision = read_view.get("owner_overlay_revision")
+        current_revision = current.get("_view", {}).get("owner_overlay_revision")
+        if read_revision != current_revision:
+            raise OwnedViewError("OWNER_STATE_REVISION_CONFLICT")
         owner_roots = ("story_craft", "planning", "promise_ledger", "review_checkpoints",
                        "workflow", "craft", "intent", "disambiguation_warnings",
                        "disambiguation_pending", "project_info", "volumes")
@@ -521,8 +542,7 @@ def _save_state_via_atomic(project_root: Path, state: dict) -> None:
             if source != target and source != {}:
                 values[path] = source
         if values:
-            expected_revision = current.get("_view", {}).get("owner_overlay_revision", 0)
-            view.write_owner_values(values, expected_revision=expected_revision)
+            view.write_owner_values(values, expected_revision=read_revision)
             verified = view.state_view()
             for key, expected in values.items():
                 target = verified

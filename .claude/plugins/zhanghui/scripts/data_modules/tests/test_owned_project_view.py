@@ -317,6 +317,97 @@ def test_owner_overlay_expected_revision_conflict_fails_closed(tmp_path):
         store.write_owner_values({"story_craft": {"second": True}}, expected_revision=0)
 
 
+def test_story_craft_cli_stale_owner_revision_fails_without_overwriting_external_value(tmp_path):
+    from data_modules.webnovel import _save_state_via_atomic
+
+    _activate(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_bytes = b'{"story_craft":{}}\n'
+    state_path.write_bytes(legacy_bytes)
+    view1 = OwnedProjectView.pin_active(tmp_path)
+    stale_state = view1.state_view()
+    OwnedStateStore(tmp_path).write_owner_values({"story_craft": {"plan": "external"}},
+                                                  expected_revision=0)
+    stale_state.setdefault("story_craft", {})["plan"] = "stale"
+
+    with pytest.raises(OwnedViewError, match="OWNER_STATE_REVISION_CONFLICT"):
+        _save_state_via_atomic(tmp_path, stale_state)
+
+    fresh = OwnedProjectView.pin_active(tmp_path)
+    assert fresh.state_view()["story_craft"]["plan"] == "external"
+    assert state_path.read_bytes() == legacy_bytes
+
+
+def test_story_craft_cli_enrolled_write_requires_original_read_snapshot(tmp_path):
+    from data_modules.webnovel import _save_state_via_atomic
+
+    _activate(tmp_path)
+    with pytest.raises(OwnedViewError, match="OWNER_READ_SNAPSHOT_REQUIRED"):
+        _save_state_via_atomic(tmp_path, {"story_craft": {"plan": "without snapshot"}})
+
+
+def test_story_craft_cli_enrolled_write_rejects_malformed_read_revision(tmp_path):
+    from data_modules.webnovel import _save_state_via_atomic
+
+    _activate(tmp_path)
+    stale_state = OwnedProjectView.pin_active(tmp_path).state_view()
+    stale_state["_view"]["owner_overlay_revision"] = "0"
+    with pytest.raises(OwnedViewError, match="OWNER_READ_SNAPSHOT_REQUIRED"):
+        _save_state_via_atomic(tmp_path, stale_state)
+
+
+def test_story_craft_cli_stale_publication_fails_without_writing_new_publication(tmp_path):
+    from data_modules.webnovel import _save_state_via_atomic
+
+    _commit, snapshot, _pinned, _record = _activate(tmp_path)
+    stale_state = OwnedProjectView.pin_active(tmp_path).state_view()
+    stale_state.setdefault("story_craft", {})["plan"] = "stale"
+    protocol = ProjectionGeneration(tmp_path)
+    active = protocol.pin_active_generation()
+    built = build_effective_generation(tmp_path, snapshot)
+    protocol.publish_generation(built["validated_generation"], active.publication_record_sha256,
+                                snapshot.correction_lineage_digest)
+
+    with pytest.raises(OwnedViewError, match="ACTIVE_PUBLICATION_CHANGED_DURING_OPERATION"):
+        _save_state_via_atomic(tmp_path, stale_state)
+
+    assert "plan" not in OwnedProjectView.pin_active(tmp_path).state_view().get("story_craft", {})
+
+
+@pytest.mark.parametrize("second_field", ["hook_type", "must_cover"])
+def test_state_manager_stale_owner_revision_fails_closed_for_same_or_disjoint_edits(tmp_path, second_field):
+    _activate(tmp_path)
+    manager_a = StateManager(DataModulesConfig.from_project_root(tmp_path), enable_sqlite_sync=False)
+    manager_b = StateManager(DataModulesConfig.from_project_root(tmp_path), enable_sqlite_sync=False)
+    manager_a._state.setdefault("chapter_meta", {}).setdefault("2", {})["hook_type"] = "悬念式"
+    manager_a._pending_chapter_meta["2"] = {"hook_type": "悬念式"}
+    manager_a.save_state()
+
+    if second_field == "hook_type":
+        manager_b._state.setdefault("chapter_meta", {}).setdefault("2", {})["hook_type"] = "反转式"
+        manager_b._pending_chapter_meta["2"] = {"hook_type": "反转式"}
+    else:
+        manager_b._state.setdefault("chapter_meta", {}).setdefault("2", {})["must_cover"] = ["B"]
+        manager_b._pending_chapter_meta["2"] = {"must_cover": ["B"]}
+
+    with pytest.raises(RuntimeError, match="OWNER_STATE_REVISION_CONFLICT"):
+        manager_b.save_state()
+    assert OwnedProjectView.pin_active(tmp_path).state_view()["chapter_meta"]["2"]["hook_type"] == "悬念式"
+
+
+def test_state_manager_sequential_owner_writes_refresh_read_snapshot(tmp_path):
+    _activate(tmp_path)
+    manager = StateManager(DataModulesConfig.from_project_root(tmp_path), enable_sqlite_sync=False)
+    manager._state.setdefault("chapter_meta", {}).setdefault("2", {})["hook_type"] = "悬念式"
+    manager._pending_chapter_meta["2"] = {"hook_type": "悬念式"}
+    manager.save_state()
+    manager._state["chapter_meta"]["2"]["hook_type"] = "反转式"
+    manager._pending_chapter_meta["2"] = {"hook_type": "反转式"}
+    manager.save_state()
+    assert OwnedProjectView.pin_active(tmp_path).state_view()["chapter_meta"]["2"]["hook_type"] == "反转式"
+
+
 def test_state_manager_save_state_routes_owner_mutations_to_overlay(tmp_path):
     _activate(tmp_path)
     state_path = tmp_path / ".webnovel/state.json"
