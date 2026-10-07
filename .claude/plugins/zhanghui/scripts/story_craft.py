@@ -110,6 +110,7 @@ def payoff_foreshadow(state: dict, foreshadow_id: str, chapter: int, quality: st
             item["status"] = "paid_off"
             item["payoff_chapter"] = chapter
             item["payoff_quality"] = quality
+            item["occurrence_evidence_status"] = "unverified"
             return state
     raise ValueError(f"foreshadow {foreshadow_id} not found")
 
@@ -147,6 +148,7 @@ def fulfill_timed_lock(state: dict, lock_id: str, chapter: int) -> dict:
                 raise ValueError(f"{lock_id} already fulfilled")
             item["status"] = "fulfilled"
             item["fulfilled_chapter"] = chapter
+            item["occurrence_evidence_status"] = "unverified"
             return state
     raise ValueError(f"timed_lock {lock_id} not found")
 
@@ -223,13 +225,15 @@ def add_thematic_echo(state: dict, premise: str, chapter: int, manifestation: st
         if item["premise"] == premise:
             item["echoes"].append({
                 "chapter": chapter,
-                "manifestation": manifestation
+                "manifestation": manifestation,
+                "occurrence_evidence_status": "unverified",
             })
             return state
     echoes.append({
         "id": _next_thematic_echo_id(echoes),
         "premise": premise,
-        "echoes": [{"chapter": chapter, "manifestation": manifestation}]
+        "echoes": [{"chapter": chapter, "manifestation": manifestation,
+                    "occurrence_evidence_status": "unverified"}]
     })
     return state
 
@@ -257,6 +261,135 @@ ALLOWED_CHAPTER_META_FIELDS = {
     "strand", "coolpoint",
     "time_anchor", "villain_tier",
 }
+
+# R1 semantic ownership is an exact field map. Unknown children do not inherit
+# the parent container's class and are returned untouched for diagnostics.
+_CRAFT_META_FIELDS = frozenset({
+    "beat_position", "hook_type", "scene_goal", "scene_conflict",
+    "scene_setback", "scene_resolution", "sequel_reaction", "sequel_dilemma",
+    "sequel_decision", "quality_evaluation", "craft_evaluation",
+})
+_INTENT_META_FIELDS = frozenset({
+    "must_cover", "forbidden", "CBN", "CPNs", "CEN", "strand",
+    "coolpoint", "time_anchor", "villain_tier",
+})
+_DOCUMENT_META_FIELDS = frozenset({"title", "word_count", "summary"})
+
+
+def classify_story_craft_field(field_path: str, value: Any = None, *,
+                               accepted_evidence_linked: bool = False) -> str:
+    """Classify only exact R1 field paths; never infer from prose or root key."""
+    if not isinstance(field_path, str) or not field_path:
+        return "UNKNOWN"
+    parts = field_path.split(".")
+    if parts[0] == "chapter_meta":
+        if len(parts) == 3 and parts[1].isdigit():
+            key = parts[2]
+        elif len(parts) == 2:
+            key = parts[1]
+        else:
+            return "UNKNOWN"
+        if key in _CRAFT_META_FIELDS:
+            return "CRAFT"
+        if key in _INTENT_META_FIELDS:
+            return "INTENT"
+        if key in _DOCUMENT_META_FIELDS:
+            return "DERIVED_REFERENCE"
+        if key in {"foreshadow_buried", "foreshadow_paid_off"}:
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        return "UNKNOWN"
+    if parts[0] != "story_craft" or len(parts) < 2:
+        return "UNKNOWN"
+    root, child = parts[1], parts[2] if len(parts) > 2 else None
+    if root.endswith("[]"):
+        root = root[:-2]
+    if child and child.endswith("[]"):
+        child = child[:-2]
+    if root == "rhythm_curve" or root in {"volume_beat", "volume_beats", "reader_contract",
+                                            "volume_anchors", "event_matrix", "pacing_history"}:
+        return "CRAFT"
+    if root == "foreshadow_chain":
+        if child in {"buried_quality", "payoff_quality", "quality_evaluation"}:
+            return "CRAFT"
+        if child in {"id", "type", "depth", "content", "buried_chapter",
+                     "expected_payoff_chapter", "payoff_method", "linked_entities", "status"}:
+            return "INTENT"
+        if child == "payoff_chapter":
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        if child == "occurrence_ref":
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        return "UNKNOWN"
+    if root == "timed_locks":
+        if child in {"id", "description", "trigger_chapter", "deadline_chapter", "status"}:
+            return "INTENT"
+        if child == "fulfilled_chapter":
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        if child == "occurrence_ref":
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        return "UNKNOWN"
+    if root == "character_arc":
+        if child in {"name", "starting_state", "ending_state", "transformation", "key_moments",
+                     "desired_change", "milestones", "target"}:
+            return "INTENT"
+        if child in {"quality", "evaluation", "structural_quality"}:
+            return "CRAFT"
+        return "UNKNOWN"
+    if root == "thematic_echoes":
+        if child == "premise":
+            return "INTENT"
+        if child in {"quality", "evaluation", "echo_quality"}:
+            return "CRAFT"
+        if child in {"echoes", "chapter", "manifestation"}:
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        if child == "occurrence_ref":
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        return "UNKNOWN"
+    return "UNKNOWN"
+
+
+def link_story_craft_occurrence(state: dict, *, collection: str, item_id: str,
+                                event_id: str, accepted_event_ids: set[str]) -> dict:
+    """Attach an exact accepted event reference; the event remains the authority."""
+    if not isinstance(event_id, str) or not event_id or event_id not in accepted_event_ids:
+        raise ValueError("occurrence reference must match an accepted event ID")
+    collections = {
+        "foreshadow_chain": "foreshadow_chain",
+        "timed_locks": "timed_locks",
+        "thematic_echoes": "thematic_echoes",
+    }
+    key = collections.get(collection)
+    if key is None:
+        raise ValueError(f"unsupported occurrence collection: {collection}")
+    for item in state.get("story_craft", {}).get(key, []):
+        if item.get("id") == item_id:
+            item["occurrence_ref"] = {"event_id": event_id}
+            item["occurrence_evidence_status"] = "linked_reference"
+            return state
+    raise ValueError(f"story craft item not found: {item_id}")
+
+
+def classify_mixed_metadata(value: Any, *, container: str,
+                            accepted_evidence_paths: set[str] | None = None) -> dict[str, Any]:
+    """Return field dispositions without mutating or discarding malformed data."""
+    if not isinstance(value, dict):
+        return {"fields": {}, "unknown": {"$value": value},
+                "diagnostics": [f"malformed_{container}"]}
+    evidence = accepted_evidence_paths or set()
+    fields: dict[str, str] = {}
+    unknown: dict[str, Any] = {}
+    for key, item in value.items():
+        path = f"{container}.{key}"
+        if container == "chapter_meta" and isinstance(item, dict):
+            unknown[path] = item
+            fields[path] = "UNKNOWN"
+            continue
+        owner = classify_story_craft_field(
+            path, item, accepted_evidence_linked=path in evidence)
+        fields[path] = owner
+        if owner == "UNKNOWN":
+            unknown[path] = item
+    return {"fields": fields, "unknown": unknown,
+            "diagnostics": [f"unknown_field:{path}" for path in sorted(unknown)]}
 
 
 def set_chapter_meta(state: dict, chapter: int, **fields) -> dict:
