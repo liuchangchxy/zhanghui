@@ -307,7 +307,7 @@ def run_craft_checks(state: dict, chapter: int) -> dict:
             vol_issues = check_volume_beat(state, volume=vol)
             for index, issue in enumerate(vol_issues):
                 record(
-                    "blockers" if "BLOCKER" in issue else "warnings",
+                    "warnings",
                     f"beat_compliance: {issue}", "story_craft.volume_beat",
                     f"chapter:{chapter}:volume:{vol}:beat_observation",
                     {"volume": vol, "rule_index": index},
@@ -318,7 +318,7 @@ def run_craft_checks(state: dict, chapter: int) -> dict:
         rhythm_status = check_rhythm_status(state)
         if rhythm_status == "block":
             n = state["story_craft"]["rhythm_curve"]["chapters_since_peak"]
-            record("blockers", f"foreshadow_compliance: 节奏曲线 BLOCK：chapters_since_peak={n}",
+            record("warnings", f"foreshadow_compliance: 节奏曲线 BLOCK：chapters_since_peak={n}",
                    "story_craft.rhythm_curve", f"chapter:{chapter}:rhythm_curve",
                    {"chapters_since_peak": n})
         elif rhythm_status == "warning":
@@ -330,7 +330,7 @@ def run_craft_checks(state: dict, chapter: int) -> dict:
     if "timed_locks" in state.get("story_craft", {}):
         overdue = check_timed_lock_deadlines(state, current_chapter=chapter)
         for lock in overdue:
-            record("blockers", f"foreshadow_compliance: 定时锁逾期：{lock['id']} deadline={lock['deadline_chapter']}",
+            record("warnings", f"foreshadow_compliance: 定时锁逾期：{lock['id']} deadline={lock['deadline_chapter']}",
                    "story_craft.timed_lock", f"timed_lock:{lock['id']}",
                    {"lock_id": lock["id"], "deadline_chapter": lock["deadline_chapter"], "observed_chapter": chapter})
 
@@ -345,13 +345,13 @@ def run_craft_checks(state: dict, chapter: int) -> dict:
     if cm:
         ss_issues = check_scene_sequel(cm)
         for index, issue in enumerate(ss_issues):
-            record("blockers" if issue.startswith("BLOCKER") else "warnings",
+            record("warnings",
                    f"beat_compliance: Scene-Sequel: {issue}", "story_craft.scene_sequel",
                    f"chapter:{chapter}:scene_sequel", {"chapter": chapter, "rule_index": index})
 
         # Hook type
         if not cm.get("hook_type"):
-            record("blockers", "foreshadow_compliance: 章末 hook_type 未声明",
+            record("warnings", "foreshadow_compliance: 章末 hook_type 未声明",
                    "story_craft.hook_type", f"chapter:{chapter}:hook_type",
                    {"hook_type_present": False})
 

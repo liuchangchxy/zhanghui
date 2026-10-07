@@ -34,14 +34,14 @@ def evaluate_pre_write_gates(
 ) -> list[str]:
     """tianming 六道门禁模式: 写前检查跨卷伏笔 overdue.
 
-    Returns a list of issue strings. BLOCKER if any overdue foreshadow
-    exists. Empty list means gates passed.
+    Returns advisory issue strings for overdue foreshadows. This observation
+    never prevents writing; explicit user constraints are handled separately.
     """
     issues: list[str] = []
     for entry in overdue_foreshadows:
         issues.append(
-            f"BLOCKER: foreshadow {entry.id} overdue — must be paid off before "
-            f"writing chapter {chapter} (volume {current_volume})"
+            f"ADVISORY: foreshadow {entry.id} is overdue — consider the plan deviation "
+            f"while writing chapter {chapter} (volume {current_volume})"
         )
     return issues
 
@@ -80,7 +80,7 @@ def evaluate_pre_write_gates_with_threshold(
             remaining = e.expected_payoff_chapter - chapter
             if 0 < remaining <= threshold:
                 issues.append(
-                    f"BLOCKER: foreshadow {e.id} approaching payoff "
+                    f"ADVISORY: foreshadow {e.id} approaching payoff "
                     f"({remaining} chapters away, threshold={threshold})"
                 )
     return issues

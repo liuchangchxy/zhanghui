@@ -248,11 +248,9 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
   story-craft init-locks --volume {volume_id}
 ```
 
-本地规划前置条件：
-- 深层伏笔 < 1 → 暂停当前大纲生成，补齐规划输入
-- 中层伏笔 < 3 → 暂停当前大纲生成，补齐规划输入
-- 卷级定时锁 < 3 → 暂停当前大纲生成，补齐规划输入
-这些数量要求只约束本地大纲生成步骤，不映射到 `GateSeverityPolicy`。
+本地规划建议：
+- 深层伏笔 < 1、中层伏笔 < 3 或卷级定时锁 < 3 时，记录为规划建议并让作者决定是否继续。
+这些数量启发式不构成事实矛盾或硬阻断；只有缺少明确要求的工作流材料、Canon 冲突或完整性错误才暂停。
 
 ### Step 7：批量生成章纲
 
@@ -328,7 +326,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
 - ✅ 每章 Scene-Sequel 必填字段不缺失
 - ✅ 每章 hook_type 已声明
 
-输出需要作者裁决的规划问题 → 暂停当前规划步骤 → 用户裁决 → 继续 Step 9。此流程是本地规划步骤控制，不改变 GateSeverityPolicy 对 craft findings 的 advisory 语义。
+输出规划建议供作者查看；作者可以继续 Step 9。仅将明确用户硬约束、Canon 冲突、必要工作流材料缺失或完整性错误升级为阻断。
 
 ### Step 9：验证、保存并更新状态
 

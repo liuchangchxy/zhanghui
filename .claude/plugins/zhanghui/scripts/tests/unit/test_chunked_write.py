@@ -38,8 +38,8 @@ def test_evaluate_pre_write_gates_no_overdue():
     assert issues == []
 
 
-def test_evaluate_pre_write_gates_with_overdue_returns_blocker():
-    """Any overdue foreshadow → BLOCKER list."""
+def test_evaluate_pre_write_gates_with_overdue_returns_advisory():
+    """An overdue foreshadow is a planning advisory, never a write blocker."""
     # Mock entry-like object with .id attribute
     class FakeEntry:
         id = "fs_over1_1"
@@ -48,7 +48,7 @@ def test_evaluate_pre_write_gates_with_overdue_returns_blocker():
         overdue_foreshadows=[FakeEntry()],
     )
     assert len(issues) == 1
-    assert "BLOCKER" in issues[0]
+    assert "ADVISORY" in issues[0]
     assert "fs_over1_1" in issues[0]
 
 
@@ -139,7 +139,7 @@ def test_evaluate_pre_write_gates_with_threshold_default_disabled_for_old_helper
 
 
 def test_evaluate_pre_write_gates_with_threshold_combines_overdue_and_pre():
-    """I9: with_threshold path surfaces BOTH overdue and pre-overdue BLOCKERs."""
+    """Both overdue and pre-overdue conditions remain advisory."""
     ledger = PromiseLedger()
     # Overdue entry (payoff in past)
     ledger.upsert(ForeshadowEntry(
@@ -162,6 +162,6 @@ def test_evaluate_pre_write_gates_with_threshold_combines_overdue_and_pre():
     issues = evaluate_pre_write_gates_with_threshold(
         chapter=110, current_volume=2, ledger=ledger, threshold=50,
     )
-    # Both BLOCKERs present
+    # Both advisory observations present
     assert any("fs_o" in i and "overdue" in i for i in issues)
     assert any("fs_p" in i and "approaching payoff" in i for i in issues)
