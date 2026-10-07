@@ -17,7 +17,7 @@ from .config import DataModulesConfig
 from .effective_history import EffectiveHistoryStore
 from .owned_project_view import activation_health_report
 from .projection_generation import ProjectionGeneration
-from .story_event_schema import StoryEvent
+from .story_craft_evidence import resolve_story_craft_occurrences
 from story_craft import classify_story_craft_field
 
 
@@ -153,27 +153,7 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             field_classes["story_craft"] = "UNKNOWN"
             return
         snapshot = EffectiveHistoryStore().read_active_snapshot(root)
-        accepted_events_by_id: dict[str, list[StoryEvent]] = {}
-        accepted_id_counts: dict[str, int] = {}
-        for chapter_entry in snapshot.chapters.values():
-            if chapter_entry.status != "accepted":
-                continue
-            for event in (chapter_entry.extraction_result or {}).get("accepted_events", []):
-                if not isinstance(event, dict) or not isinstance(event.get("event_id"), str):
-                    continue
-                event_id = event["event_id"]
-                accepted_id_counts[event_id] = accepted_id_counts.get(event_id, 0) + 1
-                try:
-                    validated_event = StoryEvent.model_validate(event)
-                except Exception:
-                    continue
-                if validated_event.chapter != chapter_entry.chapter:
-                    continue
-                accepted_events_by_id.setdefault(event_id, []).append(validated_event)
-        accepted_events_by_id = {
-            event_id: events for event_id, events in accepted_events_by_id.items()
-            if accepted_id_counts.get(event_id) == 1 and len(events) == 1
-        }
+        occurrence_evidence = resolve_story_craft_occurrences(value, snapshot)
         # Exact known shapes. Nested objects are allowlisted per container;
         # the classifier supplies semantic class for every leaf.
         schemas = {
@@ -252,24 +232,10 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                                          "thematic_echoes": {"id", "premise", "echoes"}}[key]
                     if not required_children <= set(item):
                         bad(f"{path}.{idx}", "malformed_story_craft_container")
-                    accepted_occurrence_link = False
-                    linked_event = None
-                    occurrence_ref = item.get("occurrence_ref")
-                    if isinstance(occurrence_ref, dict) and set(occurrence_ref) == {"event_id"}:
-                        event_id = occurrence_ref.get("event_id")
-                        matches = accepted_events_by_id.get(event_id, []) if isinstance(event_id, str) else []
-                        if len(matches) == 1:
-                            accepted_occurrence_link = True
-                            linked_event = matches[0]
+                    item_path = f"story_craft.{key}.{idx}"
+                    accepted_occurrence_link = f"{item_path}.occurrence_ref" in occurrence_evidence
                     def claim_has_link(field_name: str) -> bool:
-                        if not linked_event:
-                            return False
-                        occurrence_fields = {"buried_chapter", "payoff_chapter", "fulfilled_chapter"}
-                        claims = [name for name in occurrence_fields
-                                  if item.get(name) is not None and item.get(name) == linked_event.chapter]
-                        if len(claims) != 1 or claims[0] != field_name:
-                            return False
-                        return True
+                        return f"{item_path}.{field_name}" in occurrence_evidence
                     for child, child_val in item.items():
                         child_path = f"{path}.{idx}.{child}"
                         if child not in allowed_child: bad(child_path); continue
@@ -302,7 +268,7 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                                     ep = f"{child_path}.{ei}.{ec}"
                                     if ec == "chapter": shape(ep, echo[ec], "int")
                                     elif ec == "manifestation": shape(ep, echo[ec], "str")
-                                    classify(ep, echo[ec], accepted_evidence_linked=accepted_occurrence_link)
+                                    classify(ep, echo[ec], accepted_evidence_linked=ep in occurrence_evidence)
                         else: classify(child_path, child_val,
                                        accepted_evidence_linked=claim_has_link(child))
                 continue
@@ -443,6 +409,15 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         else:
             for chapter_key, fields in chapter_meta.items():
                 prefix = f"chapter_meta.{chapter_key}"
+                if not str(chapter_key).isdigit() or int(chapter_key) < 1:
+                    field_classes[prefix] = "UNCLASSIFIED_CONFLICT"
+                    conflicts.append({"kind": "malformed_chapter_meta_chapter",
+                                      "path": f".webnovel/state.json:{prefix}",
+                                      "requires": "positive canonical chapter number"})
+                    if isinstance(fields, dict):
+                        for field_name in fields:
+                            field_classes[f"{prefix}.{field_name}"] = "UNCLASSIFIED_CONFLICT"
+                    continue
                 if not isinstance(fields, dict):
                     field_classes[prefix] = "UNKNOWN"
                     conflicts.append({"kind": "malformed_chapter_meta_entry",
@@ -1017,10 +992,10 @@ def _validated_backup(root: Path, plan: MigrationPlan,
 
 
 def _prepare_owner_overlay(root: Path) -> int:
-    from .owned_project_view import OwnedStateStore
+    from .owned_project_view import OwnedStateStore, _is_owner_state_path
 
     state = _json_file(root / ".webnovel/state.json") or {}
-    _, inventory_conflicts = _owner_inventory(root)
+    inventory, inventory_conflicts = _owner_inventory(root)
     unsafe_story_craft = [item["path"] for item in inventory_conflicts
                           if item.get("path", "").startswith(".webnovel/state.json:story_craft")]
     if unsafe_story_craft:
@@ -1032,10 +1007,7 @@ def _prepare_owner_overlay(root: Path) -> int:
     owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
                    "workflow", "craft", "intent", "disambiguation_warnings",
                    "disambiguation_pending", "project_info", "volumes"}
-    allowed_overlay_paths = owner_roots | {"progress.volumes_planned", "progress.current_volume",
-                                           "progress.total_volumes", "progress.chapter_status",
-                                           "progress.volumes_completed", "progress.last_updated"}
-    unknown_overlay_paths = set(overlay["values"]) - allowed_overlay_paths
+    unknown_overlay_paths = {key for key in overlay["values"] if not _is_owner_state_path(key)}
     if unknown_overlay_paths:
         raise MigrationError(f"UNMAPPED_EXISTING_OVERLAY:{sorted(unknown_overlay_paths)}")
     for key in owner_roots:
@@ -1045,6 +1017,16 @@ def _prepare_owner_overlay(root: Path) -> int:
     for key in ("volumes_planned", "current_volume", "total_volumes", "volumes_completed", "last_updated"):
         if key in progress:
             additions[f"progress.{key}"] = progress[key]
+    field_classes = inventory.get("state", {}).get("field_classifications", {})
+    chapter_meta = state.get("chapter_meta")
+    if isinstance(chapter_meta, dict):
+        for chapter, fields in chapter_meta.items():
+            if not isinstance(fields, dict) or not str(chapter).isdigit() or int(chapter) < 1:
+                continue
+            for field_name, value in fields.items():
+                path = f"chapter_meta.{chapter}.{field_name}"
+                if field_classes.get(path) in {"CRAFT", "INTENT"}:
+                    additions[path] = value
     for key, value in additions.items():
         if key in values and values[key] != value:
             raise MigrationError(f"OWNER_OVERLAY_CONFLICT:{key}")

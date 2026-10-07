@@ -149,6 +149,54 @@ def test_chapter_meta_exact_owner_fields_map_to_overlay_paths(tmp_path):
     assert dispositions["chapter_meta.8.title"]["destination"] == "legacy_preserved_source"
 
 
+def test_migration_copies_only_classified_chapter_meta_owner_fields(tmp_path):
+    from data_modules.project_migration import migrate_project
+    from data_modules.owned_project_view import OwnedProjectView
+
+    commit_path = _root_with_base(tmp_path)
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["chapter_meta"] = {}
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    state_path = tmp_path / ".webnovel/state.json"
+    legacy_state = {"chapter_meta": {"8": {
+        "hook_type": "悬念式", "must_cover": ["A"], "title": "第八章",
+    }}}
+    legacy_bytes = json.dumps(legacy_state, ensure_ascii=False).encode("utf-8") + b"\n"
+    state_path.write_bytes(legacy_bytes)
+
+    report = preflight_project(tmp_path)
+    paths_reported_copied = [path for path, row in report.owner_mappings["state"]["field_dispositions"].items()
+                              if path.startswith("chapter_meta.") and row["copied"]]
+    assert paths_reported_copied == ["chapter_meta.8.hook_type", "chapter_meta.8.must_cover"]
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+
+    overlay = json.loads((tmp_path / ".webnovel/state-overlay.json").read_text(encoding="utf-8"))
+    assert overlay["values"]["chapter_meta.8.hook_type"] == "悬念式"
+    assert overlay["values"]["chapter_meta.8.must_cover"] == ["A"]
+    assert "chapter_meta.8.title" not in overlay["values"]
+    assert state_path.read_bytes() == legacy_bytes
+    effective = OwnedProjectView.pin_active(tmp_path).state_view()["chapter_meta"]["8"]
+    assert effective["hook_type"] == "悬念式"
+    assert effective["must_cover"] == ["A"]
+    assert "title" not in effective
+
+
+def test_migration_preflight_blocks_non_numeric_chapter_meta_owner_paths(tmp_path):
+    _root_with_base(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"chapter_meta": {"bad": {"hook_type": "悬念式"}}}),
+                          encoding="utf-8")
+
+    report = preflight_project(tmp_path)
+
+    assert not report.ok
+    assert any(row["kind"] == "malformed_chapter_meta_chapter" for row in report.conflicts)
+    dispositions = report.owner_mappings["state"]["field_dispositions"]
+    assert dispositions["chapter_meta.bad.hook_type"]["copied"] is False
+
+
 def test_pending_and_rejected_candidates_do_not_change_active_status(tmp_path):
     _active_root(tmp_path)
     base = _commit()

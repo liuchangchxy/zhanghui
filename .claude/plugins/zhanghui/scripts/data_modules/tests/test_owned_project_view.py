@@ -343,6 +343,41 @@ def test_state_manager_save_state_routes_owner_mutations_to_overlay(tmp_path):
     assert manager2._state.get("story_craft", {}).get("rhythm_curve") == {"chapters_since_peak": 3}
 
 
+def test_enrolled_chapter_meta_owner_fields_can_be_edited_without_touching_legacy_state(tmp_path):
+    _activate(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_bytes = b'{"chapter_meta":{"2":{"title":"legacy title"}}}\n'
+    state_path.write_bytes(legacy_bytes)
+    manager = StateManager(DataModulesConfig.from_project_root(tmp_path), enable_sqlite_sync=False)
+
+    manager._state.setdefault("chapter_meta", {}).setdefault("2", {}).update({
+        "hook_type": "悬念式", "must_cover": ["A"],
+    })
+    manager._pending_chapter_meta["2"] = {"hook_type": "悬念式", "must_cover": ["A"]}
+    manager.save_state()
+
+    manager._state["chapter_meta"]["2"].update({"hook_type": "揭示式", "must_cover": ["B"]})
+    manager._pending_chapter_meta["2"] = {"hook_type": "揭示式", "must_cover": ["B"]}
+    manager.save_state()
+
+    fresh_view = OwnedProjectView.pin_active(tmp_path)
+    assert fresh_view.state_view()["chapter_meta"]["2"] == {"hook_type": "揭示式", "must_cover": ["B"]}
+    assert state_path.read_bytes() == legacy_bytes
+    restarted = StateManager(DataModulesConfig.from_project_root(tmp_path), enable_sqlite_sync=False)
+    assert restarted._state["chapter_meta"]["2"]["hook_type"] == "揭示式"
+    assert restarted._state["chapter_meta"]["2"]["must_cover"] == ["B"]
+
+
+def test_enrolled_unknown_chapter_meta_field_fails_closed(tmp_path):
+    _activate(tmp_path)
+    manager = StateManager(DataModulesConfig.from_project_root(tmp_path), enable_sqlite_sync=False)
+    manager._state.setdefault("chapter_meta", {}).setdefault("2", {})["future_claim"] = "unknown"
+    manager._pending_chapter_meta["2"] = {"future_claim": "unknown"}
+    with pytest.raises(RuntimeError, match="UNMAPPED_CHAPTER_META:2.future_claim"):
+        manager.save_state()
+
+
 def test_state_manager_rejects_publication_change_since_load(tmp_path):
     _commit, snapshot, _pinned, _record = _activate(tmp_path)
     manager = StateManager(DataModulesConfig.from_project_root(tmp_path), enable_sqlite_sync=False)
@@ -379,6 +414,10 @@ def test_story_craft_cli_routes_enrolled_mutation_to_overlay(tmp_path):
     view_state = OwnedProjectView.pin_active(tmp_path).state_view()
     assert "story_craft" in view_state
     assert view_state["chapter_meta"]["2"]["hook_type"] == "悬念式"
+    args.hook_type = "反转式"
+    assert cmd_story_craft(args) == 0
+    assert OwnedProjectView.pin_active(tmp_path).state_view()["chapter_meta"]["2"]["hook_type"] == "反转式"
+    assert state_path.read_bytes() == legacy_bytes
 
 
 def test_story_craft_overlay_failure_raises_without_touching_legacy_file(tmp_path, monkeypatch):

@@ -493,9 +493,6 @@ class StateManager:
                 for field_name, value in fields.items():
                     if classify_story_craft_field(f"chapter_meta.{chapter}.{field_name}") not in {"CRAFT", "INTENT"}:
                         raise RuntimeError(f"UNMAPPED_CHAPTER_META:{chapter}.{field_name}")
-                    existing = effective.get("chapter_meta", {}).get(str(chapter), {}).get(field_name)
-                    if existing is not None and existing != value:
-                        raise RuntimeError(f"OWNER_CANON_STATE_COLLISION:chapter_meta.{chapter}.{field_name}")
                     values[f"chapter_meta.{chapter}.{field_name}"] = deepcopy(value)
         if not values:
             return {"saved": False, "sqlite_sync_ok": True}

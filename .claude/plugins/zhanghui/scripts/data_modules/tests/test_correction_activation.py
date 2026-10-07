@@ -96,6 +96,92 @@ def test_correction_rebuild_reopens_source_chapter_obligation_without_duplicates
     assert corrected_obligations[0]["status"] == "active"
 
 
+def test_context_obligations_follow_effective_correction_replay_without_merging_planner_rows(tmp_path):
+    from data_modules.context_provenance import build_governed_context
+    from data_modules.canon_correction_store import activate_correction
+
+    events = {
+        1: [
+            {"event_id": "L1", "chapter": 1, "event_type": "open_loop_created",
+             "subject": "loop", "payload": {"content": "loop question"}},
+            {"event_id": "P1", "chapter": 1, "event_type": "promise_created",
+             "subject": "promise", "payload": {"content": "promise"}},
+        ],
+        2: [
+            {"event_id": "L1-close", "chapter": 2, "event_type": "open_loop_closed",
+             "subject": "loop", "payload": {"loop_id": "L1"}},
+            {"event_id": "P1-paid", "chapter": 2, "event_type": "promise_paid_off",
+             "subject": "promise", "payload": {"promise_id": "P1"}},
+        ],
+    }
+    commits = _active_root(tmp_path, chapters=2, events_by_chapter=events)
+    OwnedStateStore(tmp_path).write_owner_values({"project_info": {"promise_ledger": [
+        {"id": "P1", "canon_event_ref": "P1", "status": "deferred"},
+    ]}})
+
+    def context_rows():
+        view = OwnedProjectView.pin_active(tmp_path)
+        bundle = build_governed_context(project_root=tmp_path, chapter=3,
+                                        state=view.state_view(), source_sections={}, owned_view=view)
+        return bundle["intent"]
+
+    def derived(rows):
+        return {row["source_identity"]: row["content"] for row in rows
+                if row["semantic_class"] == "CANON_DERIVED_OBLIGATION"}
+
+    initial = context_rows()
+    obligations = derived(initial)
+    assert set(obligations) == {"L1", "P1"}
+    assert obligations["L1"]["status"] == "resolved"
+    assert obligations["P1"]["status"] == "paid_off"
+    assert len([row for row in initial if row.get("owner") == "promise_ledger"]) == 1
+    assert obligations["L1"]["resolution_event_id"] == "L1-close"
+    assert obligations["P1"]["resolution_event_id"] == "P1-paid"
+
+    authorization = _stage_retract(tmp_path, 2, commits[1][0], "TEST-ONLY-context-remove-resolution")
+    assert activate_correction(tmp_path, "TEST-ONLY-context-remove-resolution", authorization).ok
+    reopened = derived(context_rows())
+    assert set(reopened) == {"L1", "P1"}
+    assert reopened["L1"]["status"] == "active"
+    assert reopened["P1"]["status"] == "active"
+    assert "resolution_event_id" not in reopened["L1"]
+    assert "resolution_event_id" not in reopened["P1"]
+
+    source_authorization = _stage_retract(tmp_path, 1, commits[0][0], "TEST-ONLY-context-remove-source")
+    assert activate_correction(tmp_path, "TEST-ONLY-context-remove-source", source_authorization).ok
+    assert derived(context_rows()) == {}
+
+
+def test_context_occurrence_link_is_downgraded_when_effective_event_is_retracted(tmp_path):
+    from data_modules.context_provenance import build_governed_context
+    from data_modules.canon_correction_store import activate_correction
+
+    events = {1: [{"event_id": "E1", "chapter": 1, "event_type": "open_loop_created",
+                   "subject": "TEST", "payload": {"content": "setup"}}]}
+    commits = _active_root(tmp_path, chapters=1, events_by_chapter=events)
+    craft = {"foreshadow_chain": [{"id": "FS1", "type": "物谶", "depth": "表层",
+                                   "buried_chapter": 1, "occurrence_ref": {"event_id": "E1"}}]}
+    OwnedStateStore(tmp_path).write_owner_values({"story_craft": craft})
+
+    def build_context():
+        view = OwnedProjectView.pin_active(tmp_path)
+        return build_governed_context(project_root=tmp_path, chapter=2,
+                                      state=view.state_view(), source_sections={}, owned_view=view)
+
+    linked = build_context()
+    assert any(row["semantic_class"] == "DERIVED_REFERENCE" and row.get("source_identity") == "E1"
+               for row in linked["reference"])
+
+    authorization = _stage_retract(tmp_path, 1, commits[0][0], "TEST-ONLY-remove-occurrence-event")
+    assert activate_correction(tmp_path, "TEST-ONLY-remove-occurrence-event", authorization).ok
+    corrected = build_context()
+    assert not any(row["semantic_class"] == "DERIVED_REFERENCE" and row.get("source_identity") == "E1"
+                   for row in corrected["reference"])
+    assert any(row["semantic_role"] == "UNKNOWN" and isinstance(row["content"], list)
+               and any(field.get("path", "").endswith("buried_chapter") for field in row["content"])
+               for row in corrected["reference"])
+
+
 def _stage_retract(root, chapter, base, correction_id, *, interaction_id=None, prior_verifications=(),
                    return_verification=False):
     active = EffectiveHistoryStore().read_active_snapshot(root)

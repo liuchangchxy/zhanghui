@@ -25,11 +25,6 @@ _OWNER_STATE_ROOTS = {"story_craft", "planning", "promise_ledger", "review_check
                       "disambiguation_pending", "project_info", "volumes"}
 _OWNER_STATE_PATHS = {"progress.volumes_planned", "progress.current_volume", "progress.last_updated",
                       "progress.total_volumes", "progress.chapter_status", "progress.volumes_completed"}
-_CHAPTER_META_OWNER_FIELDS = {"beat_position", "hook_type", "scene_goal", "scene_conflict",
-                              "scene_setback", "scene_resolution", "sequel_reaction",
-                              "sequel_dilemma", "sequel_decision", "quality_evaluation",
-                              "craft_evaluation", "must_cover", "forbidden", "CBN", "CPNs",
-                              "CEN", "strand", "coolpoint", "time_anchor", "villain_tier"}
 _CANON_STATE_ROOTS = {"entity_state", "protagonist_state", "strand_tracker"}
 
 
@@ -43,8 +38,13 @@ def _is_owner_state_path(key: str) -> bool:
     if key in _OWNER_STATE_PATHS or key in _OWNER_STATE_ROOTS:
         return True
     parts = key.split(".")
-    return (len(parts) == 3 and parts[0] == "chapter_meta" and parts[1].isdigit()
-            and parts[2] in _CHAPTER_META_OWNER_FIELDS)
+    if len(parts) != 3 or parts[0] != "chapter_meta" or not parts[1].isdigit():
+        return False
+    if int(parts[1]) < 1:
+        return False
+    from story_craft import classify_story_craft_field
+
+    return classify_story_craft_field(key) in {"CRAFT", "INTENT"}
 
 
 def _chapter_documents(pinned: PinnedGeneration, domain: str) -> list[dict[str, Any]]:

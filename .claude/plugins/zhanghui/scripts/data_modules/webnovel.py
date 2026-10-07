@@ -509,8 +509,6 @@ def _save_state_via_atomic(project_root: Path, state: dict) -> None:
                     semantic = classify_story_craft_field(f"chapter_meta.{chapter_key}.{field_name}")
                     if semantic not in {"CRAFT", "INTENT"}:
                         raise OwnedViewError(f"UNMAPPED_CHAPTER_META:{chapter_key}.{field_name}")
-                    if field_name in before and before[field_name] != value:
-                        raise OwnedViewError(f"OWNER_CANON_STATE_COLLISION:chapter_meta.{chapter_key}.{field_name}")
                     values[f"chapter_meta.{chapter_key}.{field_name}"] = value
         for path in ("progress.current_volume", "progress.volumes_planned",
                      "progress.volumes_completed", "progress.total_volumes", "progress.last_updated"):
