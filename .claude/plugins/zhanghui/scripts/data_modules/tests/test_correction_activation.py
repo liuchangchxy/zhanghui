@@ -291,14 +291,31 @@ def test_new_chapter_retry_preserves_concurrent_correction_activation(tmp_path, 
         race["calls"] += 1
         if race["calls"] == 2 and not race["activated"]:
             race["activated"] = True
-            from data_modules.effective_history import ActiveEffectiveHistorySnapshot
+            from data_modules.canon_correction_schema import artifact_sha256
+            from data_modules.effective_history import ActiveEffectiveHistorySnapshot, _snapshot_digests
             candidate = store.resolve_candidate(tmp_path, "TEST-ONLY-chapter-correction-race")
+            corrected_chapters = {1: candidate.chapters[1]}
+            base_digest, lineage_digest, history_digest = _snapshot_digests(corrected_chapters)
+            artifact_dependencies = [item for item in candidate.dependencies
+                                     if item.get("kind") in {"correction", "request", "authorization"}]
+            exact_lineage_digest = artifact_sha256({
+                "effective_lineage_digest": lineage_digest,
+                "artifacts": artifact_dependencies,
+            })
             corrected = ActiveEffectiveHistorySnapshot(
                 True, candidate.chapters, snapshot.activation_record_id,
-                candidate.base_set_digest, candidate.correction_lineage_digest,
-                candidate.effective_history_digest, snapshot.generation_id, (),
+                base_digest, exact_lineage_digest, history_digest,
+                snapshot.generation_id, (),
                 candidate.dependencies, candidate.lineage_namespace_checks,
                 snapshot.publication_record_sha256, snapshot.semantic_activation_id,
+            )
+            corrected = ActiveEffectiveHistorySnapshot(
+                corrected.ok, corrected_chapters, corrected.activation_record_id,
+                corrected.base_set_digest, corrected.correction_lineage_digest,
+                corrected.effective_history_digest, corrected.generation_id,
+                corrected.diagnostics, corrected.dependencies,
+                corrected.lineage_namespace_checks, corrected.publication_record_sha256,
+                corrected.semantic_activation_id,
             )
             built = build_effective_generation(
                 tmp_path, corrected, previous_generation_id=snapshot.generation_id)
@@ -313,7 +330,7 @@ def test_new_chapter_retry_preserves_concurrent_correction_activation(tmp_path, 
     monkeypatch.setattr(EffectiveHistoryStore, "read_active_snapshot", original)
     active = original(EffectiveHistoryStore(), tmp_path)
     assert active.chapters[1].extraction_result["summary_text"] == "Correction S2"
-    assert set(active.chapters) == {1, 2}
+    assert set(active.chapters) == {1}
 
     ChapterCommitService(tmp_path).apply_projections(_commit(2), on_conflict="skip")
     retried = original(EffectiveHistoryStore(), tmp_path)
