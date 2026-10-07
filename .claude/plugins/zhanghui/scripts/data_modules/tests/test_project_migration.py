@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import shutil
 
 import pytest
 
@@ -162,3 +163,286 @@ def test_verified_backup_copies_sqlite_and_all_sidecars_and_restores_hashes(tmp_
     assert manifest["manifest_sha256"] == backup.manifest_sha256
     assert all(row["file_type"] == "regular_file" and isinstance(row["size_bytes"], int)
                for row in manifest["files"])
+
+
+def test_explicit_migration_requires_verified_backup_and_publishes_complete_generation(tmp_path):
+    from data_modules.project_migration import migrate_project
+
+    commit_path = _root_with_base(tmp_path)
+    original_commit = commit_path.read_bytes()
+    expected_history_digest = EffectiveHistoryStore().read_active_snapshot(tmp_path).effective_history_digest
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    with pytest.raises(MigrationError, match="VERIFIED_BACKUP_REQUIRED"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, None)
+
+    backup = create_verified_backup(tmp_path, plan)
+    result = migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    assert result.publication["body"]["publication_kind"] == "semantic_activation"
+    assert result.publication["body"]["effective_history_digest"] == expected_history_digest
+    assert result.backup_manifest_sha256 == backup.manifest_sha256
+    assert commit_path.read_bytes() == original_commit
+    assert (tmp_path / ".story-system/effective-history/enrollment.json").is_file()
+    assert (tmp_path / ".webnovel/state-overlay.json").is_file()
+    pinned = ProjectionGeneration(tmp_path).pin_active_generation()
+    assert pinned is not None
+    from data_modules.projection_generation import CANON_DOMAINS
+    assert set(pinned.manifest["domains"]) == set(CANON_DOMAINS)
+
+
+def test_migration_rejects_stale_source_digest_and_unresolved_owner_conflicts(tmp_path):
+    from data_modules.project_migration import migrate_project
+
+    _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    (tmp_path / ".webnovel/state.json").write_text('{"mystery":true}', encoding="utf-8")
+    with pytest.raises(MigrationError, match="PREFLIGHT_REPORT_STALE"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+
+    conflict = preflight_project(tmp_path)
+    conflicted_plan = dry_run_migration(tmp_path, conflict.report_digest)
+    conflict_backup = create_verified_backup(tmp_path, conflicted_plan)
+    with pytest.raises(MigrationError, match="MIGRATION_CONFLICTS_UNRESOLVED"):
+        migrate_project(tmp_path, conflict.report_digest, conflicted_plan.plan_digest, conflict_backup)
+    assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()
+
+
+def test_same_semantic_replacement_publishes_monotonically_and_rejects_other_generation(tmp_path):
+    from data_modules.project_migration import migrate_project, replace_generation
+
+    _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    first = migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup).publication["body"]
+    snapshot = EffectiveHistoryStore().read_active_snapshot(tmp_path)
+    replacement = build_effective_generation(tmp_path, snapshot,
+                                             previous_generation_id=first["generation_id"])
+    second = replace_generation(tmp_path, replacement["generation_id"])
+    assert second.body["sequence"] == first["sequence"] + 1
+    assert second.body["semantic_activation_id"] == first["semantic_activation_id"]
+    assert second.body["effective_history_digest"] == first["effective_history_digest"]
+    with pytest.raises(MigrationError, match="REPLACEMENT_GENERATION_NOT_FOUND"):
+        replace_generation(tmp_path, "generation-unknown")
+
+    other_root = tmp_path / "other-project"
+    other_commit = _root_with_base(other_root)
+    other_body = _commit()
+    other_body["extraction_result"]["chapter_meta"]["title"] = "different semantic history"
+    other_commit.write_text(json.dumps(other_body), encoding="utf-8")
+    other_snapshot = EffectiveHistoryStore().read_active_snapshot(other_root)
+    other_generation = build_effective_generation(other_root, other_snapshot)
+    foreign_id = other_generation["generation_id"]
+    shutil.copytree(other_generation["validated_generation"].generation_root,
+                    ProjectionGeneration(tmp_path).generations_root / foreign_id)
+    with pytest.raises(MigrationError, match="REPLACEMENT_SEMANTIC_MISMATCH"):
+        replace_generation(tmp_path, foreign_id)
+
+
+def test_migration_moves_known_owner_state_to_overlay_without_rewriting_legacy_state(tmp_path):
+    from data_modules.project_migration import migrate_project
+    from data_modules.owned_project_view import OwnedStateStore
+
+    _root_with_base(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    original = {"story_craft": {"voice": "warm"},
+                "progress": {"current_volume": 4, "current_chapter": 1}}
+    state_path.write_text(json.dumps(original), encoding="utf-8")
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    result = migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    overlay = json.loads((tmp_path / ".webnovel/state-overlay.json").read_text(encoding="utf-8"))
+    assert overlay["values"]["story_craft"] == {"voice": "warm"}
+    assert overlay["values"]["progress.current_volume"] == 4
+    assert state_path.read_text(encoding="utf-8") == json.dumps(original)
+    assert result.overlay_revision == overlay["revision"]
+
+
+def test_migration_detects_post_backup_file_edits_before_enrollment(tmp_path):
+    from data_modules.project_migration import _validated_backup, migrate_project
+
+    _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text('{"planning":{"changed":true}}', encoding="utf-8")
+    with pytest.raises(MigrationError, match="POST_BACKUP_SOURCE_CONFLICT"):
+        _validated_backup(tmp_path, plan, backup)
+    with pytest.raises(MigrationError, match="PREFLIGHT_REPORT_STALE"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()
+
+
+def test_failed_generation_build_does_not_create_enrollment_or_overlay(tmp_path, monkeypatch):
+    from data_modules import projection_rebuild
+    from data_modules.project_migration import migrate_project
+
+    _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    def fail_build(*_args, **_kwargs):
+        raise RuntimeError("synthetic writer failure")
+    monkeypatch.setattr(projection_rebuild, "build_effective_generation", fail_build)
+    with pytest.raises(RuntimeError, match="synthetic writer failure"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()
+    assert not (tmp_path / ".webnovel/state-overlay.json").exists()
+
+
+def test_layout_restore_requires_conflict_report_and_preserves_active_semantics(tmp_path):
+    from data_modules.project_migration import migrate_project, restore_mutable_layout
+
+    _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    result = migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    publication = result.publication["body"]
+    conflict_report = {"ok": True, "conflicts": [],
+                       "expected_current_hashes": result.migration_owned_hashes}
+    restored = restore_mutable_layout(
+        tmp_path, backup, conflict_report,
+        expected_semantic_activation_id=publication["semantic_activation_id"],
+        expected_effective_history_digest=publication["effective_history_digest"])
+    assert restored["ok"] is True
+    assert not (tmp_path / ".webnovel/state-overlay.json").exists()
+    pinned = ProjectionGeneration(tmp_path).pin_active_generation()
+    assert pinned.semantic_activation_id == publication["semantic_activation_id"]
+    assert pinned.record_body["effective_history_digest"] == publication["effective_history_digest"]
+
+
+def test_layout_restore_blocks_post_migration_owner_edits(tmp_path):
+    from data_modules.project_migration import migrate_project, restore_mutable_layout
+
+    _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    result = migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    publication = result.publication["body"]
+    overlay = tmp_path / ".webnovel/state-overlay.json"
+    overlay.write_text('{"schema_version":"owner-state-overlay/v1","revision":9,"values":{}}', encoding="utf-8")
+    after_edit = overlay.read_bytes()
+    correction = tmp_path / ".story-system/corrections/chapter_001/base/corrections/POST-BACKUP.correction.json"
+    correction.parent.mkdir(parents=True, exist_ok=True)
+    correction.write_bytes(b'{"post_backup_candidate":true}')
+    restored = restore_mutable_layout(
+        tmp_path, backup,
+        {"ok": True, "conflicts": [], "expected_current_hashes": result.migration_owned_hashes},
+        expected_semantic_activation_id=publication["semantic_activation_id"],
+        expected_effective_history_digest=publication["effective_history_digest"])
+    assert restored["ok"] is False
+    assert restored["conflicts"][0]["kind"] == "post_backup_edit"
+    assert overlay.read_bytes() == after_edit
+    assert correction.read_bytes() == b'{"post_backup_candidate":true}'
+
+
+def test_publication_failure_before_enrollment_keeps_base_mode_readable(tmp_path, monkeypatch):
+    from data_modules.projection_generation import ProjectionGeneration
+    from data_modules.project_migration import migrate_project
+
+    _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    def fail_before_publish(*_args, **_kwargs):
+        raise RuntimeError("synthetic pre-publication crash")
+    monkeypatch.setattr(ProjectionGeneration, "publish_generation", fail_before_publish)
+    with pytest.raises(RuntimeError, match="pre-publication crash"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()
+    assert ProjectionGeneration(tmp_path).pin_active_generation() is None
+
+
+def test_crash_after_publication_is_detected_as_published_not_retried(tmp_path, monkeypatch):
+    from data_modules.projection_generation import ProjectionGeneration
+    from data_modules.project_migration import migrate_project
+
+    _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    publish = ProjectionGeneration.publish_generation
+    def publish_then_crash(self, *args, **kwargs):
+        publish(self, *args, **kwargs)
+        raise RuntimeError("synthetic post-publication crash")
+    monkeypatch.setattr(ProjectionGeneration, "publish_generation", publish_then_crash)
+    with pytest.raises(RuntimeError, match="post-publication crash"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    monkeypatch.setattr(ProjectionGeneration, "publish_generation", publish)
+    pinned = ProjectionGeneration(tmp_path).pin_active_generation()
+    assert pinned is not None
+    assert len(ProjectionGeneration(tmp_path)._records()) == 1
+    retry_report = preflight_project(tmp_path)
+    retry_plan = dry_run_migration(tmp_path, retry_report.report_digest)
+    retry_backup = create_verified_backup(tmp_path, retry_plan)
+    with pytest.raises(MigrationError, match="PROJECT_ALREADY_ENROLLED"):
+        migrate_project(tmp_path, retry_report.report_digest, retry_plan.plan_digest, retry_backup)
+
+
+def test_corrupt_active_generation_recovers_from_publication_closure_only(tmp_path):
+    from data_modules.projections import _active_generation_recovery
+    from data_modules.projection_generation import GenerationError
+    from data_modules.project_migration import migrate_project
+
+    _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    first = migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup).publication["body"]
+    protocol = ProjectionGeneration(tmp_path)
+    damaged_file = protocol.generations_root / first["generation_id"] / "events/chapter_001.json"
+    damaged_file.write_text('{"tampered":true}', encoding="utf-8")
+    with pytest.raises(GenerationError, match="ACTIVE_GENERATION_CORRUPT"):
+        protocol.pin_active_generation()
+
+    recovered = _active_generation_recovery(tmp_path)
+    assert recovered["ok"] is True
+    assert recovered["semantic_activation_id"] == first["semantic_activation_id"]
+    assert recovered["effective_history_digest"] == first["effective_history_digest"]
+    assert recovered["generation_id"] != first["generation_id"]
+    assert protocol.pin_active_generation().generation_id == recovered["generation_id"]
+
+
+def test_source_change_during_generation_build_fails_publication_recheck(tmp_path, monkeypatch):
+    from data_modules.projection_generation import GenerationError, ProjectionGeneration
+    from data_modules.project_migration import migrate_project
+
+    commit_path = _root_with_base(tmp_path)
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    publish = ProjectionGeneration.publish_generation
+    def mutate_source_then_publish(self, *args, **kwargs):
+        commit_path.write_text('{"changed_during_build":true}', encoding="utf-8")
+        return publish(self, *args, **kwargs)
+    monkeypatch.setattr(ProjectionGeneration, "publish_generation", mutate_source_then_publish)
+    with pytest.raises(GenerationError, match="LINEAGE_CHANGED"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()
+    assert ProjectionGeneration(tmp_path).latest_publication() is None
+
+
+def test_owner_overlay_collision_blocks_without_promoting_craft_or_enrolling(tmp_path):
+    from data_modules.project_migration import migrate_project
+
+    _root_with_base(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": {"tone": "legacy"}}), encoding="utf-8")
+    overlay_path = tmp_path / ".webnovel/state-overlay.json"
+    original_overlay = {"schema_version": "owner-state-overlay/v1", "revision": 3,
+                        "values": {"story_craft": {"tone": "newer-owner-value"}}}
+    overlay_path.write_text(json.dumps(original_overlay), encoding="utf-8")
+    report = preflight_project(tmp_path)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    with pytest.raises(MigrationError, match="OWNER_OVERLAY_CONFLICT:story_craft"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    assert json.loads(state_path.read_text(encoding="utf-8"))["story_craft"]["tone"] == "legacy"
+    assert json.loads(overlay_path.read_text(encoding="utf-8")) == original_overlay
+    assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()

@@ -243,6 +243,30 @@ class ProjectionGeneration:
         records = self._records()
         return records[-1] if records else None
 
+    def latest_publication_for_recovery(self) -> PublicationRecord:
+        """Validate enrollment and immutable publication chain without trusting its generation."""
+        if not self.enrollment_path.is_file():
+            raise GenerationError("ENROLLMENT_REQUIRED")
+        try:
+            enrollment = json.loads(self.enrollment_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise GenerationError("ENROLLMENT_CORRUPT") from exc
+        if (enrollment.get("schema_version") != ENROLLMENT_SCHEMA
+                or enrollment.get("mode") != "activation_managed"):
+            raise GenerationError("ENROLLMENT_CORRUPT")
+        records = self._records()
+        if not records:
+            raise GenerationError("ENROLLED_PUBLICATION_MISSING")
+        current = records[-1]
+        body = current.body
+        if (body.get("schema_version") != PUBLICATION_SCHEMA
+                or body.get("publication_record_id") != current.publication_record_id
+                or not body.get("semantic_activation_id")
+                or not body.get("effective_history_digest")
+                or not body.get("generation_id")):
+            raise GenerationError("PUBLICATION_CHAIN_CORRUPT")
+        return current
+
     def publish_generation(self, validated: ValidatedGeneration,
                            expected_previous_publication: str | None,
                            expected_lineage_digest: str) -> PublicationRecord:

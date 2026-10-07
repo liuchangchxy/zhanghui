@@ -140,17 +140,39 @@ def _namespace_digest(root: Path, relative: str, kind: str) -> str:
 
 
 class EffectiveHistoryStore:
-    def read_active_snapshot(self, project_root: str | Path) -> ActiveEffectiveHistorySnapshot:
+    def read_active_snapshot(self, project_root: str | Path, *,
+                             allow_unhealthy_generation_for_recovery: bool = False) -> ActiveEffectiveHistorySnapshot:
         root = Path(project_root).expanduser().resolve()
         generation_protocol = ProjectionGeneration(root)
         publication_records_exist = any(generation_protocol.publications_root.glob("publication-*.json"))
         if generation_protocol.enrollment_path.exists() or publication_records_exist:
             try:
-                pinned = generation_protocol.pin_active_generation()
+                try:
+                    pinned = generation_protocol.pin_active_generation()
+                except Exception:
+                    if not allow_unhealthy_generation_for_recovery:
+                        raise
+                    from types import SimpleNamespace
+                    publication = generation_protocol.latest_publication_for_recovery()
+                    pinned = SimpleNamespace(
+                        record_body=publication.body,
+                        publication_record_id=publication.publication_record_id,
+                        generation_id=publication.body["generation_id"],
+                    )
                 if pinned is None:
                     raise GenerationError("ENROLLED_PUBLICATION_MISSING")
                 record = pinned.record_body
                 dependencies = tuple(record.get("dependency_closure", ()))
+                for dependency in dependencies:
+                    relative = Path(dependency.get("path", ""))
+                    if relative.is_absolute() or ".." in relative.parts:
+                        raise GenerationError("ACTIVE_DEPENDENCY_CLOSURE_INVALID")
+                    try:
+                        actual = hashlib.sha256((root / relative).read_bytes()).hexdigest()
+                    except OSError as exc:
+                        raise GenerationError("ACTIVE_DEPENDENCY_CORRUPT") from exc
+                    if actual != dependency.get("sha256"):
+                        raise GenerationError("ACTIVE_DEPENDENCY_CORRUPT")
                 dependency_bodies: dict[str, list[dict[str, Any]]] = {}
                 for dependency in dependencies:
                     if dependency.get("kind") not in {"request", "authorization", "correction"}:

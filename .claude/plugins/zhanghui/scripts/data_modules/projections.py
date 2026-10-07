@@ -95,17 +95,17 @@ def _active_generation_recovery(root: Path, *, chapter: int | None = None) -> di
     if not protocol.enrollment_path.exists():
         return None
     try:
-        active = EffectiveHistoryStore().read_active_snapshot(root)
+        active = EffectiveHistoryStore().read_active_snapshot(
+            root, allow_unhealthy_generation_for_recovery=True)
         if not active.ok:
             raise RuntimeError(";".join(active.diagnostics))
         if chapter is not None and chapter not in active.chapters:
             raise RuntimeError("chapter is not in the active effective history")
-        pinned = protocol.pin_active_generation()
-        if pinned is None:
-            raise RuntimeError("active publication is missing")
-        built = build_effective_generation(root, active, previous_generation_id=pinned.generation_id)
+        publication_head = protocol.latest_publication_for_recovery()
+        built = build_effective_generation(
+            root, active, previous_generation_id=publication_head.body["generation_id"])
         publication = protocol.publish_generation(
-            built["validated_generation"], pinned.publication_record_sha256,
+            built["validated_generation"], publication_head.record_sha256,
             active.correction_lineage_digest,
         )
         return {

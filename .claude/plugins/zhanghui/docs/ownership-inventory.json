@@ -2055,6 +2055,51 @@
           "writer_id": "phase9-owned-state-overlay-writer"
         }
       ]
+    },
+    {
+      "writer_id": "phase9-migration-owner-overlay-writer",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+        "symbol": "_prepare_owner_overlay"
+      },
+      "owner": "Explicit Phase 9 migration command, limited to known owner fields copied into the mutable state overlay",
+      "data_domains": [
+        "STATE_JSON",
+        "COMPATIBILITY"
+      ],
+      "story_system_mode": {
+        "behavior": "after verified backup, copies only inventory-mapped owner fields to .webnovel/state-overlay.json; retains state.json and rejects unmapped overlay paths",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "does not run in legacy compatibility mode unless explicit migration is invoked",
+        "mode": "not_applicable"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "explicit Phase 9 migrate command"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while explicit migration copies known owner state into activation-managed overlays.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def _prepare_owner_overlay"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "UNMAPPED_EXISTING_OVERLAY"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "symbol": "_prepare_owner_overlay",
+          "data_domain": "STATE_JSON",
+          "sink": "Path.open",
+          "writer_id": "phase9-migration-owner-overlay-writer"
+        }
+      ]
     }
   ],
   "readers": [
@@ -4489,6 +4534,23 @@
             "fallback": null
           },
           "read_edge_id": "phase9-migration-evidence-edge"
+        },
+        {
+          "data_domain": "STATE_JSON",
+          "resource": "owner overlay and current project state hashes used to validate migration and layout restoration",
+          "story_system": {
+            "primary_source": ".webnovel/state-overlay.json and exact state file hashes",
+            "authority_claim": "UNKNOWN",
+            "condition": "read only for migration conflict and preservation checks; never Canon authority",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "preserved project .webnovel files",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "compatibility files are retained and only explicitly scoped owner overlay is restored",
+            "fallback": null
+          },
+          "read_edge_id": "phase9-migration-state-evidence-edge"
         }
       ],
       "active_consumers": [
@@ -4544,6 +4606,30 @@
           "sink": "read_bytes",
           "reader_id": "phase9-migration-evidence-reader",
           "read_edge_id": "phase9-migration-evidence-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "symbol": "restore_mutable_layout",
+          "data_domain": "COMPATIBILITY",
+          "sink": "read_bytes",
+          "reader_id": "phase9-migration-evidence-reader",
+          "read_edge_id": "phase9-migration-evidence-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "symbol": "migrate_project",
+          "data_domain": "STATE_JSON",
+          "sink": "read_bytes",
+          "reader_id": "phase9-migration-evidence-reader",
+          "read_edge_id": "phase9-migration-state-evidence-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "symbol": "restore_mutable_layout",
+          "data_domain": "STATE_JSON",
+          "sink": "read_bytes",
+          "reader_id": "phase9-migration-evidence-reader",
+          "read_edge_id": "phase9-migration-state-evidence-edge"
         }
       ]
     }
@@ -4608,6 +4694,36 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/migrate_state_to_sqlite.py",
           "anchor": "migrate_state_to_sqlite"
+        }
+      ]
+    },
+    {
+      "migration_id": "phase9-owner-overlay-migration",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+        "symbol": "migrate_project"
+      },
+      "source": "verified base-only .story-system and .webnovel project snapshot",
+      "target": "activation-managed Canon generation plus inventory-scoped mutable owner overlay",
+      "supported_project_modes": [
+        "base-only Story System project with conflict-free preflight"
+      ],
+      "preflight": "Requires current report digest, current conflict-free dry-run digest, and unchanged project file hashes.",
+      "backup": "Requires matching verified backup manifest with file hash, SQLite integrity, and temporary restore verification.",
+      "idempotency": "Enrollment is published once; subsequent migration attempts fail closed as already enrolled.",
+      "postcondition": "A complete Canon generation is published with a monotonic immutable publication record; known owner state is copied to the overlay and legacy state.json remains unchanged.",
+      "rollback": "No semantic rollback is provided; same-semantic generation replacement is exposed separately and never removes enrollment or corrections.",
+      "ambiguity_handling": "Unmapped owner roots, mixed evidence, stale source hashes, corrupt backup, and plan conflicts stop before enrollment.",
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "explicit Phase 9 migrate command"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while Phase 9 activation-managed migration is supported.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def migrate_project"
         }
       ]
     }
@@ -4940,6 +5056,38 @@
         }
       ],
       "writer_id": "canon-projection-generation-writer"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "_prepare_owner_overlay",
+      "domain": "COMPATIBILITY",
+      "sink": "open",
+      "target_expression": "os",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The temporary file is created exclusively beside the known owner overlay and atomically replaces only that overlay after backup.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "os.replace(temp_path, store.overlay_path)"
+        }
+      ],
+      "writer_id": "phase9-migration-owner-overlay-writer"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "restore_mutable_layout",
+      "domain": "COMPATIBILITY",
+      "sink": "open",
+      "target_expression": "os",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The operation restores only the overlay through an atomic replacement after exact digest and active semantic checks.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "os.replace(destination, current_path)"
+        }
+      ],
+      "writer_id": "phase9-migration-owner-overlay-writer"
     }
   ],
   "reader_exceptions": [
@@ -5827,6 +5975,74 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
           "anchor": "BACKUP_MANIFEST_FILE_MISMATCH"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "_validated_backup",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "copied",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The dynamically resolved file is confined to verified backup or temporary restore content and checked against its manifest hash.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "BACKUP_RESTORE_HASH_MISMATCH"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "_validated_backup",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "restored",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The dynamically resolved file is confined to verified backup or temporary restore content and checked against its manifest hash.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "BACKUP_RESTORE_HASH_MISMATCH"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "restore_mutable_layout",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "current_path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The path is the owner overlay or its manifest-verified backup copy, used only for exact post-backup conflict checking and layout restoration.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def restore_mutable_layout"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "restore_mutable_layout",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "source",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The path is the owner overlay or its manifest-verified backup copy, used only for exact post-backup conflict checking and layout restoration.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def restore_mutable_layout"
         }
       ]
     }

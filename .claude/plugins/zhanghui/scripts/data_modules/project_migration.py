@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import secrets
 import shutil
 import sqlite3
 import tempfile
@@ -60,6 +61,19 @@ class BackupManifest:
     sqlite_integrity: dict[str, str]
     restore_verified: bool
     manifest_sha256: str
+
+
+@dataclass(frozen=True)
+class MigrationResult:
+    schema_version: str
+    project_root: str
+    report_digest: str
+    plan_digest: str
+    backup_manifest_sha256: str
+    publication: dict[str, Any]
+    generation_id: str
+    overlay_revision: int
+    migration_owned_hashes: dict[str, str]
 
 
 def _scoped_paths(root: Path) -> list[Path]:
@@ -371,3 +385,255 @@ def create_verified_backup(project_root: str | Path, plan: MigrationPlan) -> Bac
         if temp_parent.exists():
             shutil.rmtree(temp_parent, ignore_errors=True)
         raise
+
+
+def _validated_backup(root: Path, plan: MigrationPlan,
+                      supplied: BackupManifest | dict[str, Any] | None) -> BackupManifest:
+    root = root.expanduser().resolve()
+    if supplied is None:
+        raise MigrationError("VERIFIED_BACKUP_REQUIRED")
+    backup = supplied if isinstance(supplied, BackupManifest) else BackupManifest(**supplied)
+    if (backup.project_root != str(root) or backup.plan_digest != plan.plan_digest
+            or not backup.restore_verified):
+        raise MigrationError("VERIFIED_BACKUP_REQUIRED")
+    backup_root = Path(backup.backup_path).resolve()
+    expected_parent = (root / ".story-system/backups/phase9").resolve()
+    if (backup_root.parent != expected_parent or backup_root.name != plan.plan_digest
+            or not backup_root.is_dir()):
+        raise MigrationError("VERIFIED_BACKUP_REQUIRED")
+    manifest_path = backup_root / "manifest.json"
+    manifest = _json_file(manifest_path)
+    if not manifest:
+        raise MigrationError("BACKUP_MANIFEST_INVALID")
+    manifest_body = {key: value for key, value in manifest.items() if key != "manifest_sha256"}
+    digest = hashlib.sha256(canonical_json(manifest_body).encode("utf-8")).hexdigest()
+    if (digest != backup.manifest_sha256 or digest != manifest.get("manifest_sha256")
+            or manifest.get("plan_digest") != plan.plan_digest):
+        raise MigrationError("BACKUP_MANIFEST_INVALID")
+    rows = manifest.get("files")
+    if not isinstance(rows, list) or len(rows) != backup.file_count:
+        raise MigrationError("BACKUP_MANIFEST_INVALID")
+    verified = {}
+    restore_rows = []
+    for row in rows:
+        relative = Path(row["path"])
+        if relative.is_absolute() or ".." in relative.parts or row.get("file_type") != "regular_file":
+            raise MigrationError("BACKUP_MANIFEST_INVALID")
+        copied = backup_root / "files" / relative
+        if (not copied.is_file() or copied.stat().st_size != row.get("size_bytes")
+                or hashlib.sha256(copied.read_bytes()).hexdigest() != row.get("sha256")):
+            raise MigrationError(f"BACKUP_FILE_INVALID:{row['path']}")
+        verified[row["path"]] = row["sha256"]
+        restore_rows.append(row)
+    current = _hash_files(root)
+    if current != verified:
+        raise MigrationError("POST_BACKUP_SOURCE_CONFLICT")
+    with tempfile.TemporaryDirectory(prefix="phase9-backup-verify-") as restore_name:
+        restore_root = Path(restore_name)
+        for row in restore_rows:
+            copied = backup_root / "files" / row["path"]
+            restored = restore_root / row["path"]
+            restored.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(copied, restored)
+            if hashlib.sha256(restored.read_bytes()).hexdigest() != row["sha256"]:
+                raise MigrationError(f"BACKUP_RESTORE_HASH_MISMATCH:{row['path']}")
+        for row in restore_rows:
+            restored = restore_root / row["path"]
+            if restored.suffix.lower() == ".db" and _integrity_check(restored) != "ok":
+                raise MigrationError(f"BACKUP_RESTORE_SQLITE_FAILED:{row['path']}")
+    return backup
+
+
+def _prepare_owner_overlay(root: Path) -> int:
+    from .owned_project_view import OwnedStateStore
+
+    state = _json_file(root / ".webnovel/state.json") or {}
+    store = OwnedStateStore(root)
+    overlay = store._overlay()
+    values = overlay["values"]
+    additions = {}
+    owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
+                   "workflow", "craft", "intent", "disambiguation_warnings",
+                   "disambiguation_pending"}
+    allowed_overlay_paths = owner_roots | {"progress.volumes_planned", "progress.current_volume",
+                                           "progress.total_volumes", "progress.chapter_status"}
+    unknown_overlay_paths = set(overlay["values"]) - allowed_overlay_paths
+    if unknown_overlay_paths:
+        raise MigrationError(f"UNMAPPED_EXISTING_OVERLAY:{sorted(unknown_overlay_paths)}")
+    for key in owner_roots:
+        if key in state:
+            additions[key] = state[key]
+    progress = state.get("progress") if isinstance(state.get("progress"), dict) else {}
+    for key in ("volumes_planned", "current_volume", "total_volumes"):
+        if key in progress:
+            additions[f"progress.{key}"] = progress[key]
+    for key, value in additions.items():
+        if key in values and values[key] != value:
+            raise MigrationError(f"OWNER_OVERLAY_CONFLICT:{key}")
+    new_values = {**values, **additions}
+    if new_values == values and store.overlay_path.exists():
+        return int(overlay.get("revision", 0))
+    overlay = {**overlay, "values": new_values,
+               "revision": int(overlay.get("revision", 0)) + 1}
+    store.overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = store.overlay_path.with_name(f".{store.overlay_path.name}.{secrets.token_hex(8)}.tmp")
+    data = (canonical_json(overlay) + "\n").encode("utf-8")
+    with temp_path.open("xb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temp_path, store.overlay_path)
+    directory_fd = os.open(store.overlay_path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    return overlay["revision"]
+
+
+def migrate_project(project_root: str | Path, expected_report_digest: str,
+                    reviewed_plan_digest: str,
+                    backup_manifest: BackupManifest | dict[str, Any] | None) -> MigrationResult:
+    root = Path(project_root).expanduser().resolve()
+    report = preflight_project(root)
+    if report.report_digest != expected_report_digest:
+        raise MigrationError("PREFLIGHT_REPORT_STALE")
+    plan = dry_run_migration(root, expected_report_digest)
+    if plan.plan_digest != reviewed_plan_digest:
+        raise MigrationError("MIGRATION_PLAN_STALE")
+    if plan.unresolved_decisions:
+        raise MigrationError("MIGRATION_CONFLICTS_UNRESOLVED")
+    if report.active.get("mode") != "base_only":
+        raise MigrationError("PROJECT_ALREADY_ENROLLED")
+    backup = _validated_backup(root, plan, backup_manifest)
+    snapshot = EffectiveHistoryStore().read_active_snapshot(root)
+    if not snapshot.ok:
+        raise MigrationError("ACTIVE_HISTORY_BLOCKED:" + ";".join(snapshot.diagnostics))
+    from .projection_rebuild import build_effective_generation
+
+    built = build_effective_generation(root, snapshot)
+    overlay_revision = _prepare_owner_overlay(root)
+    protocol = ProjectionGeneration(root)
+    try:
+        publication = protocol.publish_generation(
+            built["validated_generation"], None, snapshot.correction_lineage_digest)
+    except Exception:
+        # An unreferenced generation/overlay is inert before enrollment. Enrollment
+        # is created atomically with the publication attempt and remains fail-closed.
+        raise
+    if not publication.record_sha256:
+        raise MigrationError("PUBLICATION_FAILED")
+    return MigrationResult("phase9-migration-result/v1", str(root), report.report_digest,
+                           plan.plan_digest, backup.manifest_sha256,
+                           {"publication_record_id": publication.publication_record_id,
+                            "record_sha256": publication.record_sha256,
+                            "body": publication.body},
+                           built["generation_id"], overlay_revision,
+                           {".webnovel/state-overlay.json": hashlib.sha256(
+                               (root / ".webnovel/state-overlay.json").read_bytes()).hexdigest()})
+
+
+def replace_generation(project_root: str | Path, generation_id: str):
+    """Publish an already validated generation only for the active semantics."""
+    root = Path(project_root).expanduser().resolve()
+    protocol = ProjectionGeneration(root)
+    try:
+        active = protocol.latest_publication_for_recovery()
+    except Exception as exc:
+        raise MigrationError("ACTIVE_PUBLICATION_BLOCKED") from exc
+    if active is None:
+        raise MigrationError("ACTIVE_GENERATION_REQUIRED")
+    generation_root = protocol.generations_root / generation_id
+    if not generation_root.is_dir() or generation_root.parent != protocol.generations_root:
+        raise MigrationError("REPLACEMENT_GENERATION_NOT_FOUND")
+    manifest = _json_file(generation_root / "generation-manifest.json")
+    if not manifest:
+        raise MigrationError("REPLACEMENT_GENERATION_INVALID")
+    from .projection_generation import ValidatedGeneration, _file_manifest
+
+    snapshot = EffectiveHistoryStore().read_active_snapshot(
+        root, allow_unhealthy_generation_for_recovery=True)
+    if not snapshot.ok:
+        raise MigrationError("ACTIVE_HISTORY_BLOCKED:" + ";".join(snapshot.diagnostics))
+    if (manifest.get("generation_id") != generation_id
+            or manifest.get("effective_history_digest") != active.body["effective_history_digest"]
+            or manifest.get("effective_history_digest") != snapshot.effective_history_digest
+            or manifest.get("base_set_digest") != snapshot.base_set_digest
+            or manifest.get("correction_lineage_digest") != snapshot.correction_lineage_digest
+            or _file_manifest(generation_root) != manifest.get("domains")):
+        raise MigrationError("REPLACEMENT_SEMANTIC_MISMATCH")
+    validated = ValidatedGeneration(generation_id, generation_root, manifest,
+                                    artifact_sha256(manifest), snapshot)
+    try:
+        publication = protocol.publish_generation(
+            validated, active.record_sha256, snapshot.correction_lineage_digest)
+    except Exception as exc:
+        raise MigrationError(f"REPLACEMENT_PUBLICATION_REJECTED:{exc}") from exc
+    if publication.body["semantic_activation_id"] != active.body["semantic_activation_id"]:
+        raise MigrationError("REPLACEMENT_SEMANTIC_ID_CHANGED")
+    return publication
+
+
+def restore_mutable_layout(project_root: str | Path,
+                           backup_manifest: BackupManifest | dict[str, Any],
+                           post_backup_conflict_report: dict[str, Any], *,
+                           expected_semantic_activation_id: str,
+                           expected_effective_history_digest: str) -> dict[str, Any]:
+    """Restore the owner overlay only when its exact migration output is unchanged.
+
+    Canon commits, corrections, enrollment, publications, and generations are never
+    restored or removed by this filesystem-layout rollback.
+    """
+    root = Path(project_root).expanduser().resolve()
+    if (not isinstance(post_backup_conflict_report, dict)
+            or post_backup_conflict_report.get("ok") is not True
+            or post_backup_conflict_report.get("conflicts")
+            or not isinstance(post_backup_conflict_report.get("expected_current_hashes"), dict)):
+        raise MigrationError("POST_BACKUP_CONFLICT_REPORT_REQUIRED")
+    protocol = ProjectionGeneration(root)
+    try:
+        active = protocol.pin_active_generation()
+    except Exception as exc:
+        raise MigrationError("ACTIVE_GENERATION_BLOCKED") from exc
+    if (active is None or active.semantic_activation_id != expected_semantic_activation_id
+            or active.record_body.get("effective_history_digest") != expected_effective_history_digest):
+        raise MigrationError("ACTIVE_SEMANTIC_HISTORY_CHANGED")
+    backup = backup_manifest if isinstance(backup_manifest, BackupManifest) else BackupManifest(**backup_manifest)
+    backup_root = Path(backup.backup_path).expanduser().resolve()
+    if (backup.project_root != str(root)
+            or backup_root.parent != (root / ".story-system/backups/phase9").resolve()
+            or backup_root.name != backup.plan_digest):
+        raise MigrationError("BACKUP_MANIFEST_INVALID")
+    manifest_path = backup_root / "manifest.json"
+    manifest = _json_file(manifest_path) or {}
+    body = {key: value for key, value in manifest.items() if key != "manifest_sha256"}
+    digest = hashlib.sha256(canonical_json(body).encode("utf-8")).hexdigest()
+    if (digest != backup.manifest_sha256 or digest != manifest.get("manifest_sha256")
+            or manifest.get("project_root") != str(root)):
+        raise MigrationError("BACKUP_MANIFEST_INVALID")
+    relative = ".webnovel/state-overlay.json"
+    expected_hashes = post_backup_conflict_report["expected_current_hashes"]
+    current_path = root / relative
+    current_hash = hashlib.sha256(current_path.read_bytes()).hexdigest() if current_path.is_file() else None
+    if current_hash != expected_hashes.get(relative):
+        return {"ok": False, "conflicts": [{"path": relative, "kind": "post_backup_edit"}],
+                "restored": []}
+    backup_row = next((row for row in manifest.get("files", []) if row.get("path") == relative), None)
+    if backup_row:
+        source = backup_root / "files" / relative
+        if (not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != backup_row["sha256"]):
+            raise MigrationError("BACKUP_FILE_INVALID:" + relative)
+        destination = current_path.with_name(f".{current_path.name}.{secrets.token_hex(8)}.restore")
+        current_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        os.replace(destination, current_path)
+        directory_fd = os.open(current_path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    elif current_path.exists():
+        current_path.unlink()
+    return {"ok": True, "conflicts": [], "restored": [relative],
+            "semantic_activation_id": active.semantic_activation_id,
+            "effective_history_digest": active.record_body["effective_history_digest"]}

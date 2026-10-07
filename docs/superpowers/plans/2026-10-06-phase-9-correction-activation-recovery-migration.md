@@ -256,12 +256,12 @@ Implementation constraint: add challenge/provenance validation beside the existi
 - `replace_generation(root, generation_id) -> PublicationRecord` accepts only a verified generation with current semantic activation ID and identical effective-history digest; older semantic IDs are rejected.
 - Filesystem restore requires backup manifest plus explicit post-backup conflict report; it never removes newer corrections, activation enrollment, or current semantic history.
 
-- [ ] Add failing tests for source hash changes after preflight, unresolved human conflict, unavailable interactive confirmation, failed generation writer, and stale build digest.
-- [ ] Implement revalidation, verified-backup prerequisite, owner-overlay setup, activation-mode enrollment, staged full-history Canon generation, final source/lineage recheck, and immutable publication-record creation.
-- [ ] Add legacy/partial/mixed test fixtures proving no silent delete, overwrite, sibling choice or Craft promotion.
-- [ ] Add crash tests before/after publication-record creation and same-semantic generation replacement; prove prior semantic activation cannot be selected.
-- [ ] Add filesystem migration rollback tests proving activation enrollment, current semantic activation and new corrections remain intact; newer files are preserved and conflicts block restore.
-- [ ] Run full migration/recovery focused suites; commit.
+- [x] Add failing tests for source hash changes after preflight, unresolved human conflict, unavailable interactive confirmation, failed generation writer, and stale build digest.
+- [x] Implement revalidation, verified-backup prerequisite, owner-overlay setup, activation-mode enrollment, staged full-history Canon generation, final source/lineage recheck, and immutable publication-record creation.
+- [x] Add legacy/partial/mixed test fixtures proving no silent delete, overwrite, sibling choice or Craft promotion.
+- [x] Add crash tests before/after publication-record creation and same-semantic generation replacement; prove prior semantic activation cannot be selected.
+- [x] Add filesystem migration rollback tests proving activation enrollment, current semantic activation and new corrections remain intact; newer files are preserved and conflicts block restore.
+- [x] Run full migration/recovery focused suites; commit.
 
 ## Task 10: Integrate correction activation last
 
