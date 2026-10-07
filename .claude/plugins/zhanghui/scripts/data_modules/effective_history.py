@@ -173,6 +173,15 @@ class EffectiveHistoryStore:
                         raise GenerationError("ACTIVE_DEPENDENCY_CORRUPT") from exc
                     if actual != dependency.get("sha256"):
                         raise GenerationError("ACTIVE_DEPENDENCY_CORRUPT")
+                namespace_checks = [{"path": ".story-system/commits", "sha256": _namespace_digest(
+                    root, ".story-system/commits", "base_set"), "kind": "base_set"}]
+                correction_namespaces = sorted({
+                    (root / dependency["path"]).parent.parent.relative_to(root).as_posix()
+                    for dependency in dependencies if dependency.get("kind") == "correction"
+                })
+                namespace_checks.extend({"path": namespace, "sha256": _namespace_digest(
+                    root, namespace, "correction_namespace"), "kind": "correction_namespace"}
+                    for namespace in correction_namespaces)
                 dependency_bodies: dict[str, list[dict[str, Any]]] = {}
                 for dependency in dependencies:
                     if dependency.get("kind") not in {"request", "authorization", "correction"}:
@@ -244,7 +253,7 @@ class EffectiveHistoryStore:
                     raise GenerationError("ACTIVE_HISTORY_DIGEST_MISMATCH")
                 return ActiveEffectiveHistorySnapshot(
                     True, entries, pinned.publication_record_id, base_digest, exact_lineage_digest,
-                    history_digest, pinned.generation_id, (), dependencies,
+                    history_digest, pinned.generation_id, (), dependencies, tuple(namespace_checks),
                 )
             except Exception as exc:
                 return ActiveEffectiveHistorySnapshot(False, {}, None, "", "", "", None,
@@ -264,8 +273,12 @@ class EffectiveHistoryStore:
                  "kind": "base_commit"}
                 for row in records if row["payload"].get("meta", {}).get("status") == "accepted"
             )
+            namespace_checks = ({"path": ".story-system/commits",
+                                 "sha256": _namespace_digest(root, ".story-system/commits", "base_set"),
+                                 "kind": "base_set"},)
             return ActiveEffectiveHistorySnapshot(True, entries, None, base_digest,
-                                                  lineage_digest, history_digest, None, (), dependencies)
+                                                  lineage_digest, history_digest, None, (), dependencies,
+                                                  namespace_checks)
         except Exception as exc:
             return ActiveEffectiveHistorySnapshot(False, {}, None, "", "", "", None,
                                                   (f"ACTIVE_HISTORY_INVALID:{exc}",))

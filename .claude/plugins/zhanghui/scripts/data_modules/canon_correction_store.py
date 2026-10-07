@@ -43,6 +43,153 @@ class VerifiedCorrectionDecision:
             raise ValueError("invalid verified decision status")
 
 
+@dataclass(frozen=True)
+class ActivationResult:
+    ok: bool
+    activated: bool
+    publication_record_id: str
+    record_sha256: str
+    semantic_activation_id: str
+    effective_history_digest: str
+    generation_id: str
+    effective_revision_id: str
+    correction_id: str
+    diagnostics: tuple[str, ...] = ()
+
+
+def activate_correction(project_root: str | Path, correction_id: str,
+                        authorization: CanonCorrectionAuthorization | dict[str, Any]) -> ActivationResult:
+    """Publish an approved candidate through one complete immutable generation."""
+    from .effective_history import (
+        CandidateEffectiveHistorySnapshot, EffectiveHistoryStore, _snapshot_digests,
+    )
+    from .projection_generation import ProjectionGeneration
+    from .projection_rebuild import build_effective_generation
+
+    root = Path(project_root).expanduser().resolve()
+    try:
+        supplied_auth = (authorization if isinstance(authorization, CanonCorrectionAuthorization)
+                         else CanonCorrectionAuthorization.model_validate(authorization))
+    except Exception as exc:
+        raise CorrectionStoreError(f"INVALID_AUTHORIZATION:{exc}") from exc
+    correction_paths = list((root / ".story-system/corrections").glob(
+        f"chapter_*/*/corrections/{correction_id}.correction.json"))
+    if len(correction_paths) != 1:
+        raise CorrectionStoreError("CORRECTION_NOT_FOUND_OR_AMBIGUOUS")
+    correction_path = correction_paths[0]
+    try:
+        correction = json.loads(correction_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise CorrectionStoreError("CORRECTION_ARTIFACT_INVALID") from exc
+    if correction.get("correction_id") != correction_id:
+        raise CorrectionStoreError("CORRECTION_ID_MISMATCH")
+    target_namespace = correction_path.parent.parent
+    auth_path = target_namespace / "authorizations" / f"{supplied_auth.authorization_id}.authorization.json"
+    try:
+        persisted_auth = CanonCorrectionAuthorization.model_validate(
+            json.loads(auth_path.read_text(encoding="utf-8")))
+    except Exception as exc:
+        raise CorrectionStoreError("AUTHORIZATION_ARTIFACT_NOT_FOUND") from exc
+    if artifact_sha256(persisted_auth) != artifact_sha256(supplied_auth):
+        raise CorrectionStoreError("AUTHORIZATION_ARTIFACT_MISMATCH")
+    if (supplied_auth.choice != "APPROVE"
+            or correction.get("authorization_ref") != supplied_auth.authorization_id
+            or correction.get("authorization_sha256") != artifact_sha256(supplied_auth)):
+        raise CorrectionStoreError("APPROVED_AUTHORIZATION_REQUIRED")
+
+    protocol = ProjectionGeneration(root)
+    try:
+        pinned = protocol.pin_active_generation()
+        current_publication = protocol.latest_publication_for_recovery()
+    except Exception as exc:
+        raise CorrectionStoreError(f"ACTIVE_PUBLICATION_INVALID:{exc}") from exc
+    if pinned is None or current_publication is None:
+        raise CorrectionStoreError("ACTIVATION_MANAGED_PROJECT_REQUIRED")
+    history_store = EffectiveHistoryStore()
+    active = history_store.read_active_snapshot(root)
+    if not active.ok:
+        raise CorrectionStoreError("ACTIVE_HISTORY_BLOCKED:" + ";".join(active.diagnostics))
+    if (pinned.publication_record_sha256 != current_publication.record_sha256
+            or active.activation_record_id != pinned.publication_record_id):
+        raise CorrectionStoreError("ACTIVE_PUBLICATION_CHANGED_DURING_ACTIVATION")
+    candidate = history_store.resolve_candidate(root, correction_id)
+    if not candidate.ok:
+        raise CorrectionStoreError("CANDIDATE_BLOCKED:" + ";".join(candidate.diagnostics))
+    if candidate.base_set_digest != active.base_set_digest:
+        raise CorrectionStoreError("ACTIVE_CANDIDATE_BASE_SET_MISMATCH")
+    chapter = int(correction["chapter"])
+    candidate_entry = candidate.chapters.get(chapter)
+    if candidate_entry is None or correction_id not in candidate_entry.applied_correction_ids:
+        raise CorrectionStoreError("TARGET_CORRECTION_NOT_EFFECTIVE")
+
+    active_entry = active.chapters.get(chapter)
+    if active_entry and correction_id in active_entry.applied_correction_ids:
+        latest = protocol.latest_publication()
+        if latest is None or latest.record_sha256 != pinned.publication_record_sha256:
+            raise CorrectionStoreError("ACTIVE_PUBLICATION_CHANGED_DURING_ACTIVATION")
+        return ActivationResult(True, False, pinned.publication_record_id,
+                                pinned.publication_record_sha256, pinned.semantic_activation_id,
+                                active.effective_history_digest, pinned.generation_id,
+                                active_entry.effective_revision_id, correction_id)
+
+    chapters = dict(active.chapters)
+    chapters[chapter] = candidate_entry
+    base_set_digest, lineage_digest, history_digest = _snapshot_digests(chapters)
+    if base_set_digest != active.base_set_digest:
+        raise CorrectionStoreError("ACTIVE_CANDIDATE_BASE_SET_MISMATCH")
+    dependency_by_path: dict[str, dict[str, str]] = {}
+    for row in (*active.dependencies, *candidate.dependencies):
+        existing = dependency_by_path.get(row["path"])
+        if existing and existing["sha256"] != row["sha256"]:
+            raise CorrectionStoreError("ACTIVE_CANDIDATE_DEPENDENCY_CONFLICT")
+        dependency_by_path[row["path"]] = dict(row)
+    dependencies = tuple(sorted(dependency_by_path.values(), key=lambda row: (row["kind"], row["path"])))
+    artifact_dependencies = [row for row in dependencies
+                             if row["kind"] in {"correction", "request", "authorization"}]
+    correction_lineage_digest = artifact_sha256({
+        "effective_lineage_digest": lineage_digest,
+        "artifacts": artifact_dependencies,
+    })
+    namespace_by_path = {row["path"]: dict(row) for row in active.lineage_namespace_checks}
+    namespace_by_path.update({row["path"]: dict(row) for row in candidate.lineage_namespace_checks})
+    merged_candidate = CandidateEffectiveHistorySnapshot(
+        True, correction_id, chapters, history_digest, (), dependencies,
+        base_set_digest, correction_lineage_digest, history_digest,
+        tuple(sorted(namespace_by_path.values(), key=lambda row: row["path"])),
+    )
+    try:
+        built = build_effective_generation(root, merged_candidate,
+                                           previous_generation_id=pinned.generation_id)
+    except Exception as exc:
+        raise CorrectionStoreError(f"GENERATION_BUILD_FAILED:{exc}") from exc
+    try:
+        publication = protocol.publish_generation(
+            built["validated_generation"], current_publication.record_sha256,
+            correction_lineage_digest)
+    except Exception as exc:
+        try:
+            committed = protocol.latest_publication()
+        except Exception:
+            committed = None
+        if (committed is not None
+                and committed.body.get("effective_history_digest") == history_digest
+                and committed.body.get("previous_record_sha256") == current_publication.record_sha256
+                and any(row.get("chapter") == chapter
+                        and row.get("effective_revision_id") == candidate_entry.effective_revision_id
+                        and correction_id in row.get("applied_correction_ids", [])
+                        for row in committed.body.get("chapter_closure", []))):
+            return ActivationResult(True, True, committed.publication_record_id,
+                                    committed.record_sha256,
+                                    committed.body["semantic_activation_id"], history_digest,
+                                    committed.body["generation_id"],
+                                    candidate_entry.effective_revision_id, correction_id)
+        raise CorrectionStoreError(f"ACTIVATION_PUBLICATION_FAILED:{exc}") from exc
+    return ActivationResult(True, True, publication.publication_record_id,
+                            publication.record_sha256, publication.body["semantic_activation_id"],
+                            history_digest, publication.body["generation_id"],
+                            candidate_entry.effective_revision_id, correction_id)
+
+
 def correction_target_dir(root: str | Path, chapter: int, base_sha256: str) -> Path:
     if isinstance(chapter, bool) or not isinstance(chapter, int) or chapter < 1:
         raise CorrectionStoreError("INVALID_CHAPTER")

@@ -2100,6 +2100,50 @@
           "writer_id": "phase9-migration-owner-overlay-writer"
         }
       ]
+    },
+    {
+      "writer_id": "canon-correction-activation-writer",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+        "symbol": "activate_correction"
+      },
+      "owner": "Explicit Phase 9 correction confirmation workflow coordinating the existing publication and projection-generation writer",
+      "data_domains": [
+        "CANON_COMMIT"
+      ],
+      "story_system_mode": {
+        "behavior": "validates the persisted exact APPROVE authorization and candidate lineage, stages all Canon domains, then asks ProjectionGeneration to append one immutable publication record",
+        "mode": "guarded"
+      },
+      "legacy_mode": {
+        "behavior": "activation is unavailable until explicit migration enrollment creates an active publication",
+        "mode": "not_applicable"
+      },
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "explicit correction confirmation workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while approved correction candidates can be explicitly activated into Canon history.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "anchor": "def activate_correction"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_generation.py",
+          "anchor": "def publish_generation"
+        }
+      ],
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "symbol": "activate_correction",
+          "data_domain": "CANON_COMMIT",
+          "sink": "publish_generation",
+          "writer_id": "canon-correction-activation-writer"
+        }
+      ]
     }
   ],
   "readers": [
@@ -4726,6 +4770,36 @@
           "anchor": "def migrate_project"
         }
       ]
+    },
+    {
+      "migration_id": "canon-correction-activation",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+        "symbol": "activate_correction"
+      },
+      "source": "persisted approved staged correction and current active effective history",
+      "target": "new immutable active publication with a complete Canon-only generation",
+      "supported_project_modes": [
+        "activation-managed Story System project with a valid active publication"
+      ],
+      "preflight": "Resolves the selected correction, verifies exact persisted APPROVE authorization, request/challenge binding, active history, candidate lineage, and base set.",
+      "backup": "Uses an existing activation-managed project and does not rewrite base evidence; migration backup is required before initial enrollment.",
+      "idempotency": "A correction already in active lineage returns the active publication without appending a duplicate record.",
+      "postcondition": "All seven Canon projection domains are validated before one monotonic publication record makes the new semantic history active.",
+      "rollback": "Semantic reversal requires a new reviewed correction; operational generation recovery preserves the same semantic activation.",
+      "ambiguity_handling": "Authorization mismatch, candidate conflict, active corruption, base or namespace change, writer failure, and publication-head races fail without replacing the active publication.",
+      "lifecycle_status": "guarded",
+      "active_consumers": [
+        "explicit correction confirmation workflow"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while Phase 9 correction candidates use immutable activation publications.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_store.py",
+          "anchor": "def activate_correction"
+        }
+      ]
     }
   ],
   "compatibility_matrix": {
@@ -6045,6 +6119,23 @@
           "anchor": "def restore_mutable_layout"
         }
       ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+      "symbol": "main",
+      "domain": "WORKFLOW_METADATA",
+      "sink": "read_text",
+      "target_expression": "Path(args.authorization_file)",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The authorization file is an explicit CLI input that is matched byte-for-byte to the immutable authorization referenced by the selected correction.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/canon_correction_workflow.py",
+          "anchor": "authorization_file"
+        }
+      ],
+      "reader_id": "canon-correction-confirmation-reader",
+      "read_edge_id": "canon-correction-confirmation-workflow-edge"
     }
   ]
 }

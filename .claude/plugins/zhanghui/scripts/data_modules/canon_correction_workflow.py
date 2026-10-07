@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import json
 import secrets
 from datetime import datetime, timezone
@@ -10,6 +11,7 @@ from pathlib import Path
 from .canon_correction_schema import CanonCorrectionRequest, artifact_sha256
 from .canon_correction_store import (
     CorrectionStoreError,
+    activate_correction,
     build_correction_review_package,
     record_interactive_correction_decision,
 )
@@ -73,15 +75,21 @@ def main(argv: list[str] | None = None) -> int:
     decide.add_argument("--request-id", required=True)
     decide.add_argument("--review-package-file", required=True)
     decide.add_argument("--choice", choices=["APPROVE", "REJECT"], required=True)
+    activate = sub.add_parser("activate")
+    activate.add_argument("--correction-id", required=True)
+    activate.add_argument("--authorization-file", required=True)
     args = parser.parse_args(argv)
     root = Path(args.project_root).expanduser().resolve()
     try:
         if args.action == "review-package":
             state = json.loads(Path(args.parent_state_file).read_text(encoding="utf-8"))
             result = prepare_review(root, args.request_id, state)
-        else:
+        elif args.action == "record-decision":
             package = json.loads(Path(args.review_package_file).read_text(encoding="utf-8"))
             result = record_decision(root, args.request_id, package, args.choice).model_dump(mode="json")
+        else:
+            authorization = json.loads(Path(args.authorization_file).read_text(encoding="utf-8"))
+            result = asdict(activate_correction(root, args.correction_id, authorization))
     except (OSError, json.JSONDecodeError, CorrectionStoreError) as exc:
         parser.exit(2, f"correction confirmation failed: {exc}\n")
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
