@@ -88,7 +88,8 @@ def retry_projection(project_root: str | Path, *, chapter: int) -> dict[str, Any
 
 
 def _active_generation_recovery(root: Path, *, chapter: int | None = None) -> dict[str, Any] | None:
-    from .effective_history import EffectiveHistoryStore, append_base_commits
+    from .effective_history import (EffectiveHistoryStore, append_base_commits,
+                                   require_exact_publication_binding)
     from .projection_generation import ProjectionGeneration
     from .projection_rebuild import build_effective_generation
 
@@ -109,10 +110,11 @@ def _active_generation_recovery(root: Path, *, chapter: int | None = None) -> di
             root, allow_unhealthy_generation_for_recovery=True)
         if not active.ok:
             raise RuntimeError(";".join(active.diagnostics))
+        publication_head = protocol.latest_publication_for_recovery()
+        require_exact_publication_binding(active, publication_head)
         active = append_base_commits(active, root)
         if chapter is not None and chapter not in active.chapters:
             raise RuntimeError("chapter is not in the active effective history")
-        publication_head = protocol.latest_publication_for_recovery()
         built = build_effective_generation(
             root, active, previous_generation_id=publication_head.body["generation_id"])
         publication = protocol.publish_generation(

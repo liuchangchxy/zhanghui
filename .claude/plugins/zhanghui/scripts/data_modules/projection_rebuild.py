@@ -608,6 +608,30 @@ def build_effective_generation(project_root: str | Path, snapshot: Any, *,
     from .projection_generation import ProjectionGeneration
 
     root = Path(project_root).expanduser().resolve()
+    # State word counts are computed from chapter prose during this build. Bind
+    # those exact inputs into the generation so later edits cannot silently
+    # change the meaning of a published snapshot.
+    from dataclasses import replace
+    try:
+        from chapter_paths import find_chapter_file
+    except ImportError:  # pragma: no cover
+        from scripts.chapter_paths import find_chapter_file
+    dependencies = list(getattr(snapshot, "dependencies", ()))
+    dependency_paths = {item.get("path") for item in dependencies}
+    for chapter, entry in sorted(snapshot.chapters.items()):
+        if entry.status != "accepted":
+            continue
+        chapter_file = find_chapter_file(root, chapter)
+        if chapter_file is None:
+            continue
+        relative = chapter_file.relative_to(root).as_posix()
+        if relative not in dependency_paths:
+            import hashlib
+            dependencies.append({"path": relative,
+                                 "sha256": hashlib.sha256(chapter_file.read_bytes()).hexdigest(),
+                                 "kind": "chapter_prose"})
+    if hasattr(snapshot, "dependencies"):
+        snapshot = replace(snapshot, dependencies=tuple(dependencies))
     protocol = ProjectionGeneration(root)
     handle = protocol.begin(snapshot, previous_generation_id)
     history = EffectiveHistoryStore()

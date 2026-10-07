@@ -610,7 +610,8 @@ class ChapterCommitService:
 
     def _publish_activation_managed_commit(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Publish the durable commit through the active-generation protocol only."""
-        from .effective_history import EffectiveHistoryStore, append_base_commits
+        from .effective_history import (EffectiveHistoryStore, append_base_commits,
+                                        require_exact_publication_binding)
         from .projection_generation import ProjectionGeneration
         from .projection_rebuild import build_effective_generation
 
@@ -619,12 +620,14 @@ class ChapterCommitService:
         active = EffectiveHistoryStore().read_active_snapshot(root)
         if not active.ok:
             raise ChapterCommitError("activation-managed Canon is unhealthy; publication is blocked")
+        head = protocol.latest_publication()
+        if head is None:
+            raise ChapterCommitError("activation-managed publication head is missing")
+        require_exact_publication_binding(active, head)
         expanded = append_base_commits(active, root)
         if not set(active.chapters).issubset(expanded.chapters):
             raise ChapterCommitError("active Canon history was not preserved")
-        head = None
         try:
-            head = protocol.latest_publication()
             built = build_effective_generation(
                 root, expanded, previous_generation_id=head.body["generation_id"] if head else None,
             )
@@ -642,6 +645,10 @@ class ChapterCommitService:
                 "chapter": int((payload.get("meta") or {}).get("chapter") or 0),
                 "commit_sha256": hashlib.sha256(self._commit_path(payload).read_bytes()).hexdigest(),
                 "previous_publication_record_id": head.publication_record_id if head else None,
+                "previous_publication_record_sha256": head.record_sha256 if head else None,
+                "previous_semantic_activation_id": head.body.get("semantic_activation_id") if head else None,
+                "previous_effective_history_digest": head.body.get("effective_history_digest") if head else None,
+                "previous_generation_id": head.body.get("generation_id") if head else None,
                 "reason": str(exc),
             })
             raise ChapterCommitError(f"activation-managed publication pending recovery: {exc}") from exc

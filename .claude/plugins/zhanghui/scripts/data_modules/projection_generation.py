@@ -1,7 +1,7 @@
 """Immutable Canon projection generation and monotonic publication protocol."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import json
 import os
@@ -34,6 +34,7 @@ class BuildHandle:
     generation_id: str
     snapshot: Any
     previous_generation_id: str | None
+    build_state: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @staticmethod
     def digest_bytes(data: bytes) -> str:
@@ -205,6 +206,13 @@ class ProjectionGeneration:
             "base_set_digest": handle.snapshot.base_set_digest,
             "correction_lineage_digest": handle.snapshot.correction_lineage_digest,
             "previous_generation_id": handle.previous_generation_id,
+            "source_publication": ({
+                "publication_record_id": handle.snapshot.activation_record_id,
+                "publication_record_sha256": handle.snapshot.publication_record_sha256,
+                "semantic_activation_id": handle.snapshot.semantic_activation_id,
+                "effective_history_digest": handle.snapshot.effective_history_digest,
+                "generation_id": handle.snapshot.generation_id,
+            } if getattr(handle.snapshot, "activation_record_id", None) else None),
             "domains": actual,
         }
         manifest_path = handle.staging_root / "generation-manifest.json"

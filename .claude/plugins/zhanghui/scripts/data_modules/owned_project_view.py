@@ -23,7 +23,7 @@ _CANON_INDEX_TABLES = {"chapters", "scenes", "appearances", "state_changes", "st
 _OWNER_STATE_ROOTS = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
                       "workflow", "craft", "intent", "disambiguation_warnings",
                       "disambiguation_pending"}
-_OWNER_STATE_PATHS = {"progress.volumes_planned", "progress.current_volume",
+_OWNER_STATE_PATHS = {"progress.volumes_planned", "progress.current_volume", "progress.last_updated",
                       "progress.total_volumes", "progress.chapter_status"}
 _CANON_STATE_ROOTS = {"entity_state", "protagonist_state", "strand_tracker"}
 
@@ -62,20 +62,16 @@ class OwnedStateStore:
         return data
 
     def read_view(self, pinned: PinnedGeneration) -> dict[str, Any]:
-        from .state_projection_writer import StateProjectionWriter
-
-        canon: dict[str, Any] = {"entity_state": {}, "progress": {"chapter_status": {}},
-                                 "protagonist_state": {}, "strand_tracker": {}}
-        reducer = StateProjectionWriter(self.project_root)
+        canon: dict[str, Any] | None = None
         for doc in _chapter_documents(pinned, "state"):
             projection = doc.get("projection", {})
-            if projection.get("tombstone"):
-                canon["progress"]["chapter_status"][str(doc["chapter"])] = "retracted"
-                continue
-            payload = projection.get("commit_payload")
-            if not isinstance(payload, dict):
+            snapshot = projection.get("materialized_state")
+            if not isinstance(snapshot, dict):
                 raise OwnedViewError("CANON_STATE_SLICE_INCOMPLETE")
-            reducer.reduce_state(canon, payload)
+            canon = snapshot
+        if canon is None:
+            canon = {"entity_state": {}, "progress": {"chapter_status": {}},
+                     "protagonist_state": {}, "strand_tracker": {}}
         overlay = self._overlay()
         values = overlay["values"]
         collision = _CANON_STATE_ROOTS.intersection(values)
@@ -247,7 +243,8 @@ class OwnedRAGView:
                 canon_docs.append({**chunk, "chapter": int(doc["chapter"]),
                                    "generation_id": self.pinned.generation_id,
                                    "authority_claim": "CANON_AUTHORITY"})
-        query_terms = [token.lower() for token in re.findall(r"[\w\u3400-\u9fff]+", query) if token]
+        from .rag_tokenizer import tokenize_rag
+        query_terms = tokenize_rag(query)
         query_counts = {term: query_terms.count(term) for term in set(query_terms)}
         lengths = [int(item.get("doc_length") or 0) for item in canon_docs]
         average_length = sum(lengths) / len(lengths) if lengths else 1.0

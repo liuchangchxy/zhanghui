@@ -46,6 +46,8 @@ class ActiveEffectiveHistorySnapshot:
     diagnostics: tuple[str, ...] = ()
     dependencies: tuple[dict[str, str], ...] = ()
     lineage_namespace_checks: tuple[dict[str, str], ...] = ()
+    publication_record_sha256: str | None = None
+    semantic_activation_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,19 @@ class CandidateEffectiveHistorySnapshot:
     correction_lineage_digest: str = ""
     effective_history_digest: str = ""
     lineage_namespace_checks: tuple[dict[str, str], ...] = ()
+
+
+def require_exact_publication_binding(snapshot: ActiveEffectiveHistorySnapshot, publication: Any) -> None:
+    """Reject a history snapshot assembled from a different publication head."""
+    if (not snapshot.ok
+            or snapshot.activation_record_id != publication.publication_record_id
+            or snapshot.generation_id != publication.body.get("generation_id")
+            or snapshot.publication_record_sha256 != publication.record_sha256
+            or snapshot.semantic_activation_id != publication.body.get("semantic_activation_id")
+            or snapshot.effective_history_digest != publication.body.get("effective_history_digest")
+            or snapshot.base_set_digest != publication.body.get("base_set_digest")
+            or snapshot.correction_lineage_digest != publication.body.get("correction_lineage_digest")):
+        raise GenerationError("PUBLICATION_HEAD_CHANGED")
 
 
 _PROJECTION_SEAL = object()
@@ -167,6 +182,7 @@ def append_base_commits(snapshot: ActiveEffectiveHistorySnapshot,
     return ActiveEffectiveHistorySnapshot(
         True, entries, snapshot.activation_record_id, base_digest, exact_lineage, history_digest,
         snapshot.generation_id, (), tuple(dependencies.values()), namespaces,
+        snapshot.publication_record_sha256, snapshot.semantic_activation_id,
     )
 
 
@@ -216,6 +232,8 @@ class EffectiveHistoryStore:
                     pinned = SimpleNamespace(
                         record_body=publication.body,
                         publication_record_id=publication.publication_record_id,
+                        publication_record_sha256=publication.record_sha256,
+                        semantic_activation_id=publication.body["semantic_activation_id"],
                         generation_id=publication.body["generation_id"],
                     )
                 if pinned is None:
@@ -313,6 +331,7 @@ class EffectiveHistoryStore:
                 return ActiveEffectiveHistorySnapshot(
                     True, entries, pinned.publication_record_id, base_digest, exact_lineage_digest,
                     history_digest, pinned.generation_id, (), dependencies, tuple(namespace_checks),
+                    pinned.publication_record_sha256, pinned.semantic_activation_id,
                 )
             except Exception as exc:
                 return ActiveEffectiveHistorySnapshot(False, {}, None, "", "", "", None,

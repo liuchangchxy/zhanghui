@@ -264,17 +264,19 @@ class RAGAdapter:
         limit: int,
         chunk_type: str | None = None,
         chapter: int | None = None,
+        owner_only: bool = False,
     ) -> List[str]:
         if limit <= 0:
             return []
         with self._get_conn() as conn:
             cursor = conn.cursor()
+            owner_clause = " AND (source_file IS NULL OR source_file NOT LIKE 'commit:%')" if owner_only else ""
             if chunk_type and chapter is not None:
                 cursor.execute(
                     """
                     SELECT chunk_id
                     FROM vectors
-                    WHERE chunk_type = ? AND chapter <= ?
+                    WHERE chunk_type = ? AND chapter <= ?""" + owner_clause + """
                     ORDER BY chapter DESC, scene_index DESC
                     LIMIT ?
                 """,
@@ -285,7 +287,7 @@ class RAGAdapter:
                     """
                     SELECT chunk_id
                     FROM vectors
-                    WHERE chunk_type = ?
+                    WHERE chunk_type = ?""" + owner_clause + """
                     ORDER BY chapter DESC, scene_index DESC
                     LIMIT ?
                 """,
@@ -296,7 +298,7 @@ class RAGAdapter:
                     """
                     SELECT chunk_id
                     FROM vectors
-                    WHERE chapter <= ?
+                    WHERE chapter <= ?""" + owner_clause + """
                     ORDER BY chapter DESC, scene_index DESC
                     LIMIT ?
                 """,
@@ -304,7 +306,7 @@ class RAGAdapter:
                 )
             else:
                 cursor.execute(
-                    "SELECT chunk_id FROM vectors ORDER BY chapter DESC, scene_index DESC LIMIT ?",
+                    "SELECT chunk_id FROM vectors" + (" WHERE " + owner_clause[5:] if owner_only else "") + " ORDER BY chapter DESC, scene_index DESC LIMIT ?",
                     (int(limit),),
                 )
             return [str(r[0]) for r in cursor.fetchall() if r and r[0]]
@@ -518,15 +520,8 @@ class RAGAdapter:
     # ==================== BM25 索引 ====================
 
     def _tokenize(self, text: str) -> List[str]:
-        """简单分词（中文按字符，英文按单词）"""
-        # 中文字符
-        chinese = re.findall(r'[\u4e00-\u9fff]+', text)
-        chinese_chars = list("".join(chinese))
-
-        # 英文单词
-        english = re.findall(r'[a-zA-Z]+', text.lower())
-
-        return chinese_chars + english
+        from .rag_tokenizer import tokenize_rag
+        return tokenize_rag(text)
 
     def _update_bm25_index(self, cursor, chunk_id: str, content: str):
         """更新 BM25 索引"""
@@ -564,6 +559,7 @@ class RAGAdapter:
         chunk_type: str | None = None,
         log_query: bool = True,
         chapter: int | None = None,
+        owner_only: bool = False,
     ) -> List[SearchResult]:
         """向量相似度搜索"""
         top_k = top_k or self.config.vector_top_k
@@ -582,18 +578,18 @@ class RAGAdapter:
         # 从数据库读取所有向量并计算相似度
         with self._get_conn() as conn:
             cursor = conn.cursor()
+            owner_clause = " AND (source_file IS NULL OR source_file NOT LIKE 'commit:%')" if owner_only else ""
             if chunk_type and chapter is not None:
                 cursor.execute(
                     """
                     SELECT chunk_id, chapter, scene_index, content, embedding, parent_chunk_id, chunk_type, source_file
                     FROM vectors
-                    WHERE chunk_type = ? AND chapter <= ?
-                """,
+                    WHERE chunk_type = ? AND chapter <= ?""" + owner_clause,
                     (chunk_type, int(chapter)),
                 )
             elif chunk_type:
                 cursor.execute(
-                    "SELECT chunk_id, chapter, scene_index, content, embedding, parent_chunk_id, chunk_type, source_file FROM vectors WHERE chunk_type = ?",
+                    "SELECT chunk_id, chapter, scene_index, content, embedding, parent_chunk_id, chunk_type, source_file FROM vectors WHERE chunk_type = ?" + owner_clause,
                     (chunk_type,),
                 )
             elif chapter is not None:
@@ -601,13 +597,12 @@ class RAGAdapter:
                     """
                     SELECT chunk_id, chapter, scene_index, content, embedding, parent_chunk_id, chunk_type, source_file
                     FROM vectors
-                    WHERE chapter <= ?
-                """,
+                    WHERE chapter <= ?""" + owner_clause,
                     (int(chapter),),
                 )
             else:
                 cursor.execute(
-                    "SELECT chunk_id, chapter, scene_index, content, embedding, parent_chunk_id, chunk_type, source_file FROM vectors"
+                    "SELECT chunk_id, chapter, scene_index, content, embedding, parent_chunk_id, chunk_type, source_file FROM vectors" + (" WHERE " + owner_clause[5:] if owner_only else "")
                 )
 
             results = []
@@ -669,6 +664,7 @@ class RAGAdapter:
         chunk_type: str | None = None,
         log_query: bool = True,
         chapter: int | None = None,
+        owner_only: bool = False,
     ) -> List[SearchResult]:
         """BM25 关键词搜索"""
         top_k = top_k or self.config.bm25_top_k
@@ -682,7 +678,9 @@ class RAGAdapter:
             cursor = conn.cursor()
 
             # 获取文档总数和平均长度
-            cursor.execute("SELECT COUNT(*), AVG(doc_length) FROM doc_stats")
+            corpus_join = " JOIN vectors v ON v.chunk_id = d.chunk_id" if owner_only else ""
+            owner_predicate = " WHERE (v.source_file IS NULL OR v.source_file NOT LIKE 'commit:%')" if owner_only else ""
+            cursor.execute("SELECT COUNT(*), AVG(d.doc_length) FROM doc_stats d" + corpus_join + owner_predicate)
             row = cursor.fetchone()
             total_docs = row[0] or 1
             avg_doc_length = row[1] or 1
@@ -696,8 +694,9 @@ class RAGAdapter:
                     SELECT b.chunk_id, b.tf, d.doc_length
                     FROM bm25_index b
                     JOIN doc_stats d ON b.chunk_id = d.chunk_id
+                    """ + ("JOIN vectors v ON v.chunk_id = b.chunk_id " if owner_only else "") + """
                     WHERE b.term = ?
-                """, (term,))
+                    """ + (" AND (v.source_file IS NULL OR v.source_file NOT LIKE 'commit:%')" if owner_only else ""), (term,))
 
                 docs_with_term = cursor.fetchall()
                 df = len(docs_with_term)
@@ -1123,20 +1122,22 @@ class RAGAdapter:
             if strategy not in {"vector", "bm25", "hybrid", "graph_hybrid"}:
                 strategy = "hybrid"
             if not hasattr(self, "api_client"):
-                owner_results = self.bm25_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter)
+                owner_results = self.bm25_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter, owner_only=True)
             elif strategy == "vector":
-                owner_results = await self.vector_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter)
+                owner_results = await self.vector_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter, owner_only=True)
             elif strategy == "bm25":
-                owner_results = self.bm25_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter)
-            elif strategy == "graph_hybrid":
-                owner_results = await self.graph_hybrid_search(
-                    query, top_k=top_k, chunk_type=chunk_type, chapter=chapter,
-                    center_entities=center_entities,
+                owner_results = self.bm25_search(query, top_k=top_k, chunk_type=chunk_type, chapter=chapter, owner_only=True)
+            elif strategy in {"hybrid", "graph_hybrid"}:
+                # Mutable graph tables may contain stale Canon rows. Canon graph
+                # expansion is performed from the pinned generation below.
+                owner_results = await self.hybrid_search(
+                    query, vector_top_k=top_k, bm25_top_k=top_k, rerank_top_n=top_k,
+                    chunk_type=chunk_type, chapter=chapter, owner_only=True,
                 )
             else:
                 owner_results = await self.hybrid_search(
                     query, vector_top_k=top_k, bm25_top_k=top_k, rerank_top_n=top_k,
-                    chunk_type=chunk_type, chapter=chapter,
+                    chunk_type=chunk_type, chapter=chapter, owner_only=True,
                 )
             # Mutable compatibility rows carrying durable-commit provenance are
             # not active Canon. Their generation-local replacements are below.
@@ -1236,6 +1237,7 @@ class RAGAdapter:
         chunk_type: str | None = None,
         chapter: int | None = None,
         log_query: bool = True,
+        owner_only: bool = False,
     ) -> List[SearchResult]:
         """
         混合检索：向量 + BM25 + RRF 融合 + Rerank
@@ -1258,8 +1260,8 @@ class RAGAdapter:
         if use_full_scan:
             # 并行执行向量和 BM25 检索
             vector_results, bm25_results = await asyncio.gather(
-                self.vector_search(query, vector_top_k, chunk_type=chunk_type, log_query=False, chapter=chapter),
-                asyncio.to_thread(self.bm25_search, query, bm25_top_k, 1.5, 0.75, chunk_type, False, chapter),
+                self.vector_search(query, vector_top_k, chunk_type=chunk_type, log_query=False, chapter=chapter, owner_only=owner_only),
+                asyncio.to_thread(self.bm25_search, query, bm25_top_k, 1.5, 0.75, chunk_type, False, chapter, owner_only),
             )
         else:
             bm25_candidates = max(
@@ -1283,8 +1285,9 @@ class RAGAdapter:
                 chunk_type,
                 False,
                 chapter,
+                owner_only,
             )
-            recent_task = asyncio.to_thread(self._get_recent_chunk_ids, recent_candidates, chunk_type, chapter)
+            recent_task = asyncio.to_thread(self._get_recent_chunk_ids, recent_candidates, chunk_type, chapter, owner_only)
             embed_task = self.api_client.embed([query])
 
             bm25_candidates_results, recent_ids, query_embeddings = await asyncio.gather(
@@ -1303,6 +1306,8 @@ class RAGAdapter:
             candidate_ids.update(recent_ids)
 
             rows = await asyncio.to_thread(self._fetch_vectors_by_chunk_ids, list(candidate_ids))
+            if owner_only:
+                rows = [row for row in rows if row[7] is None or not str(row[7]).startswith("commit:")]
             if chunk_type:
                 rows = [r for r in rows if len(r) > 6 and r[6] == chunk_type]
             if chapter is not None:

@@ -138,12 +138,13 @@
         "symbol": "StateProjectionWriter"
       },
       "data_domains": [
-        "STATE_JSON"
+        "STATE_JSON",
+        "CANON_COMMIT"
       ],
-      "owner": "ChapterCommitService projection coordinator",
+      "owner": "ChapterCommitService legacy projection coordinator and Phase 9 generation builder",
       "story_system_mode": {
-        "behavior": "validated commit projection only",
-        "mode": "projection_only"
+        "behavior": "generation build sequentially materializes validated effective Canon state; runtime reads the pinned state snapshot",
+        "mode": "guarded"
       },
       "legacy_mode": {
         "behavior": "supported rebuild/projection only",
@@ -181,6 +182,13 @@
           "symbol": "retry_projection",
           "data_domain": "STATE_JSON",
           "sink": "apply_projection_writers",
+          "writer_id": "state-projection"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/state_projection_writer.py",
+          "symbol": "apply_effective",
+          "data_domain": "CANON_COMMIT",
+          "sink": "write_domain_file",
           "writer_id": "state-projection"
         }
       ]
@@ -4441,6 +4449,23 @@
       },
       "read_edges": [
         {
+          "data_domain": "COMPATIBILITY",
+          "resource": "chapter prose used only to materialize the generation-bound total word count",
+          "story_system": {
+            "primary_source": "chapter prose resolved during generation build",
+            "authority_claim": "UNKNOWN",
+            "condition": "content digest is captured in the publication dependency closure; runtime views never re-read prose",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "chapter prose through the legacy state projection",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode only",
+            "fallback": null
+          },
+          "read_edge_id": "generation-chapter-prose-state-input-edge"
+        },
+        {
           "data_domain": "CANON_COMMIT",
           "resource": "exact active publication chain, generation manifest, and frozen dependency closure",
           "story_system": {
@@ -4537,10 +4562,10 @@
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
           "symbol": "build_effective_generation",
-          "data_domain": "CANON_COMMIT",
+          "data_domain": "COMPATIBILITY",
           "sink": "read_bytes",
           "reader_id": "canon-projection-generation-reader",
-          "read_edge_id": "canon-projection-generation-reader-edge"
+          "read_edge_id": "generation-chapter-prose-state-input-edge"
         },
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/projections.py",
@@ -4585,6 +4610,23 @@
           "read_edge_id": "phase9-owned-canon-view-edge"
         },
         {
+          "data_domain": "CANON_COMMIT",
+          "resource": "materialized Canon state snapshot in the pinned immutable generation",
+          "story_system": {
+            "primary_source": ".story-system/projection-generations referenced by the pinned publication",
+            "authority_claim": "CANON_AUTHORITY",
+            "condition": "sequential replay is completed during generation build; runtime does not re-read prose or rerun the reducer",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "legacy .webnovel/state.json",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "legacy mode only",
+            "fallback": null
+          },
+          "read_edge_id": "phase9-owned-materialized-state-edge"
+        },
+        {
           "data_domain": "STATE_JSON",
           "resource": "mutable owner-scoped state overlay",
           "story_system": {
@@ -4627,6 +4669,14 @@
           "sink": "read_text",
           "reader_id": "phase9-owned-project-view-reader",
           "read_edge_id": "phase9-owned-canon-view-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
+          "symbol": "read_view",
+          "data_domain": "CANON_COMMIT",
+          "sink": "_chapter_documents",
+          "reader_id": "phase9-owned-project-view-reader",
+          "read_edge_id": "phase9-owned-materialized-state-edge"
         },
         {
           "path": ".claude/plugins/zhanghui/scripts/data_modules/owned_project_view.py",
@@ -5248,6 +5298,23 @@
     }
   ],
   "reader_exceptions": [
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+      "symbol": "build_effective_generation",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "chapter_file",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "rationale": "The resolved chapter prose is used only to materialize total_words during generation build; its exact digest is recorded as a publication dependency, and runtime state reads never reopen it.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/projection_rebuild.py",
+          "anchor": "chapter_file.read_bytes"
+        }
+      ],
+      "reader_id": "canon-projection-generation-reader",
+      "read_edge_id": "generation-chapter-prose-state-input-edge"
+    },
     {
       "path": ".claude/plugins/zhanghui/scripts/_shared/text_humanizer.py",
       "symbol": "_load_chapter",

@@ -247,6 +247,111 @@ def test_normal_chapter_commit_publishes_complete_activation_generation(tmp_path
     assert (tmp_path / ".webnovel/state.json").read_bytes() == legacy_state_bytes
 
 
+def test_new_chapter_rejects_snapshot_staled_by_same_semantic_publication(tmp_path, monkeypatch):
+    _active_root(tmp_path, chapters=1)
+    protocol = ProjectionGeneration(tmp_path)
+    original_read = EffectiveHistoryStore.read_active_snapshot
+    observed = {"published": False, "calls": 0}
+
+    def race_after_snapshot(store, root, **kwargs):
+        snapshot = original_read(store, root, **kwargs)
+        observed["calls"] += 1
+        if observed["calls"] == 2 and not observed["published"]:
+            observed["published"] = True
+            built = build_effective_generation(root, snapshot,
+                                               previous_generation_id=protocol.pin_active_generation().generation_id)
+            head = protocol.latest_publication()
+            protocol.publish_generation(built["validated_generation"], head.record_sha256,
+                                        snapshot.correction_lineage_digest)
+        return snapshot
+
+    monkeypatch.setattr(EffectiveHistoryStore, "read_active_snapshot", race_after_snapshot)
+    with pytest.raises(GenerationError, match="PUBLICATION_HEAD_CHANGED"):
+        ChapterCommitService(tmp_path).apply_projections(_commit(2))
+    monkeypatch.setattr(EffectiveHistoryStore, "read_active_snapshot", original_read)
+    active = original_read(EffectiveHistoryStore(), tmp_path)
+    assert set(active.chapters) == {1}
+    assert active.activation_record_id == protocol.latest_publication().publication_record_id
+    result = ChapterCommitService(tmp_path).apply_projections(_commit(2), on_conflict="skip")
+    retry = original_read(EffectiveHistoryStore(), tmp_path)
+    assert result["publication_record_id"] == protocol.latest_publication().publication_record_id
+    assert set(retry.chapters) == {1, 2}
+
+
+def test_new_chapter_retry_preserves_concurrent_correction_activation(tmp_path, monkeypatch):
+    commits = _active_root(tmp_path, chapters=1, include_state=True)
+    auth, _decision = _stage_amend_summary(tmp_path, 1, commits[0][0],
+                                           "TEST-ONLY-chapter-correction-race", "Correction S2")
+    protocol = ProjectionGeneration(tmp_path)
+    original = EffectiveHistoryStore.read_active_snapshot
+    race = {"calls": 0, "activated": False}
+
+    def concurrent_activation(store, root, **kwargs):
+        snapshot = original(store, root, **kwargs)
+        race["calls"] += 1
+        if race["calls"] == 2 and not race["activated"]:
+            race["activated"] = True
+            from data_modules.effective_history import ActiveEffectiveHistorySnapshot
+            candidate = store.resolve_candidate(tmp_path, "TEST-ONLY-chapter-correction-race")
+            corrected = ActiveEffectiveHistorySnapshot(
+                True, candidate.chapters, snapshot.activation_record_id,
+                candidate.base_set_digest, candidate.correction_lineage_digest,
+                candidate.effective_history_digest, snapshot.generation_id, (),
+                candidate.dependencies, candidate.lineage_namespace_checks,
+                snapshot.publication_record_sha256, snapshot.semantic_activation_id,
+            )
+            built = build_effective_generation(
+                tmp_path, corrected, previous_generation_id=snapshot.generation_id)
+            head = protocol.latest_publication()
+            protocol.publish_generation(built["validated_generation"], head.record_sha256,
+                                        corrected.correction_lineage_digest)
+        return snapshot
+
+    monkeypatch.setattr(EffectiveHistoryStore, "read_active_snapshot", concurrent_activation)
+    with pytest.raises(GenerationError, match="PUBLICATION_HEAD_CHANGED"):
+        ChapterCommitService(tmp_path).apply_projections(_commit(2))
+    monkeypatch.setattr(EffectiveHistoryStore, "read_active_snapshot", original)
+    active = original(EffectiveHistoryStore(), tmp_path)
+    assert active.chapters[1].extraction_result["summary_text"] == "Correction S2"
+    assert set(active.chapters) == {1, 2}
+
+    ChapterCommitService(tmp_path).apply_projections(_commit(2), on_conflict="skip")
+    retried = original(EffectiveHistoryStore(), tmp_path)
+    assert set(retried.chapters) == {1, 2}
+    assert retried.chapters[1].extraction_result["summary_text"] == "Correction S2"
+    assert protocol.pin_active_generation().publication_record_id == retried.activation_record_id
+
+
+def test_pending_recovery_rejects_snapshot_staled_by_semantic_activation(tmp_path, monkeypatch):
+    from data_modules.canon_correction_store import activate_correction
+    from data_modules.projections import retry_projection
+
+    commits = _active_root(tmp_path, chapters=1, include_state=True)
+    auth, _decision = _stage_amend_summary(tmp_path, 1, commits[0][0],
+                                           "TEST-ONLY-recovery-race", "Correction S2")
+    original = EffectiveHistoryStore.read_active_snapshot
+    raced = {"done": False}
+
+    def race_after_snapshot(store, root, **kwargs):
+        snapshot = original(store, root, **kwargs)
+        if not raced["done"]:
+            raced["done"] = True
+            monkeypatch.setattr(EffectiveHistoryStore, "read_active_snapshot", original)
+            activate_correction(tmp_path, "TEST-ONLY-recovery-race", auth)
+            monkeypatch.setattr(EffectiveHistoryStore, "read_active_snapshot", race_after_snapshot)
+        return snapshot
+
+    monkeypatch.setattr(EffectiveHistoryStore, "read_active_snapshot", race_after_snapshot)
+    result = retry_projection(tmp_path, chapter=1)
+    assert result["ok"] is False
+    monkeypatch.setattr(EffectiveHistoryStore, "read_active_snapshot", original)
+    active = original(EffectiveHistoryStore(), tmp_path)
+    assert active.chapters[1].extraction_result["summary_text"] == "Correction S2"
+    recovered = retry_projection(tmp_path, chapter=1)
+    assert recovered["ok"] is True
+    assert original(EffectiveHistoryStore(), tmp_path).chapters[1].extraction_result["summary_text"] == "Correction S2"
+
+
 def test_activation_publication_supports_sparse_and_rejected_commits(tmp_path):
     _active_root(tmp_path, chapters=1)
     service = ChapterCommitService(tmp_path)

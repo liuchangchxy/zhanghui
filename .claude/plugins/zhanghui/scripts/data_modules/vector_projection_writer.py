@@ -293,8 +293,5 @@ class VectorProjectionWriter:
 
     @staticmethod
     def _tokens(content: str) -> list[str]:
-        import re
-        chinese = re.findall(r"[\u4e00-\u9fff]+", content)
-        chinese_chars = list("".join(chinese))
-        english = re.findall(r"[a-zA-Z]+", content.lower())
-        return chinese_chars + english
+        from .rag_tokenizer import tokenize_rag
+        return tokenize_rag(content)

@@ -61,7 +61,7 @@ class StateProjectionWriter:
         with self._locked_state() as state:
             return self.reduce_state(state, commit_payload)
 
-    def reduce_state(self, state: dict, commit_payload: dict) -> dict:
+    def reduce_state(self, state: dict, commit_payload: dict, *, include_operational_metadata: bool = True) -> dict:
         """Apply one immutable Canon commit to a state value without performing I/O."""
         chapter = int(commit_payload.get("meta", {}).get("chapter") or 0)
         status = commit_payload["meta"]["status"]
@@ -116,7 +116,7 @@ class StateProjectionWriter:
             else:
                 progress["total_words"] = old_total
 
-            if (
+            if include_operational_metadata and (
                 old_status != "chapter_committed"
                 or progress.get("current_chapter") != old_current
                 or progress.get("total_words") != old_total
@@ -484,10 +484,21 @@ class StateProjectionWriter:
         canonical["meta"]["chapter"] = entry.chapter
         canonical["meta"]["status"] = entry.status
         canonical["extraction_result"] = entry.extraction_result or {}
+        state = build_handle.build_state.get("canon_state_snapshot")
+        if state is None:
+            state = {"entity_state": {}, "progress": {"chapter_status": {}},
+                     "protagonist_state": {}, "strand_tracker": {}}
+        else:
+            state = json.loads(json.dumps(state, ensure_ascii=False))
+        if entry.status == "retracted":
+            state.setdefault("progress", {}).setdefault("chapter_status", {})[str(entry.chapter)] = "retracted"
+        else:
+            self.reduce_state(state, canonical, include_operational_metadata=False)
+        build_handle.build_state["canon_state_snapshot"] = state
         return write_effective_projection(
             self.project_root, effective_input, build_handle, "state", "state",
             {"tombstone": entry.status == "retracted",
-             "commit_payload": canonical,
+             "materialized_state": state,
              "state_deltas": extraction.get("state_deltas", []),
              "entity_deltas": extraction.get("entity_deltas", []),
              "chapter_status": entry.status},
