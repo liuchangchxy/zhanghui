@@ -259,6 +259,13 @@ class MemoryWriter:
                 value=content,
                 payload={
                     "loop_id": identity_id or None,
+                    "semantic_class": "CANON_DERIVED_OBLIGATION",
+                    "source_owner": "effective_accepted_canon_events",
+                    "source_event_id": row.get("source_event_id"),
+                    "source_chapter": source_chapter,
+                    "resolution_event_id": row.get("resolution_event_id"),
+                    "resolved_chapter": row.get("resolved_chapter"),
+                    "effective_history_digest": row.get("effective_history_digest"),
                     "source_event_id": row.get("source_event_id"),
                     "source_chapter": source_chapter,
                     "resolution_event_id": row.get("resolution_event_id"),
@@ -295,6 +302,8 @@ class MemoryWriter:
                 field="promise",
                 value=content,
                 payload={
+                    "semantic_class": "CANON_DERIVED_OBLIGATION",
+                    "source_owner": "effective_accepted_canon_events",
                     "promise_event_id": identity_id or None,
                     "source_event_id": row.get("source_event_id"),
                     "source_chapter": source_chapter,
@@ -305,6 +314,7 @@ class MemoryWriter:
                     "lifecycle_status": lifecycle_status,
                     "promise_type": row.get("promise_type") or row.get("type"),
                     "target": row.get("target"),
+                    "effective_history_digest": row.get("effective_history_digest"),
                 },
                 status="active" if lifecycle_status == "active" else "outdated",
                 source_chapter=source_chapter,
@@ -371,7 +381,15 @@ class MemoryWriter:
                 intent_events,
                 initial_open_loops=initial_loops,
                 initial_reader_promises=initial_promises,
+                effective_history_digest=(commit_payload.get("effective_history_digest")
+                                           or (commit_payload.get("meta") or {}).get("effective_history_digest")),
             )
+            effective_digest = (commit_payload.get("effective_history_digest")
+                                or (commit_payload.get("meta") or {}).get("effective_history_digest"))
+            if effective_digest:
+                for row in [*lifecycle_rows["open_loops"], *lifecycle_rows["reader_promises"]]:
+                    if row.get("source_event_id") in {str(event.get("event_id") or "") for event in intent_events}:
+                        row["effective_history_digest"] = effective_digest
             current_ids = {str(event.get("event_id") or "") for event in intent_events}
             memory_facts["open_loops"] = [
                 row for row in lifecycle_rows["open_loops"]

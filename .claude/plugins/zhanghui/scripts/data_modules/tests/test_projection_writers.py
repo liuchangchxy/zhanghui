@@ -863,6 +863,10 @@ def test_memory_projection_writer_maps_open_loop_event_into_scratchpad(tmp_path)
     loops = store.query(category="open_loop", status="active")
     assert result["applied"] is True
     assert any("三年之约" in x.subject for x in loops)
+    projected = next(x for x in loops if "三年之约" in x.subject)
+    assert projected.payload["semantic_class"] == "CANON_DERIVED_OBLIGATION"
+    assert projected.payload["source_event_id"] == "evt-001"
+    assert projected.payload["source_chapter"] == 3
 
 
 def _loop_event(event_type, content, chapter=None, event_id=None, **payload_extra):

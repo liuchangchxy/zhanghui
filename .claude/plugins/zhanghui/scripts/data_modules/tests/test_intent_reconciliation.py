@@ -1,4 +1,8 @@
-from data_modules.intent_reconciliation import intent_event_content_candidates, reconcile_intent_events
+from types import SimpleNamespace
+
+from data_modules.intent_reconciliation import (intent_event_content_candidates,
+                                                reconcile_effective_history,
+                                                reconcile_intent_events)
 
 
 def _event(event_id, chapter, event_type, content, **payload):
@@ -160,3 +164,45 @@ def test_loop_type_metadata_alone_is_not_a_legacy_storage_alias():
         "subject": "entity-7",
         "payload": {"loop_type": "mystery"},
     }) == []
+
+
+def test_effective_event_replay_has_canon_derived_provenance_and_correction_removal_rebuilds():
+    created = _event("create-effective", 4, "open_loop_created", "遗失的密信")
+    closed = _event("close-effective", 8, "open_loop_closed", "遗失的密信")
+    first = reconcile_intent_events([created], effective_history_digest="history-a")
+    assert first["open_loops"][0]["semantic_class"] == "CANON_DERIVED_OBLIGATION"
+    assert first["open_loops"][0]["source_event_id"] == "create-effective"
+    assert first["open_loops"][0]["source_chapter"] == 4
+    assert first["open_loops"][0]["effective_history_digest"] == "history-a"
+    corrected = reconcile_intent_events([closed], effective_history_digest="history-b")
+    assert corrected["open_loops"] == []
+    replayed = reconcile_intent_events([created, closed], effective_history_digest="history-b")
+    row = replayed["open_loops"][0]
+    assert row["status"] == "resolved"
+    assert row["resolution_event_id"] == "close-effective"
+    assert row["source_event_id"] == "create-effective"
+    assert row["effective_history_digest"] == "history-b"
+
+
+def test_effective_history_reconciliation_uses_accepted_corrected_entries_only():
+    create = SimpleNamespace(status="accepted", extraction_result={
+        "accepted_events": [_event("create-a", 1, "open_loop_created", "旧约")]})
+    close = SimpleNamespace(status="accepted", extraction_result={
+        "accepted_events": [_event("close-a", 2, "open_loop_closed", "旧约", loop_id="create-a")]})
+    rejected = SimpleNamespace(status="rejected", extraction_result={
+        "accepted_events": [_event("rejected-create", 3, "open_loop_created", "无效") ]})
+    snapshot = SimpleNamespace(effective_history_digest="effective-digest",
+                               chapters={1: create, 2: close, 3: rejected})
+    result = reconcile_effective_history(snapshot)
+    assert len(result["open_loops"]) == 1
+    row = result["open_loops"][0]
+    assert row["status"] == "resolved"
+    assert row["source_event_id"] == "create-a"
+    assert row["resolution_event_id"] == "close-a"
+    assert row["semantic_class"] == "CANON_DERIVED_OBLIGATION"
+    assert row["effective_history_digest"] == "effective-digest"
+    corrected = SimpleNamespace(effective_history_digest="corrected-digest",
+                                chapters={2: close, 3: rejected})
+    rebuilt = reconcile_effective_history(corrected)
+    assert rebuilt["open_loops"] == []
+    assert rebuilt["diagnostics"][0]["reason"] == "orphan_close"

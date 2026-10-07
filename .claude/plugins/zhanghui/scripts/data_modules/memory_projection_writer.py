@@ -28,13 +28,17 @@ class MemoryProjectionWriter:
 
     def apply_effective(self, effective_input, build_handle) -> dict:
         from .effective_history import EffectiveProjectionInput, write_effective_projection
+        from .intent_reconciliation import reconcile_effective_history
         if not isinstance(effective_input, EffectiveProjectionInput):
             raise TypeError("apply_effective requires EffectiveProjectionInput")
         entry = effective_input.effective_entry
         extraction = entry.extraction_result or {}
+        obligations = reconcile_effective_history(build_handle.snapshot)
         return write_effective_projection(
             self.project_root, effective_input, build_handle, "memory", "memory",
             {"tombstone": entry.status != "accepted",
              "accepted_events": extraction.get("accepted_events", []),
-             "state_deltas": extraction.get("state_deltas", [])},
+             "state_deltas": extraction.get("state_deltas", []),
+             "derived_obligations": obligations,
+             "semantic_class": "CANON_DERIVED_OBLIGATION"},
         )
