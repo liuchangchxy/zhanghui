@@ -109,7 +109,7 @@ def _json_file(path: Path) -> dict[str, Any] | None:
 def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     webnovel = root / ".webnovel"
     state = _json_file(webnovel / "state.json") or {}
-    state_canon = {"entity_state", "protagonist_state", "strand_tracker", "chapter_meta"}
+    state_canon = {"entity_state", "protagonist_state", "strand_tracker"}
     owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
                    "workflow", "craft", "intent", "disambiguation_warnings", "disambiguation_pending",
                    "project_info", "volumes"}
@@ -117,7 +117,7 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                    "progress.volumes_completed", "progress.last_updated"}
     known = state_canon | owner_roots | {"progress", "meta", "schema_version", "project_info", "state",
                                          "plot_threads", "relationships", "state_changes", "volumes",
-                                         "world_settings", "_migrated_to_sqlite", "_migration_timestamp"}
+                                         "world_settings", "chapter_meta", "_migrated_to_sqlite", "_migration_timestamp"}
     conflicts = []
     unknown = sorted(set(state) - known)
     for key in unknown:
@@ -133,6 +133,44 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                           "requires": "explicit owner mapping"})
 
     field_classes = {}
+    chapter_meta = state.get("chapter_meta")
+    if chapter_meta is not None:
+        # Exact field names only. No accepted evidence binding is established
+        # by this legacy state migration, so occurrence flags remain UNKNOWN.
+        craft_fields = {"hook_type", "beat_position", "scene_goal", "scene_conflict",
+                        "scene_setback", "scene_resolution", "sequel_reaction",
+                        "sequel_dilemma", "sequel_decision"}
+        intent_fields_meta = {"must_cover", "forbidden", "CBN", "CPNs", "CEN",
+                              "strand", "coolpoint", "time_anchor", "villain_tier"}
+        reference_fields = {"title", "word_count", "summary"}
+        if not isinstance(chapter_meta, dict):
+            conflicts.append({"kind": "malformed_chapter_meta", "path": ".webnovel/state.json:chapter_meta",
+                              "requires": "preserve source; field semantics unavailable"})
+        else:
+            for chapter_key, fields in chapter_meta.items():
+                prefix = f"chapter_meta.{chapter_key}"
+                if not isinstance(fields, dict):
+                    field_classes[prefix] = "UNKNOWN"
+                    conflicts.append({"kind": "malformed_chapter_meta_entry",
+                                      "path": f".webnovel/state.json:{prefix}",
+                                      "requires": "preserve source; explicit field mapping required"})
+                    continue
+                for field_name, value in fields.items():
+                    path = f"{prefix}.{field_name}"
+                    if field_name in craft_fields:
+                        semantic = "CRAFT"
+                    elif field_name in intent_fields_meta:
+                        semantic = "INTENT"
+                    elif field_name in reference_fields:
+                        semantic = "DERIVED_REFERENCE"
+                    else:
+                        semantic = "UNKNOWN"
+                    field_classes[path] = semantic
+                    if semantic == "UNKNOWN":
+                        conflicts.append({"kind": "unknown_chapter_meta_field",
+                                          "path": f".webnovel/state.json:{path}",
+                                          "value_preserved": True,
+                                          "requires": "explicit field and evidence mapping"})
     for key in ("_migrated_to_sqlite", "_migration_timestamp"):
         if key in state:
             field_classes[key] = "PRESERVED_COMPATIBILITY_METADATA"
@@ -149,11 +187,28 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                      "resource_distribution", "gf_visibility", "gf_irreversible_cost", "currency_system",
                      "currency_exchange", "sect_hierarchy", "cultivation_chain", "cultivation_subtiers",
                      "later_volumes_status", "confirmed_through_volume", "cross_volume_beat_map"}
+    # The ledger is planner-owned Intent. Keep its bytes in the existing
+    # project_info owner; malformed rows remain preserved and diagnostic.
+    intent_fields.add("promise_ledger")
     config_fields = {"author", "language", "output_dir", "project_id", "platform", "created_at"}
     project_info = state.get("project_info") if isinstance(state.get("project_info"), dict) else {}
     for key in sorted(project_info):
         if key in intent_fields:
             field_classes[f"project_info.{key}"] = "OWNER_INTENT"
+            if key == "promise_ledger":
+                ledger = project_info[key]
+                if not isinstance(ledger, list):
+                    conflicts.append({"kind": "malformed_planner_promise_ledger",
+                                      "path": ".webnovel/state.json:project_info.promise_ledger",
+                                      "requires": "preserve source and explicitly map ledger shape"})
+                else:
+                    for index, entry in enumerate(ledger):
+                        required = {"id", "type", "depth", "planted_chapter", "planted_volume",
+                                    "expected_payoff_chapter", "expected_payoff_volume", "status"}
+                        if not isinstance(entry, dict) or not required <= set(entry):
+                            conflicts.append({"kind": "malformed_planner_promise_entry",
+                                              "path": f".webnovel/state.json:project_info.promise_ledger[{index}]",
+                                              "requires": "preserve source row and explicitly map its schema"})
         elif key in config_fields:
             field_classes[f"project_info.{key}"] = "OWNER_PROJECT_CONFIG"
         else:

@@ -35,6 +35,9 @@ class ForeshadowEntry:
     # Each entry: {"action": "advance"|"payoff"|"mark_overdue", "chapter": int, "ts": iso_now}
     # backward-additive: not present in entries created before this column existed.
     audit_log: list[dict] = field(default_factory=list)
+    # Exact optional Canon pointer. It is opaque and never changes this row's
+    # planner-owned status or the lifecycle of the referenced Canon event.
+    canon_event_ref: str | None = None
 
     _ALLOWED_TYPES = frozenset({"foreshadow", "promise", "callback"})
     _MAX_NOTES_LEN = 4096
@@ -53,6 +56,9 @@ class ForeshadowEntry:
         # Boundary checks (Critical 2)
         if not self.id:
             raise ValueError("id must be non-empty")
+        if self.canon_event_ref is not None and (
+                not isinstance(self.canon_event_ref, str) or not self.canon_event_ref.strip()):
+            raise ValueError("canon_event_ref must be a non-empty opaque ID")
         if self.depth < 1:
             raise ValueError("depth must be >= 1")
         if self.planted_chapter < 1:
@@ -102,6 +108,7 @@ class ForeshadowEntry:
             updated_at=d.get("updated_at", ""),
             notes=d.get("notes", ""),
             audit_log=list(d.get("audit_log", []) or []),
+            canon_event_ref=d.get("canon_event_ref"),
         )
 
 
@@ -130,6 +137,58 @@ class PromiseLedger:
                 self.entries[i] = entry
                 return
         self.entries.append(entry)
+
+    def update_schedule(self, entry_id: str, *, expected_payoff_chapter: int,
+                        expected_payoff_volume: int, canon_event_ref: str | None = None) -> None:
+        """Edit planner schedule while preserving status and exact Canon reference."""
+        for index, existing in enumerate(self.entries):
+            if existing.id != entry_id:
+                continue
+            data = existing.to_dict()
+            data["expected_payoff_chapter"] = expected_payoff_chapter
+            data["expected_payoff_volume"] = expected_payoff_volume
+            if canon_event_ref is not None:
+                if not isinstance(canon_event_ref, str) or not canon_event_ref.strip():
+                    raise ValueError("canon_event_ref must be a non-empty opaque ID")
+                data["canon_event_ref"] = canon_event_ref
+            data["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self.entries[index] = ForeshadowEntry.from_dict(data)
+            return
+        raise KeyError(f"foreshadow not found: {entry_id}")
+
+    def defer(self, entry_id: str, *, expected_payoff_chapter: int,
+              expected_payoff_volume: int) -> None:
+        """Defer the planner deadline without changing the legacy lifecycle enum."""
+        self._record_planner_action(
+            entry_id, "defer", expected_payoff_chapter=expected_payoff_chapter,
+            expected_payoff_volume=expected_payoff_volume,
+        )
+
+    def cancel(self, entry_id: str) -> None:
+        """Cancel planner intent only; Canon-derived rows remain untouched."""
+        self._record_planner_action(entry_id, "cancel")
+
+    def is_cancelled(self, entry_id: str) -> bool:
+        for entry in self.entries:
+            if entry.id == entry_id:
+                return bool(entry.audit_log and entry.audit_log[-1].get("action") == "cancel")
+        raise KeyError(f"foreshadow not found: {entry_id}")
+
+    def _record_planner_action(self, entry_id: str, action: str, **schedule: int) -> None:
+        if action not in {"defer", "cancel"}:
+            raise ValueError("unsupported planner action")
+        for index, existing in enumerate(self.entries):
+            if existing.id != entry_id:
+                continue
+            data = existing.to_dict()
+            data.update(schedule)
+            data["updated_at"] = datetime.now(timezone.utc).isoformat()
+            data["audit_log"] = [*data.get("audit_log", []), {
+                "action": action, "chapter": 0, "ts": data["updated_at"],
+            }]
+            self.entries[index] = ForeshadowEntry.from_dict(data)
+            return
+        raise KeyError(f"foreshadow not found: {entry_id}")
 
     def advance(self, entry_id: str, at_chapter: int) -> None:
         """Transition entry to ADVANCED status; record audit_log entry (I2)."""
@@ -196,6 +255,8 @@ class PromiseLedger:
         for e in self.entries:
             if e.status == ForeshadowStatus.PAID_OFF:
                 continue
+            if e.audit_log and e.audit_log[-1].get("action") == "cancel":
+                continue
             if e.expected_payoff_volume < current_volume:
                 result.append(e)
             elif (e.expected_payoff_volume == current_volume
@@ -206,4 +267,5 @@ class PromiseLedger:
     def list_for_volume(self, volume: int) -> list[ForeshadowEntry]:
         """Return entries planted OR scheduled to payoff in given volume."""
         return [e for e in self.entries
+                if not (e.audit_log and e.audit_log[-1].get("action") == "cancel")
                 if e.planted_volume == volume or e.expected_payoff_volume == volume]

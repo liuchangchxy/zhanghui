@@ -637,3 +637,45 @@ def test_owner_overlay_collision_blocks_without_promoting_craft_or_enrolling(tmp
     assert json.loads(state_path.read_text(encoding="utf-8"))["story_craft"]["tone"] == "legacy"
     assert json.loads(overlay_path.read_text(encoding="utf-8")) == original_overlay
     assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()
+
+
+def test_promise_ledger_migration_is_planner_intent_and_malformed_rows_conflict(tmp_path):
+    from data_modules.project_migration import _owner_inventory
+
+    state = {"project_info": {"promise_ledger": [
+        {"id": "p-1", "type": "promise", "depth": 1, "planted_chapter": 1,
+         "planted_volume": 1, "expected_payoff_chapter": 10,
+         "expected_payoff_volume": 2, "status": "pending", "canon_event_ref": "evt-7"},
+        {"id": "unknown-old-row", "custom": "preserve"},
+    ]}}
+    (tmp_path / ".webnovel").mkdir(exist_ok=True)
+    path = tmp_path / ".webnovel/state.json"
+    original = json.dumps(state)
+    path.write_text(original, encoding="utf-8")
+    mappings, conflicts = _owner_inventory(tmp_path)
+    assert mappings["state"]["field_classifications"]["project_info.promise_ledger"] == "OWNER_INTENT"
+    assert any(row["kind"] == "malformed_planner_promise_entry" for row in conflicts)
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_chapter_meta_migration_splits_fields_and_preserves_unknown_occurrence(tmp_path):
+    from data_modules.project_migration import _owner_inventory
+
+    state = {"chapter_meta": {"1": {"hook_type": "悬念式", "beat_position": "midpoint",
+                                     "must_cover": ["plan-node"],
+                                     "foreshadow_paid_off": ["FS-01"],
+                                     "title": "开篇", "custom": {"note": "keep"}}}}
+    (tmp_path / ".webnovel").mkdir(exist_ok=True)
+    path = tmp_path / ".webnovel/state.json"
+    source = json.dumps(state, ensure_ascii=False)
+    path.write_text(source, encoding="utf-8")
+    mappings, conflicts = _owner_inventory(tmp_path)
+    classes = mappings["state"]["field_classifications"]
+    assert classes["chapter_meta.1.hook_type"] == "CRAFT"
+    assert classes["chapter_meta.1.beat_position"] == "CRAFT"
+    assert classes["chapter_meta.1.must_cover"] == "INTENT"
+    assert classes["chapter_meta.1.foreshadow_paid_off"] == "UNKNOWN"
+    assert classes["chapter_meta.1.title"] == "DERIVED_REFERENCE"
+    assert classes["chapter_meta.1.custom"] == "UNKNOWN"
+    assert any(row["kind"] == "unknown_chapter_meta_field" for row in conflicts)
+    assert path.read_text(encoding="utf-8") == source
