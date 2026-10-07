@@ -33,6 +33,7 @@ class PreflightReport:
     candidates: list[dict[str, Any]]
     evidence_hashes: dict[str, str]
     owner_mappings: dict[str, Any]
+    legacy_history: dict[str, Any]
     conflicts: list[dict[str, Any]]
     report_digest: str
 
@@ -44,6 +45,7 @@ class MigrationPlan:
     preflight_digest: str
     plan_digest: str
     canon_slices: list[dict[str, Any]]
+    owner_dispositions: dict[str, Any]
     mutable_overlays: list[dict[str, Any]]
     preserved_sources: list[dict[str, Any]]
     output_hashes: dict[str, str]
@@ -109,26 +111,97 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     state = _json_file(webnovel / "state.json") or {}
     state_canon = {"entity_state", "protagonist_state", "strand_tracker", "chapter_meta"}
     owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
-                   "workflow", "craft", "intent", "disambiguation_warnings", "disambiguation_pending"}
-    owner_paths = {"progress.volumes_planned", "progress.current_volume", "progress.total_volumes"}
-    known = state_canon | owner_roots | {"progress", "meta", "schema_version"}
+                   "workflow", "craft", "intent", "disambiguation_warnings", "disambiguation_pending",
+                   "project_info", "volumes"}
+    owner_paths = {"progress.volumes_planned", "progress.current_volume", "progress.total_volumes",
+                   "progress.volumes_completed", "progress.last_updated"}
+    known = state_canon | owner_roots | {"progress", "meta", "schema_version", "project_info", "state",
+                                         "plot_threads", "relationships", "state_changes", "volumes",
+                                         "world_settings", "_migrated_to_sqlite", "_migration_timestamp"}
     conflicts = []
     unknown = sorted(set(state) - known)
     for key in unknown:
         conflicts.append({"kind": "unmapped_state_root", "path": f".webnovel/state.json:{key}",
                           "requires": "explicit owner mapping"})
     progress = state.get("progress") if isinstance(state.get("progress"), dict) else {}
-    progress_owner = sorted(set(progress) & {"volumes_planned", "current_volume", "total_volumes"})
-    progress_canon = sorted(set(progress) & {"current_chapter", "total_words", "chapter_status", "last_updated"})
+    progress_owner = sorted(set(progress) & {"volumes_planned", "current_volume", "total_volumes",
+                                             "volumes_completed", "last_updated"})
+    progress_canon = sorted(set(progress) & {"current_chapter", "total_words", "chapter_status"})
     unmapped_progress = sorted(set(progress) - set(progress_owner) - set(progress_canon) - {"chapter_meta"})
     for key in unmapped_progress:
         conflicts.append({"kind": "unmapped_progress_field", "path": f".webnovel/state.json:progress.{key}",
                           "requires": "explicit owner mapping"})
 
+    field_classes = {}
+    for key in ("_migrated_to_sqlite", "_migration_timestamp"):
+        if key in state:
+            field_classes[key] = "PRESERVED_COMPATIBILITY_METADATA"
+    for key in progress_owner:
+        field_classes[f"progress.{key}"] = "OWNER_WORKFLOW_METADATA"
+    for key in progress_canon:
+        field_classes[f"progress.{key}"] = "LEGACY_DERIVED_CANON_PROJECTION"
+    intent_fields = {"title", "genre", "genre_label", "genre_tags", "tags", "core_selling_points",
+                     "target_reader", "target_words", "target_chapters", "story_pitch", "story_premise",
+                     "characters", "world_setting", "outline", "theme", "golden_finger_name",
+                     "golden_finger_type", "golden_finger_style", "protagonist_structure", "heroine_config",
+                     "heroine_names", "heroine_role", "co_protagonists", "co_protagonist_roles",
+                     "antagonist_tiers", "world_scale", "factions", "power_system_type", "social_class",
+                     "resource_distribution", "gf_visibility", "gf_irreversible_cost", "currency_system",
+                     "currency_exchange", "sect_hierarchy", "cultivation_chain", "cultivation_subtiers",
+                     "later_volumes_status", "confirmed_through_volume", "cross_volume_beat_map"}
+    config_fields = {"author", "language", "output_dir", "project_id", "platform", "created_at"}
+    project_info = state.get("project_info") if isinstance(state.get("project_info"), dict) else {}
+    for key in sorted(project_info):
+        if key in intent_fields:
+            field_classes[f"project_info.{key}"] = "OWNER_INTENT"
+        elif key in config_fields:
+            field_classes[f"project_info.{key}"] = "OWNER_PROJECT_CONFIG"
+        else:
+            conflicts.append({"kind": "unmapped_legacy_field", "path": f".webnovel/state.json:project_info.{key}",
+                              "requires": "explicit owner mapping"})
+    legacy_root_classes = {
+        "state_changes": "LEGACY_DERIVED_CANON_PROJECTION",
+        "relationships": "LEGACY_DERIVED_CANON_PROJECTION",
+        "plot_threads": "LEGACY_AMBIGUOUS_CANON_OR_INTENT",
+        "world_settings": "LEGACY_AMBIGUOUS_CANON_OR_INTENT",
+        "volumes": "OWNER_INTENT_PLANNING",
+    }
+    for root_name, classification in legacy_root_classes.items():
+        value = state.get(root_name)
+        field_classes[root_name] = classification
+        if value not in (None, {}, []):
+            if root_name == "volumes":
+                field_classes[root_name] = "OWNER_INTENT_PLANNING"
+            elif root_name in {"plot_threads", "world_settings"}:
+                def leaves(item, prefix):
+                    if item == {} or item == []:
+                        return
+                    if isinstance(item, dict) and item:
+                        for child_key, child_value in item.items():
+                            yield from leaves(child_value, f"{prefix}.{child_key}")
+                    elif isinstance(item, list) and item:
+                        for index, child_value in enumerate(item):
+                            yield from leaves(child_value, f"{prefix}[{index}]")
+                    else:
+                        yield prefix
+                for field_path in leaves(value, root_name):
+                    conflicts.append({"kind": "ambiguous_legacy_semantics",
+                                      "path": f".webnovel/state.json:{field_path}",
+                                      "classification": classification,
+                                      "requires": "explicit field-level import decision"})
+    state_blob = state.get("state") if isinstance(state.get("state"), dict) else {}
+    for key in sorted(state_blob):
+        if key in {"_revision", "_last_modified_by", "_last_modified_at"}:
+            field_classes[f"state.{key}"] = "PRESERVED_COMPATIBILITY_METADATA"
+        else:
+            conflicts.append({"kind": "unmapped_legacy_field", "path": f".webnovel/state.json:state.{key}",
+                              "requires": "explicit owner mapping"})
+
     table_owners = {
-        "chapters": "CANON_COMMIT", "scenes": "CANON_COMMIT", "appearances": "CANON_COMMIT",
-        "state_changes": "CANON_COMMIT", "entities": "CANON_COMMIT", "relationships": "CANON_COMMIT",
-        "story_events": "CANON_COMMIT",
+        "chapters": "LEGACY_DERIVED_CANON_PROJECTION", "scenes": "LEGACY_DERIVED_CANON_PROJECTION",
+        "appearances": "LEGACY_DERIVED_CANON_PROJECTION", "state_changes": "LEGACY_DERIVED_CANON_PROJECTION",
+        "entities": "LEGACY_DERIVED_CANON_PROJECTION", "relationships": "LEGACY_DERIVED_CANON_PROJECTION",
+        "story_events": "LEGACY_DERIVED_CANON_PROJECTION",
     }
     index_path = webnovel / "index.db"
     index_tables = []
@@ -165,11 +238,59 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         conflicts.append({"kind": "mixed_memory_evidence", **row,
                           "requires": "separate Canon and owner evidence before migration"})
 
+    for conflict in conflicts:
+        path = str(conflict.get("path") or "")
+        prefix = ".webnovel/state.json:"
+        if path.startswith(prefix):
+            field_classes.setdefault(path[len(prefix):], "UNCLASSIFIED_CONFLICT")
+    field_dispositions = {}
+    for path, classification in field_classes.items():
+        if classification in {"OWNER_INTENT", "OWNER_PROJECT_CONFIG"}:
+            disposition = {"destination": "owner_overlay.project_info", "copied": True,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification == "OWNER_INTENT_PLANNING":
+            disposition = {"destination": "owner_overlay.volumes", "copied": True,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification == "OWNER_WORKFLOW_METADATA":
+            disposition = {"destination": "owner_overlay." + path, "copied": True,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification == "LEGACY_DERIVED_CANON_PROJECTION":
+            root_name = path.split(".", 1)[0]
+            destination = {"relationships": "generation.relationships",
+                           "state_changes": "generation.state_changes",
+                           "progress": "generation.materialized_state"}.get(
+                               root_name, "generation." + root_name)
+            disposition = {"destination": destination, "copied": False,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification == "LEGACY_AMBIGUOUS_CANON_OR_INTENT":
+            disposition = {"destination": "legacy_preserved_source", "copied": False,
+                           "visible_in_activation_runtime": False, "conflict_required": True}
+        elif classification == "UNCLASSIFIED_CONFLICT":
+            disposition = {"destination": "legacy_preserved_source", "copied": False,
+                           "visible_in_activation_runtime": False, "conflict_required": True}
+        else:
+            disposition = {"destination": "legacy_preserved_source", "copied": False,
+                           "visible_in_activation_runtime": False, "conflict_required": False}
+        field_dispositions[path] = disposition
+    table_dispositions = {}
+    for table, classification in table_owners.items():
+        if classification == "LEGACY_DERIVED_CANON_PROJECTION":
+            table_dispositions[table] = {"destination": "generation." + table, "copied": False,
+                                         "visible_in_activation_runtime": True, "conflict_required": False}
+        else:
+            table_dispositions[table] = {"destination": ".webnovel/index.db", "copied": False,
+                                         "visible_in_activation_runtime": True, "conflict_required": False}
     mappings = {
         "state": {"canon_roots": sorted(state_canon), "owner_roots": sorted(owner_roots),
                   "owner_progress_paths": sorted(owner_paths), "observed_owner_progress_fields": progress_owner,
-                  "observed_canon_progress_fields": progress_canon},
+                  "observed_canon_progress_fields": progress_canon, "field_classifications": field_classes,
+                  "field_dispositions": field_dispositions,
+                  "owner_field_paths": sorted(path for path, owner in field_classes.items()
+                                               if owner.startswith("OWNER_")),
+                  "overlay_compatible_owner_field_paths": sorted(
+                      (set(progress_owner) & set(owner_paths)) | {"project_info", "volumes"})},
         "index_tables": table_owners,
+        "index_table_dispositions": table_dispositions,
         "memory": {"observed_rows": memory_rows, "canon_evidence_prefixes": list(canon_prefixes),
                    "ambiguous_mixed_rows": ambiguous_memory_rows},
         "vector_store_paths": [path.relative_to(root).as_posix() for path in _scoped_paths(root)
@@ -216,12 +337,49 @@ def _report_body(root: Path) -> dict[str, Any]:
         active["base_history_status"] = "valid" if history.ok else "blocked"
         if not history.ok:
             conflicts.append({"kind": "base_history_invalid", "diagnostics": list(history.diagnostics)})
+    commit_paths = sorted((root / ".story-system/commits").glob("*.commit.json"))
+    chapter_paths = sorted((root / ".story-system/chapters").glob("chapter_*.json"))
+    structured_paths = set(chapter_paths)
+    for pattern in (".story-system/reviews/chapter_*.review.json",
+                    ".story-system/volumes/volume_*.json",
+                    "99_归档/**/chapter_*.json"):
+        structured_paths.update(root.glob(pattern))
+    structured_paths = sorted(path for path in structured_paths if path.is_file()
+                              and "/backups/" not in path.relative_to(root).as_posix())
+    prose_paths = sorted(path for path in root.rglob("*.md") if path.is_file()
+                         and not any(part.startswith(".") for part in path.relative_to(root).parts)
+                         and __import__("re").search(r"第\d{4,}章", path.name)
+                         and not any(token in path.name for token in ("审查报告", "质量检查表")))
+    durable_history_valid = bool(commit_paths and history.ok and history.chapters)
+    legacy_history = {"status": "durable_history_available" if durable_history_valid else
+                      "invalid_durable_history" if commit_paths else "no_durable_history",
+                      "durable_commit_count": len(commit_paths),
+                      "legacy_chapter_artifact_count": len(chapter_paths),
+                      "chapter_artifacts": [{"path": p.relative_to(root).as_posix(),
+                                             "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+                                             "contract_type": (_json_file(p) or {}).get("meta", {}).get("contract_type")}
+                                            for p in chapter_paths],
+                      "legacy_structured_artifacts": [{"path": p.relative_to(root).as_posix(),
+                                                        "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+                                                        "contract_type": (_json_file(p) or {}).get("meta", {}).get("contract_type"),
+                                                        "archived": "99_归档" in p.relative_to(root).parts}
+                                                       for p in structured_paths],
+                      "legacy_prose_count": len(prose_paths),
+                      "prose_artifacts": [{"path": p.relative_to(root).as_posix(),
+                                           "sha256": hashlib.sha256(p.read_bytes()).hexdigest()} for p in prose_paths],
+                      "accepted_evidence_found": durable_history_valid, "safe_to_auto_import": False}
+    if not commit_paths and (chapter_paths or prose_paths):
+        legacy_history["status"] = "requires_explicit_import_decision"
+        conflicts.append({"kind": "legacy_history_requires_explicit_import_decision",
+                          "path": ".story-system/commits", "legacy_prose_count": len(prose_paths),
+                          "legacy_chapter_artifact_count": len(chapter_paths),
+                          "requires": "human-confirmed accepted legacy history and field-level Canon import"})
     evidence_hashes = _hash_files(root)
     candidates = _candidate_report(root)
     return {"schema_version": "phase9-migration-preflight/v1", "project_root": str(root),
             "active_status": active.get("active_status", "unknown"), "active": active,
             "candidates": candidates, "evidence_hashes": evidence_hashes,
-            "owner_mappings": mappings, "conflicts": conflicts}
+            "owner_mappings": mappings, "legacy_history": legacy_history, "conflicts": conflicts}
 
 
 def preflight_project(project_root: str | Path) -> PreflightReport:
@@ -253,8 +411,13 @@ def dry_run_migration(project_root: str | Path, report_digest: str) -> Migration
                              "effective_content_sha256": entry.effective_content_sha256,
                              "status": entry.status, "applied_correction_ids": list(entry.applied_correction_ids)})
     mappings = report.owner_mappings
+    owner_dispositions = {
+        "state_fields": mappings["state"]["field_dispositions"],
+        "index_tables": mappings["index_table_dispositions"],
+    }
     mutable_overlays = [
-        {"path": ".webnovel/state-overlay.json", "fields": mappings["state"]["owner_roots"] + mappings["state"]["owner_progress_paths"]},
+        {"path": ".webnovel/state-overlay.json", "fields": sorted(set(
+            mappings["state"]["owner_roots"] + mappings["state"]["owner_progress_paths"]))},
         {"path": ".webnovel/index.db", "tables": sorted(name for name, owner in mappings["index_tables"].items()
                                                            if owner == "OWNER_OPERATIONAL")},
         {"path": ".webnovel/memory_scratchpad.json", "classification": "non-Canon rows; Canon evidence rows regenerated from effective history"},
@@ -289,6 +452,7 @@ def dry_run_migration(project_root: str | Path, report_digest: str) -> Migration
     unresolved = list(report.conflicts)
     body = {"schema_version": "phase9-migration-plan/v1", "project_root": str(root),
             "preflight_digest": report.report_digest, "canon_slices": canon_slices,
+            "owner_dispositions": owner_dispositions,
             "mutable_overlays": mutable_overlays, "preserved_sources": preserved,
             "output_hashes": output_hashes, "unresolved_decisions": unresolved}
     after = _hash_files(root)
@@ -454,9 +618,10 @@ def _prepare_owner_overlay(root: Path) -> int:
     additions = {}
     owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
                    "workflow", "craft", "intent", "disambiguation_warnings",
-                   "disambiguation_pending"}
+                   "disambiguation_pending", "project_info", "volumes"}
     allowed_overlay_paths = owner_roots | {"progress.volumes_planned", "progress.current_volume",
-                                           "progress.total_volumes", "progress.chapter_status"}
+                                           "progress.total_volumes", "progress.chapter_status",
+                                           "progress.volumes_completed", "progress.last_updated"}
     unknown_overlay_paths = set(overlay["values"]) - allowed_overlay_paths
     if unknown_overlay_paths:
         raise MigrationError(f"UNMAPPED_EXISTING_OVERLAY:{sorted(unknown_overlay_paths)}")
@@ -464,7 +629,7 @@ def _prepare_owner_overlay(root: Path) -> int:
         if key in state:
             additions[key] = state[key]
     progress = state.get("progress") if isinstance(state.get("progress"), dict) else {}
-    for key in ("volumes_planned", "current_volume", "total_volumes"):
+    for key in ("volumes_planned", "current_volume", "total_volumes", "volumes_completed", "last_updated"):
         if key in progress:
             additions[f"progress.{key}"] = progress[key]
     for key, value in additions.items():

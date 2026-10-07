@@ -21,6 +21,7 @@ from data_modules.chapter_commit_service import ChapterCommitService, ChapterCom
 from data_modules.owned_project_view import OwnedProjectView, OwnedRAGView, OwnedStateStore
 from data_modules.config import DataModulesConfig
 from data_modules.context_manager import ContextManager
+from data_modules.index_manager import IndexManager
 
 
 def _commit(chapter):
@@ -245,6 +246,72 @@ def test_normal_chapter_commit_publishes_complete_activation_generation(tmp_path
     for domain in ("events", "state", "index", "summary", "memory", "vector", "intent_diagnostics"):
         assert (after.generation_root / domain / "chapter_002.json").is_file()
     assert (tmp_path / ".webnovel/state.json").read_bytes() == legacy_state_bytes
+
+
+def test_durable_migration_full_smoke_preserves_owner_chapter_correction_and_checklist(tmp_path, monkeypatch):
+    import sys
+    from data_modules.canon_correction_store import activate_correction
+
+    base = _commit(1)
+    base["extraction_result"]["accepted_events"] = [{
+        "event_id": "accepted-relationship", "chapter": 1,
+        "event_type": "relationship_changed", "subject": "Hero",
+        "payload": {"from_entity": "Hero", "to_entity": "Mentor",
+                    "relationship_type": "ally", "description": "Canon relationship"},
+    }]
+    commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    commit_path.parent.mkdir(parents=True)
+    commit_path.write_text(json.dumps(base), encoding="utf-8")
+    state = {"project_info": {"title": "TEST ONLY", "genre": "玄幻",
+                              "core_selling_points": ["planned premise"]},
+             "volumes": [{"title": "TEST ONLY volume", "outline": "planned"}],
+             "relationships": {"legacy-only": [{"description": "must not become Canon"}]}}
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.parent.mkdir(parents=True)
+    original_state = json.dumps(state, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(original_state)
+    with sqlite3.connect(tmp_path / ".webnovel/index.db") as conn:
+        conn.execute("CREATE TABLE chapters (chapter INTEGER)")
+        conn.execute("CREATE TABLE review_attempts (id INTEGER)")
+
+    report = preflight_project(tmp_path)
+    assert report.ok is True
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    assert {"project_info", "volumes"}.issubset(next(
+        row["fields"] for row in plan.mutable_overlays if row["path"] == ".webnovel/state-overlay.json"))
+    backup = create_verified_backup(tmp_path, plan)
+    migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    active = OwnedProjectView.pin_active(tmp_path)
+    state_view = OwnedStateStore(tmp_path).read_view(active.pinned)
+    assert state_view["project_info"] == state["project_info"]
+    assert state_view["volumes"] == state["volumes"]
+    relations = active.index.read_table("relationships")
+    assert [row["payload"]["description"] for row in relations] == ["Canon relationship"]
+
+    second = _commit(2)
+    second["extraction_result"]["summary_text"] = "chapter two accepted"
+    ChapterCommitService(tmp_path).apply_projections(second)
+    authorization, _ = _stage_amend_summary(
+        tmp_path, 1, base, "TEST-ONLY-full-smoke", "corrected accepted Canon summary")
+    activation = activate_correction(tmp_path, "TEST-ONLY-full-smoke", authorization)
+    assert activation.ok is True
+    assert (state_path.read_bytes() == original_state)
+
+    # A new manager instance represents the restarted runtime reading the activated generation.
+    restarted = ContextManager(DataModulesConfig.from_project_root(tmp_path))
+    context = restarted.build_context(3)
+    assert context["meta"]["context_snapshot"]["publication_record_id"] == activation.publication_record_id
+    persisted_owner_state = OwnedProjectView.pin_active(tmp_path).state_view()
+    assert persisted_owner_state["project_info"] == state["project_info"]
+    assert persisted_owner_state["volumes"] == state["volumes"]
+
+    monkeypatch.setattr(sys, "argv", ["context_manager", "--project-root", str(tmp_path),
+                                      "--chapter", "3", "--persist-checklist-score"])
+    from data_modules.context_manager import main
+    main()
+    assert IndexManager(DataModulesConfig.from_project_root(tmp_path), read_only=True).get_writing_checklist_score(3) is not None
+    assert ContextManager(DataModulesConfig.from_project_root(tmp_path)).build_context(4)
+    assert IndexManager(DataModulesConfig.from_project_root(tmp_path), read_only=True).get_writing_checklist_score_trend()["count"] == 1
 
 
 def test_new_chapter_rejects_snapshot_staled_by_same_semantic_publication(tmp_path, monkeypatch):

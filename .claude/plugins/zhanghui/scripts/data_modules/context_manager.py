@@ -109,7 +109,7 @@ class ContextManager:
 
     def __init__(self, config=None):
         self.config = config or get_config()
-        self.index_manager = IndexManager(self.config)
+        self.index_manager = IndexManager(self.config, read_only=True)
         self.context_ranker = ContextRanker(self.config)
 
     def build_context(
@@ -521,8 +521,7 @@ class ContextManager:
             reader_signal=reader_signal,
         )
 
-        if getattr(self.config, "context_writing_score_persist_enabled", True):
-            self._persist_writing_checklist_score(checklist_score)
+        # Context assembly is a pure read; checklist telemetry is written by explicit workflows.
 
         low_ranges = guidance_bundle.get("low_ranges") or []
         hook_usage = guidance_bundle.get("hook_usage") or {}
@@ -616,34 +615,6 @@ class ContextManager:
 
     def _is_checklist_item_completed(self, item: Dict[str, Any], reader_signal: Dict[str, Any]) -> bool:
         return is_checklist_item_completed(item, reader_signal)
-
-    def _persist_writing_checklist_score(self, checklist_score: Dict[str, Any]) -> None:
-        if not checklist_score:
-            return
-        try:
-            self.index_manager.save_writing_checklist_score(
-                WritingChecklistScoreMeta(
-                    chapter=int(checklist_score.get("chapter") or 0),
-                    template=str(getattr(self, "_active_template", self.DEFAULT_TEMPLATE) or self.DEFAULT_TEMPLATE),
-                    total_items=int(checklist_score.get("total_items") or 0),
-                    required_items=int(checklist_score.get("required_items") or 0),
-                    completed_items=int(checklist_score.get("completed_items") or 0),
-                    completed_required=int(checklist_score.get("completed_required") or 0),
-                    total_weight=float(checklist_score.get("total_weight") or 0.0),
-                    completed_weight=float(checklist_score.get("completed_weight") or 0.0),
-                    completion_rate=float(checklist_score.get("completion_rate") or 0.0),
-                    score=float(checklist_score.get("score") or 0.0),
-                    score_breakdown={
-                        "weighted_completion_rate": checklist_score.get("weighted_completion_rate"),
-                        "required_completion_rate": checklist_score.get("required_completion_rate"),
-                        "trend_window": checklist_score.get("trend_window"),
-                    },
-                    pending_items=list(checklist_score.get("pending_items") or []),
-                    source="context_manager",
-                )
-            )
-        except Exception as exc:
-            logger.warning("failed to persist writing checklist score: %s", exc)
 
     def _resolve_context_stage(self, chapter: int) -> str:
         early = max(1, int(getattr(self.config, "context_dynamic_budget_early_chapter", 30)))
@@ -880,6 +851,8 @@ def main():
     parser.add_argument("--project-root", type=str, help="项目根目录")
     parser.add_argument("--chapter", type=int, required=True)
     parser.add_argument("--template", type=str, default=ContextManager.DEFAULT_TEMPLATE)
+    parser.add_argument("--persist-checklist-score", action="store_true",
+                        help="在显式写作工作流步骤中保存本次清单评分 telemetry")
 
     args = parser.parse_args()
 
@@ -898,6 +871,28 @@ def main():
             chapter=args.chapter,
             template=args.template,
         )
+        if args.persist_checklist_score:
+            score = (payload.get("writing_guidance") or {}).get("checklist_score") or {}
+            if score:
+                IndexManager(config).save_writing_checklist_score(WritingChecklistScoreMeta(
+                    chapter=int(score.get("chapter") or args.chapter),
+                    template=str(args.template),
+                    total_items=int(score.get("total_items") or 0),
+                    required_items=int(score.get("required_items") or 0),
+                    completed_items=int(score.get("completed_items") or 0),
+                    completed_required=int(score.get("completed_required") or 0),
+                    total_weight=float(score.get("total_weight") or 0.0),
+                    completed_weight=float(score.get("completed_weight") or 0.0),
+                    completion_rate=float(score.get("completion_rate") or 0.0),
+                    score=float(score.get("score") or 0.0),
+                    score_breakdown={
+                        "weighted_completion_rate": score.get("weighted_completion_rate"),
+                        "required_completion_rate": score.get("required_completion_rate"),
+                        "trend_window": score.get("trend_window"),
+                    },
+                    pending_items=list(score.get("pending_items") or []),
+                    source="context_manager_explicit_workflow",
+                ))
         print_success(payload, message="context_built")
         try:
             manager.index_manager.log_tool_call("context_manager:build", True, chapter=args.chapter)
