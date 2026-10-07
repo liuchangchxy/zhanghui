@@ -45,6 +45,7 @@ class MigrationPlan:
     preflight_digest: str
     plan_digest: str
     canon_slices: list[dict[str, Any]]
+    owner_dispositions: dict[str, Any]
     mutable_overlays: list[dict[str, Any]]
     preserved_sources: list[dict[str, Any]]
     output_hashes: dict[str, str]
@@ -110,7 +111,8 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     state = _json_file(webnovel / "state.json") or {}
     state_canon = {"entity_state", "protagonist_state", "strand_tracker", "chapter_meta"}
     owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
-                   "workflow", "craft", "intent", "disambiguation_warnings", "disambiguation_pending"}
+                   "workflow", "craft", "intent", "disambiguation_warnings", "disambiguation_pending",
+                   "project_info", "volumes"}
     owner_paths = {"progress.volumes_planned", "progress.current_volume", "progress.total_volumes",
                    "progress.volumes_completed", "progress.last_updated"}
     known = state_canon | owner_roots | {"progress", "meta", "schema_version", "project_info", "state",
@@ -133,7 +135,7 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     field_classes = {}
     for key in ("_migrated_to_sqlite", "_migration_timestamp"):
         if key in state:
-            field_classes[key] = "OWNER_OPERATIONAL_METADATA"
+            field_classes[key] = "PRESERVED_COMPATIBILITY_METADATA"
     for key in progress_owner:
         field_classes[f"progress.{key}"] = "OWNER_WORKFLOW_METADATA"
     for key in progress_canon:
@@ -170,7 +172,7 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         if value not in (None, {}, []):
             if root_name == "volumes":
                 field_classes[root_name] = "OWNER_INTENT_PLANNING"
-            elif root_name in {"plot_threads", "relationships", "world_settings"}:
+            elif root_name in {"plot_threads", "world_settings"}:
                 def leaves(item, prefix):
                     if item == {} or item == []:
                         return
@@ -190,7 +192,7 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     state_blob = state.get("state") if isinstance(state.get("state"), dict) else {}
     for key in sorted(state_blob):
         if key in {"_revision", "_last_modified_by", "_last_modified_at"}:
-            field_classes[f"state.{key}"] = "OWNER_OPERATIONAL_METADATA"
+            field_classes[f"state.{key}"] = "PRESERVED_COMPATIBILITY_METADATA"
         else:
             conflicts.append({"kind": "unmapped_legacy_field", "path": f".webnovel/state.json:state.{key}",
                               "requires": "explicit owner mapping"})
@@ -236,14 +238,59 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         conflicts.append({"kind": "mixed_memory_evidence", **row,
                           "requires": "separate Canon and owner evidence before migration"})
 
+    for conflict in conflicts:
+        path = str(conflict.get("path") or "")
+        prefix = ".webnovel/state.json:"
+        if path.startswith(prefix):
+            field_classes.setdefault(path[len(prefix):], "UNCLASSIFIED_CONFLICT")
+    field_dispositions = {}
+    for path, classification in field_classes.items():
+        if classification in {"OWNER_INTENT", "OWNER_PROJECT_CONFIG"}:
+            disposition = {"destination": "owner_overlay.project_info", "copied": True,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification == "OWNER_INTENT_PLANNING":
+            disposition = {"destination": "owner_overlay.volumes", "copied": True,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification == "OWNER_WORKFLOW_METADATA":
+            disposition = {"destination": "owner_overlay." + path, "copied": True,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification == "LEGACY_DERIVED_CANON_PROJECTION":
+            root_name = path.split(".", 1)[0]
+            destination = {"relationships": "generation.relationships",
+                           "state_changes": "generation.state_changes",
+                           "progress": "generation.materialized_state"}.get(
+                               root_name, "generation." + root_name)
+            disposition = {"destination": destination, "copied": False,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification == "LEGACY_AMBIGUOUS_CANON_OR_INTENT":
+            disposition = {"destination": "legacy_preserved_source", "copied": False,
+                           "visible_in_activation_runtime": False, "conflict_required": True}
+        elif classification == "UNCLASSIFIED_CONFLICT":
+            disposition = {"destination": "legacy_preserved_source", "copied": False,
+                           "visible_in_activation_runtime": False, "conflict_required": True}
+        else:
+            disposition = {"destination": "legacy_preserved_source", "copied": False,
+                           "visible_in_activation_runtime": False, "conflict_required": False}
+        field_dispositions[path] = disposition
+    table_dispositions = {}
+    for table, classification in table_owners.items():
+        if classification == "LEGACY_DERIVED_CANON_PROJECTION":
+            table_dispositions[table] = {"destination": "generation." + table, "copied": False,
+                                         "visible_in_activation_runtime": True, "conflict_required": False}
+        else:
+            table_dispositions[table] = {"destination": ".webnovel/index.db", "copied": False,
+                                         "visible_in_activation_runtime": True, "conflict_required": False}
     mappings = {
         "state": {"canon_roots": sorted(state_canon), "owner_roots": sorted(owner_roots),
                   "owner_progress_paths": sorted(owner_paths), "observed_owner_progress_fields": progress_owner,
                   "observed_canon_progress_fields": progress_canon, "field_classifications": field_classes,
+                  "field_dispositions": field_dispositions,
                   "owner_field_paths": sorted(path for path, owner in field_classes.items()
                                                if owner.startswith("OWNER_")),
-                  "overlay_compatible_owner_field_paths": sorted(set(progress_owner) & set(owner_paths))},
+                  "overlay_compatible_owner_field_paths": sorted(
+                      (set(progress_owner) & set(owner_paths)) | {"project_info", "volumes"})},
         "index_tables": table_owners,
+        "index_table_dispositions": table_dispositions,
         "memory": {"observed_rows": memory_rows, "canon_evidence_prefixes": list(canon_prefixes),
                    "ambiguous_mixed_rows": ambiguous_memory_rows},
         "vector_store_paths": [path.relative_to(root).as_posix() for path in _scoped_paths(root)
@@ -364,6 +411,10 @@ def dry_run_migration(project_root: str | Path, report_digest: str) -> Migration
                              "effective_content_sha256": entry.effective_content_sha256,
                              "status": entry.status, "applied_correction_ids": list(entry.applied_correction_ids)})
     mappings = report.owner_mappings
+    owner_dispositions = {
+        "state_fields": mappings["state"]["field_dispositions"],
+        "index_tables": mappings["index_table_dispositions"],
+    }
     mutable_overlays = [
         {"path": ".webnovel/state-overlay.json", "fields": sorted(set(
             mappings["state"]["owner_roots"] + mappings["state"]["owner_progress_paths"]))},
@@ -401,6 +452,7 @@ def dry_run_migration(project_root: str | Path, report_digest: str) -> Migration
     unresolved = list(report.conflicts)
     body = {"schema_version": "phase9-migration-plan/v1", "project_root": str(root),
             "preflight_digest": report.report_digest, "canon_slices": canon_slices,
+            "owner_dispositions": owner_dispositions,
             "mutable_overlays": mutable_overlays, "preserved_sources": preserved,
             "output_hashes": output_hashes, "unresolved_decisions": unresolved}
     after = _hash_files(root)
@@ -566,7 +618,7 @@ def _prepare_owner_overlay(root: Path) -> int:
     additions = {}
     owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
                    "workflow", "craft", "intent", "disambiguation_warnings",
-                   "disambiguation_pending"}
+                   "disambiguation_pending", "project_info", "volumes"}
     allowed_overlay_paths = owner_roots | {"progress.volumes_planned", "progress.current_volume",
                                            "progress.total_volumes", "progress.chapter_status",
                                            "progress.volumes_completed", "progress.last_updated"}

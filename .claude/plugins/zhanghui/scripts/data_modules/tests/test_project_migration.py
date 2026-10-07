@@ -183,6 +183,11 @@ def test_unknown_state_owner_and_mixed_memory_evidence_are_explicit_conflicts(tm
 
 def test_legacy_brief_and_prose_require_explicit_import_decision(tmp_path):
     prose = _legacy_project(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["relationships"] = {"林川": {"陈默": "ally"}}
+    state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    original_relationships = state["relationships"]
 
     report = preflight_project(tmp_path)
 
@@ -196,15 +201,31 @@ def test_legacy_brief_and_prose_require_explicit_import_decision(tmp_path):
     assert report.legacy_history["prose_artifacts"][0]["sha256"] == __import__("hashlib").sha256(prose.read_bytes()).hexdigest()
     assert any(item["kind"] == "legacy_history_requires_explicit_import_decision"
                for item in report.conflicts)
+    assert not any(item["kind"] == "ambiguous_legacy_semantics"
+                   and item.get("path", "").startswith(".webnovel/state.json:relationships")
+                   for item in report.conflicts)
+    assert original_relationships == json.loads(state_path.read_text(encoding="utf-8"))["relationships"]
     assert not any(item["kind"] == "ambiguous_legacy_semantics" for item in report.conflicts)
-    assert report.owner_mappings["state"]["field_classifications"]["_migrated_to_sqlite"] == "OWNER_OPERATIONAL_METADATA"
+    assert report.owner_mappings["state"]["field_classifications"]["_migrated_to_sqlite"] == "PRESERVED_COMPATIBILITY_METADATA"
     assert report.owner_mappings["state"]["field_classifications"]["progress.volumes_completed"] == "OWNER_WORKFLOW_METADATA"
     assert report.owner_mappings["state"]["field_classifications"]["project_info.core_selling_points"] == "OWNER_INTENT"
     classifications = report.owner_mappings["state"]["field_classifications"]
-    assert classifications["_migration_timestamp"] == "OWNER_OPERATIONAL_METADATA"
+    assert classifications["_migration_timestamp"] == "PRESERVED_COMPATIBILITY_METADATA"
     assert classifications["relationships"] == "LEGACY_DERIVED_CANON_PROJECTION"
     assert classifications["state_changes"] == "LEGACY_DERIVED_CANON_PROJECTION"
-    assert classifications["state._revision"] == "OWNER_OPERATIONAL_METADATA"
+    assert classifications["state._revision"] == "PRESERVED_COMPATIBILITY_METADATA"
+    assert report.owner_mappings["state"]["field_dispositions"]["state._revision"] == {
+        "destination": "legacy_preserved_source", "copied": False,
+        "visible_in_activation_runtime": False, "conflict_required": False,
+    }
+    assert report.owner_mappings["state"]["field_dispositions"]["progress.current_chapter"] == {
+        "destination": "generation.materialized_state", "copied": False,
+        "visible_in_activation_runtime": True, "conflict_required": False,
+    }
+    assert report.owner_mappings["index_table_dispositions"]["relationships"] == {
+        "destination": "generation.relationships", "copied": False,
+        "visible_in_activation_runtime": True, "conflict_required": False,
+    }
     assert classifications["volumes"] == "OWNER_INTENT_PLANNING"
     assert classifications["plot_threads"] == "LEGACY_AMBIGUOUS_CANON_OR_INTENT"
     assert classifications["world_settings"] == "LEGACY_AMBIGUOUS_CANON_OR_INTENT"
@@ -234,10 +255,81 @@ def test_nonempty_ambiguous_legacy_roots_remain_field_level_conflicts(tmp_path):
 
     paths = {item.get("path") for item in report.conflicts}
     assert any(path.startswith(".webnovel/state.json:plot_threads.active_threads") for path in paths)
-    assert any(path.startswith(".webnovel/state.json:relationships.林川") for path in paths)
+    assert not any(path.startswith(".webnovel/state.json:relationships") for path in paths)
     assert any(path.startswith(".webnovel/state.json:world_settings.locations") for path in paths)
     assert ".webnovel/state.json:project_info.unclassified_future_field" in paths
     assert report.ok is False
+
+
+def test_durable_migration_preserves_project_intent_and_volumes_in_active_owner_view(tmp_path):
+    from data_modules.project_migration import migrate_project
+    from data_modules.owned_project_view import OwnedProjectView, OwnedStateStore
+    from data_modules.config import DataModulesConfig
+    from data_modules.context_manager import ContextManager
+
+    commit_path = _root_with_base(tmp_path)
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["accepted_events"] = [{
+        "event_id": "TEST ONLY relationship", "chapter": 1,
+        "event_type": "relationship_changed", "subject": "林川",
+        "payload": {"from_entity": "林川", "to_entity": "陈默",
+                    "relationship_type": "trusted ally", "description": "accepted Canon"},
+    }]
+    commit_path.write_text(json.dumps(commit, ensure_ascii=False), encoding="utf-8")
+    state = {
+        "project_info": {"title": "TEST ONLY title", "genre": "玄幻",
+                         "core_selling_points": ["TEST ONLY premise"]},
+        "volumes": [{"title": "TEST ONLY volume", "outline": "planned"}],
+        "relationships": {"legacy": [{"from": "林川", "to": "陈默"}]},
+    }
+    state_path = tmp_path / ".webnovel/state.json"
+    original_bytes = json.dumps(state, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(original_bytes)
+
+    report = preflight_project(tmp_path)
+    assert report.ok is True
+    assert not any(item.get("path", "").startswith(".webnovel/state.json:relationships")
+                   for item in report.conflicts)
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    owner_overlay_plan = next(row for row in plan.mutable_overlays
+                              if row["path"] == ".webnovel/state-overlay.json")
+    assert {"project_info", "volumes"}.issubset(owner_overlay_plan["fields"])
+    assert report.owner_mappings["state"]["field_dispositions"]["project_info.genre"]["destination"] == "owner_overlay.project_info"
+    assert report.owner_mappings["state"]["field_dispositions"]["relationships"]["destination"] == "generation.relationships"
+    assert plan.owner_dispositions["state_fields"]["project_info.genre"]["destination"] == "owner_overlay.project_info"
+    assert plan.owner_dispositions["state_fields"]["volumes"]["destination"] == "owner_overlay.volumes"
+    assert plan.owner_dispositions["state_fields"]["relationships"]["destination"] == "generation.relationships"
+    backup = create_verified_backup(tmp_path, plan)
+    migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+
+    overlay = json.loads((tmp_path / ".webnovel/state-overlay.json").read_text(encoding="utf-8"))
+    assert overlay["values"]["project_info"] == state["project_info"]
+    assert overlay["values"]["volumes"] == state["volumes"]
+    assert state_path.read_bytes() == original_bytes
+    owned = OwnedProjectView.pin_active(tmp_path)
+    view = OwnedStateStore(tmp_path).read_view(owned.pinned)
+    assert view["project_info"] == state["project_info"]
+    assert view["volumes"] == state["volumes"]
+    active_relationships = owned.index.read_table("relationships")
+    assert len(active_relationships) == 1
+    assert active_relationships[0]["payload"]["description"] == "accepted Canon"
+    assert active_relationships[0]["payload"]["description"] != state["relationships"]["legacy"][0]["from"]
+    payload = ContextManager(DataModulesConfig.from_project_root(tmp_path)).build_context(2)
+    assert "玄幻" in json.dumps(payload["genre_profile"], ensure_ascii=False)
+
+
+def test_unknown_project_info_field_still_blocks_durable_migration(tmp_path):
+    _root_with_base(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"project_info": {"_rerun_at": "TEST ONLY"}}), encoding="utf-8")
+    report = preflight_project(tmp_path)
+    assert report.ok is False
+    assert any(item.get("path") == ".webnovel/state.json:project_info._rerun_at"
+               for item in report.conflicts)
+    assert report.owner_mappings["state"]["field_dispositions"]["project_info._rerun_at"] == {
+        "destination": "legacy_preserved_source", "copied": False,
+        "visible_in_activation_runtime": False, "conflict_required": True,
+    }
 
 
 def test_verified_backup_copies_sqlite_and_all_sidecars_and_restores_hashes(tmp_path):

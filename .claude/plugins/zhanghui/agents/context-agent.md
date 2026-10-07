@@ -33,6 +33,14 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "{project_root}" mem
 
 ```
 
+每次真实写作任务书工作流中，在读取基础包前显式执行一次清单评分 telemetry 写入；该命令单独计算并持久化评分，`ContextManager.build_context()` 本身仍保持纯读：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "{project_root}" context --chapter {NNNN} --template plot --persist-checklist-score
+```
+
+该命令只用于此写作工作流的显式 mutation step，不要在普通 context 查询或只读检查中添加 `--persist-checklist-score`。
+
 按需补查（基础包不足时才调，已含的不重复查）：
 
 ```bash

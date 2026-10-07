@@ -27,7 +27,7 @@ except ImportError:  # pragma: no cover
     )
 
 from .config import get_config
-from .index_manager import IndexManager
+from .index_manager import IndexManager, WritingChecklistScoreMeta
 from .context_ranker import ContextRanker
 from .prewrite_validator import PrewriteValidator
 from .story_contracts import read_json_if_exists
@@ -851,6 +851,8 @@ def main():
     parser.add_argument("--project-root", type=str, help="项目根目录")
     parser.add_argument("--chapter", type=int, required=True)
     parser.add_argument("--template", type=str, default=ContextManager.DEFAULT_TEMPLATE)
+    parser.add_argument("--persist-checklist-score", action="store_true",
+                        help="在显式写作工作流步骤中保存本次清单评分 telemetry")
 
     args = parser.parse_args()
 
@@ -869,6 +871,28 @@ def main():
             chapter=args.chapter,
             template=args.template,
         )
+        if args.persist_checklist_score:
+            score = (payload.get("writing_guidance") or {}).get("checklist_score") or {}
+            if score:
+                IndexManager(config).save_writing_checklist_score(WritingChecklistScoreMeta(
+                    chapter=int(score.get("chapter") or args.chapter),
+                    template=str(args.template),
+                    total_items=int(score.get("total_items") or 0),
+                    required_items=int(score.get("required_items") or 0),
+                    completed_items=int(score.get("completed_items") or 0),
+                    completed_required=int(score.get("completed_required") or 0),
+                    total_weight=float(score.get("total_weight") or 0.0),
+                    completed_weight=float(score.get("completed_weight") or 0.0),
+                    completion_rate=float(score.get("completion_rate") or 0.0),
+                    score=float(score.get("score") or 0.0),
+                    score_breakdown={
+                        "weighted_completion_rate": score.get("weighted_completion_rate"),
+                        "required_completion_rate": score.get("required_completion_rate"),
+                        "trend_window": score.get("trend_window"),
+                    },
+                    pending_items=list(score.get("pending_items") or []),
+                    source="context_manager_explicit_workflow",
+                ))
         print_success(payload, message="context_built")
         try:
             manager.index_manager.log_tool_call("context_manager:build", True, chapter=args.chapter)

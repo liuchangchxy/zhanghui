@@ -819,7 +819,28 @@ def test_context_manager_build_does_not_persist_writing_checklist_score(temp_pro
         raise AssertionError("context read attempted telemetry write")
 
     monkeypatch.setattr(manager.index_manager, "save_writing_checklist_score", _raise_save_error)
-    manager.build_context(6)
+    payload = manager.build_context(6)
+    assert isinstance(payload["writing_guidance"]["checklist_score"], dict)
+    assert temp_project.index_db.exists() is False
+
+
+def test_explicit_context_workflow_persists_score_and_next_build_reads_trend(temp_project, monkeypatch):
+    import sys
+    from data_modules.context_manager import main
+
+    temp_project.state_file.write_text('{"project": {"genre": "玄幻"}}', encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["context_manager", "--project-root", str(temp_project.project_root),
+                                      "--chapter", "6", "--persist-checklist-score"])
+    main()
+
+    reader = IndexManager(temp_project, read_only=True)
+    saved = reader.get_writing_checklist_score(6)
+    assert saved is not None
+    assert saved["source"] == "context_manager_explicit_workflow"
+    assert reader.get_writing_checklist_score_trend()["count"] == 1
+    second = ContextManager(temp_project).build_context(7)
+    assert isinstance(second["writing_guidance"]["checklist_score"], dict)
+    assert IndexManager(temp_project, read_only=True).get_writing_checklist_score_trend()["count"] == 1
 
 
 def test_context_manager_composite_genre_boundary_three_plus(temp_project):

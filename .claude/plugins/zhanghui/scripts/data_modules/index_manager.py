@@ -670,9 +670,9 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
                 wal_path = Path(str(path) + "-wal")
                 shm_path = Path(str(path) + "-shm")
                 if wal_path.exists() and wal_path.stat().st_size and not shm_path.exists():
-                    # A WAL without its shared-memory index cannot be safely read
-                    # without SQLite trying to create a sidecar; degrade to empty.
-                    conn = sqlite3.connect(":memory:", isolation_level=None)
+                    raise sqlite3.OperationalError(
+                        "READ_ONLY_WAL_INDEX_MISSING: existing WAL has no shared-memory index"
+                    )
                 else:
                     use_wal = wal_path.exists() and shm_path.exists()
                     uri = f"{path.resolve().as_uri()}?mode=ro" + ("" if use_wal else "&immutable=1")

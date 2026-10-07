@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+import pytest
 
 from data_modules.config import DataModulesConfig
 from data_modules.context_manager import ContextManager
@@ -55,6 +56,47 @@ def test_read_only_index_manager_with_missing_database_does_not_create_it(tmp_pa
     assert manager.get_invalid_ids("entity") == set()
     assert manager.get_stats()["chapters"] == 0
     assert not config.index_db.exists()
+
+
+def test_read_only_index_manager_reads_existing_valid_wal_without_schema_mutation(tmp_path):
+    config = DataModulesConfig.from_project_root(tmp_path)
+    config.ensure_dirs()
+    writer = sqlite3.connect(config.index_db)
+    writer.execute("PRAGMA journal_mode=WAL")
+    writer.execute("CREATE TABLE chapters (chapter INTEGER PRIMARY KEY, title TEXT)")
+    writer.execute("INSERT INTO chapters VALUES (7, 'WAL visible')")
+    writer.commit()
+    assert config.index_db.with_name(config.index_db.name + "-wal").is_file()
+    assert config.index_db.with_name(config.index_db.name + "-shm").is_file()
+    before_schema = _schema(config.index_db)
+    before_db = hashlib.sha256(config.index_db.read_bytes()).hexdigest()
+
+    manager = IndexManager(config, read_only=True)
+    assert manager.get_chapter(7)["title"] == "WAL visible"
+    assert manager.get_stats()["chapters"] == 1
+
+    assert _schema(config.index_db) == before_schema
+    assert hashlib.sha256(config.index_db.read_bytes()).hexdigest() == before_db
+    assert config.index_db.with_name(config.index_db.name + "-wal").is_file()
+    assert config.index_db.with_name(config.index_db.name + "-shm").is_file()
+    writer.close()
+
+
+def test_read_only_index_manager_fails_closed_for_wal_without_shared_memory_index(tmp_path):
+    config = DataModulesConfig.from_project_root(tmp_path)
+    config.ensure_dirs()
+    writer = sqlite3.connect(config.index_db)
+    writer.execute("PRAGMA journal_mode=WAL")
+    writer.execute("CREATE TABLE chapters (chapter INTEGER PRIMARY KEY, title TEXT)")
+    writer.execute("INSERT INTO chapters VALUES (7, 'WAL data')")
+    writer.commit()
+    shm_path = config.index_db.with_name(config.index_db.name + "-shm")
+    shm_path.unlink()
+
+    manager = IndexManager(config, read_only=True)
+    with pytest.raises(sqlite3.OperationalError, match="READ_ONLY_WAL_INDEX_MISSING"):
+        manager.get_chapter(7)
+    writer.close()
 
 
 def test_context_init_build_and_read_helpers_leave_index_unchanged(tmp_path):
