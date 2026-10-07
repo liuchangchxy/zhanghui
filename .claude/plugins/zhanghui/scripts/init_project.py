@@ -415,6 +415,9 @@ def init_project(
     project_path = Path(project_dir).expanduser().resolve()
     if ".claude" in project_path.parts:
         raise SystemExit("Refusing to initialize a project inside .claude. Choose a different directory.")
+    from data_modules.projection_generation import ProjectionGeneration
+    if ProjectionGeneration(project_path).enrollment_path.exists():
+        raise ValueError("Cannot reinitialize an activation-managed project through the base-only initializer")
     genre = _validate_initial_genre_source(genre)
     genre_resolution = resolve_genre_input(genre)
     canonical_genre = genre_resolution.canonical_genre or genre

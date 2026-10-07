@@ -25,6 +25,11 @@ _OWNER_STATE_ROOTS = {"story_craft", "planning", "promise_ledger", "review_check
                       "disambiguation_pending", "project_info", "volumes"}
 _OWNER_STATE_PATHS = {"progress.volumes_planned", "progress.current_volume", "progress.last_updated",
                       "progress.total_volumes", "progress.chapter_status", "progress.volumes_completed"}
+_CHAPTER_META_OWNER_FIELDS = {"beat_position", "hook_type", "scene_goal", "scene_conflict",
+                              "scene_setback", "scene_resolution", "sequel_reaction",
+                              "sequel_dilemma", "sequel_decision", "quality_evaluation",
+                              "craft_evaluation", "must_cover", "forbidden", "CBN", "CPNs",
+                              "CEN", "strand", "coolpoint", "time_anchor", "villain_tier"}
 _CANON_STATE_ROOTS = {"entity_state", "protagonist_state", "strand_tracker"}
 
 
@@ -32,6 +37,14 @@ def _pinned(pinned: PinnedGeneration) -> Path:
     if not isinstance(pinned, PinnedGeneration) or not pinned.generation_root.is_dir():
         raise OwnedViewError("PINNED_GENERATION_REQUIRED")
     return pinned.generation_root
+
+
+def _is_owner_state_path(key: str) -> bool:
+    if key in _OWNER_STATE_PATHS or key in _OWNER_STATE_ROOTS:
+        return True
+    parts = key.split(".")
+    return (len(parts) == 3 and parts[0] == "chapter_meta" and parts[1].isdigit()
+            and parts[2] in _CHAPTER_META_OWNER_FIELDS)
 
 
 def _chapter_documents(pinned: PinnedGeneration, domain: str) -> list[dict[str, Any]]:
@@ -79,7 +92,7 @@ class OwnedStateStore:
             raise OwnedViewError(f"OWNER_CANON_STATE_COLLISION:{sorted(collision)}")
         result = canon
         for key, value in values.items():
-            if key in _OWNER_STATE_PATHS:
+            if key in _OWNER_STATE_PATHS or (key not in _OWNER_STATE_ROOTS and _is_owner_state_path(key)):
                 parts = key.split(".")
                 target = result
                 for part in parts[:-1]:
@@ -101,15 +114,17 @@ class OwnedStateStore:
             result[key] = value
         result["_view"] = {"generation_id": pinned.generation_id,
                            "semantic_activation_id": pinned.semantic_activation_id,
+                           "publication_record_id": pinned.publication_record_id,
+                           "publication_record_sha256": pinned.publication_record_sha256,
                            "owner_overlay_revision": overlay.get("revision", 0)}
         return result
 
-    def write_owner_values(self, values: dict[str, Any]) -> int:
+    def write_owner_values(self, values: dict[str, Any], *, expected_revision: int | None = None) -> int:
         if not isinstance(values, dict) or not values:
             raise OwnedViewError("OWNER_STATE_VALUES_REQUIRED")
         if _CANON_STATE_ROOTS.intersection(values):
             raise OwnedViewError("CANON_STATE_IS_IMMUTABLE")
-        unknown = set(values) - _OWNER_STATE_ROOTS - _OWNER_STATE_PATHS
+        unknown = {key for key in values if not _is_owner_state_path(key)}
         if unknown:
             raise OwnedViewError(f"UNOWNED_STATE_OVERLAY_PATH:{sorted(unknown)}")
         statuses = values.get("progress.chapter_status")
@@ -120,6 +135,8 @@ class OwnedStateStore:
         self.overlay_path.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(str(self.lock_path)):
             overlay = self._overlay()
+            if expected_revision is not None and overlay.get("revision", 0) != expected_revision:
+                raise OwnedViewError("OWNER_STATE_REVISION_CONFLICT")
             overlay["values"].update(values)
             overlay["revision"] = int(overlay.get("revision", 0)) + 1
             temporary = self.overlay_path.with_name(f".{self.overlay_path.name}.{secrets.token_hex(8)}.tmp")
@@ -377,6 +394,15 @@ class OwnedProjectView:
         if (current is None or current.publication_record_sha256 != self.pinned.publication_record_sha256
                 or current.generation_id != self.pinned.generation_id):
             raise OwnedViewError("ACTIVE_PUBLICATION_CHANGED_DURING_OPERATION")
+
+    def write_owner_values(self, values: dict[str, Any], *, expected_revision: int | None = None) -> int:
+        """Serialize publication changes against owner writes, then CAS overlay revision."""
+        protocol = ProjectionGeneration(self.project_root)
+        with FileLock(str(protocol.lock_path)):
+            self.assert_still_active()
+            revision = self.state.write_owner_values(values, expected_revision=expected_revision)
+            self.assert_still_active()
+            return revision
 
     def state_view(self) -> dict[str, Any]:
         return self.state.read_view(self.pinned)

@@ -436,9 +436,35 @@ class StateManager:
             raise RuntimeError("无法获取 state.json 文件锁，请稍后重试")
 
     def _save_activation_owner_overlay(self) -> Dict[str, Any]:
-        from .owned_project_view import OwnedStateStore
+        from .owned_project_view import OwnedProjectView, OwnedStateStore
+
+        view = OwnedProjectView.pin_active(self.config.project_root)
+        if view is None:
+            raise RuntimeError("ENROLLED_PUBLICATION_MISSING")
+        pinned_identity = (self._activation_state_base.get("_view") or {})
+        if (pinned_identity.get("generation_id") != view.pinned.generation_id
+                or pinned_identity.get("semantic_activation_id") != view.pinned.semantic_activation_id
+                or pinned_identity.get("publication_record_id") != view.pinned.publication_record_id
+                or pinned_identity.get("publication_record_sha256") != view.pinned.publication_record_sha256):
+            raise RuntimeError("ACTIVE_PUBLICATION_CHANGED_DURING_OPERATION")
+        view.assert_still_active()
 
         baseline = getattr(self, "_activation_state_base", {})
+        effective = view.state_view()
+
+        def merge_owner_delta(base: Any, changed: Any, current: Any) -> Any:
+            if changed == base:
+                return deepcopy(current)
+            if isinstance(base, dict) and isinstance(changed, dict) and isinstance(current, dict):
+                result = deepcopy(current)
+                for key in set(base) | set(changed):
+                    if key not in changed:
+                        if key in base:
+                            result.pop(key, None)
+                    else:
+                        result[key] = merge_owner_delta(base.get(key), changed[key], current.get(key))
+                return result
+            return deepcopy(changed)
         for key in ("entity_state", "protagonist_state", "strand_tracker"):
             if self._state.get(key) != baseline.get(key):
                 raise RuntimeError(CANON_WRITE_ERROR)
@@ -456,18 +482,40 @@ class StateManager:
         values = {}
         for key in ("story_craft", "planning", "promise_ledger", "review_checkpoints",
                     "workflow", "craft", "intent", "disambiguation_warnings",
-                    "disambiguation_pending"):
-            if key in self._state:
-                values[key] = deepcopy(self._state[key])
+                    "disambiguation_pending", "project_info", "volumes"):
+            if key in self._state and self._state.get(key) != self._activation_state_base.get(key):
+                values[key] = merge_owner_delta(self._activation_state_base.get(key), self._state[key], effective.get(key))
         if self._pending_chapter_status:
             values["progress.chapter_status"] = dict(self._pending_chapter_status)
+        if self._pending_chapter_meta:
+            from story_craft import classify_story_craft_field
+            for chapter, fields in self._pending_chapter_meta.items():
+                for field_name, value in fields.items():
+                    if classify_story_craft_field(f"chapter_meta.{chapter}.{field_name}") not in {"CRAFT", "INTENT"}:
+                        raise RuntimeError(f"UNMAPPED_CHAPTER_META:{chapter}.{field_name}")
+                    existing = effective.get("chapter_meta", {}).get(str(chapter), {}).get(field_name)
+                    if existing is not None and existing != value:
+                        raise RuntimeError(f"OWNER_CANON_STATE_COLLISION:chapter_meta.{chapter}.{field_name}")
+                    values[f"chapter_meta.{chapter}.{field_name}"] = deepcopy(value)
         if not values:
             return {"saved": False, "sqlite_sync_ok": True}
-        revision = OwnedStateStore(self.config.project_root).write_owner_values(values)
+        revision = view.write_owner_values(
+            values, expected_revision=effective.get("_view", {}).get("owner_overlay_revision", 0))
+        verified = view.state_view()
+        for key, expected in values.items():
+            target: Any = verified
+            for part in key.split("."):
+                target = target.get(part) if isinstance(target, dict) else None
+            matches = (isinstance(target, dict) and all(target.get(k) == v for k, v in expected.items())
+                       if key == "progress.chapter_status" and isinstance(expected, dict) else target == expected)
+            if not matches:
+                raise RuntimeError(f"OWNER_STATE_READ_AFTER_WRITE_MISMATCH:{key}")
+        view.assert_still_active()
         self._activation_state_base = deepcopy(self._state)
         self._pending_disambiguation_warnings.clear()
         self._pending_disambiguation_pending.clear()
         self._pending_chapter_status.clear()
+        self._pending_chapter_meta.clear()
         return {"saved": True, "sqlite_sync_ok": True, "owner_overlay_revision": revision}
 
     def _sync_to_sqlite(self) -> bool:
@@ -674,7 +722,7 @@ class StateManager:
         """Return whether legacy buffers contain facts reserved for commit projections.
 
         Canon-owned buffers: entity/alias/appearance patches, state changes,
-        relationships, chapter metadata, chapter progress/word count, committed
+        relationships, chapter progress/word count, committed
         status, and the equivalent chapter batch queued for SQLite.
 
         Disambiguation warnings/pending items and drafted/reviewed chapter status
@@ -686,7 +734,6 @@ class StateManager:
             self._pending_alias_entries,
             self._pending_state_changes,
             self._pending_structured_relationships,
-            self._pending_chapter_meta,
             self._pending_progress_chapter is not None,
             self._pending_progress_words_delta != 0,
             any(value == "chapter_committed" for value in self._pending_chapter_status.values()),

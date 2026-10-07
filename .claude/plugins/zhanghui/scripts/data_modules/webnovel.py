@@ -482,7 +482,61 @@ def cmd_use(args: argparse.Namespace) -> int:
 
 
 def _save_state_via_atomic(project_root: Path, state: dict) -> None:
-    """Save state.json atomically using security_utils."""
+    """Persist mutable state through the active owner view when enrolled."""
+    from .owned_project_view import OwnedProjectView
+
+    view = OwnedProjectView.pin_active(project_root)
+    if view is not None:
+        from .owned_project_view import OwnedViewError
+        from story_craft import classify_story_craft_field
+
+        current = view.state_view()
+        owner_roots = ("story_craft", "planning", "promise_ledger", "review_checkpoints",
+                       "workflow", "craft", "intent", "disambiguation_warnings",
+                       "disambiguation_pending", "project_info", "volumes")
+        values = {key: state[key] for key in owner_roots
+                  if key in state and state.get(key) != current.get(key)}
+        metadata = state.get("chapter_meta")
+        current_metadata = current.get("chapter_meta")
+        if isinstance(metadata, dict):
+            for chapter_key, fields in metadata.items():
+                if not isinstance(fields, dict):
+                    raise OwnedViewError(f"UNMAPPED_CHAPTER_META:{chapter_key}")
+                before = current_metadata.get(chapter_key, {}) if isinstance(current_metadata, dict) else {}
+                for field_name, value in fields.items():
+                    if before.get(field_name) == value:
+                        continue
+                    semantic = classify_story_craft_field(f"chapter_meta.{chapter_key}.{field_name}")
+                    if semantic not in {"CRAFT", "INTENT"}:
+                        raise OwnedViewError(f"UNMAPPED_CHAPTER_META:{chapter_key}.{field_name}")
+                    if field_name in before and before[field_name] != value:
+                        raise OwnedViewError(f"OWNER_CANON_STATE_COLLISION:chapter_meta.{chapter_key}.{field_name}")
+                    values[f"chapter_meta.{chapter_key}.{field_name}"] = value
+        for path in ("progress.current_volume", "progress.volumes_planned",
+                     "progress.volumes_completed", "progress.total_volumes", "progress.last_updated"):
+            parts = path.split(".")
+            source = state
+            target = current
+            for part in parts:
+                source = source.get(part, {}) if isinstance(source, dict) else {}
+                target = target.get(part, {}) if isinstance(target, dict) else {}
+            if source != target and source != {}:
+                values[path] = source
+        if values:
+            expected_revision = current.get("_view", {}).get("owner_overlay_revision", 0)
+            view.write_owner_values(values, expected_revision=expected_revision)
+            verified = view.state_view()
+            for key, expected in values.items():
+                target = verified
+                for part in key.split("."):
+                    target = target.get(part) if isinstance(target, dict) else None
+                matches = (isinstance(target, dict) and all(target.get(k) == v for k, v in expected.items())
+                           if key == "progress.chapter_status" and isinstance(expected, dict) else target == expected)
+                if not matches:
+                    raise OwnedViewError(f"OWNER_STATE_READ_AFTER_WRITE_MISMATCH:{key}")
+        return
+
+    """Base-only compatibility writer."""
     from security_utils import atomic_write_json
 
     state_path = project_root / ".webnovel" / "state.json"
@@ -498,10 +552,12 @@ def _save_state_via_atomic(project_root: Path, state: dict) -> None:
 def cmd_story_craft(args: argparse.Namespace) -> int:
     """Dispatch story-craft subcommands."""
     from security_utils import read_json_safe
+    from .owned_project_view import OwnedProjectView
 
     root = _resolve_root(args.project_root)
     state_path = root / ".webnovel" / "state.json"
-    state = read_json_safe(state_path, default={})
+    view = OwnedProjectView.pin_active(root)
+    state = view.state_view() if view is not None else read_json_safe(state_path, default={})
 
     action = args.story_craft_action
     if action == "init-volume-beat":
@@ -535,9 +591,9 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
         )
 
         issues: list[str] = []
-        # 1. Volume beat (chapter-aware for accurate BLOCKER timing)
+        # Craft observations remain advisory; malformed required state stays a blocker.
         try:
-            vol_issues = check_volume_beat(state, volume=args.volume, current_chapter=args.chapter)
+            vol_issues = [f"ADVISORY: {issue}" for issue in check_volume_beat(state, volume=args.volume, current_chapter=args.chapter)]
         except ValueError as exc:
             vol_issues = [f"BLOCKER: {exc}"]
         issues.extend(vol_issues)
@@ -546,22 +602,22 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
             rhythm_status = check_rhythm_status(state)
             if rhythm_status == "block":
                 n = state["story_craft"]["rhythm_curve"].get("chapters_since_peak", "?")
-                issues.append(f"BLOCKER: 节奏曲线 BLOCK：chapters_since_peak={n}")
+                issues.append(f"ADVISORY: 节奏曲线建议复核：chapters_since_peak={n}")
             elif rhythm_status == "warning":
                 issues.append("WARN: 节奏曲线 WARNING")
         # 3. Timed locks + 4. Scene-Sequel (chapter-aware)
         if args.chapter is not None:
             overdue = check_timed_lock_deadlines(state, current_chapter=args.chapter)
             for lock in overdue:
-                issues.append(f"BLOCKER: 定时锁逾期：{lock['id']} deadline={lock['deadline_chapter']}")
+                issues.append(f"ADVISORY: 定时锁计划偏差：{lock['id']} deadline={lock['deadline_chapter']}")
             cm = state.get("chapter_meta", {})
             if isinstance(cm, dict):
                 cm_entry = cm.get(str(args.chapter), {})
                 if isinstance(cm_entry, dict):
                     for issue in check_scene_sequel(cm_entry):
-                        issues.append(issue)
+                        issues.append(f"ADVISORY: {issue}")
                     if not cm_entry.get("hook_type"):
-                        issues.append("BLOCKER: 章末 hook_type 未声明")
+                        issues.append("ADVISORY: 章末 hook_type 未声明")
         # 5. Foreshadow chain per-depth count
         foreshadow_chain = state.get("story_craft", {}).get("foreshadow_chain", [])
         if isinstance(foreshadow_chain, list):
@@ -574,7 +630,7 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
             if depth_counts["中层"] < 3:
                 issues.append(f"WARN: 中层伏笔 < 3 (当前 {depth_counts['中层']})")
             if depth_counts["深层"] < 1:
-                issues.append("BLOCKER: 深层伏笔 = 0")
+                issues.append("WARN: 深层伏笔 = 0")
         # 6. Thematic echoes + 7. Character arc presence
         thematic = state.get("story_craft", {}).get("thematic_echoes", [])
         if not thematic:
