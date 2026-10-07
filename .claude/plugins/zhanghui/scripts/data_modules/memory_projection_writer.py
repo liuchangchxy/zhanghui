@@ -33,7 +33,14 @@ class MemoryProjectionWriter:
             raise TypeError("apply_effective requires EffectiveProjectionInput")
         entry = effective_input.effective_entry
         extraction = entry.extraction_result or {}
-        obligations = reconcile_effective_history(build_handle.snapshot)
+        global_obligations = reconcile_effective_history(build_handle.snapshot)
+        # Lifecycle is reconciled against the complete accepted history so a
+        # later close/payoff is visible, then each obligation is stored only
+        # in its creation chapter's memory slice.
+        obligations = {}
+        for name in ("open_loops", "reader_promises"):
+            obligations[name] = [row for row in global_obligations.get(name, [])
+                                 if row.get("source_chapter") == entry.chapter]
         return write_effective_projection(
             self.project_root, effective_input, build_handle, "memory", "memory",
             {"tombstone": entry.status != "accepted",

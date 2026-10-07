@@ -435,7 +435,7 @@ def test_migration_moves_known_owner_state_to_overlay_without_rewriting_legacy_s
 
     _root_with_base(tmp_path)
     state_path = tmp_path / ".webnovel/state.json"
-    original = {"story_craft": {"voice": "warm"},
+    original = {"story_craft": _valid_story_craft(),
                 "progress": {"current_volume": 4, "current_chapter": 1,
                              "volumes_completed": [1, 2], "last_updated": "2026-10-07"}}
     state_path.write_text(json.dumps(original), encoding="utf-8")
@@ -444,7 +444,7 @@ def test_migration_moves_known_owner_state_to_overlay_without_rewriting_legacy_s
     backup = create_verified_backup(tmp_path, plan)
     result = migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
     overlay = json.loads((tmp_path / ".webnovel/state-overlay.json").read_text(encoding="utf-8"))
-    assert overlay["values"]["story_craft"] == {"voice": "warm"}
+    assert overlay["values"]["story_craft"] == _valid_story_craft()
     assert overlay["values"]["progress.current_volume"] == 4
     assert overlay["values"]["progress.volumes_completed"] == [1, 2]
     assert overlay["values"]["progress.last_updated"] == "2026-10-07"
@@ -624,17 +624,19 @@ def test_owner_overlay_collision_blocks_without_promoting_craft_or_enrolling(tmp
 
     _root_with_base(tmp_path)
     state_path = tmp_path / ".webnovel/state.json"
-    state_path.write_text(json.dumps({"story_craft": {"tone": "legacy"}}), encoding="utf-8")
+    state_path.write_text(json.dumps({"story_craft": _valid_story_craft()}), encoding="utf-8")
     overlay_path = tmp_path / ".webnovel/state-overlay.json"
+    conflicting_craft = _valid_story_craft()
+    conflicting_craft["rhythm_curve"]["warning_threshold"] = 4
     original_overlay = {"schema_version": "owner-state-overlay/v1", "revision": 3,
-                        "values": {"story_craft": {"tone": "newer-owner-value"}}}
+                        "values": {"story_craft": conflicting_craft}}
     overlay_path.write_text(json.dumps(original_overlay), encoding="utf-8")
     report = preflight_project(tmp_path)
     plan = dry_run_migration(tmp_path, report.report_digest)
     backup = create_verified_backup(tmp_path, plan)
     with pytest.raises(MigrationError, match="OWNER_OVERLAY_CONFLICT:story_craft"):
         migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
-    assert json.loads(state_path.read_text(encoding="utf-8"))["story_craft"]["tone"] == "legacy"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["story_craft"] == _valid_story_craft()
     assert json.loads(overlay_path.read_text(encoding="utf-8")) == original_overlay
     assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()
 
@@ -679,3 +681,218 @@ def test_chapter_meta_migration_splits_fields_and_preserves_unknown_occurrence(t
     assert classes["chapter_meta.1.custom"] == "UNKNOWN"
     assert any(row["kind"] == "unknown_chapter_meta_field" for row in conflicts)
     assert path.read_text(encoding="utf-8") == source
+
+
+def _valid_promise_row(**overrides):
+    return {"id": "p1", "type": "promise", "depth": 1, "planted_chapter": 1,
+            "planted_volume": 1, "expected_payoff_chapter": 10,
+            "expected_payoff_volume": 2, "status": "pending", **overrides}
+
+
+@pytest.mark.parametrize("row", [
+    _valid_promise_row(),
+    _valid_promise_row(created_at="2026-01-01", updated_at="2026-01-01",
+                       notes="old row", audit_log=[]),
+    _valid_promise_row(canon_event_ref="evt-opaque"),
+])
+def test_promise_ledger_known_and_legacy_optional_schema_is_accepted(tmp_path, row):
+    _root_with_base(tmp_path)
+    state = {"project_info": {"promise_ledger": [row]}}
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps(state, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is True
+    assert not any("promise_ledger" in conflict.get("path", "") for conflict in report.conflicts)
+    assert path.read_bytes() == raw
+
+
+def test_promise_unknown_field_blocks_preflight_and_migration_without_rewriting_source(tmp_path):
+    _root_with_base(tmp_path)
+    row = _valid_promise_row(mystery_future_semantics=True)
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"project_info": {"promise_ledger": [row]}}, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    expected = ".webnovel/state.json:project_info.promise_ledger[0].mystery_future_semantics"
+    assert report.ok is False
+    assert expected in {conflict.get("path") for conflict in report.conflicts}
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    with pytest.raises(MigrationError, match="MIGRATION_CONFLICTS_UNRESOLVED"):
+        from data_modules.project_migration import migrate_project
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, None)
+    assert path.read_bytes() == raw
+    assert not (tmp_path / ".webnovel/state-overlay.json").exists()
+
+
+@pytest.mark.parametrize("field,value", [
+    ("status", "resolved"), ("type", "mystery"), ("depth", "deep"),
+    ("expected_payoff_chapter", -2), ("audit_log", {"action": "payoff"}),
+    ("canon_event_ref", {"event_id": "evt-1"}),
+])
+def test_promise_ledger_invalid_known_field_shape_or_enum_conflicts(tmp_path, field, value):
+    _root_with_base(tmp_path)
+    row = _valid_promise_row(**{field: value})
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"project_info": {"promise_ledger": [row]}}, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is False
+    assert any(conflict.get("kind") == "invalid_planner_promise_field"
+               and conflict.get("path", "").endswith(f"promise_ledger[0].{field}")
+               for conflict in report.conflicts)
+    assert path.read_bytes() == raw
+
+
+def _valid_story_craft():
+    return {
+        "rhythm_curve": {"last_emotion_peak_chapter": 0, "chapters_since_peak": 0,
+                          "warning_threshold": 3, "block_threshold": 5, "history": []},
+        "foreshadow_chain": [], "timed_locks": [], "thematic_echoes": [],
+        "character_arc": None, "volume_beat": None, "volume_beats": {},
+        "reader_contract": {"version": 1, "expectation_debt": [],
+                            "causal_credits": {"protagonist_actions_used_without_setup": []},
+                            "endgame_reserves": [], "swap_debts": [], "contract_fulfillment": []},
+        "volume_anchors": {"version": 1, "anchors": []},
+        "event_matrix_state": {"version": 1, "types": {}, "history": [],
+                               "gentle_window": 5, "max_consecutive_fast": 2},
+        "pacing_history": {"version": 1, "history": [],
+                           "rules": {"max_consecutive_fast": 1, "slow_per_4_chapters_min": 1}},
+    }
+
+
+def test_story_craft_known_exact_containers_allow_existing_whole_root_overlay_copy(tmp_path):
+    _root_with_base(tmp_path)
+    path = tmp_path / ".webnovel/state.json"
+    value = {"story_craft": _valid_story_craft()}
+    raw = json.dumps(value, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is True
+    classes = report.owner_mappings["state"]["field_classifications"]
+    assert classes["story_craft.rhythm_curve.history"] == "CRAFT"
+    assert "story_craft.foreshadow_chain" not in classes
+    assert classes["story_craft.reader_contract.expectation_debt"] == "CRAFT"
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    from data_modules.project_migration import migrate_project
+    migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    overlay = json.loads((tmp_path / ".webnovel/state-overlay.json").read_text())
+    assert overlay["values"]["story_craft"] == value["story_craft"]
+    assert path.read_bytes() == raw
+
+
+def test_story_craft_unknown_nested_field_blocks_root_copy_and_preserves_source(tmp_path):
+    _root_with_base(tmp_path)
+    value = {"story_craft": _valid_story_craft()}
+    value["story_craft"]["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶",
+                                                  "depth": "表层", "mystery_field": 123}]
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps(value, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    expected = ".webnovel/state.json:story_craft.foreshadow_chain[0].mystery_field"
+    assert report.ok is False
+    assert expected in {conflict.get("path") for conflict in report.conflicts}
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    from data_modules.project_migration import migrate_project
+    with pytest.raises(MigrationError, match="MIGRATION_CONFLICTS_UNRESOLVED"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, None)
+    assert path.read_bytes() == raw
+    assert not (tmp_path / ".webnovel/state-overlay.json").exists()
+
+
+@pytest.mark.parametrize("change,expected_kind", [
+    (lambda root: root.update(foreshadow_chain="not-a-list"), "malformed_story_craft_container"),
+    (lambda root: root.update(rhythm_curve=[]), "malformed_story_craft_container"),
+    (lambda root: root.update(thematic_echoes={"premise": "x"}), "malformed_story_craft_container"),
+    (lambda root: root.update(voice="warm"), "unknown_story_craft_field"),
+])
+def test_story_craft_malformed_or_unmapped_shape_is_preserved_as_conflict(tmp_path, change, expected_kind):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    change(story)
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is False
+    assert any(conflict.get("kind") == expected_kind for conflict in report.conflicts)
+    assert path.read_bytes() == raw
+
+
+@pytest.mark.parametrize("change,path", [
+    (lambda root: root["rhythm_curve"].update(history="not-a-list"), "rhythm_curve.history"),
+    (lambda root: root["rhythm_curve"].update(warning_threshold={}), "rhythm_curve.warning_threshold"),
+])
+def test_story_craft_known_leaf_with_malformed_value_blocks_whole_root_copy(tmp_path, change, path):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    change(story)
+    state_path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is False
+    assert any(item.get("kind") == "malformed_story_craft_field"
+               and item.get("path", "").endswith(path) for item in report.conflicts)
+    assert state_path.read_bytes() == raw
+
+
+def test_story_craft_occurrence_reference_rejects_unmapped_descendant(tmp_path):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "occurrence_ref": {"event_id": "accepted-id", "claim": "unmapped"}}]
+    state_path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert any("foreshadow_chain[0].occurrence_ref" in c.get("path", "") for c in report.conflicts)
+    assert state_path.read_bytes() == raw
+
+
+def test_story_craft_empty_mixed_item_is_malformed_and_blocks_copy(tmp_path):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{}]
+    state_path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert any(c.get("kind") == "malformed_story_craft_container" for c in report.conflicts)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda s: s["reader_contract"]["causal_credits"].update(protagonist_actions_used_without_setup="bad"),
+    lambda s: s["volume_anchors"]["anchors"].append({"future_field": 1}),
+    lambda s: s["event_matrix_state"]["history"].append({"unknown": 1}),
+    lambda s: s["pacing_history"]["rules"].update(unmapped=1),
+    lambda s: s["volume_beats"].update({"2": {}}),
+    lambda s: s["reader_contract"]["expectation_debt"].append({}),
+    lambda s: s["reader_contract"]["contract_fulfillment"].append({"promise_id": [], "status": "broken"}),
+    lambda s: s.update(volume_beat={"volume": 1, "total_chapters": 15, "beats": [{}]}),
+])
+def test_story_craft_malformed_nested_descendants_block_copy(tmp_path, mutate):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    mutate(story)
+    state_path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert state_path.read_bytes() == raw
+
+
+def test_story_craft_production_volume_beat_initializer_shape_is_accepted(tmp_path):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    story["volume_beat"] = {"volume": 1, "total_chapters": 80, "beats": [
+        {"name": "Inciting Incident", "chapter": 8, "filled": False, "notes": None}]}
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    report = preflight_project(tmp_path)
+    assert report.ok

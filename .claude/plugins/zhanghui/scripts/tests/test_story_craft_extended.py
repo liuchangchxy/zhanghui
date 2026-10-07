@@ -114,22 +114,18 @@ def test_phase10_malformed_mixed_metadata_is_preserved_with_diagnostic():
     assert result["diagnostics"] == ["malformed_story_craft"]
 
 
-def test_story_craft_occurrence_claims_are_unverified_until_exact_event_reference():
+def test_story_craft_occurrence_mutations_do_not_claim_canon_linkage():
     from scripts.story_craft import (add_foreshadow, payoff_foreshadow, add_timed_lock,
-                                     fulfill_timed_lock, link_story_craft_occurrence)
+                                     fulfill_timed_lock, classify_story_craft_field)
 
     state = {"story_craft": {"foreshadow_chain": [], "timed_locks": [], "thematic_echoes": []}}
     add_foreshadow(state, {"id": "FS-1", "type": "物谶", "depth": "表层"})
     payoff_foreshadow(state, "FS-1", 7, "quality")
-    assert state["story_craft"]["foreshadow_chain"][0]["occurrence_evidence_status"] == "unverified"
+    assert "occurrence_evidence_status" not in state["story_craft"]["foreshadow_chain"][0]
     add_timed_lock(state, {"id": "TL-1", "description": "约定", "deadline_chapter": 7})
     fulfill_timed_lock(state, "TL-1", 7)
-    assert state["story_craft"]["timed_locks"][0]["occurrence_evidence_status"] == "unverified"
-    with pytest.raises(ValueError, match="accepted event ID"):
-        link_story_craft_occurrence(state, collection="foreshadow_chain", item_id="FS-1",
-                                    event_id="not-accepted", accepted_event_ids={"event-1"})
-    link_story_craft_occurrence(state, collection="foreshadow_chain", item_id="FS-1",
-                                event_id="event-1", accepted_event_ids={"event-1"})
-    item = state["story_craft"]["foreshadow_chain"][0]
-    assert item["occurrence_ref"] == {"event_id": "event-1"}
-    assert item["occurrence_evidence_status"] == "linked_reference"
+    assert "occurrence_evidence_status" not in state["story_craft"]["timed_locks"][0]
+    assert not hasattr(__import__("scripts.story_craft", fromlist=["x"]), "link_story_craft_occurrence")
+    assert classify_story_craft_field("story_craft.foreshadow_chain.0.payoff_chapter") == "UNKNOWN"
+    assert classify_story_craft_field("story_craft.foreshadow_chain.0.payoff_chapter",
+                                      accepted_evidence_linked=True) == "DERIVED_REFERENCE"

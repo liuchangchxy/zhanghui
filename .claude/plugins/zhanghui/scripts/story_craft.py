@@ -110,7 +110,6 @@ def payoff_foreshadow(state: dict, foreshadow_id: str, chapter: int, quality: st
             item["status"] = "paid_off"
             item["payoff_chapter"] = chapter
             item["payoff_quality"] = quality
-            item["occurrence_evidence_status"] = "unverified"
             return state
     raise ValueError(f"foreshadow {foreshadow_id} not found")
 
@@ -148,7 +147,6 @@ def fulfill_timed_lock(state: dict, lock_id: str, chapter: int) -> dict:
                 raise ValueError(f"{lock_id} already fulfilled")
             item["status"] = "fulfilled"
             item["fulfilled_chapter"] = chapter
-            item["occurrence_evidence_status"] = "unverified"
             return state
     raise ValueError(f"timed_lock {lock_id} not found")
 
@@ -223,17 +221,12 @@ def add_thematic_echo(state: dict, premise: str, chapter: int, manifestation: st
     echoes = state["story_craft"]["thematic_echoes"]
     for item in echoes:
         if item["premise"] == premise:
-            item["echoes"].append({
-                "chapter": chapter,
-                "manifestation": manifestation,
-                "occurrence_evidence_status": "unverified",
-            })
+            item["echoes"].append({"chapter": chapter, "manifestation": manifestation})
             return state
     echoes.append({
         "id": _next_thematic_echo_id(echoes),
         "premise": premise,
-        "echoes": [{"chapter": chapter, "manifestation": manifestation,
-                    "occurrence_evidence_status": "unverified"}]
+        "echoes": [{"chapter": chapter, "manifestation": manifestation}]
     })
     return state
 
@@ -281,7 +274,7 @@ def classify_story_craft_field(field_path: str, value: Any = None, *,
     """Classify only exact R1 field paths; never infer from prose or root key."""
     if not isinstance(field_path, str) or not field_path:
         return "UNKNOWN"
-    parts = field_path.split(".")
+    parts = [part for part in field_path.split(".") if not part.isdigit()]
     if parts[0] == "chapter_meta":
         if len(parts) == 3 and parts[1].isdigit():
             key = parts[2]
@@ -305,9 +298,18 @@ def classify_story_craft_field(field_path: str, value: Any = None, *,
         root = root[:-2]
     if child and child.endswith("[]"):
         child = child[:-2]
-    if root == "rhythm_curve" or root in {"volume_beat", "volume_beats", "reader_contract",
-                                            "volume_anchors", "event_matrix", "pacing_history"}:
-        return "CRAFT"
+    if root in {"rhythm_curve", "volume_beat", "volume_beats", "reader_contract",
+                "volume_anchors", "event_matrix_state", "pacing_history"}:
+        # Container-level fields are classified exactly; nested traversal is
+        # performed by migration's shape validator.
+        if child is None:
+            return "CRAFT"
+        return "CRAFT" if child in {"version", "history", "rules", "anchors", "types",
+                                    "gentle_window", "max_consecutive_fast", "expectation_debt",
+                                    "causal_credits", "endgame_reserves", "swap_debts",
+                                    "contract_fulfillment", "last_emotion_peak_chapter",
+                                    "chapters_since_peak", "warning_threshold", "block_threshold",
+                                    "volume", "total_chapters", "beats", "protagonist_actions_used_without_setup"} else "UNKNOWN"
     if root == "foreshadow_chain":
         if child in {"buried_quality", "payoff_quality", "quality_evaluation"}:
             return "CRAFT"
@@ -345,27 +347,6 @@ def classify_story_craft_field(field_path: str, value: Any = None, *,
             return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
         return "UNKNOWN"
     return "UNKNOWN"
-
-
-def link_story_craft_occurrence(state: dict, *, collection: str, item_id: str,
-                                event_id: str, accepted_event_ids: set[str]) -> dict:
-    """Attach an exact accepted event reference; the event remains the authority."""
-    if not isinstance(event_id, str) or not event_id or event_id not in accepted_event_ids:
-        raise ValueError("occurrence reference must match an accepted event ID")
-    collections = {
-        "foreshadow_chain": "foreshadow_chain",
-        "timed_locks": "timed_locks",
-        "thematic_echoes": "thematic_echoes",
-    }
-    key = collections.get(collection)
-    if key is None:
-        raise ValueError(f"unsupported occurrence collection: {collection}")
-    for item in state.get("story_craft", {}).get(key, []):
-        if item.get("id") == item_id:
-            item["occurrence_ref"] = {"event_id": event_id}
-            item["occurrence_evidence_status"] = "linked_reference"
-            return state
-    raise ValueError(f"story craft item not found: {item_id}")
 
 
 def classify_mixed_metadata(value: Any, *, container: str,

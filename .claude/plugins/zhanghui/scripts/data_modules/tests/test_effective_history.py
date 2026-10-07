@@ -238,6 +238,41 @@ def test_all_projection_writers_require_typed_inputs_and_bind_one_generation(tmp
     assert len(generation.manifest["domains"]) == 7
 
 
+def test_effective_generation_partitions_obligations_by_source_chapter(tmp_path):
+    events = {
+        1: [
+            {"event_id": "L1", "event_type": "open_loop_created", "payload": {"content": "question"}},
+            {"event_id": "P1", "event_type": "promise_created", "payload": {"content": "promise", "promise_id": "P1"}},
+        ],
+        2: [{"event_id": "L1-close", "event_type": "open_loop_closed", "payload": {"loop_id": "L1"}}],
+        3: [{"event_id": "P1-paid", "event_type": "promise_paid_off", "payload": {"promise_id": "P1"}}],
+    }
+    for chapter, accepted_events in events.items():
+        body = _commit(chapter)
+        body["extraction_result"]["accepted_events"] = accepted_events
+        path = tmp_path / f".story-system/commits/chapter_{chapter:03d}.commit.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(body), encoding="utf-8")
+    snapshot = EffectiveHistoryStore().read_active_snapshot(tmp_path)
+    built = build_effective_generation(tmp_path, snapshot)
+    generation_root = built["validated_generation"].generation_root
+    all_rows = []
+    by_chapter = {}
+    for chapter in (1, 2, 3):
+        path = generation_root / "memory" / f"chapter_{chapter:03d}.json"
+        projection = json.loads(path.read_text(encoding="utf-8"))["projection"]
+        rows = projection["derived_obligations"]["open_loops"] + projection["derived_obligations"]["reader_promises"]
+        by_chapter[chapter] = rows
+        all_rows.extend(rows)
+    assert [row["identity_id"] for row in all_rows].count("L1") == 1
+    assert [row["identity_id"] for row in all_rows].count("P1") == 1
+    loop = next(row for row in by_chapter[1] if row["identity_id"] == "L1")
+    promise = next(row for row in by_chapter[1] if row["identity_id"] == "P1")
+    assert loop["status"] == "resolved" and loop["resolved_chapter"] == 2
+    assert promise["status"] == "paid_off" and promise["resolved_chapter"] == 3
+    assert not by_chapter[2] and not by_chapter[3]
+
+
 def test_retract_generation_writes_explicit_tombstones_and_preserves_base(tmp_path):
     base = _install_base(tmp_path)
     _stage_retract(tmp_path, base)
