@@ -167,6 +167,8 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                     validated_event = StoryEvent.model_validate(event)
                 except Exception:
                     continue
+                if validated_event.chapter != chapter_entry.chapter:
+                    continue
                 accepted_events_by_id.setdefault(event_id, []).append(validated_event)
         accepted_events_by_id = {
             event_id: events for event_id, events in accepted_events_by_id.items()

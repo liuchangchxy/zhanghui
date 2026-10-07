@@ -1002,6 +1002,27 @@ def test_valid_story_event_with_wrong_chapter_cannot_authorize_claim(tmp_path):
     assert state_path.read_bytes() == raw
 
 
+def test_story_event_chapter_must_match_effective_containing_chapter(tmp_path):
+    _root_with_base(tmp_path)
+    commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["accepted_events"] = [
+        {"event_id": "E1", "chapter": 9, "event_type": "open_loop_created",
+         "subject": "TEST", "payload": {"content": "TEST"}}
+    ]
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "buried_chapter": 9, "occurrence_ref": {"event_id": "E1"}}]
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    raw = state_path.read_bytes()
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert any("buried_chapter" in item.get("path", "") for item in report.conflicts)
+    assert state_path.read_bytes() == raw
+
+
 def test_one_ref_proves_only_one_matching_occurrence_chapter(tmp_path):
     _root_with_base(tmp_path)
     commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
