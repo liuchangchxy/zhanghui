@@ -54,7 +54,7 @@ Exact helper names below are the cross-task contract; keep them stable or update
 
 ## Task 0: Record capability audit and adopt the workflow trust model
 
-**Status at design R2:** completed read-only audit found `CAPABILITY_ABSENT` for an unforgeable host-origin identity credential verifiable by repository Python. The current Local host does provide interactive user input usable by the normal workflow. This is not a closure gate and does not justify claims of authenticated identity. Preserve this evidence and the explicit in-scope/out-of-scope threat model from spec §2.2.
+**Status at design R2:** completed read-only audit found `CAPABILITY_ABSENT` for an unforgeable host-origin identity credential verifiable by repository Python. Host UI availability is an embedding-host concern, not a Zhanghui core dependency or H1 gate. This is not a closure gate and does not justify claims of authenticated identity. Preserve this evidence and the explicit in-scope/out-of-scope threat model from spec §2.2.
 
 **Evidence:** prior Task 0 audit record in this task history; no repository artifact is required. Do not repeat the audit as a blocker or implement an unavailable provider.
 
@@ -67,7 +67,7 @@ Exact helper names below are the cross-task contract; keep them stable or update
 - Add: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_correction_authorization_workflow.py`
 
 **Interfaces:**
-- Workflow contract: construct the canonical review package, render it, invoke the current host's explicit user-input UI, then append the answer as the existing `CanonCorrectionAuthorization` with a namespaced Phase 9 envelope under `decision_provenance`. Python does not invoke or authenticate the UI. No separate confirmation artifact or second persisted decision is created.
+- Workflow contract: construct the canonical review package and render it through a host adapter. The adapter collects an explicit answer and passes it to the host-neutral core decision interface, which appends the existing `CanonCorrectionAuthorization` with a namespaced Phase 9 envelope under `decision_provenance`. Python does not invoke or authenticate a host UI. No separate confirmation artifact or second persisted decision is created.
 - The review package includes request ID/digest, chapter/base digest, parent revision/content digest, operation, proposed effective status/content digest, AMEND changed paths, and semantic before/after details. `challenge_sha256` is SHA-256 over canonical JSON for this package; render the UI from the same package.
 - The fixed `decision_provenance.phase9_confirmation` envelope contains `kind = interactive-workflow-confirmation/v1`, `challenge_sha256`, workflow-generated `interaction_id`, `interaction_surface`, and `confirmed_at`; timestamp and surface are audit metadata. Preserve unrelated provenance keys.
 - The existing authorization binds request ID/digest and `APPROVE|REJECT`. Its digest covers the provenance envelope and therefore the challenge binding.
@@ -80,7 +80,7 @@ Implementation constraint: add challenge/provenance validation beside the existi
 - [ ] Test that normal write/planning/review/query flows cannot enter activation or infer/supply an APPROVE through workflow routing; do not claim resistance to malicious arbitrary project-file writers.
 - [ ] Persist the answer only through `append_correction_authorization`; scan existing authorization artifacts to reject interaction ID reuse across requests; verify identical authorization retries are idempotent, different decisions conflict, REJECT is terminal, and final correction bytes exactly match the reviewed proposal.
 - [ ] Verify pre-Phase-9 authorizations without the envelope remain immutable historical/staged evidence and cannot activate. A new confirmation requires a new request identity; never edit or supplement an old authorization.
-- [ ] Exercise the actual Local interactive confirmation workflow end-to-end for acceptance; use mocked input only for deterministic unit tests. Do not claim Python verified the UI origin.
+- [ ] Exercise the host-adapter contract end-to-end with deterministic explicit APPROVE and REJECT inputs; verify the exact canonical package is rendered/passed through the interface and the core persists only the existing authorization artifact. No specific development-host UI must render during acceptance. Do not claim Python verified UI origin.
 - [ ] Keep Phase 8 compatibility with the smallest needed adapter; do not rewrite Phase 8 artifact schemas or call Python dataclasses authentication.
 - [ ] Run focused authorization/store/workflow tests and commit.
 
@@ -278,7 +278,7 @@ Implementation constraint: add challenge/provenance validation beside the existi
 
 - [ ] Add failing end-to-end tests that observe active publication identity, runtime snapshot, mutable owner overlays and every Canon projection domain before/after the explicit interactive confirmation path and every failure class.
 - [ ] Prove no consumer can observe correction live before a complete publication record and every post-publication consumer reports identical semantic activation/revision/tip/generation.
-- [ ] Implement activation by composing Tasks 0–9; do not introduce per-consumer flags or duplicate resolver logic. Exercise actual confirmation workflow at acceptance; tests must not claim protection against malicious project-writer agents.
+- [ ] Implement activation by composing Tasks 0–9; do not introduce per-consumer flags or duplicate resolver logic. Exercise host-neutral confirmation and adapter contract tests at acceptance; tests must not claim protection against malicious project-writer agents or require a specific IDE UI.
 - [ ] Add process-crash and candidate-added-during-build tests; prove publication records advance monotonically and correction artifacts obey the specified invariants.
 - [ ] Update ownership inventory, drift guard evidence and operator recovery documentation.
 - [ ] Run Phase 8 regressions, architecture/projection and owner-overlay suites, confirmation-binding/replay/bypass workflow cases and acceptance-template guard.

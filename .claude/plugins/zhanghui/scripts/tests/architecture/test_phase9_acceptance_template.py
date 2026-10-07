@@ -1,3 +1,4 @@
+import ast
 import re
 from pathlib import Path
 
@@ -26,3 +27,36 @@ def test_phase9_h1_template_has_no_results_hashes_node_ids_or_dispositions():
 
 def test_phase9_h2_evidence_record_is_not_created_in_h1():
     assert not H2.exists()
+
+
+def test_phase9_python_core_has_no_host_specific_ui_dependency():
+    core = ROOT / ".claude/plugins/zhanghui/scripts/data_modules"
+    modules = (
+        "canon_correction_store.py",
+        "canon_correction_workflow.py",
+        "canon_correction_resolver.py",
+        "effective_history.py",
+        "projection_generation.py",
+    )
+    forbidden = ("codex", "claude", "request_user_input", "askuserquestion")
+    for name in modules:
+        path = core / name
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        imported = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.append(node.module or "")
+                imported.extend(alias.name for alias in node.names)
+        assert not any(any(marker in item.lower() for marker in forbidden) for item in imported), str(path)
+        assert not any(marker in source.lower() for marker in forbidden), str(path)
+
+
+def test_correction_skill_keeps_human_decision_in_host_adapter():
+    skill = ROOT / ".claude/plugins/zhanghui/skills/webnovel-correction-confirm/SKILL.md"
+    text = skill.read_text(encoding="utf-8")
+    assert "AskUserQuestion" in text
+    assert "Do not select a choice, infer one" in text
+    assert "No answer or an unavailable interaction UI leaves the request pending" in text

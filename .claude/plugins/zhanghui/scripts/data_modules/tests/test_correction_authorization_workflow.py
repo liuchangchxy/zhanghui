@@ -12,6 +12,7 @@ from data_modules.canon_correction_store import (
     record_interactive_correction_decision,
     verify_phase9_correction_decision,
 )
+from data_modules.canon_correction_workflow import prepare_review, record_decision
 
 
 def _request():
@@ -48,7 +49,7 @@ def _authorization(request, package, choice="APPROVE"):
                 "kind": "interactive-workflow-confirmation/v1",
                 "challenge_sha256": package["challenge_sha256"],
                 "interaction_id": "TEST-ONLY-interaction-1",
-                "interaction_surface": "Codex Local user-input",
+                "interaction_surface": "test host-adapter contract",
                 "confirmed_at": "2026-10-06T00:00:00Z",
             }
         },
@@ -118,6 +119,26 @@ def test_no_answer_does_not_append_authorization(tmp_path):
             confirmed_at="2026-10-06T00:00:00Z",
         )
     assert not (tmp_path / ".story-system/corrections").exists()
+
+
+@pytest.mark.parametrize("choice", ["APPROVE", "REJECT"])
+def test_host_adapter_contract_passes_canonical_package_and_explicit_choice(tmp_path, choice):
+    base, req = _persistable_request(3)
+    commit_path = tmp_path / ".story-system/commits/chapter_003.commit.json"
+    commit_path.parent.mkdir(parents=True, exist_ok=True)
+    commit_path.write_text(json.dumps(base), encoding="utf-8")
+    append_correction_request(tmp_path, req)
+    package = prepare_review(tmp_path, req["request_id"], {
+        "status": "accepted", "extraction_result": base["extraction_result"],
+    })
+
+    authorization = record_decision(tmp_path, req["request_id"], package, choice)
+
+    assert authorization.choice == choice
+    assert authorization.request_id == req["request_id"]
+    assert authorization.request_sha256 == artifact_sha256(req)
+    assert authorization.decision_provenance["phase9_confirmation"]["challenge_sha256"] == package["challenge_sha256"]
+    assert verify_phase9_correction_decision(req, authorization, package).decision_status == f"VERIFIED_{choice}"
 
 
 def _persistable_request(chapter):

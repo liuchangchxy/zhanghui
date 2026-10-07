@@ -12,9 +12,11 @@ This template is included in the implementation candidate. Leave every evidence
 field empty in H1. Record exact results and artifact identities only in the
 external acceptance evidence after the H1 commit has been reviewed.
 
-The interactive check uses a disposable temporary project and a direct human
-choice on the exact rendered correction package. It does not use fixture-created
-authorization as evidence of human approval. No check may mutate the book project.
+The confirmation checks use a disposable temporary project and deterministic
+host-adapter contract inputs. No specific IDE or assistant UI is part of the
+Zhanghui product architecture or required for H1 acceptance. These tests verify
+the explicit decision boundary and do not claim authenticated human identity.
+No check may mutate the book project.
 
 ## Verification commands
 
@@ -40,14 +42,14 @@ git stash list --format='%gd %gs'
 git status --short --branch
 ```
 
-### Direct interactive workflow
+### Host-agnostic explicit-confirmation contract
 
 1. Create a disposable project outside the working tree with one accepted base commit and complete the explicit project migration workflow.
-2. Stage one correction and render its canonical review package through the correction workflow.
-3. Present the complete package and ask the human to choose `APPROVE` or `REJECT`. Do not synthesize, replay, or infer the answer.
-4. Persist the chosen answer with `correction record-decision`; on `APPROVE`, invoke `correction activate` with the exact persisted authorization file.
-5. Capture the request, challenge, authorization and correction digests; before/after publication identity; effective revision; seven-domain manifest; active owner overlay; and the direct human interaction surface.
-6. Repeat with `REJECT`, no answer, stale parent, altered authorization, and an unavailable interaction surface. Active publication identity and Canon slices must remain unchanged in each non-approval case.
+2. Stage a correction and build the canonical review package; verify the adapter renders the package and passes only an explicit `APPROVE` or `REJECT` choice to the host-neutral core interface.
+3. Verify APPROVE writes the existing authorization and permits exact-bound correction staging/activation; verify REJECT is terminal and leaves active Canon unchanged.
+4. Verify no answer or missing adapter keeps the request pending and writes no authorization, correction, or activation.
+5. Verify stale parent, changed challenge, cross-request/auth/content, interaction replay, and modified payload are rejected without activation.
+6. Capture request/challenge/authorization/correction digests, publication identity, effective revision, seven-domain manifest, and owner overlay for automated fixture cases. Do not claim a real host UI interaction or authenticated identity.
 
 ## Evidence fields — populate outside H1 only
 
