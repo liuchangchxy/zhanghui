@@ -1,28 +1,31 @@
-# Phase 10 — Intent / Craft Ownership Reconciliation (Design R0)
+# Phase 10 — Intent / Craft Ownership Reconciliation (Design R1)
 
 > Status: design candidate for independent review. Production implementation: NOT_STARTED.
 > Baseline: main at `6f04925a321a01f72c6d00b127d6ab2d2e8ce7aa`.
 > Issue: https://github.com/liuchangchxy/zhanghui/issues/1 (OPEN at audit time).
 
+> R1 disposition: independent review marked R0 FAIL on commit-containment semantics and planning-copy authority. This revision addresses those two blockers without changing the accepted R0 constitutional decisions.
+
 ## 1. Problem statement
 
 The repository already distinguishes CANON, INTENT, CRAFT, and REFERENCE when assembling writer context, and Phase 9 provides a mutable owner overlay for activation-managed projects. The remaining problem is that the same future-facing idea can be authored or projected through several paths, while field classification still follows container boundaries in some readers and migrations. Story Craft is especially mixed: some rows express author decisions with deadlines, some are craft methods or metrics, and some record claims about events that only accepted Canon can establish.
 
-Phase 10 must reconcile semantic ownership and mutation paths without changing Canon authority, collapsing different lifecycles, or creating a second registry. This document records current paths, proposes one owner per semantic field, and defines a migration and implementation candidate. It does not authorize or perform production changes.
+Phase 10 must reconcile semantic ownership and mutation paths without changing Canon authority, collapsing different lifecycles, or creating a second registry. This document records current paths, freezes one owner per semantic field and source relationship, and defines a migration and implementation candidate. R1 corrects two R0 blockers: commit containment does not confer Canon semantics, and generated planning contracts are copies rather than peer author authorities. It does not authorize or perform production changes.
 
 ## 2. Design constraints and decisions
 
-These constraints are ratified for R0:
+These constraints were ratified for R0 and remain unchanged in R1. R1 adds clarifications required by independent review:
 
-1. Accepted durable CHAPTER_COMMIT and its effective correction lineage remain the authority for past story facts. A plan never becomes a past fact by being copied, fulfilled, or placed in a contract.
+1. Validated factual evidence in effective accepted CHAPTER_COMMIT artifacts and their effective correction lineage remains the authority for past story facts. A plan never becomes a past fact by being copied, fulfilled, or placed in a contract.
 2. No unified NarrativeObligation authority or shared lifecycle is introduced. Canon-derived obligations, planner obligations, foreshadow, timed locks, and craft recommendations keep distinct authority and transition rules. A Context-only shared envelope is permitted for display and diagnostics; it cannot persist, write, or resolve any source item.
 3. Canon-derived lifecycle is determined only by effective accepted Canon events. Planner fields such as deadline, priority, defer, or cancel belong to planner Intent and cannot change a Canon-derived resolved/fulfilled state. Explicit cross-reference is allowed; automatic bidirectional synchronization is prohibited.
-4. Reuse Phase 9 OwnedStateStore and state-overlay.json for mutable state fields where activation-managed persistence applies. No new intent/craft registry or database is proposed. Existing Story System contract files remain the current authored contract artifacts; they are not copied into a second store by this design.
+4. Reuse Phase 9 OwnedStateStore and state-overlay.json for mutable state fields where activation-managed persistence applies. No new intent/craft registry or database is proposed. Existing Story System paths remain in use, but contract files may mix explicit source nodes and generated runtime copies. Per-node provenance/source relationships—not file extension or location—determine authority; no second store is introduced.
 5. Classify fields, not JSON roots. Intent wins when an explicit author decision conflicts with a Craft recommendation. Craft, style, and quality heuristics default to advisory or score.
 6. Unknown and ambiguous legacy values remain preserved and non-authoritative until explicit mapping. Migration may use exact schema/field identity, never prose similarity, timestamps, ordering, or guessed meaning.
 7. Context is a composition boundary. Each composed item carries its semantic class, owner reference, source reference, provenance status, and stable identity when available. Duplicate or conflicting sources produce diagnostics; composition does not silently merge or create authority.
 8. The approved `/根源牌序` option B remains unchanged: chapter 1/2 are legacy/reference only, not Canon; `_rerun_at` remains `UNKNOWN / PRESERVED / NOT IMPORTED`.
 9. `.claude/plugins/zhanghui/6.4.0/**` is immutable. Stash `pre-phase7-preserve-untracked-2026-10-06` is preserved.
+10. **Commit containment is not Canon semantic authority.** A field persisted inside an accepted CHAPTER_COMMIT is CANON only when its field semantics are factual and its factual evidence type and source provenance satisfy an explicit validated Canon evidence rule. `ExtractionResult.chapter_meta` is `Any`; it cannot confer Canon semantics on its children.
 
 ### Options considered
 
@@ -44,7 +47,7 @@ These constraints are ratified for R0:
 | `webnovel-plan/SKILL.md`, `update_state.py`, `update_master_outline.py` | Plan workflow writes markdown outlines/timeline/beat artifacts, updates state progress, and writes back confirmed V+1 volume fields into master outline. Optional all-volumes flow writes `project_info.cross_volume_beat_map`. | Planning and init workflows, chapter outline loader, Story System contract builder, write gates. |
 | `story_system.py`, `story_contracts.py`, RuntimeContractBuilder | Writes `.story-system/MASTER_SETTING.json`, volume JSON, chapter JSON, and review JSON; marked Markdown is a rendered companion with generated blocks. | `story_runtime_sources.load_runtime_sources`, ContextManager, prewrite validation, commit artifact creation. |
 
-The planning formats are not interchangeable: state volume records establish confirmed/deferred volume decisions; outlines carry authored plot plans; Story System contracts package selected plans and constraints for a chapter. R0 retains those existing artifacts while naming one writer family for each field. Where the same field appears in more than one artifact, its source relationship must be declared; a rendered or runtime copy is not a second authority.
+The planning formats are not interchangeable: state volume records establish confirmed/deferred volume decisions; outlines carry authored plot plans; Story System contracts package source-traced, scoped runtime representations of selected plans and constraints for a chapter. R1 retains those existing artifacts while freezing the source relationships in Section 5. `RuntimeContractBuilder.build_for_chapter()` reads MASTER_SETTING and `load_chapter_plot_structure()` to generate VOLUME_BRIEF and REVIEW_CONTRACT; these generated artifacts are runtime copies. StorySystemEngine generates CHAPTER_BRIEF from chapter-scoped directive and reference inputs. A rendered/runtime copy is not a second authority.
 
 ### 3.2 Story Craft and chapter metadata
 
@@ -66,7 +69,7 @@ The planning formats are not interchangeable: state volume records establish con
 | `MemoryWriter` / memory projection | Derives `open_loop` and `reader_promise` memory rows from accepted commit event lifecycle and stores them in memory projection/scratchpad. | `MemoryContractAdapter.get_open_loops`, Context memory pack, writer prompt. Existing Context categorizes these memory rows as INTENT with generic `unverified_plan`, losing the important Canon-derived provenance distinction. |
 | `context_provenance.py` | Reads accepted commit facts separately from state projections, contracts, outline, memory, and retrieval. It emits CANON/INTENT/CRAFT/REFERENCE groups and diagnostics for fact conflicts. | `ContextManager` and `MemoryContractAdapter` output governed context to Writer and other consumers. |
 
-The accepted event is a past fact (CANON). An active or resolved obligation derived from that event is a CANON_DERIVED_OBLIGATION presented within the INTENT section, explicitly labeled with that origin. The projection must remain reproducible from effective Canon; planner metadata may link to it but cannot change its lifecycle.
+The accepted event and validated factual state/entity deltas are Canon evidence. Container membership in CHAPTER_COMMIT is not semantic evidence: `ExtractionResult.chapter_meta` is `Any`, and the historical object mixes plan, Craft, occurrence claims, and descriptive metadata. A field is CANON only when its field semantics are factual and its evidence/provenance satisfies an explicit Canon evidence rule. An obligation derived from accepted events remains CANON_DERIVED_OBLIGATION, presented within INTENT with origin labels; projection is reproducible from effective Canon and planner metadata cannot change its lifecycle.
 
 ### 3.4 Context and contracts
 
@@ -99,7 +102,8 @@ The class cell in each row contains exactly one allowed semantic class. Where a 
 | project_info.genre, genre_label, genre_tags, tags | project init/author edit | Same | planning templates, Story Craft CLI, Context | PROJECT_CONFIG | User-selected project profile | Explicit config edit | Versioned selection | No Canon authority | project_info owner root | Separate from reference genre profile |
 | project_info.author, language, output_dir, project_id, platform, created_at | project init/setup | Same | init/runtime/reporting | PROJECT_CONFIG | User/setup | Config operation; created_at stable after setup | Project lifetime | None | project_info owner root | Preserve recognized values |
 | project_info.core_selling_points, target_reader, target_words, target_chapters | project init/planner edit | Same | init, plan, progress/runtime helpers | INTENT | Author/planner | Explicit revision | Project-level plan | Not a past fact | project_info owner root | Map exact field names |
-| project_info.story_pitch, story_premise, theme, outline | project init/plan | Same; outline also appears in 大纲 files | plan, Context, Story System seed | INTENT | Author | Explicit author edit | Plan may become stale | Never proof of occurrence | project_info Intent and authored outline file | Cross-copy disagreement diagnostic |
+| project_info.story_pitch / story_premise / theme | Project setup and author plan | state.json.project_info | Init/plan/Context | INTENT | Author-authored project-level premise/pitch/theme, each distinct by semantic scope | Explicit author edit | Project-level plan | Not proof of occurrence | project_info field by exact semantic identity | Do not collapse distinct fields; same-identity authored edits require planner resolution |
+| project_info.outline | Legacy/project summary field; no audited production reader establishes it as authoritative detailed outline | state.json.project_info | Compatibility readers if present | UNKNOWN | Unproven | Preserve | Unknown | No factual authority | None assigned | Do not treat as peer authority to authored outline files |
 | project_info.characters, world_setting, golden_finger fields, protagonist/heroine/co-protagonist/antagonist structure, world_scale, factions, power/currency/sect/cultivation/social/resource fields | init/author plan | Same | Story System seed, plan, Context | PROJECT_CONFIG | Author-selected story baseline | Explicit revision | Project setup/configuration | Grounds later Canon; does not establish chapter events | project_info owner root | Exact allowlist; unknown nested fields conflict |
 | project_info.later_volumes_status and expected_total_volumes | VolumeStateManager/init | Same | planning horizon and plan workflow | INTENT | Author/planner | Explicit status/target edit | deferred/unknown/planned | None | project_info owner root | expected_total_volumes currently omitted from Phase 9 field allowlist |
 | project_info.confirmed_through_volume | VolumeStateManager recomputation | Same cache | plan/init | DERIVED_REFERENCE | Derived from volumes status | Recomputed | Mirrors max confirmed index | None | Derived view of volumes | Not independent authority |
@@ -109,12 +113,17 @@ The class cell in each row contains exactly one allowed semantic class. Where a 
 | progress.volumes_planned, current_volume, total_volumes, volumes_completed, last_updated | init/update-state/plan workflow | state.json.progress; overlay paths where supported | plan, status, runtime | WORKFLOW | Workflow progress service | Workflow transition | Operational progress | Does not imply Canon | Existing workflow progress owner | Keep separate from volume plan |
 | progress.current_chapter and total_words | Canon projection and legacy StateManager compatibility path | Canon generation when enrolled; legacy state projection otherwise | status, gates, dashboard | DERIVED_REFERENCE | Accepted commit projection | Recomputed | Progress projection | Never creates Canon | Canon generation | Preserve Phase 9 projection boundary |
 | progress.chapter_status | Commit projection for committed status; workflow service for draft/review/reject | Canon generation and workflow metadata | status, gates, dashboard | WORKFLOW | Workflow transition except committed projection | Workflow transition | Draft/review/reject/committed | Status alone never creates Canon | Existing workflow path | Keep status authority explicit |
-| MASTER_SETTING authored setting/world baseline | init/story seed/author plan | .story-system/MASTER_SETTING.json and marked Markdown rendering | Runtime sources, Context, validation | PROJECT_CONFIG | Author-approved project setup | Explicit author edit | Project lifetime/versioned by file history | May ground later Canon; not proof events occurred | Existing Story System contract artifact | JSON source; marked Markdown is rendered companion |
-| MASTER_SETTING explicit locked/append-only/override constraints | Story seed and author/planner | Same contract JSON | contract merge, prewrite, Context, gate binding | INTENT | Explicit author contract node | Explicit revision with provenance | Proposed/active/superseded | Only exact user-bound constraint may hard gate | Contract node owner | Do not infer hard status from key name |
-| VOLUME_BRIEF conflict, climax, and target beats | RuntimeContractBuilder and plan | .story-system/volumes/volume_NNN.json | Runtime sources, Context, prewrite/review | INTENT | Author/planner | Author revise/defer | Plan lifecycle | Plan deviation is not Canon contradiction | Volume contract owner | Diagnose duplicate state-volume values |
-| CHAPTER_BRIEF goal, must-cover, forbidden, planned time/characters | RuntimeContractBuilder and plan | .story-system/chapters/chapter_NNN.json and outline | Context, prewrite validator, fulfillment review | INTENT | Author/planner; explicit user constraint only with binding | Author revision | Proposed/active/stale/satisfied candidate | Canon may inform satisfaction; never deletes plan | Chapter plan contract owner | Exact source identity required |
-| Review contract quality/method rules | RuntimeContractBuilder/review flow | .story-system/reviews/chapter_NNN.review.json | prewrite, review, commit gates | CRAFT | Reviewer method unless separately user-bound | Versioned advisory config | active/superseded | Cannot imply Canon truth | Review/craft contract owner | Keep constraint binding separate |
-| Master/volume/chapter outline prose | Plan authoring and writeback | 大纲 Markdown/JSON planning artifacts | plan, outline loader, Context | INTENT | Author/planner | Author edit; generated fragments replace marked sections only | Proposed/active/stale/satisfied | Plan remains plan | Plan artifact writer | Preserve author-edited regions |
+| selected project genre/config | project init and explicit project configuration | state.json.project_info genre/tags | Init, templates, planning, Context | PROJECT_CONFIG | User-selected project config at project scope | Explicit config edit | Project configuration | No Canon authority | project_info config fields | Not duplicate of reference genre advice |
+| MASTER_SETTING generated route/context seed fields | StorySystemEngine or seed/runtime generator | .story-system/MASTER_SETTING.json | Runtime sources, Context, RuntimeContractBuilder | DERIVED_REFERENCE | Source-traced project config/reference inputs | Regenerated from input or source trace | Runtime seed/version | No factual authority | Referenced project config/reference source | Generated fields do not become author authority by being stored in MASTER_SETTING |
+| Explicit user-bound constraint embedded in MASTER_SETTING or another contract | Explicit author action with stable constraint identity/binding | Contract field plus binding/provenance record | Contract merge, prewrite, Context, gate binding | INTENT | User constraint source, not generated contract | Explicit revision with provenance | Proposed/active/superseded | Only exact bound constraint may hard gate | Bound authored source | Do not infer authority from key name or generated container |
+| VOLUME_BRIEF selected_scenes copied from chapter-outline CPNs | RuntimeContractBuilder | .story-system/volumes/volume_NNN.json | Runtime sources, Context, prewrite/review | INTENT | Authored chapter-outline CPN source | Derived runtime generation; no independent authored override established by current builder (overrides are empty) | Per-chapter scoped runtime copy | Plan deviation is not Canon contradiction | Outline CPN source; brief field is DERIVED_RUNTIME_COPY | Stale copy is diagnostic, not intent_conflict |
+| VOLUME_BRIEF generated volume_goal, tropes, pacing, anti-patterns, system constraints | RuntimeContractBuilder | Same | Runtime sources, Context, review | CRAFT | Generated from MASTER_SETTING route/constraints and anti-pattern source; not an authored volume decision unless separately bound | Derived runtime generation | Per-chapter craft guidance | Does not establish fact or user constraint | Referenced craft/config fields | Stale copy diagnostic only; explicit user binding remains at source |
+| CHAPTER_BRIEF goal, must-cover, forbidden, planned time/characters | StorySystemEngine and plan workflow | .story-system/chapters/chapter_NNN.json | Context, prewrite validator, fulfillment review | INTENT | Authored chapter section in the volume outline; explicit user constraint retains its binding at source | Generated scoped runtime copy; current builder does not establish a separate authored override | Per-chapter runtime scope | Canon may assess satisfaction; never deletes plan | Chapter outline source; CHAPTER_BRIEF is DERIVED_RUNTIME_COPY | Drift emits stale_runtime_copy |
+| CHAPTER_BRIEF generated method/style guidance | StorySystemEngine/reference routing | Same | Context and Writer | CRAFT | Generated from query, route, and reference material | Regenerated derived guidance | Per-chapter scope | No factual/user-constraint authority | Reference/routing sources | Advisory; source/copy drift is stale_runtime_copy |
+| REVIEW_CONTRACT must_check and blocking_rules copied from outline nodes | RuntimeContractBuilder | .story-system/reviews/chapter_NNN.review.json | prewrite, review, commit gates | INTENT | Authored outline mandatory_nodes/prohibitions | Derived scoped runtime copy; source Intent remains authority | Per-chapter plan scope | Canon may assess satisfaction; contract does not prove fact | Outline nodes; contract field is DERIVED_RUNTIME_COPY | Drift is stale_runtime_copy; only a separately bound source constraint may hard gate |
+| REVIEW_CONTRACT generated risk/method/threshold fields | RuntimeContractBuilder | Same | prewrite, review, commit gates | CRAFT | Generated genre risks, anti-patterns, system guidance, review thresholds | Derived runtime generation | Per-chapter review method | Cannot imply Canon truth or user constraint | Reference/MASTER_SETTING method source | Drift is stale_runtime_copy; advisory by default |
+| Explicit stable user constraint carried by REVIEW_CONTRACT | Author binding to exact constraint identity/source | Contract field plus binding/provenance | prewrite, review, commit gates | INTENT | Authoritative bound constraint source | Explicit revision | Scoped user constraint | May hard gate only under exact binding policy | Bound authored source; contract is a scoped representation | Never infer binding from blocking_rules or file location |
+| Project, volume, and chapter outline authored prose | Plan authoring/writeback; author edits preserved by marked-region rules | `大纲/总纲.md`, volume detailed outline files | Plan, outline loader, RuntimeContractBuilder, Context | INTENT | Authoritative authored plan source at its declared scope | Author edit; marked generated fragments are derived copies | Proposed/active/stale/satisfied | Plan remains plan | Authored outline file identity | Generated contracts and compatibility copies do not become peer authority |
 | story_craft.foreshadow_chain planned setup/payoff fields | plan skill, story_craft.py, webnovel CLI | state.json.story_craft.foreshadow_chain; overlay after routing | CLI, review, P1/P7 consistency, Context | INTENT | Author/planner | Explicit add/amend/payoff/defer/cancel | Existing active/paid_off; additional transitions remain open | Planned target only; occurrence requires accepted event | story_craft Intent subfields | Exact known schema; auto placeholders remain unconfirmed |
 | Legacy foreshadow payoff/burial chapter claims without accepted event identity | Story Craft and consistency legacy writers | story_craft.foreshadow_chain | review, Context | UNKNOWN | Canon owns occurrence | Preserve annotation | Unverified | Does not prove Canon event | Legacy reference pending link | No migration by text/chapter match |
 | Foreshadow payoff/burial quality evaluation | Craft/review workflow | story_craft.foreshadow_chain fields | review and Context | CRAFT | Reviewer/craft method | Advisory annotation | Re-evaluable | No factual authority | story_craft Craft subfields | Exact field mapping |
@@ -137,7 +146,14 @@ The class cell in each row contains exactly one allowed semantic class. Where a 
 | chapter_meta hook_type, beat_position, Scene-Sequel fields | Story Craft setter/CLI, review | Legacy state and current review metadata | review, Context, status/dashboard | CRAFT | Author/reviewer craft assessment | Advisory/editable | Per-chapter annotation | Storage does not prove fact | Craft owner/projection | Split mixed root |
 | chapter_meta must_cover, forbidden, CBN/CPNs/CEN, planned time/strand/villain targets | Plan/artifact generation and Story Craft setter | Outline/contract; legacy state duplicate | prewrite/fulfillment, Context | INTENT | Author/planner | Editable until accepted/revised plan | Proposed/active/stale/satisfied candidate | Canon may inform satisfaction | Chapter plan owner | Exact source link required |
 | Legacy chapter_meta hook/foreshadow occurrence values without commit identity | Legacy state/process-chapter | state.json.chapter_meta | review, memory writer, Context | UNKNOWN | No Canon proof | Preserve | Unverified | Cannot promote to Canon | Legacy reference | Phase 9 root-level Canon label must be split |
-| Accepted-commit chapter_meta hook/foreshadow occurrence fields | ChapterCommitService extraction | Accepted commit and generation index | Canon Context, review, memory | CANON | Accepted commit/correction | Effective correction only | Historical event | Defines accepted story event | Canon commit/projection | Legacy values stay UNKNOWN |
+| Commit-carried hook_type, beat_position, Scene-Sequel, craft/evaluation annotations | ChapterCommitService extraction snapshot or Craft/review writer | Accepted commit snapshot and/or Craft projection | Review, Context | CRAFT | Craft method/assessment | Advisory annotation | Per-chapter evaluation | Does not establish occurrence | Craft / commit-carried metadata | Never promote because commit-contained |
+| Commit-carried must_cover, forbidden, planned nodes/targets | Planner/contract snapshot carried by commit | Accepted commit snapshot and source plan | Fulfillment review, Context | INTENT | Authored plan source; snapshot records plan-at-commit time | Plan lifecycle remains separate | Historical plan snapshot | Not evidence that planned content occurred | Original Intent source; snapshot is DERIVED_REFERENCE to that source | Preserve source identity and snapshot time; no authority transfer |
+| Commit-carried occurrence flags (foreshadow_buried/paid_off, thematic occurrence, timed-lock fulfillment) | Extraction metadata | Accepted commit snapshot | Review, Context | DERIVED_REFERENCE | Flag alone has no factual authority | Rebuildable/source-linked annotation | Evidence link status | Must point to accepted StoryEvent, accepted factual state/entity delta, or another explicitly schema-validated factual evidence record; otherwise UNKNOWN | Canon evidence owns fact; flag is reference | No promotion from flag or containment |
+| Commit literary/document title | Chapter/document writer or extraction | Commit document metadata | Status, Context | DERIVED_REFERENCE | Document identity/title metadata | Source-linked | Document lifecycle | Not inherently an in-story event | Document metadata source | Keep separate from Canon facts |
+| Commit word_count | Text projection/counting path | Accepted chapter text plus derived index | Progress/status | DERIVED_REFERENCE | Deterministic count of accepted text | Recomputed from text | Per accepted document | Describes document length, not story fact | Text-derived projection | Must retain text/commit provenance |
+| Commit summary_text | Extraction/summary writer | Extraction artifact | Context, memory/review | DERIVED_REFERENCE | Derived summary of chapter | Recomputable/correctable | Summary version | Summary may paraphrase facts but is not factual evidence itself | Derived summary source | Individual claims require linked Canon evidence before factual use |
+| Commit-carried characters/location mentions from extraction only | Extraction metadata | Extraction artifact | Context, memory, review | UNKNOWN | No validated factual evidence supplied by mention alone | Preserve/source-link | Unverified claim | Mention/extraction alone does not establish state or occurrence | UNKNOWN/REFERENCE | No blanket promotion from commit containment |
+| Accepted factual character/location state or event | Accepted StoryEvent, factual state/entity delta, or explicitly validated factual schema with provenance | Commit evidence and effective Canon projection | Canon Context, memory, queries | CANON | Exact accepted factual evidence | Effective correction only | Historical fact | Evidence itself establishes the fact; chapter_meta pointer is only a reference | Canon evidence owner | Require evidence identity and schema validation |
 | review_checkpoints, run ledger, gate decision events | Review/run workflow | Existing owner overlay and review artifacts | resume/review/write | WORKFLOW | Workflow service | Workflow update/append | Started/completed/resumable | No story fact authority | Existing workflow owner | Do not merge with plan or craft |
 | writing_guidance, author style patterns, style contract, reader metrics | Author/config/review systems | Existing config/context sources | Context, review, Writer | CRAFT | Craft source/reviewer | Configurable; heuristic results advisory | Active/superseded/score | Never fact evidence | Existing Craft/config owner | Keep provenance |
 | Author preferences | Author config | Existing preference source | Context and Writer | PROJECT_CONFIG | User | Explicit configuration edit | Project lifetime/versioned | No Canon authority | Existing config owner | Separate from generated recommendations |
@@ -147,52 +163,74 @@ The class cell in each row contains exactly one allowed semantic class. Where a 
 | progress.chapter_status | Commit projection for committed status; workflow service for draft/review/reject | Canon generation and workflow metadata | status, gates, dashboard | WORKFLOW | Workflow transition except committed projection | Workflow transition | Draft/review/reject/committed | Status alone never creates Canon | Existing workflow path | Preserve field-level Phase 9 split |
 | Unknown state roots and unrecognized nested fields | Legacy writers/migrations | Original state/contract files | Compatibility readers | UNKNOWN | None assigned | Preserve only | Unknown | No Canon authority | Legacy/reference quarantine | Fail closed; never bulk move/delete |
 
-## 5. Current duplicate ownership graph
+## 5. Source relationship graph and duplicate ownership graph
+
+Use these relationship values in the ownership matrix and Context diagnostics:
+
+- `AUTHORITATIVE_SOURCE`: the authored/configured field that owns the value for a declared semantic identity and scope.
+- `SCOPED_AUTHORED_OVERRIDE`: an explicit, provenance-bearing author override for a narrower scope; it wins only within that scope and must retain the source identity it overrides.
+- `DERIVED_RUNTIME_COPY`: generated or compatibility representation of a source. It is never a peer authority. Agreement is normal; divergence is `stale_runtime_copy`.
+
+### Frozen source map for planning artifacts
+
+| Scope / field | Authoritative source | Relationship / permitted scope | Runtime or compatibility representation | Conflict rule |
+|---|---|---|---|---|
+| Project pitch and premise | `project_info.story_pitch` and `project_info.story_premise` as distinct authored project-level fields | `AUTHORITATIVE_SOURCE` for pitch vs premise respectively; they are not duplicates merely because related | MASTER_SETTING may carry generated/refined scoped context only when source trace identifies it | Same field identity and scope differing between independent authored sources is `intent_conflict`; distinct pitch/premise scopes are not |
+| Project theme | `project_info.theme` when authored with theme identity | `AUTHORITATIVE_SOURCE` for project-level theme | MASTER_SETTING/context may render or elaborate it with provenance | Divergent generated representation is `stale_runtime_copy`; independent explicit theme override is `SCOPED_AUTHORED_OVERRIDE` |
+| `project_info.outline` | No authoritative production consumer/source relation established in audit | `UNKNOWN`/legacy until identity and writer are evidenced | Authored outline files remain the detailed plan sources | Never rank this field against outline files without exact source identity |
+| Selected genre/config (`project_info.genre`, tags) | Explicit project config fields | `AUTHORITATIVE_SOURCE` for user selection / `PROJECT_CONFIG` | MASTER_SETTING route or references are derived routing/runtime interpretation with source trace | Routing difference is stale/config diagnostic, not competing Intent |
+| MASTER_SETTING authored constraints | Exact explicitly authored node with stable binding; generated MASTER_SETTING nodes remain derived | `SCOPED_AUTHORED_OVERRIDE` only for a declared narrower scope; otherwise derived seed/runtime representation | `.story-system/MASTER_SETTING.json` may contain mixed generated and explicit nodes | Per-node provenance/binding decides; the JSON root has no uniform authority |
+| Confirmed volume title/range/summary decision | Confirmed `volumes[]` record | `AUTHORITATIVE_SOURCE` for the volume-summary decision scope | Volume outline owns detailed authored plot scope. If it repeats a summary under explicit source identity it is `DERIVED_RUNTIME_COPY`; a separately authored same-scope value requires `SCOPED_AUTHORED_OVERRIDE` or is unresolved | Source/copy drift is stale; independently authored same-scope disagreement is `intent_conflict`; missing relationship evidence stays UNKNOWN/diagnostic |
+| Volume detailed plot plan and chapter nodes | Authored volume outline sections/files | `AUTHORITATIVE_SOURCE` for detailed plot plan within chapter/volume scope | `VOLUME_BRIEF.selected_scenes` copies outline CPNs as Intent; generated volume_goal/trope/pacing/method fields are Craft output from MASTER_SETTING and anti-pattern sources | Differences yield `stale_runtime_copy`; current RuntimeContractBuilder emits empty overrides, so no independent VOLUME_BRIEF author override is established |
+| Chapter goal, must-cover, forbidden, planned nodes/targets | Authored chapter section in volume outline, at chapter scope | `AUTHORITATIVE_SOURCE`; an explicit exact user-bound node may be `SCOPED_AUTHORED_OVERRIDE` | CHAPTER_BRIEF is a StorySystemEngine generated scoped representation; chapter_meta planned copies are compatibility/history references | CHAPTER_BRIEF drift is stale copy; no independent CHAPTER_BRIEF author override path is established by audited code; chapter_meta never becomes authority through copying or commit persistence |
+| REVIEW_CONTRACT plan fields (`must_check`, `blocking_rules`) | Authored outline `mandatory_nodes` and `prohibitions` | `AUTHORITATIVE_SOURCE` for scoped chapter plan; contract fields are `DERIVED_RUNTIME_COPY` | RuntimeContractBuilder copies them into review representation | Drift is stale copy; only exact source binding can hard gate |
+| REVIEW_CONTRACT quality/method fields and thresholds | Generated reviewer method/quality policy | `CRAFT` runtime guidance, `DERIVED_RUNTIME_COPY` | RuntimeContractBuilder generates risks, anti-patterns, system guidance, thresholds from inputs | Drift is stale runtime copy; never an Intent conflict |
+| Explicit user constraint represented in REVIEW_CONTRACT | Exact stable user-bound source node | Contract field plus binding/provenance | prewrite, review, commit gates | INTENT | Authoritative bound constraint source | Explicit revision | Scoped user constraint | May hard gate only under exact binding policy | Bound authored source; contract is a scoped representation | Never infer binding from blocking_rules or file location |
 
 ~~~mermaid
-flowchart TD
-  E[Accepted StoryEvent in CHAPTER_COMMIT] --> R[intent_reconciliation]
-  R --> M[Canon-derived memory projection]
-  M --> C[Context INTENT today, generic provenance]
-  P[Planner Promise Ledger in project_info] --> C
-  F[story_craft.foreshadow_chain] --> C
-  T[story_craft.timed_locks] --> C
-  V[state.json volumes and horizon] --> O[Outline files]
-  O --> S[Story System contracts]
-  S --> C
-  B[story_craft volume beats] --> Q[Plan/review/CLI checks]
-  BM[Outline beat files] --> Q
-  CM[legacy chapter_meta] -->|mixed root| C
-  CC[accepted commit chapter_meta] --> G[Canon generation/index]
-  CM --> G
-  G --> C
-  SC[story_craft whole root] --> X[state-overlay.json when routed]
-  SC --> L[legacy state.json direct CLI write]
-  X --> C
-  L -. activation view may ignore .-> C
+flowchart LR
+  PI[project_info authored pitch / premise / theme] -->|source-traced fields only; otherwise independent scope| MS[MASTER_SETTING generated seed or exact authored node]
+  CFG[project_info selected genre/config] -->|AUTHORITATIVE_SOURCE| ROUTE[MASTER_SETTING route interpretation]
+  V[confirmed volumes[] summary decision] -->|distinct volume-summary scope| C[Context]
+  VO[authored volume outline detailed plan] -->|AUTHORITATIVE_SOURCE for plot scope| VB[VOLUME_BRIEF per chapter scope]
+  VO -->|DERIVED_RUNTIME_COPY| VB
+  VO -->|DERIVED_RUNTIME_COPY| CB[CHAPTER_BRIEF per chapter scope]
+  MS -->|DERIVED_RUNTIME_COPY| VB
+  MS -->|DERIVED_RUNTIME_COPY| RC[REVIEW_CONTRACT generated method]
+  VO -->|DERIVED_RUNTIME_COPY| RC
+  USER[explicit bound user constraint] -->|SCOPED_AUTHORED_OVERRIDE| UC[scoped contract representation]
+  CM[chapter_meta planned compatibility copy] -.->|DERIVED_REFERENCE; never authority| VO
+  CM2[chapter_meta craft annotation] -.->|CRAFT even if commit-carried| CC[CHAPTER_COMMIT snapshot]
+  CM3[chapter_meta occurrence flag] -.->|DERIVED_REFERENCE or UNKNOWN absent evidence| CE[accepted StoryEvent / factual delta]
+  CE -->|factual authority| CANON[Canon evidence]
+  C[Context] <-->|read-only composition and diagnostics| VB
+  C <-->|read-only composition and diagnostics| CB
+  C <-->|read-only composition and diagnostics| RC
 ~~~
 
-### Duplicate/conflict pairs requiring explicit identity and diagnostics
+Generated contract files may be edited by a user, but file edits alone do not establish an override. A `SCOPED_AUTHORED_OVERRIDE` requires an explicit author action/binding, exact semantic identity and scope, and provenance to the source it narrows; otherwise preserve the edit as unverified/UNKNOWN and report it for explicit mapping. The audited VOLUME_BRIEF builder initializes an empty overrides object and does not establish an independent override writer.
 
-| Sources | Current overlap | R0 rule |
+Derived-copy diagnostics are relationship-aware: matching source/copy is normal; a generated copy with the same source identity but different value emits `stale_runtime_copy`, retaining source, copy, scope and source trace. It does not ask the planner to resolve an `intent_conflict`. `intent_conflict` is reserved for two independent `AUTHORITATIVE_SOURCE` or valid same-scope `SCOPED_AUTHORED_OVERRIDE` records sharing exact identity/scope and differing in value. No winner is selected by timestamp, path, recency, similarity or container.
+
+### Remaining duplicate ownership pairs
+
+| Sources | Relationship | R1 rule |
 |---|---|---|
-| Canon-derived Promise/Open Loop projection ↔ planner Promise Ledger | Both contain promise/loop content, status, and payoff concepts. | Distinct IDs and lifecycles; explicit cross-reference only. Never text-match or synchronize. Conflict diagnostic reports both owners and values. |
-| Promise Ledger ↔ story_craft.foreshadow_chain | Both model planted/payoff chapters, status, and type. | Keep types distinct. Legacy row-to-row linking requires explicit IDs; no merging by content/chapter. |
-| Foreshadow chain ↔ timed locks | Both are future-facing and reviewed for deadline. | Keep separate: payoff chain vs deadline constraint. A lock may refer to a foreshadow ID but does not own its payoff state. |
-| `volumes[]` ↔ outline volume rows ↔ VOLUME_BRIEF | Conflict/climax/targets can repeat. | Confirmed volume record owns volume-level summary decision; outline/brief reference it or carry an explicitly authored scoped expansion. Mismatch diagnostic, no silent winner except source-qualified derived rendering. |
-| CHAPTER_BRIEF ↔ chapter outline ↔ chapter_meta plan fields | Chapter goals and required nodes repeat. | Chapter plan contract/outline owns explicit plan; chapter_meta duplicate is compatibility projection unless it has exact source identity. Conflict is Intent vs Intent, requiring planner resolution. |
-| Story Craft volume beats ↔ beat markdown files | Same method/beat positions in JSON and files. | Existing explicit source-of-writeback must be documented; rendered copy is derived. Author-edited unmarked content is preserved and conflicts block automated overwrite. |
-| chapter_meta state root ↔ commit extraction chapter_meta ↔ generation index | Same root mixes plan, Craft and actual chapter metadata; Phase 9 inventory treats root as Canon. | Split by field and provenance. Only commit-backed fields are CANON; plans remain INTENT and method annotations CRAFT. Legacy unlinked state values are UNKNOWN. |
-| Thematic echo chapter notes ↔ accepted story events | Notes can claim a theme appeared in a chapter. | Note remains reference until linked to a validated accepted event; never promotes Canon. |
-| `project_info.confirmed_through_volume` ↔ volume statuses | Cached derived value duplicates max confirmed status. | Volume record is source; horizon is recomputed derived reference. |
-| `cross_volume_beat_map` ↔ adjacent confirmed volume plans | Generated map repeats volume relationships. | Derived reference with source digest/identity; rebuild or diagnose drift. |
-| Consistency finding ↔ Craft field ↔ generated view | P1/P7 can inspect or update both state and view. | Finding is advisory evidence; view is derived; semantic state mutation must go through declared owner API. |
+| Canon-derived Promise/Open Loop projection ↔ planner Promise Ledger | Separate lifecycle owners; optional explicit cross-reference | Distinct IDs/lifecycles; never text-match or synchronize; report cross-owner mismatch without merging |
+| Promise Ledger ↔ story_craft.foreshadow_chain | Separate planner Intent owners | Explicit IDs only; no merge by prose/chapter |
+| Foreshadow chain ↔ timed locks | Separate Intent scopes | Keep payoff chain and deadline constraint distinct |
+| Story Craft volume beats ↔ beat markdown files | Authored source vs generated/marked section as evidenced by writer | Preserve author-edited regions; generated content is copy; conflict only between independent same-scope authored sources |
+| chapter_meta root ↔ outline/contracts/commit snapshot | Mixed compatibility/history container | Split each field by semantics/provenance; no root-level authority |
+| Thematic echo chapter note ↔ accepted story event | Planner/Craft note vs factual evidence | Note is DERIVED_REFERENCE if linked, UNKNOWN if unlinked; event/delta/schema evidence owns fact |
+| `project_info.confirmed_through_volume` ↔ volume statuses | Derived cache vs source records | Recompute from volume source; drift diagnostic |
+| `cross_volume_beat_map` ↔ confirmed volume plans | Derived map vs source plans | Rebuild/diagnose with source identity |
+| Consistency finding ↔ Craft field ↔ generated view | Finding, owned semantic field, derived view | Finding is evidence; mutation uses field owner; view is derived |
 
 ## 6. Intent taxonomy and lifecycle candidate
 
 Intent records author/planner choices about future story content. Distinguish: project-level decisions; volume/chapter plans; explicit user constraints; planner-owned obligations; and authored foreshadow/timed-lock plans. These remain separate variants with explicit owner and source identity.
 
-R0 lifecycle proposal: do not impose one enum. Keep existing exact per-model status where valid. Add only the minimum distinctions needed by implementations: a planner item may be proposed/confirmed/active/deferred/cancelled/satisfied/stale; satisfaction is an assessment, not deletion, and only an explicit planner action may cancel or alter a deadline. Exact enum and transition table remain an implementation-review item because existing Promise Ledger and Story Craft statuses differ. Existing items are not bulk-renamed in R0.
+R1 preserves the R0 lifecycle decision: do not impose one enum. Keep existing exact per-model status where valid. Add only the minimum distinctions needed by implementations: a planner item may be proposed/confirmed/active/deferred/cancelled/satisfied/stale; satisfaction is an assessment, not deletion, and only an explicit planner action may cancel or alter a deadline. Exact enum and transition table remain an implementation-review item because existing Promise Ledger and Story Craft statuses differ. Existing items are not bulk-renamed by this design.
 
 `character_arc` desired change and `thematic_echoes.premise` are Intent only when explicitly authored as target. Evaluations, echo quality, or notes that a chapter manifested something are Craft/UNKNOWN unless linked to Canon evidence. A source's JSON location never decides semantic class.
 
@@ -206,7 +244,7 @@ The following do not become factual blockers solely through a legacy BLOCKER lab
 
 Keep `intent_reconciliation.py` as deterministic event-to-lifecycle derivation, not as a mutable owner. Inputs must be the effective accepted event stream in canonical order. Creation and resolution identity remains explicit event/loop/promise IDs; exact-unique historical matching remains compatibility-only. Ambiguity, orphan close, duplicate resolution, or missing source identity remains diagnostic and does not select a winner.
 
-The durable authority is the accepted commit/effective correction lineage. The lifecycle projection is rebuildable and may be physically stored in the existing Canon projection generation or current memory read model; R0 does not add a database. Context must label the item as CANON_DERIVED_OBLIGATION, identify the source event(s), and expose it under INTENT without representing it as a new past event. Correction replay recomputes it. Planner actions cannot resolve it.
+The durable authority is the accepted commit/effective correction lineage. The lifecycle projection is rebuildable and may be physically stored in the existing Canon projection generation or current memory read model; R1 does not add a database. Context must label the item as CANON_DERIVED_OBLIGATION, identify the source event(s), and expose it under INTENT without representing it as a new past event. Correction replay recomputes it. Planner actions cannot resolve it.
 
 ## 9. Planner-owned obligation model
 
@@ -227,11 +265,11 @@ If Canon reports a payoff while a planner ledger stays active/overdue, Context e
 | Volume/chapter target | Author/planner | Scoped target in contract/outline | Plan fulfillment assessment against accepted commit | Author revise/defer | Plan source path and commit evidence on satisfaction | Intent |
 | Rhythm/beat/style recommendation | Craft framework/checker | Recommendation window/score threshold | Recompute/review/dismiss | Dismiss/supersede as craft advice | No required Canon link | Craft, advisory/score |
 
-Therefore R0 selects distinct owners composed by Context. There is no common NarrativeObligation authority, shared persistence, common status enum, or automatic linkage.
+Therefore R1 selects distinct owners composed by Context. There is no common NarrativeObligation authority, shared persistence, common status enum, or automatic linkage.
 
 ## 11. Story Craft field-by-field split
 
-| Field path | R0 class | Owner / authority | Gate and migration rule |
+| Field path | R1 class | Owner / authority | Gate and migration rule |
 |---|---|---|---|
 | foreshadow_chain planned setup/payoff fields | INTENT | Author/planner | Exact recognized schema only; generated placeholders remain unconfirmed |
 | Legacy foreshadow payoff/burial chapter claim without accepted event identity | UNKNOWN | Canon owns occurrence | Preserve; no content/chapter matching |
@@ -253,7 +291,13 @@ Therefore R0 selects distinct owners composed by Context. There is no common Nar
 | chapter_meta hook_type, beat_position, Scene-Sequel fields | CRAFT | Author/reviewer | Missing heuristic field cannot hard block |
 | chapter_meta must_cover, forbidden, CBN/CPNs/CEN, planned time/strand/villain targets | INTENT | Plan owner | Source reference required when copied from contract |
 | Legacy chapter_meta hook/foreshadow occurrence values without commit identity | UNKNOWN | No Canon proof | Preserve as reference |
-| Accepted-commit chapter_meta hook/foreshadow occurrence fields | CANON | ChapterCommitService | Effective correction only; legacy root cannot promote |
+| Commit-carried Craft annotations (hook_type, beat_position, Scene-Sequel, evaluations) | CRAFT | Craft source/assessment; commit is transport snapshot | Commit containment never promotes to CANON |
+| Commit-carried plan snapshot (must_cover, forbidden, planned nodes/targets) | INTENT | Authored plan source; commit payload is a historical snapshot/reference of that Intent | Does not become occurrence/fact |
+| Commit-carried occurrence flag with accepted factual evidence link | DERIVED_REFERENCE | Accepted event/factual delta/schema evidence owns fact | Flag is a reference only; linked evidence establishes occurrence |
+| Commit-carried occurrence flag without accepted factual evidence link | UNKNOWN | No factual evidence established | Preserve as unverified; flag alone never proves occurrence |
+| Document title, word_count, and summary metadata | DERIVED_REFERENCE | Accepted text/document source or extraction artifact | Derived description/measurement; no factual authority by itself |
+| Extracted characters/location mention without linked factual evidence | UNKNOWN | Extraction metadata only | Mention is not proof of occurrence/state; preserve as reference |
+| Character/location fact with accepted StoryEvent or validated factual state/entity evidence | CANON | Exact accepted factual evidence identity | Evidence establishes fact; chapter_meta field only points to it |
 | Other story_craft keys or unknown nested fields | UNKNOWN | Unassigned | Preserve and diagnose; do not inherit root class |
 
 Mixed-container policy: migration and Context split by explicit subfield identity. If a legacy object does not match a recognized schema, retain the original object as REFERENCE/UNKNOWN and require an explicit decision. Do not divide nested content by keyword or guess from prose.
@@ -276,11 +320,11 @@ No new store is proposed. Canon stays in accepted chapter commits and effective 
 
 ## 13. Context target model and conflict semantics
 
-Context output remains a read-only composition. Candidate envelope fields are: semantic class, stable item identity when known, owner reference, source reference(s), provenance status, chapter/scope, and display payload. For derived obligation rows, semantic class is CANON_DERIVED_OBLIGATION while presentation section is INTENT. This is Context metadata only and does not create an obligation registry.
+Context output remains a read-only composition. Relationship-aware diagnostic semantics are frozen as in Section 5: source/copy agreement is normal; a differing `DERIVED_RUNTIME_COPY` emits `stale_runtime_copy`; only differing independent authored sources with exact shared identity and scope emit `intent_conflict`. Context never asks for a planner conflict resolution between an authoritative source and its generated copy. Candidate envelope fields are: semantic class, stable item identity when known, owner reference, source reference(s), provenance status, chapter/scope, and display payload. For derived obligation rows, semantic class is CANON_DERIVED_OBLIGATION while presentation section is INTENT. This is Context metadata only and does not create an obligation registry.
 
 | Section | Content | Authority treatment |
 |---|---|---|
-| CANON | Accepted effective history and exact Canon-backed facts/events | Only accepted commit/correction lineage establishes past fact. |
+| CANON | Accepted effective history and exact Canon-backed facts/events | Only field-semantics-matched, validated factual evidence in accepted commit/correction lineage establishes past fact; commit containment alone is insufficient. |
 | INTENT | Explicit planner decisions, contracts, outlines, active planner obligations, and Canon-derived obligations with origin labels | Multiple sources remain separate. Intent never overwrites Canon; Canon does not silently delete plan. |
 | CRAFT | Rhythm, structure, style, reader signals, methodology, and quality advice | Advisory/score unless a separate exact user-constraint binding proves elevation. |
 | REFERENCE | Legacy/unknown items, summaries, retrieval hits, compatibility copies | Useful with labels; no authority inferred from similarity, location, or recency. |
@@ -296,7 +340,7 @@ Conflict rules:
 
 ## 14. Lifecycle, writer API, and failure behavior
 
-R0 does not mandate one lifecycle enum. Each model retains its existing valid lifecycle until its writer and reader transition matrix is ratified in implementation review. Required invariants:
+R1 retains the R0 decision not to mandate one lifecycle enum. Each model retains its existing valid lifecycle until its writer and reader transition matrix is ratified in implementation review. Required invariants:
 
 - Planner deadline/defer/cancel affects only planner record.
 - Canon-derived fulfilled/resolved is reconstructed only from effective Canon events and corrections.
@@ -312,7 +356,7 @@ Planner operations should be typed by existing domain (volume, Promise Ledger, S
 
 ## 15. Migration strategy and compatibility window
 
-Migration is design-only in R0. Proposed stages:
+Migration remains a design candidate in R1. Proposed stages:
 
 1. **Inventory/preflight:** hash inputs and record exact JSON paths, types, recognized schema versions, owner mapping, reader/writer evidence, and conflicts. No writes on dry-run.
 2. **Deterministic mapping:** map only enumerated field paths and exact known schemas. Extend Phase 9 inventory for nested `project_info.promise_ledger`, split `chapter_meta` by exact subfield/provenance, and map recognized Story Craft fields separately. Preserve every unrecognized value as UNKNOWN/reference.
@@ -323,7 +367,7 @@ Migration is design-only in R0. Proposed stages:
 
 Project classes:
 
-| Project state | R0 handling |
+| Project state | R1 handling |
 |---|---|
 | Base-only project | Continue exact existing files; add compatibility adapters/diagnostics in implementation. Do not force Phase 9 enrollment as Phase 10 prerequisite. |
 | Phase 9 enrolled project | Overlay is owner-state write target; do not let state.json-only Story Craft CLI appear successful. Preserve the immutable pinned Canon generation. |
@@ -334,7 +378,7 @@ Project classes:
 | Old Open Loop projection/memory | Rebuild Canon-derived items from accepted commits/effective corrections; owner-only legacy rows remain reference unless exact source identity confirms lineage. |
 | Unknown fields | Preserve source; no mutation, deletion, or authoritative Context promotion. |
 
-The compatibility window ends per path only after all production writers/readers use the assigned owner, migration has zero unresolved conflicts for that path, round-trip/parity checks pass, rollback has been exercised, and no supported installed skill invokes the old writer. R0 does not set dates or delete files.
+The compatibility window ends per path only after all production writers/readers use the assigned owner, migration has zero unresolved conflicts for that path, round-trip/parity checks pass, rollback has been exercised, and no supported installed skill invokes the old writer. R1 does not set dates or delete files.
 
 ## 16. Gates and skill prose findings
 
@@ -379,7 +423,7 @@ Gate normalization beyond these direct Intent/Craft ownership leaks is explicitl
 7. Align direct craft blockers in review/CLI/skill prose with existing GateSeverityPolicy; retain distinct workflow/integrity preconditions.
 8. Add base-only/enrolled migration dry-run, backup, parity, rollback and compatibility-retirement criteria; update only directly affected architecture instructions.
 
-These are candidate slices; sequence and exact APIs require independent review. No implementation is started by this spec.
+These are candidate slices. Field semantics and source relationships in Sections 4–5 are frozen R1 inputs; only concrete types/IDs or compatibility adapters expressly left open may be decided during implementation review. No implementation is started by this spec.
 
 ## 19. Acceptance tests for implementation
 
@@ -388,7 +432,7 @@ These are candidate slices; sequence and exact APIs require independent review. 
 3. Planner deadline/defer/cancel operations do not alter event-derived resolved status; Canon payoff does not silently alter planner status/deadline.
 4. Explicit cross-reference is preserved; missing, ambiguous, stale, or conflicting links emit diagnostics without content-match fallback.
 5. Story Craft Intent and Craft field writes target their own owner paths; unknown fields are rejected or preserved as non-authoritative, never misclassified by root.
-6. `chapter_meta` plan, craft and factual fields are separated; legacy unlinked rows do not enter Canon; accepted commit-backed facts remain Canon.
+6. Being persisted inside an accepted CHAPTER_COMMIT does not by itself make a field a Canon story fact. Tests prove commit-carried hook/beat/Scene-Sequel metadata remains CRAFT and excluded from Canon factual Context; plan snapshots remain INTENT/history-of-plan; occurrence flags without accepted StoryEvent, accepted factual state/entity delta, or another explicitly schema-validated evidence record remain DERIVED_REFERENCE/UNKNOWN and are never treated as past facts.
 7. Intent-vs-Intent conflicts are visible; Context does not select by time/order. Intent wins over Craft recommendations without discarding either source.
 8. Duplicate same-identity/same-value rows may be display-deduplicated only with every provenance reference retained.
 9. Craft/style/quality threshold findings cannot reject a chapter commit or trigger mandatory rewrite by default; explicit user constraint remains hard only with stable contract evidence.
@@ -396,13 +440,14 @@ These are candidate slices; sequence and exact APIs require independent review. 
 11. Base-only migration and Phase 9 enrolled migration both preserve original bytes, report unknown values, and support verified rollback.
 12. `/根源牌序` chapter 1/2 remains REFERENCE-only and `_rerun_at` remains `UNKNOWN / PRESERVED / NOT IMPORTED`.
 13. Phase 9 activation writes become visible from pinned overlay reads; old state.json-only mutation is rejected/guarded rather than falsely succeeding.
+14. A generated VOLUME_BRIEF/CHAPTER_BRIEF/REVIEW_CONTRACT that agrees with its exact source is not a duplicate conflict; changed source-bound output emits `stale_runtime_copy`, while two independent same-scope authored values emit `intent_conflict`.
 
 ## 20. Explicit non-goals
 
-- No production code, schema, lifecycle enum, migration, or gate behavior is changed in R0.
+- No production code, schema, lifecycle enum, migration, or gate behavior is changed by this R1 design revision.
 - No unified NarrativeObligation authority, shared obligation status, or new Intent/Craft registry/store/database.
 - No Issue #1 edit, PR, merge, release, broad docs rewrite, or cleanup of legacy paths.
-- No change to Canon correction architecture, Phase 9 immutable generation/publication/recovery, accepted commit boundary, or `/根源牌序` option B.
+- No change to Canon correction architecture, Phase 9 immutable generation/publication/recovery, accepted commit boundary, or `/根源牌序` option B. R1 clarifies that accepting a commit does not promote every carried field to Canon.
 - No comprehensive GateSeverityPolicy refactor; only direct craft ownership leaks are listed for Phase 10 implementation.
 - No deletion of legacy state, Story Craft paths, outline artifacts, or installed skill compatibility.
 
@@ -412,19 +457,19 @@ These are candidate slices; sequence and exact APIs require independent review. 
 2. What minimum stable ID and source reference must be required for existing planner Promise Ledger rows that currently have IDs but no Canon cross-reference?
 3. Which exact recognized Story Craft schema versions exist in supported user projects, beyond fields found in current source/tests? Unknown shapes must remain fail-closed.
 4. Should ContextItem gain an explicit owner field, or should a typed owner reference be added through a Context-only envelope while preserving the public Context v3 shape during a compatibility window?
-5. Should `.story-system` authored contract files be versioned with content digests/source identities to diagnose duplicate state/outline values, or is existing file provenance sufficient for R0 implementation?
-6. Which existing project_info fields are live and user-authored versus compatibility cache fields? `_owner_inventory` currently recognizes only a subset and deliberately conflicts on unknown values.
-7. Can chapter_meta be split without altering compatibility consumers that expect one root, and which exact fields are projected from accepted commits in every production path?
+5. Should `.story-system` authored contract files be versioned with content digests/source identities to diagnose duplicate state/outline values, or is existing file provenance sufficient for implementation?
+6. What exact legacy project_info schemas should be supported beyond the R1 field map? Unknown fields remain UNKNOWN/conflicted; this implementation compatibility question cannot promote `project_info.outline` or another field to authority without a reviewed source identity.
+7. Which additional legacy chapter_meta shapes appear in supported projects beyond the audited fields? They remain UNKNOWN until exact field and evidence mapping is reviewed; they do not inherit Canon from the root or commit.
 8. What compatibility period and measurable adoption threshold should precede retirement of direct state.json Story Craft writers and legacy plan adapters?
 
 ## 22. Audit scope and evidence paths
 
 Primary production paths inspected on baseline main (all active-source paths, excluding immutable 6.4.0 snapshot):
 
-- `scripts/data_modules/{volume_state.py,promise_ledger.py,intent_reconciliation.py,state_manager.py,webnovel.py,owned_project_view.py,project_migration.py}`
+- `scripts/data_modules/{volume_state.py,promise_ledger.py,intent_reconciliation.py,state_manager.py,webnovel.py,owned_project_view.py,project_migration.py,runtime_contract_builder.py,story_contract_schema.py,story_system_engine.py}` and `scripts/chapter_outline_loader.py`
 - `scripts/{story_craft.py,migrate_story_craft.py,init_project.py,update_master_outline.py,update_state.py,story_system.py}`
 - `scripts/data_modules/{story_contracts.py,story_runtime_sources.py,context_provenance.py,context_manager.py,memory_contract_adapter.py,memory/writer.py,gate_severity_policy.py,gate_finding_adapters.py,prewrite_validator.py,write_gates/*}`
 - `scripts/{review_pipeline.py,consistency/cli.py,consistency/core/runner.py,consistency/patches/p1_foreshadow_dag.py,p2_volume_anchor.py,p3_event_matrix.py,p4_pacing_tracker.py,p5_state_revision.py,p6_reader_contract.py,p7_derived_views.py}`
 - `skills/webnovel-{init,plan,write,review,resume}/SKILL.md`, `agents/context-agent.md`, chapter outline/runtime callers, and Issue #1.
 
-Tests were not run; this is a read-only architecture audit. No implementation claim is made.
+Tests were not run; this is a read-only architecture audit. Production inspection confirms `ExtractionResult.chapter_meta: Any`; `RuntimeContractBuilder.build_for_chapter()` reads MASTER_SETTING and chapter plot structure to generate VOLUME_BRIEF and REVIEW_CONTRACT; StorySystemEngine generates CHAPTER_BRIEF. No implementation claim is made.

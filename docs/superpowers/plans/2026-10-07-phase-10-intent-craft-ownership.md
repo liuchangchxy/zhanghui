@@ -1,4 +1,4 @@
-# Phase 10 Intent / Craft Ownership Reconciliation Implementation Plan
+# Phase 10 Intent / Craft Ownership Reconciliation Implementation Plan (R1 candidate)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,11 +8,11 @@
 
 **Tech Stack:** Python 3, JSON owner overlay and Story System artifacts, existing pytest architecture and data-module suites.
 
-**Spec:** `docs/superpowers/specs/2026-10-07-phase-10-intent-craft-ownership-design.md`
+**Spec:** `docs/superpowers/specs/2026-10-07-phase-10-intent-craft-ownership-design.md` (R1; frozen semantic/source map input)
 
 ## Global Constraints
 
-- Canon past facts come only from accepted durable CHAPTER_COMMIT and effective correction lineage.
+- Canon past facts come only from field-semantics-matched, validated factual evidence in accepted durable CHAPTER_COMMIT and effective correction lineage; commit containment is insufficient.
 - No unified NarrativeObligation authority, common lifecycle, or new Intent/Craft registry/store/database.
 - Canon-derived obligations and planner obligations never synchronize automatically; exact explicit cross-reference only.
 - Reuse Phase 9 OwnedStateStore/state-overlay.json for enrolled mutable state; reuse the existing Phase 7 ownership inventory and extend it instead of creating another registry.
@@ -25,9 +25,14 @@
 
 - Accepted event correction changes derived Promise/Open Loop lifecycle while leaving planner ledger bytes unchanged; cover in Task 3.
 - Conflicting Planner Promise/Foreshadow and volume/outline copies remain separate with diagnostics; cover in Tasks 2 and 5.
-- Mixed `story_craft` and `chapter_meta` fields do not inherit a root-level class; cover in Task 4.
+- Mixed `story_craft` and `chapter_meta` fields do not inherit a root-level class; Task 4 consumes the R1 exact field/provenance map. Commit containment never establishes Canon semantics.
+- Planning authority follows the R1 source map: authored source → optional scoped authored override → derived runtime copy. Tasks 1 and 6 may implement, but must not re-decide, source precedence or copy diagnostics.
 - Enrolled-project direct state.json writes cannot falsely succeed when Context reads the owner overlay; cover in Task 5.
 - Craft/style warnings cannot trigger commit rejection or mandatory rewrite, while explicit user constraints and integrity checks retain their own actions; cover in Task 7.
+
+## Frozen architecture inputs from Design R1
+
+Tasks 1, 4, and 6 must use Section 4 field classes, Section 5 source relationships, and the commit-evidence invariant as fixed inputs. Implementation may define concrete types/IDs and compatibility adapters only where R1 explicitly leaves them open; it must not infer authority from JSON/file/commit containment or choose which planning copy wins. In particular, generated VOLUME_BRIEF, CHAPTER_BRIEF, and REVIEW_CONTRACT are DERIVED_RUNTIME_COPY unless a separate exact authored binding is evidenced; copy drift is `stale_runtime_copy`, while `intent_conflict` requires independent authored sources with same exact identity/scope.
 
 ---
 
@@ -48,8 +53,8 @@
 - Modify: `.claude/plugins/zhanghui/scripts/tests/architecture/ownership_inventory_guard.py` only if current record validation cannot express exact field paths
 
 **Interfaces:**
-- Consumes: Current writer/reader/migration record families and exact coordinates.
-- Produces: Governance records for planner obligations, Canon-derived obligation projection, Story Craft Intent/Craft subfields, mixed chapter_meta, contract files, Context readers, and direct-write compatibility paths.
+- Consumes: Current writer/reader/migration record families, exact coordinates, and the frozen R1 field/source map. No ownership class or source winner is to be decided in implementation.
+- Produces: Governance records for planner obligations, Canon-derived obligation projection, Story Craft Intent/Craft subfields, commit-carried chapter_meta semantics, source/copy relationships for generated contracts, Context readers, and direct-write compatibility paths.
 - Authority boundary: This inventory detects missing ownership declarations; it does not determine runtime data authority.
 
 - [ ] **Step 1: Add failing architecture cases** for one undeclared `chapter_meta` field path, one writer with no replacement/retirement criterion, and one Context read edge that claims authority from an owner projection.
@@ -98,7 +103,7 @@
 - [ ] **Step 4: Add replay/idempotency and ambiguous legacy-link cases**; require diagnostics rather than choosing a matching row.
 - [ ] **Step 5: Run the focused event reconciliation, memory writer, and projection rebuild tests** and confirm planner-owned data is unchanged.
 
-## Task 4: Split Story Craft by exact field ownership
+## Task 4: Split Story Craft and chapter metadata by exact R1 field ownership
 
 **Files:**
 - Modify: `.claude/plugins/zhanghui/scripts/story_craft.py`
@@ -109,13 +114,13 @@
 - Modify: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_project_migration.py`
 
 **Interfaces:**
-- Consumes: Existing Craft functions and explicit field map ratified from the R0 spec.
+- Consumes: Existing Craft functions and frozen R1 Section 4 field/provenance map. Do not re-decide classes from container placement.
 - Produces: Distinct Intent/Craft/derived-reference field operations under the existing `story_craft` owner root, with unknown values preserved as UNKNOWN.
-- Canon interaction: Occurrence fields are Canon only when linked to an accepted commit; old unlinked data stays UNKNOWN/reference.
+- Canon interaction: CHAPTER_COMMIT containment is insufficient. Hook/beat/Scene-Sequel fields remain CRAFT even when commit-carried; planned nodes remain INTENT/history-of-plan; occurrence flags are DERIVED_REFERENCE or UNKNOWN unless linked to accepted StoryEvent, accepted factual state/entity delta, or another explicitly validated factual schema with provenance.
 
-- [ ] **Step 1: Add failing field-level tests** for foreshadow plan vs payoff occurrence, timed-lock deadline vs fulfilled claim, character arc target vs quality, thematic target vs chapter manifestation, rhythm/volume-beat advice, and chapter_meta plan/craft/factual fields.
+- [ ] **Step 1: Add failing field-level tests** for foreshadow plan vs payoff occurrence, timed-lock deadline vs fulfilled claim, character arc target vs quality, thematic target vs chapter manifestation, rhythm/volume-beat advice, and chapter_meta plan/craft/factual fields. Include accepted commits carrying CRAFT metadata, plan snapshots, unsupported occurrence flags, and literary/document fields (title, word_count, summary, characters, location); assert no container-based Canon promotion.
 - [ ] **Step 2: Run focused Story Craft and project migration tests** and record which current root-level classifications fail.
-- [ ] **Step 3: Add exact field ownership validation** to existing Story Craft operations and migration inventory; do not add a new store or reclassify unknown children from their parent key.
+- [ ] **Step 3: Add exact field ownership validation** to existing Story Craft operations and migration inventory; do not add a new store or reclassify unknown children from their parent key. Preserve literary/document metadata as DERIVED_REFERENCE (title/count/summary with source provenance) or UNKNOWN (unsupported character/location claims); only separately validated factual evidence may enter Canon. Add a positive case where an occurrence reference points to accepted evidence but the reference itself remains DERIVED_REFERENCE.
 - [ ] **Step 4: Add malformed and unknown nested-shape tests** proving the entire unrecognized source is preserved and reported without partial promotion.
 - [ ] **Step 5: Run focused Story Craft, state validation, and migration tests** and verify the supported legacy shapes retain a deterministic disposition.
 
@@ -140,7 +145,7 @@
 - [ ] **Step 4: Add read-after-write tests** using `OwnedProjectView.pin_active` and a test activation fixture; assert Context's effective state sees the new value and the legacy file does not win.
 - [ ] **Step 5: Run focused owner routing, migration and CLI tests**; verify a failed overlay write never produces a success result.
 
-## Task 6: Add owner/provenance-aware Context composition and conflict diagnostics
+## Task 6: Implement the frozen source map in Context composition and diagnostics
 
 **Files:**
 - Modify: `.claude/plugins/zhanghui/scripts/data_modules/context_provenance.py`
@@ -152,15 +157,15 @@
 - Modify: `.claude/plugins/zhanghui/scripts/data_modules/tests/test_memory_contract_adapter.py`
 
 **Interfaces:**
-- Consumes: Existing ContextItem source roles, exact field ownership map, canonical event projections, and current contract/outline files.
-- Produces: Read-only CANON/INTENT/CRAFT/REFERENCE composition with owner reference, source provenance, stable identity when available, and deterministic diagnostics.
+- Consumes: Existing ContextItem source roles, frozen R1 Sections 4–5 field/source map, canonical event projections, and current contract/outline files.
+- Produces: Read-only CANON/INTENT/CRAFT/REFERENCE composition with owner reference, source provenance, stable identity when available, and deterministic source/copy diagnostics. It must not infer a second author authority from generated contract storage.
 - Authority boundary: Context may rank/display items; it may not persist, resolve, satisfy, or rewrite them.
 
-- [ ] **Step 1: Add failing Context tests** for duplicate planner sources, Canon-derived Promise origin, Intent-vs-Craft disagreement, missing owner metadata, and same-ID/different-value conflict.
+- [ ] **Step 1: Add failing Context tests** for duplicate planner sources, Canon-derived Promise origin, Intent-vs-Craft disagreement, missing owner metadata, same-ID/different-value conflict, matching generated copies, stale generated copies, and two independent authored sources with exact same identity/scope in conflict, plus commit-carried Craft/Intent/reference rows excluded from the Canon factual section.
 - [ ] **Step 2: Run focused Context tests** and confirm generic `unverified_plan` and whole-root Craft grouping do not satisfy the new cases.
-- [ ] **Step 3: Compose each recognized field separately**; represent Canon-derived obligations under INTENT with their distinct semantic class and event provenance; retain unknown items in REFERENCE/UNKNOWN.
-- [ ] **Step 4: Add deterministic conflict diagnostics** that retain all source references and never select by timestamp, filename, source order, or similarity.
-- [ ] **Step 5: Run Context and memory adapter tests** and verify the public Context compatibility shape follows the reviewed R0 decision.
+- [ ] **Step 3: Compose each recognized field separately**; represent Canon-derived obligations under INTENT with their distinct semantic class and event provenance; retain unknown items in REFERENCE/UNKNOWN. Keep commit-carried Craft and plan snapshot classes unchanged; only validated factual evidence contributes Canon facts.
+- [ ] **Step 4: Add deterministic relationship-aware diagnostics**: agreeing DERIVED_RUNTIME_COPY is normal; differing same-source copy emits `stale_runtime_copy`; only different values from independent AUTHORITATIVE_SOURCE or valid same-scope SCOPED_AUTHORED_OVERRIDE records with exact shared identity/scope emit `intent_conflict`. Retain all sources and never select by timestamp, filename, source order, or similarity.
+- [ ] **Step 5: Run Context and memory adapter tests** and verify the public Context compatibility shape follows the reviewed R1 decision.
 
 ## Task 7: Remove local craft-only hard blocks that bypass the shared policy
 
@@ -220,4 +225,4 @@
 
 ## Review and handoff
 
-This is an implementation plan candidate tied to Design R0. It is not authorization to execute. Before implementation, independent review must settle the open questions listed in the spec, especially planner-only fulfillment wording, exact legacy schemas, Context owner envelope shape, and chapter_meta field provenance. No production work was performed while creating this plan.
+This implementation plan candidate is tied to Design R1 and is not authorization to execute. Tasks 1, 4, and 6 consume the frozen R1 field/source map; implementation must not reopen commit containment, generated-contract authority, or plan-copy precedence. Remaining open questions are limited to items explicitly left open in R1, including planner-only fulfillment wording, exact legacy schemas, and Context owner envelope compatibility. No production work was performed while creating this plan.
