@@ -5,7 +5,6 @@ ContextManager tests
 """
 
 import json
-import logging
 
 import pytest
 
@@ -598,10 +597,8 @@ def test_context_manager_includes_writing_guidance(temp_project):
     assert isinstance(first_item, dict)
     assert {"id", "label", "weight", "required", "source", "verify_hint"}.issubset(first_item.keys())
 
-    persisted = idx.get_writing_checklist_score(4)
-    assert isinstance(persisted, dict)
-    assert persisted.get("chapter") == 4
-    assert persisted.get("score") is not None
+    # Building context must not persist telemetry; only explicit workflow writers do that.
+    assert idx.get_writing_checklist_score(4) is None
 
 
 def test_context_manager_dynamic_weights_and_composite_genre(temp_project):
@@ -814,32 +811,15 @@ def test_context_manager_allows_methodology_whitelist_restriction(temp_project):
     assert guidance.get("signals_used", {}).get("methodology_enabled") is False
 
 
-def test_context_manager_persist_writing_checklist_score_logs_failure(temp_project, monkeypatch, caplog):
+def test_context_manager_build_does_not_persist_writing_checklist_score(temp_project, monkeypatch):
     manager = ContextManager(temp_project)
+    temp_project.state_file.write_text('{"project": {"genre": "玄幻"}}', encoding="utf-8")
 
     def _raise_save_error(_meta):
-        raise RuntimeError("simulated save failure")
+        raise AssertionError("context read attempted telemetry write")
 
     monkeypatch.setattr(manager.index_manager, "save_writing_checklist_score", _raise_save_error)
-
-    with caplog.at_level(logging.WARNING):
-        manager._persist_writing_checklist_score(
-            {
-                "chapter": 6,
-                "score": 70.0,
-                "total_items": 3,
-                "required_items": 1,
-                "completed_items": 1,
-                "completed_required": 1,
-                "total_weight": 3.0,
-                "completed_weight": 1.0,
-                "completion_rate": 0.33,
-                "pending_items": ["test"],
-            }
-        )
-
-    message_text = "\n".join(record.getMessage() for record in caplog.records)
-    assert "failed to persist writing checklist score" in message_text
+    manager.build_context(6)
 
 
 def test_context_manager_composite_genre_boundary_three_plus(temp_project):

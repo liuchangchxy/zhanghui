@@ -34,6 +34,7 @@ v5.1 变更:
 
 import sqlite3
 import json
+import re
 import time
 import contextlib
 from pathlib import Path
@@ -233,9 +234,11 @@ class WritingChecklistScoreMeta:
 class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexReadingMixin, IndexObservabilityMixin):
     """索引管理器"""
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, *, read_only: bool = False):
         self.config = config or get_config()
-        self._init_db()
+        self.read_only = bool(read_only)
+        if not self.read_only:
+            self._init_db()
 
     def _phase9_owned_rows(self, table: str):
         from .owned_project_view import OwnedIndexView
@@ -248,6 +251,11 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
             from .owned_project_view import OwnedViewError
             raise OwnedViewError("ENROLLED_PUBLICATION_MISSING")
         return OwnedIndexView(self.config.project_root, pinned).read_table(table)
+
+    def log_tool_call(self, *args, **kwargs):
+        if self.read_only:
+            return None
+        return super().log_tool_call(*args, **kwargs)
 
     def _init_db(self):
         """初始化数据库表"""
@@ -652,6 +660,29 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
         注意：调用方自行 conn.commit() 仍然兼容 —— 提交后 in_transaction
         为 False，这里不会再重复 COMMIT。
         """
+        if self.read_only:
+            path = Path(self.config.index_db)
+            if not path.is_file():
+                conn = sqlite3.connect(":memory:", isolation_level=None)
+            else:
+                # immutable avoids SQLite creating WAL/SHM sidecars on clean legacy DBs.
+                # When a WAL already exists, use ordinary read-only mode so it is included.
+                wal_path = Path(str(path) + "-wal")
+                shm_path = Path(str(path) + "-shm")
+                if wal_path.exists() and wal_path.stat().st_size and not shm_path.exists():
+                    # A WAL without its shared-memory index cannot be safely read
+                    # without SQLite trying to create a sidecar; degrade to empty.
+                    conn = sqlite3.connect(":memory:", isolation_level=None)
+                else:
+                    use_wal = wal_path.exists() and shm_path.exists()
+                    uri = f"{path.resolve().as_uri()}?mode=ro" + ("" if use_wal else "&immutable=1")
+                    conn = sqlite3.connect(uri, uri=True, isolation_level=None)
+            conn.row_factory = sqlite3.Row
+            try:
+                yield _ReadOnlyConnection(conn)
+            finally:
+                conn.close()
+            return
         conn = sqlite3.connect(str(self.config.index_db), isolation_level=None)
         conn.row_factory = sqlite3.Row
         try:
@@ -669,6 +700,7 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
                 raise
         finally:
             conn.close()
+
 
     def apply_entity_delta(self, delta: Dict[str, Any]) -> bool:
         """将 commit/entity 提取产物映射为实体或关系索引更新。"""
@@ -749,6 +781,96 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
         return True
 
     # ==================== 章节操作 ====================
+
+class _EmptyCursor:
+    rowcount = 0
+    lastrowid = None
+
+    def __init__(self, sql=""):
+        self.sql = sql
+
+    def execute(self, sql, parameters=()):
+        return self
+
+    def fetchone(self):
+        lowered = self.sql.lower()
+        if "count(" in lowered or "sum(" in lowered:
+            keys, values = [], []
+            counts = list(re.finditer(r"count\s*\((?:\*|distinct\s+\w+|\w+)\)(?:\s+as\s+(\w+))?", self.sql, flags=re.I))
+            sums = list(re.finditer(r"(?:coalesce\s*\()?\s*sum\s*\([^)]*\)(?:\s*,\s*0\s*\))?(?:\s+as\s+(\w+))?", self.sql, flags=re.I))
+            for match in counts:
+                keys.append(match.group(1) or "COUNT(*)"); values.append(0)
+            for match in sums:
+                keys.append(match.group(1) or "SUM"); values.append(0)
+            return _EmptyRow(keys, values)
+        if "max(" in lowered:
+            return _EmptyRow(["MAX"], [None])
+        return None
+
+    def fetchall(self):
+        return []
+
+    def __iter__(self):
+        return iter(())
+
+
+class _ReadOnlyCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def execute(self, sql, parameters=()):
+        try:
+            self._cursor.execute(sql, parameters)
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc).lower():
+                raise
+            self._cursor = _EmptyCursor(sql)
+        return self
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    @property
+    def lastrowid(self):
+        return self._cursor.lastrowid
+
+
+class _ReadOnlyConnection:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        return _ReadOnlyCursor(self._conn.cursor())
+
+    def execute(self, sql, parameters=()):
+        cursor = _ReadOnlyCursor(self._conn.cursor())
+        return cursor.execute(sql, parameters)
+
+    def commit(self):
+        # Read-only legacy reads have no transaction to commit.
+        return None
+
+
+class _EmptyRow(tuple):
+    def __new__(cls, keys, values=None):
+        obj = super().__new__(cls, values if values is not None else [0] * len(keys))
+        obj._keys = keys
+        return obj
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            key = self._keys.index(key)
+        return super().__getitem__(key)
 
 # ==================== CLI 接口 ====================
 

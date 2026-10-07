@@ -24,7 +24,7 @@ _OWNER_STATE_ROOTS = {"story_craft", "planning", "promise_ledger", "review_check
                       "workflow", "craft", "intent", "disambiguation_warnings",
                       "disambiguation_pending"}
 _OWNER_STATE_PATHS = {"progress.volumes_planned", "progress.current_volume", "progress.last_updated",
-                      "progress.total_volumes", "progress.chapter_status"}
+                      "progress.total_volumes", "progress.chapter_status", "progress.volumes_completed"}
 _CANON_STATE_ROOTS = {"entity_state", "protagonist_state", "strand_tracker"}
 
 

@@ -51,6 +51,44 @@ def _active_root(root):
     return root / ".story-system/commits/chapter_001.commit.json"
 
 
+def _legacy_project(root):
+    story = root / ".story-system"
+    chapters = story / "chapters"
+    chapters.mkdir(parents=True)
+    (chapters / "chapter_001.json").write_text(json.dumps({
+        "meta": {"schema_version": "story-system/v1", "contract_type": "CHAPTER_BRIEF", "chapter": 1},
+        "override_allowed": {"chapter_focus": "TEST ONLY legacy brief"},
+        "chapter_directive": {},
+    }), encoding="utf-8")
+    (chapters / "chapter_001.md").write_text("# TEST ONLY legacy brief\n", encoding="utf-8")
+    prose = root / "正文/第0001章-TEST-ONLY.md"
+    prose.parent.mkdir(parents=True)
+    prose.write_text("# TEST ONLY chapter prose\n本文仅用于 legacy migration smoke。\n", encoding="utf-8")
+
+    webnovel = root / ".webnovel"
+    webnovel.mkdir(parents=True)
+    (webnovel / "state.json").write_text(json.dumps({
+        "project_info": {"title": "TEST ONLY", "genre": "玄幻", "core_selling_points": "planned"},
+        "progress": {"current_chapter": 1, "total_words": 10, "last_updated": "2026-10-07",
+                      "volumes_completed": []},
+        "_migrated_to_sqlite": True,
+        "_migration_timestamp": "2026-10-07T00:00:00Z",
+        "state": {"_revision": 1, "_last_modified_by": "TEST ONLY", "_last_modified_at": "2026-10-07"},
+        "plot_threads": {"active_threads": [], "foreshadowing": []},
+        "relationships": {},
+        "state_changes": [],
+        "volumes": [],
+        "world_settings": {"power_system": [], "factions": [], "locations": []},
+    }), encoding="utf-8")
+    db = sqlite3.connect(webnovel / "index.db")
+    db.execute("CREATE TABLE chapters (chapter INTEGER PRIMARY KEY, title TEXT)")
+    db.execute("INSERT INTO chapters VALUES (1, 'TEST ONLY derived row')")
+    db.execute("CREATE TABLE state_changes (id INTEGER PRIMARY KEY, chapter INTEGER, value TEXT)")
+    db.commit()
+    db.close()
+    return prose
+
+
 def _tree_hashes(root):
     return {path.relative_to(root).as_posix(): __import__("hashlib").sha256(path.read_bytes()).hexdigest()
             for base in (root / ".story-system", root / ".webnovel") if base.exists()
@@ -141,6 +179,64 @@ def test_unknown_state_owner_and_mixed_memory_evidence_are_explicit_conflicts(tm
     kinds = {item["kind"] for item in report.conflicts}
     assert "unmapped_state_root" in kinds
     assert "mixed_memory_evidence" in kinds
+
+
+def test_legacy_brief_and_prose_require_explicit_import_decision(tmp_path):
+    prose = _legacy_project(tmp_path)
+
+    report = preflight_project(tmp_path)
+
+    assert report.ok is False
+    assert report.legacy_history["status"] == "requires_explicit_import_decision"
+    assert report.legacy_history["durable_commit_count"] == 0
+    assert report.legacy_history["legacy_chapter_artifact_count"] == 1
+    assert report.legacy_history["legacy_prose_count"] == 1
+    assert report.legacy_history["legacy_structured_artifacts"][0]["contract_type"] == "CHAPTER_BRIEF"
+    assert report.legacy_history["accepted_evidence_found"] is False
+    assert report.legacy_history["prose_artifacts"][0]["sha256"] == __import__("hashlib").sha256(prose.read_bytes()).hexdigest()
+    assert any(item["kind"] == "legacy_history_requires_explicit_import_decision"
+               for item in report.conflicts)
+    assert not any(item["kind"] == "ambiguous_legacy_semantics" for item in report.conflicts)
+    assert report.owner_mappings["state"]["field_classifications"]["_migrated_to_sqlite"] == "OWNER_OPERATIONAL_METADATA"
+    assert report.owner_mappings["state"]["field_classifications"]["progress.volumes_completed"] == "OWNER_WORKFLOW_METADATA"
+    assert report.owner_mappings["state"]["field_classifications"]["project_info.core_selling_points"] == "OWNER_INTENT"
+    classifications = report.owner_mappings["state"]["field_classifications"]
+    assert classifications["_migration_timestamp"] == "OWNER_OPERATIONAL_METADATA"
+    assert classifications["relationships"] == "LEGACY_DERIVED_CANON_PROJECTION"
+    assert classifications["state_changes"] == "LEGACY_DERIVED_CANON_PROJECTION"
+    assert classifications["state._revision"] == "OWNER_OPERATIONAL_METADATA"
+    assert classifications["volumes"] == "OWNER_INTENT_PLANNING"
+    assert classifications["plot_threads"] == "LEGACY_AMBIGUOUS_CANON_OR_INTENT"
+    assert classifications["world_settings"] == "LEGACY_AMBIGUOUS_CANON_OR_INTENT"
+    assert classifications["progress.current_chapter"] == "LEGACY_DERIVED_CANON_PROJECTION"
+    assert report.owner_mappings["index_tables"]["chapters"] == "LEGACY_DERIVED_CANON_PROJECTION"
+
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    from data_modules.project_migration import migrate_project
+    with pytest.raises(MigrationError, match="MIGRATION_CONFLICTS_UNRESOLVED"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()
+    assert not (tmp_path / ".story-system/publications/active.json").exists()
+
+
+def test_nonempty_ambiguous_legacy_roots_remain_field_level_conflicts(tmp_path):
+    _legacy_project(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["plot_threads"]["active_threads"] = [{"id": "TEST ONLY", "description": "ambiguous"}]
+    state["relationships"]["林川"] = {"ally": "陈默"}
+    state["world_settings"]["locations"] = [{"name": "TEST ONLY", "source": "unknown"}]
+    state["project_info"]["unclassified_future_field"] = "ambiguous"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    report = preflight_project(tmp_path)
+
+    paths = {item.get("path") for item in report.conflicts}
+    assert any(path.startswith(".webnovel/state.json:plot_threads.active_threads") for path in paths)
+    assert any(path.startswith(".webnovel/state.json:relationships.林川") for path in paths)
+    assert any(path.startswith(".webnovel/state.json:world_settings.locations") for path in paths)
+    assert ".webnovel/state.json:project_info.unclassified_future_field" in paths
     assert report.ok is False
 
 
@@ -248,7 +344,8 @@ def test_migration_moves_known_owner_state_to_overlay_without_rewriting_legacy_s
     _root_with_base(tmp_path)
     state_path = tmp_path / ".webnovel/state.json"
     original = {"story_craft": {"voice": "warm"},
-                "progress": {"current_volume": 4, "current_chapter": 1}}
+                "progress": {"current_volume": 4, "current_chapter": 1,
+                             "volumes_completed": [1, 2], "last_updated": "2026-10-07"}}
     state_path.write_text(json.dumps(original), encoding="utf-8")
     report = preflight_project(tmp_path)
     plan = dry_run_migration(tmp_path, report.report_digest)
@@ -257,6 +354,8 @@ def test_migration_moves_known_owner_state_to_overlay_without_rewriting_legacy_s
     overlay = json.loads((tmp_path / ".webnovel/state-overlay.json").read_text(encoding="utf-8"))
     assert overlay["values"]["story_craft"] == {"voice": "warm"}
     assert overlay["values"]["progress.current_volume"] == 4
+    assert overlay["values"]["progress.volumes_completed"] == [1, 2]
+    assert overlay["values"]["progress.last_updated"] == "2026-10-07"
     assert state_path.read_text(encoding="utf-8") == json.dumps(original)
     assert result.overlay_revision == overlay["revision"]
 
