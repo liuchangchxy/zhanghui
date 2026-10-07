@@ -210,7 +210,11 @@ def test_promise_event_is_canon_while_payoff_target_is_intent(tmp_path):
         state={},
         source_sections={"promise_intent": {"promise_id": "p1", "payoff_chapter": 30}},
     )
-    assert bundle["canon"][0]["content"]["event_type"] == "promise_created"
+    assert bundle["canon"] == []
+    derived = next(row for row in bundle["intent"] if row["semantic_class"] == "CANON_DERIVED_OBLIGATION")
+    assert derived["content"]["event_type"] == "promise_created"
+    assert derived["source_identity"] == "p1"
+    assert derived["chapter"] == 3
     assert bundle["intent"][0]["content"]["payoff_chapter"] == 30
 
 
@@ -316,6 +320,108 @@ def test_conflicting_authoritative_intents_are_exposed_without_failing_canon(tmp
     )
     assert len(bundle["intent"]) == 2
     assert any(row["type"] == "intent_conflict" for row in bundle["diagnostics"])
+
+
+def test_stale_runtime_copy_is_diagnostic_not_authoritative_intent_conflict(tmp_path):
+    bundle = build_governed_context(
+        project_root=tmp_path, chapter=21, state={}, source_sections={"intent_facts": [
+            {"fact_key": ["A", "target"], "content": "death", "source_ref": "outline:vol1",
+             "source_identity": "outline:vol1", "source_relationship": "AUTHORITATIVE_SOURCE", "scope": "chapter:21"},
+            {"fact_key": ["A", "target"], "content": "survival", "source_ref": "brief:21",
+             "source_identity": "outline:vol1", "source_relationship": "DERIVED_RUNTIME_COPY", "scope": "chapter:21"},
+        ]})
+    assert any(row["type"] == "stale_runtime_copy" for row in bundle["diagnostics"])
+    assert not any(row["type"] == "intent_conflict" for row in bundle["diagnostics"])
+
+
+def test_context_splits_story_craft_and_chapter_meta_by_field(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=8, state={
+        "story_craft": {"foreshadow_chain": [{"id": "f1", "expected_payoff_chapter": 12,
+                                               "payoff_quality": "strong"}],
+                        "rhythm_curve": {"chapters_since_peak": 5}},
+        "chapter_meta": {"8": {"must_cover": ["promise"], "hook_type": "reveal", "future_flag": True}},
+    }, source_sections={})
+    assert any(row["semantic_class"] == "PLANNER_INTENT" and
+               any(field["path"].endswith("expected_payoff_chapter") for field in row["content"])
+               for row in bundle["intent"])
+    assert any(row["semantic_class"] == "CRAFT_RECOMMENDATION" and
+               any(field == "hook_type" for field in row["content"])
+               for row in bundle["craft"])
+    assert any(row["semantic_role"] == "UNKNOWN" and "future_flag" in row["content"]
+               for row in bundle["reference"])
+
+
+def test_planner_promise_and_volume_items_have_owner_and_stable_identity(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=8, state={
+        "project_info": {"promise_ledger": [{"id": "P7", "status": "pending"}]},
+        "volumes": [{"index": 2, "title": "second volume"}],
+    }, source_sections={})
+    promise = next(row for row in bundle["intent"] if row["source_identity"] == "P7")
+    volume = next(row for row in bundle["intent"] if row["owner"] == "volumes")
+    assert promise["semantic_class"] == "PLANNER_INTENT"
+    assert promise["source_relationship"] == "AUTHORITATIVE_SOURCE"
+    assert volume["scope"] == "volume:2"
+
+
+def test_commit_carried_mixed_chapter_meta_is_not_a_canon_container(tmp_path):
+    write_commit(tmp_path, 1, valid_commit(1, extraction={
+        "entity_deltas": [], "state_deltas": [], "accepted_events": [],
+        "chapter_meta": {"hook_type": "悬念式", "must_cover": ["target"], "title": "chapter title"},
+    }))
+    bundle = build_governed_context(project_root=tmp_path, chapter=2, state={}, source_sections={})
+    assert bundle["canon"] == []
+    assert any(row["content"].get("field") == "hook_type" for row in bundle["craft"])
+    plan = next(row for row in bundle["intent"] if row["content"].get("field") == "must_cover")
+    assert plan["source_relationship"] == "DERIVED_RUNTIME_COPY"
+    assert any(row["content"].get("field") == "title" for row in bundle["reference"])
+
+
+def test_craft_recommendation_difference_does_not_rewrite_intent(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=20, state={}, source_sections={
+        "intent_facts": [{"fact_key": ["promise:P1", "payoff_chapter"], "content": 20,
+                          "source_ref": "outline:vol1", "scope": "chapter:20"}],
+        "craft_facts": [{"fact_key": ["promise:P1", "payoff_chapter"], "content": 18,
+                         "source_ref": "rhythm-advisor", "scope": "chapter:20"}],
+    })
+    assert next(row for row in bundle["intent"] if row.get("fact_key"))["content"] == 20
+    assert next(row for row in bundle["craft"] if row.get("fact_key"))["content"] == 18
+    diagnostic = next(row for row in bundle["diagnostics"] if row["type"] == "craft_recommendation_differs_from_intent")
+    assert diagnostic["blocking"] is False
+
+
+def test_unlinked_outline_and_generated_contract_are_diagnosed_without_guessing(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=20, state={}, source_sections={
+        "outline": "chapter 20 authored outline", "story_contract": {"chapter": 20, "goal": "generated copy"},
+    })
+    assert len(bundle["intent"]) == 2
+    diagnostic = next(row for row in bundle["diagnostics"] if row["type"] == "source_relationship_unresolved")
+    assert diagnostic["copy_ref"] == "story_contract"
+    assert diagnostic["requires"].startswith("exact semantic identity")
+
+
+def test_exact_identity_and_scope_diagnose_stale_root_contract_copy(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=20, state={}, source_sections={
+        "outline": "authored outline", "outline_source_identity": "doc:chapter-20",
+        "story_contract": {"chapter": 20, "goal": "stale generated copy"},
+        "story_contract_source_identity": "doc:chapter-20",
+    })
+    diagnostic = next(row for row in bundle["diagnostics"] if row["type"] == "stale_runtime_copy")
+    assert diagnostic["source_identity"] == "doc:chapter-20"
+    assert diagnostic["scope"] == "chapter:20"
+    assert diagnostic["source_ref"] == "outline"
+    assert diagnostic["copy_ref"] == "story_contract"
+    assert len(bundle["intent"]) == 2
+    assert not any(row["type"] == "intent_conflict" for row in bundle["diagnostics"])
+
+
+def test_exact_identity_and_scope_accept_matching_root_contract_copy(tmp_path):
+    content = {"chapter": 20, "goal": "same content"}
+    bundle = build_governed_context(project_root=tmp_path, chapter=20, state={}, source_sections={
+        "outline": content, "outline_source_identity": "doc:chapter-20",
+        "story_contract": content, "story_contract_source_identity": "doc:chapter-20",
+    })
+    assert not any(row["type"] in {"stale_runtime_copy", "intent_conflict"} for row in bundle["diagnostics"])
+    assert len(bundle["intent"]) == 2
 
 
 def test_relationship_commit_suppresses_conflicting_legacy_row():

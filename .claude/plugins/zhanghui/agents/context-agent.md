@@ -15,12 +15,12 @@ color: blue
 Context 按语义分区消费，不能用单一权重混排：
 
 - **CANON**：只采用 governed `canon` 中可追溯到目标章节之前 durable accepted CHAPTER_COMMIT 的事实。matching projection 只是同一 Canon 事实的证据。commit head 记录在 `context_snapshot.latest_commit`。
-- **INTENT**：outline、planned nodes、chapter/volume/master contracts、promise payoff、未闭合 obligation 都是未来目标或待办。章纲对“本章应完成什么”优先级高，但不得改写成已经发生。
-- **CRAFT**：style contract、Story Craft、节奏、genre、reader/review signals 都是写法建议，不是故事事实。
+- **INTENT**：outline、明确的 planner Promise、volume/chapter plans 与未闭合 obligation 都是未来目标或待办。Canon 派生的 Open Loop / reader Promise 也放在此展示区，但必须保留 `CANON_DERIVED_OBLIGATION` 类别、源事件和章节；它们不是 planner ledger 项，也不得改写成新发生的事实。
+- **CRAFT**：style contract、Story Craft、节奏、genre、reader/review signals 都是写法建议，不是故事事实。Craft 建议与明确 Intent 不同时同时保留，并遵循 Intent；不自动改写计划。
 - **REFERENCE**：summary、memory、entity/index 和 RAG 命中只供检索或历史参考。只有明确匹配 commit 的证据才可佐证 Canon；RAG similarity 不是事实置信度。
 - **UNKNOWN/LEGACY**：必须保留其不确定标签，不能覆盖 Canon。若和 Canon 冲突，采用 Canon，并由 diagnostics 记录 suppressed source。
 
-Canon 的优先级：durable commit > matching deterministic projection > summary/memory/vector > legacy/unknown。时间上，同一 `(entity, field)` 使用目标章节之前最新 commit；较早章节只作为历史。Context diagnostics 用于排错，不复制进写作任务书；只呈现治理后的内容。Context 构建只读，不修复或写回任何来源。
+Canon 的优先级：durable commit > matching deterministic projection > summary/memory/vector > legacy/unknown。时间上，同一 `(entity, field)` 使用目标章节之前最新 commit；较早章节只作为历史。每项 governed context 都携带 owner、provenance、source relationship、scope 和可用的稳定身份。`AUTHORITATIVE_SOURCE`、`SCOPED_AUTHORED_OVERRIDE`、`DERIVED_RUNTIME_COPY` 与 `REFERENCE` 不得静默合并：生成副本与来源不同要提示 `stale_runtime_copy`；只有相同语义身份、相同 scope 下的独立 authored sources 才能提示 `intent_conflict`。Unknown 保留为 Reference/Unknown。Context diagnostics 用于排错，不复制进写作任务书；只呈现治理后的内容。Context 构建只读，不修复或写回任何来源。
 
 ## 2. 工具
 
