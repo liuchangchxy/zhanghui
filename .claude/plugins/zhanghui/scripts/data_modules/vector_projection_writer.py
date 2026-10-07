@@ -246,3 +246,52 @@ class VectorProjectionWriter:
         except Exception as exc:
             logger.warning("vector_store_failed: %s", exc)
             return 0
+
+    def apply_effective(self, effective_input, build_handle) -> dict:
+        from .effective_history import EffectiveProjectionInput, write_effective_projection
+        if not isinstance(effective_input, EffectiveProjectionInput):
+            raise TypeError("apply_effective requires EffectiveProjectionInput")
+        entry = effective_input.effective_entry
+        extraction = entry.extraction_result or {}
+        commit = dict(entry.base_commit)
+        commit["meta"] = dict(commit.get("meta") or {})
+        commit["meta"].update(chapter=entry.chapter, status=entry.status)
+        commit["extraction_result"] = extraction
+        chunks = self._collect_chunks(commit) if entry.status == "accepted" else []
+        embeddings = self._generation_embeddings(chunks)
+        if len(embeddings) != len(chunks):
+            raise RuntimeError("CANON_GENERATION_EMBEDDING_UNAVAILABLE")
+        indexed_chunks = []
+        for chunk, embedding in zip(chunks, embeddings):
+            if embedding is None:
+                raise RuntimeError("CANON_GENERATION_EMBEDDING_UNAVAILABLE")
+            tokens = self._tokens(str(chunk.get("content") or ""))
+            indexed_chunks.append({**chunk, "embedding": embedding,
+                                   "terms": tokens, "doc_length": len(tokens)})
+        return write_effective_projection(
+            self.project_root, effective_input, build_handle, "vector", "vector",
+            {"tombstone": entry.status != "accepted",
+             "chapter_meta": extraction.get("chapter_meta", {}),
+             "summary_text": extraction.get("summary_text", ""),
+             "accepted_events": extraction.get("accepted_events", []),
+             "state_deltas": extraction.get("state_deltas", []),
+             "chunks": indexed_chunks},
+        )
+
+    def _generation_embeddings(self, chunks: List[Dict[str, Any]]) -> List[list[float] | None]:
+        if not chunks:
+            return []
+        from .config import DataModulesConfig
+        from .api_client import get_client
+        config = DataModulesConfig.from_project_root(self.project_root)
+        try:
+            return list(self._run_store_coro(get_client(config).embed_batch(
+                [str(chunk.get("content") or "") for chunk in chunks])))
+        except Exception as exc:
+            logger.warning("generation_embedding_unavailable: %s", exc)
+            return [None] * len(chunks)
+
+    @staticmethod
+    def _tokens(content: str) -> list[str]:
+        from .rag_tokenizer import tokenize_rag
+        return tokenize_rag(content)

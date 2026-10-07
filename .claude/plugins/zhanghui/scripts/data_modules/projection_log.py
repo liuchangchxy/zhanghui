@@ -46,13 +46,17 @@ def build_projection_run(
     commit_payload: dict[str, Any],
     writer_results: dict[str, dict[str, Any]],
     commit_path: str | Path | None = None,
+    generation_id: str | None = None,
+    base_set_digest: str | None = None,
+    effective_history_digest: str | None = None,
+    correction_lineage_digest: str | None = None,
 ) -> dict[str, Any]:
     meta = commit_payload.get("meta") if isinstance(commit_payload, dict) else {}
     chapter = int((meta or {}).get("chapter") or 0)
     if commit_path is None and chapter > 0:
         commit_path = Path(project_root) / ".story-system" / "commits" / f"chapter_{chapter:03d}.commit.json"
     writers = {str(name): dict(result) for name, result in writer_results.items()}
-    return {
+    record = {
         "schema_version": SCHEMA_VERSION,
         "run_id": uuid4().hex,
         "created_at": _now_iso(),
@@ -64,6 +68,14 @@ def build_projection_run(
         "writers": writers,
         "projection_status": dict(commit_payload.get("projection_status") or {}),
     }
+    if generation_id:
+        record["generation_identity"] = {
+            "generation_id": generation_id,
+            "base_set_digest": base_set_digest,
+            "effective_history_digest": effective_history_digest,
+            "correction_lineage_digest": correction_lineage_digest,
+        }
+    return record
 
 
 def projection_status_from_run(run: dict[str, Any] | None) -> dict[str, str]:
@@ -106,12 +118,20 @@ def append_projection_run(
     writer_results: dict[str, dict[str, Any]],
     *,
     commit_path: str | Path | None = None,
+    generation_id: str | None = None,
+    base_set_digest: str | None = None,
+    effective_history_digest: str | None = None,
+    correction_lineage_digest: str | None = None,
 ) -> dict[str, Any]:
     record = build_projection_run(
         project_root=project_root,
         commit_payload=commit_payload,
         writer_results=writer_results,
         commit_path=commit_path,
+        generation_id=generation_id,
+        base_set_digest=base_set_digest,
+        effective_history_digest=effective_history_digest,
+        correction_lineage_digest=correction_lineage_digest,
     )
     path = projection_log_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)

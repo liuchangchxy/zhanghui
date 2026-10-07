@@ -167,6 +167,14 @@ class IndexEntityMixin:
 
     def get_entity(self, entity_id: str) -> Optional[Dict]:
         """获取单个实体；ID 查不到时回退到别名查找。"""
+        owned = self._phase9_owned_rows("entities")
+        if owned is not None:
+            for row in owned:
+                payload = row.get("payload") or {}
+                identity = str(payload.get("entity_id") or payload.get("id") or "")
+                if identity == str(entity_id):
+                    return {"id": identity, "chapter": row.get("chapter"), **payload}
+            return None
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM entities WHERE id = ?", (entity_id,))
@@ -452,6 +460,10 @@ class IndexEntityMixin:
 
     def get_entity_state_changes(self, entity_id: str, limit: int = 20) -> List[Dict]:
         """获取实体的状态变化历史"""
+        owned = self._phase9_owned_rows("state_changes")
+        if owned is not None:
+            return [{"chapter": row["chapter"], **(row.get("payload") or {})}
+                    for row in owned if str((row.get("payload") or {}).get("entity_id") or "") == str(entity_id)][:limit]
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -467,6 +479,10 @@ class IndexEntityMixin:
 
     def get_recent_state_changes(self, limit: int = 50) -> List[Dict]:
         """获取最近的状态变化"""
+        owned = self._phase9_owned_rows("state_changes")
+        if owned is not None:
+            return [{"chapter": row["chapter"], **(row.get("payload") or {})}
+                    for row in sorted(owned, key=lambda item: int(item.get("chapter") or 0), reverse=True)[:limit]]
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -481,6 +497,10 @@ class IndexEntityMixin:
 
     def get_chapter_state_changes(self, chapter: int) -> List[Dict]:
         """获取某章的所有状态变化"""
+        owned = self._phase9_owned_rows("state_changes")
+        if owned is not None:
+            return [{"chapter": chapter, **(row.get("payload") or {})}
+                    for row in owned if row.get("chapter") == chapter]
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -554,6 +574,13 @@ class IndexEntityMixin:
 
         direction: "from" | "to" | "both"
         """
+        owned = self._phase9_owned_rows("relationships")
+        if owned is not None:
+            return [row.get("payload", {}) for row in owned
+                    if ((direction == "from" and row.get("payload", {}).get("from_entity") == entity_id)
+                        or (direction == "to" and row.get("payload", {}).get("to_entity") == entity_id)
+                        or (direction == "both" and entity_id in {row.get("payload", {}).get("from_entity"),
+                                                                   row.get("payload", {}).get("to_entity")}))]
         with self._get_conn() as conn:
             cursor = conn.cursor()
 
@@ -587,6 +614,11 @@ class IndexEntityMixin:
 
     def get_relationship_between(self, entity1: str, entity2: str) -> List[Dict]:
         """获取两个实体之间的所有关系"""
+        owned = self._phase9_owned_rows("relationships")
+        if owned is not None:
+            return [row.get("payload", {}) for row in owned
+                    if {row.get("payload", {}).get("from_entity"), row.get("payload", {}).get("to_entity")}
+                    == {entity1, entity2}]
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(

@@ -396,6 +396,21 @@ class ChapterCommitService:
                 f"Conflict policy rejected: overwrite is forbidden for canonical chapter commits: {path}"
             )
         if not path.exists():
+            from .projection_generation import ProjectionGeneration
+            if ProjectionGeneration(self.project_root).enrollment_path.exists():
+                from .effective_history import EffectiveHistoryStore
+                from .durable_projection import discover_validated_chapter_commits
+                if (self.project_root / ".story-system" / "workflow" / "activation-publication-pending.json").exists():
+                    raise ChapterCommitError("activation-managed publication recovery required by pending marker")
+                active = EffectiveHistoryStore().read_active_snapshot(self.project_root)
+                if not active.ok:
+                    raise ChapterCommitError("activation-managed Canon is unhealthy; writes are blocked")
+                committed = {row["chapter"] for row in discover_validated_chapter_commits(self.project_root)}
+                pending = committed - set(active.chapters)
+                if pending:
+                    raise ChapterCommitError(
+                        f"activation-managed publication recovery required for chapters {sorted(pending)}"
+                    )
             higher = self._higher_commit_chapters(int(payload["meta"]["chapter"]))
             if higher:
                 chapter = int(payload["meta"]["chapter"])
@@ -447,6 +462,36 @@ class ChapterCommitService:
         if reason.startswith("error:"):
             return f"failed:{reason[6:] or 'writer_error'}"
         return "skipped"
+
+    def apply_effective_projection(self, effective_input, build_handle) -> dict[str, Any]:
+        """Run all Canon writers from one validated effective snapshot and generation."""
+        from .effective_history import validate_effective_projection_input, write_effective_projection
+        from .intent_reconciliation import reconcile_intent_events
+
+        validate_effective_projection_input(self.project_root, effective_input)
+        entry = effective_input.effective_entry
+        if build_handle.snapshot.effective_history_digest != effective_input.snapshot_digest:
+            raise ChapterCommitError("effective input does not match projection generation")
+        writers = self._projection_writers()
+        results = {}
+        event_writer = EventLogStore(self.project_root)
+        ordered = EventProjectionRouter().PROJECTION_ORDER
+        for name in ordered:
+            if name == "intent_diagnostics":
+                extraction = entry.extraction_result or {}
+                events = extraction.get("accepted_events", []) if entry.status == "accepted" else []
+                diagnostics = reconcile_intent_events(events if isinstance(events, list) else [])
+                results[name] = write_effective_projection(
+                    self.project_root, effective_input, build_handle, name, name,
+                    {"tombstone": entry.status != "accepted",
+                     "diagnostics": diagnostics.get("diagnostics", [])},
+                )
+            else:
+                writer = event_writer if name == "events" else writers.get(name)
+                if writer is None:
+                    raise ChapterCommitError(f"effective projection writer missing: {name}")
+                results[name] = writer.apply_effective(effective_input, build_handle)
+        return results
 
     def apply_projection_writers(
         self,
@@ -558,7 +603,72 @@ class ChapterCommitService:
         commit_path = self.persist_commit(payload, on_conflict=on_conflict)
         if on_conflict == "skip":
             payload = self._read_commit(commit_path)
+        from .projection_generation import ProjectionGeneration
+        if ProjectionGeneration(self.project_root).enrollment_path.exists():
+            return self._publish_activation_managed_commit(payload)
         return self.apply_projection_writers(payload)
+
+    def _publish_activation_managed_commit(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Publish the durable commit through the active-generation protocol only."""
+        from .effective_history import (EffectiveHistoryStore, append_base_commits,
+                                        require_exact_publication_binding)
+        from .projection_generation import ProjectionGeneration
+        from .projection_rebuild import build_effective_generation
+
+        root = self.project_root
+        protocol = ProjectionGeneration(root)
+        active = EffectiveHistoryStore().read_active_snapshot(root)
+        if not active.ok:
+            raise ChapterCommitError("activation-managed Canon is unhealthy; publication is blocked")
+        head = protocol.latest_publication()
+        if head is None:
+            raise ChapterCommitError("activation-managed publication head is missing")
+        require_exact_publication_binding(active, head)
+        expanded = append_base_commits(active, root)
+        if not set(active.chapters).issubset(expanded.chapters):
+            raise ChapterCommitError("active Canon history was not preserved")
+        try:
+            built = build_effective_generation(
+                root, expanded, previous_generation_id=head.body["generation_id"] if head else None,
+            )
+            publication = protocol.publish_generation(
+                built["validated_generation"], head.record_sha256 if head else None,
+                expanded.correction_lineage_digest,
+            )
+        except Exception as exc:
+            # The immutable commit remains on disk and is discoverable as pending;
+            # persist_commit refuses later writes until retry publishes it.
+            import hashlib
+            pending_path = root / ".story-system" / "workflow" / "activation-publication-pending.json"
+            write_json(pending_path, {
+                "schema_version": "activation-publication-pending/v1",
+                "chapter": int((payload.get("meta") or {}).get("chapter") or 0),
+                "commit_sha256": hashlib.sha256(self._commit_path(payload).read_bytes()).hexdigest(),
+                "previous_publication_record_id": head.publication_record_id if head else None,
+                "previous_publication_record_sha256": head.record_sha256 if head else None,
+                "previous_semantic_activation_id": head.body.get("semantic_activation_id") if head else None,
+                "previous_effective_history_digest": head.body.get("effective_history_digest") if head else None,
+                "previous_generation_id": head.body.get("generation_id") if head else None,
+                "reason": str(exc),
+            })
+            raise ChapterCommitError(f"activation-managed publication pending recovery: {exc}") from exc
+        pending_path = root / ".story-system" / "workflow" / "activation-publication-pending.json"
+        if pending_path.exists():
+            pending_path.unlink()
+        payload["projection_status"] = {
+            name: "done" for name in EventProjectionRouter.PROJECTION_ORDER
+        }
+        payload["publication_record_id"] = publication.publication_record_id
+        payload["generation_id"] = publication.body["generation_id"]
+        try:
+            from .projection_log import append_projection_run
+            append_projection_run(root, payload,
+                                  {name: {"status": "done", "result": {"applied": True}}
+                                   for name in EventProjectionRouter.PROJECTION_ORDER},
+                                  commit_path=self._commit_path(payload))
+        except Exception:
+            pass
+        return payload
 
     def _commit_path(self, payload: Dict[str, Any]) -> Path:
         chapter = int((payload.get("meta") or {}).get("chapter") or 0)

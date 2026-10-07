@@ -89,6 +89,7 @@ PASSTHROUGH_TOOLS = {
     "story-system",
     "memory-contract",
     "project-memory",
+    "correction",
 }
 
 
@@ -287,6 +288,69 @@ def cmd_projections(args: argparse.Namespace) -> int:
         )
     print(format_projection_report(report, args.format))
     return 0 if report.get("ok") else 1
+
+
+def cmd_migration(args: argparse.Namespace) -> int:
+    from dataclasses import asdict
+    from .project_migration import (
+        BackupManifest, MigrationError, create_verified_backup, dry_run_migration,
+        migrate_project, preflight_project, replace_generation, restore_mutable_layout,
+    )
+
+    root = _resolve_root(args.project_root)
+    try:
+        if args.migration_action == "preflight":
+            payload = asdict(preflight_project(root))
+        elif args.migration_action == "dry-run":
+            payload = asdict(dry_run_migration(root, args.report_digest))
+        elif args.migration_action == "backup":
+            report = preflight_project(root)
+            plan = dry_run_migration(root, args.report_digest or report.report_digest)
+            payload = asdict(create_verified_backup(root, plan))
+        elif args.migration_action == "migrate":
+            report = preflight_project(root)
+            plan = dry_run_migration(root, args.report_digest)
+            manifest_path = Path(args.backup_path).expanduser().resolve() / "manifest.json"
+            from .project_migration import _json_file
+            manifest = _json_file(manifest_path)
+            if not manifest:
+                raise MigrationError("BACKUP_MANIFEST_INVALID")
+            backup = BackupManifest(
+                schema_version=manifest.get("schema_version", ""), project_root=str(root),
+                backup_path=str(manifest_path.parent), plan_digest=manifest.get("plan_digest", ""),
+                file_count=len(manifest.get("files", [])), files=manifest.get("files", []),
+                sqlite_integrity=manifest.get("sqlite_integrity", {}), restore_verified=True,
+                manifest_sha256=manifest.get("manifest_sha256", ""))
+            payload = asdict(migrate_project(root, args.report_digest, args.plan_digest, backup))
+        else:
+            if args.migration_action == "replace-generation":
+                publication = replace_generation(root, args.generation_id)
+                payload = {"publication_record_id": publication.publication_record_id,
+                           "record_sha256": publication.record_sha256,
+                           "path": str(publication.path), "body": publication.body}
+            else:
+                manifest_path = Path(args.backup_path).expanduser().resolve() / "manifest.json"
+                from .project_migration import _json_file
+                manifest = _json_file(manifest_path)
+                if not manifest:
+                    raise MigrationError("BACKUP_MANIFEST_INVALID")
+                backup = BackupManifest(
+                    schema_version=manifest.get("schema_version", ""), project_root=str(root),
+                    backup_path=str(manifest_path.parent), plan_digest=manifest.get("plan_digest", ""),
+                    file_count=len(manifest.get("files", [])), files=manifest.get("files", []),
+                    sqlite_integrity=manifest.get("sqlite_integrity", {}), restore_verified=True,
+                    manifest_sha256=manifest.get("manifest_sha256", ""))
+                payload = restore_mutable_layout(
+                    root, backup,
+                    {"ok": True, "conflicts": [], "expected_current_hashes": {
+                        ".webnovel/state-overlay.json": args.overlay_sha256}},
+                    expected_semantic_activation_id=args.semantic_activation_id,
+                    expected_effective_history_digest=args.effective_history_digest)
+    except MigrationError as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2))
+        return 1
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok", True) and not payload.get("unresolved_decisions") else 1
 
 
 def cmd_user_report(args: argparse.Namespace) -> int:
@@ -743,6 +807,31 @@ def main() -> None:
     p_projection_replay.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_projection_replay.set_defaults(func=cmd_projections)
 
+    p_migration = sub.add_parser("phase9-migration", help="Phase 9 migration preflight, dry run, and verified backup")
+    migration_sub = p_migration.add_subparsers(dest="migration_action", required=True)
+    p_migration_preflight = migration_sub.add_parser("preflight", help="read-only ownership and candidate preflight")
+    p_migration_preflight.set_defaults(func=cmd_migration)
+    p_migration_dry_run = migration_sub.add_parser("dry-run", help="read-only exact migration plan")
+    p_migration_dry_run.add_argument("--report-digest", required=True)
+    p_migration_dry_run.set_defaults(func=cmd_migration)
+    p_migration_backup = migration_sub.add_parser("backup", help="create and verify the planned project backup")
+    p_migration_backup.add_argument("--report-digest", required=True)
+    p_migration_backup.set_defaults(func=cmd_migration)
+    p_migration_execute = migration_sub.add_parser("migrate", help="explicitly enroll a project using a reviewed plan and verified backup")
+    p_migration_execute.add_argument("--report-digest", required=True)
+    p_migration_execute.add_argument("--plan-digest", required=True)
+    p_migration_execute.add_argument("--backup-path", required=True)
+    p_migration_execute.set_defaults(func=cmd_migration)
+    p_migration_replace = migration_sub.add_parser("replace-generation", help="publish a same-semantic verified generation for recovery")
+    p_migration_replace.add_argument("--generation-id", required=True)
+    p_migration_replace.set_defaults(func=cmd_migration)
+    p_migration_restore = migration_sub.add_parser("restore-layout", help="restore only verified mutable overlay layout after exact conflict review")
+    p_migration_restore.add_argument("--backup-path", required=True)
+    p_migration_restore.add_argument("--overlay-sha256", required=True)
+    p_migration_restore.add_argument("--semantic-activation-id", required=True)
+    p_migration_restore.add_argument("--effective-history-digest", required=True)
+    p_migration_restore.set_defaults(func=cmd_migration)
+
     p_user_report = sub.add_parser("user-report", help="渲染作者友好的最终报告")
     p_user_report.add_argument("--stage", choices=["init", "plan", "write", "review"], required=True, help="报告阶段")
     p_user_report.add_argument("--chapter", type=int, default=None, help="目标章节号")
@@ -872,6 +961,9 @@ def main() -> None:
     p_project_memory = sub.add_parser("project-memory", help="转发到 project_memory.py")
     p_project_memory.add_argument("args", nargs=argparse.REMAINDER)
 
+    p_correction = sub.add_parser("correction", help="Phase 9 human-reviewed Canon correction workflow")
+    p_correction.add_argument("args", nargs=argparse.REMAINDER)
+
     p_review_pipeline = sub.add_parser("review-pipeline", help="转发到 review_pipeline.py")
     p_review_pipeline.add_argument("--chapter", type=int, required=True, help="目标章节号")
     p_review_pipeline.add_argument("--review-results", required=True, help="reviewer 原始结果 JSON 文件")
@@ -943,6 +1035,8 @@ def main() -> None:
         raise SystemExit(_run_data_module("context_manager", [*forward_args, *rest]))
     if tool == "memory":
         raise SystemExit(_run_data_module("memory.store", [*forward_args, *rest]))
+    if tool == "correction":
+        raise SystemExit(_run_data_module("canon_correction_workflow", [*forward_args, *rest]))
     if tool == "migrate":
         raise SystemExit(_run_data_module("migrate_state_to_sqlite", [*forward_args, *rest]))
 

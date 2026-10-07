@@ -58,70 +58,73 @@ class StateProjectionWriter:
 
     def apply(self, commit_payload: dict) -> dict:
         require_durable_commit_match(self.project_root, commit_payload)
+        with self._locked_state() as state:
+            return self.reduce_state(state, commit_payload)
+
+    def reduce_state(self, state: dict, commit_payload: dict, *, include_operational_metadata: bool = True) -> dict:
+        """Apply one immutable Canon commit to a state value without performing I/O."""
         chapter = int(commit_payload.get("meta", {}).get("chapter") or 0)
         status = commit_payload["meta"]["status"]
 
         if status == "rejected":
             if chapter > 0:
-                with self._locked_state() as state:
-                    progress = state.setdefault("progress", {})
-                    chapter_status = progress.setdefault("chapter_status", {})
-                    chapter_status[str(chapter)] = "chapter_rejected"
+                progress = state.setdefault("progress", {})
+                chapter_status = progress.setdefault("chapter_status", {})
+                chapter_status[str(chapter)] = "chapter_rejected"
             return {"applied": True, "writer": "state", "reason": "commit_rejected_status_updated"}
 
         if status != "accepted":
             return {"applied": False, "writer": "state", "reason": f"unknown_status:{status}"}
 
-        with self._locked_state() as state:
-            entity_state = state.setdefault("entity_state", {})
-            progress = state.setdefault("progress", {})
-            chapter_status = progress.setdefault("chapter_status", {})
+        entity_state = state.setdefault("entity_state", {})
+        progress = state.setdefault("progress", {})
+        chapter_status = progress.setdefault("chapter_status", {})
 
-            current_chapter = self._safe_int(progress.get("current_chapter"))
-            if chapter < current_chapter and not is_controlled_rebuild(self.project_root):
-                raise RuntimeError(
-                    f"Out-of-order state projection refused: chapter {chapter} < "
-                    f"projected chapter {current_chapter}; replay must be rebuilt in order"
-                )
+        current_chapter = self._safe_int(progress.get("current_chapter"))
+        if chapter < current_chapter and not is_controlled_rebuild(self.project_root):
+            raise RuntimeError(
+                f"Out-of-order state projection refused: chapter {chapter} < "
+                f"projected chapter {current_chapter}; replay must be rebuilt in order"
+            )
 
-            protagonist_ids = self._collect_protagonist_ids(commit_payload, state)
+        protagonist_ids = self._collect_protagonist_ids(commit_payload, state)
 
-            applied_count = 0
-            for delta in self._collect_state_deltas(commit_payload):
-                entity_id = str(delta.get("entity_id") or "").strip()
-                field = str(delta.get("field") or "").strip()
-                if not entity_id or not field:
-                    continue
-                new_value = delta.get("new")
-                entity_bucket = entity_state.setdefault(entity_id, {})
-                self._set_path(entity_bucket, field, new_value)
-                if entity_id in protagonist_ids:
-                    self._set_path(state.setdefault("protagonist_state", {}), field, new_value)
-                applied_count += 1
+        applied_count = 0
+        for delta in self._collect_state_deltas(commit_payload):
+            entity_id = str(delta.get("entity_id") or "").strip()
+            field = str(delta.get("field") or "").strip()
+            if not entity_id or not field:
+                continue
+            new_value = delta.get("new")
+            entity_bucket = entity_state.setdefault(entity_id, {})
+            self._set_path(entity_bucket, field, new_value)
+            if entity_id in protagonist_ids:
+                self._set_path(state.setdefault("protagonist_state", {}), field, new_value)
+            applied_count += 1
 
-            if chapter > 0:
-                old_current = self._safe_int(progress.get("current_chapter"))
-                old_total = self._safe_int(progress.get("total_words"))
-                old_status = chapter_status.get(str(chapter))
+        if chapter > 0:
+            old_current = self._safe_int(progress.get("current_chapter"))
+            old_total = self._safe_int(progress.get("total_words"))
+            old_status = chapter_status.get(str(chapter))
 
-                chapter_status[str(chapter)] = "chapter_committed"
-                progress["current_chapter"] = max(old_current, chapter)
+            chapter_status[str(chapter)] = "chapter_committed"
+            progress["current_chapter"] = max(old_current, chapter)
 
-                projected_total = self._project_total_words(chapter_status)
-                if projected_total > 0:
-                    progress["total_words"] = projected_total
-                else:
-                    progress["total_words"] = old_total
+            projected_total = self._project_total_words(chapter_status)
+            if projected_total > 0:
+                progress["total_words"] = projected_total
+            else:
+                progress["total_words"] = old_total
 
-                if (
-                    old_status != "chapter_committed"
-                    or progress.get("current_chapter") != old_current
-                    or progress.get("total_words") != old_total
-                ):
-                    progress["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if include_operational_metadata and (
+                old_status != "chapter_committed"
+                or progress.get("current_chapter") != old_current
+                or progress.get("total_words") != old_total
+            ):
+                progress["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            strand_applied = self._apply_strand_tracker(state, chapter, commit_payload)
-            foreshadow_applied = self._apply_foreshadowing(state, chapter, commit_payload)
+        strand_applied = self._apply_strand_tracker(state, chapter, commit_payload)
+        foreshadow_applied = self._apply_foreshadowing(state, chapter, commit_payload)
 
         return {
             "applied": applied_count > 0 or chapter > 0,
@@ -260,6 +263,10 @@ class StateProjectionWriter:
                 or (protagonist_name and canonical == protagonist_name)
             ):
                 ids.add(eid)
+                if canonical:
+                    protagonist_state = state.setdefault("protagonist_state", {})
+                    protagonist_state.setdefault("entity_id", eid)
+                    protagonist_state.setdefault("name", canonical)
         return ids
 
     def _apply_foreshadowing(self, state: dict, chapter: int, commit_payload: dict) -> int:
@@ -465,3 +472,34 @@ class StateProjectionWriter:
             return int(value or 0)
         except (TypeError, ValueError):
             return 0
+
+    def apply_effective(self, effective_input, build_handle) -> dict:
+        from .effective_history import EffectiveProjectionInput, write_effective_projection
+        if not isinstance(effective_input, EffectiveProjectionInput):
+            raise TypeError("apply_effective requires EffectiveProjectionInput")
+        entry = effective_input.effective_entry
+        extraction = entry.extraction_result or {}
+        canonical = dict(entry.base_commit)
+        canonical["meta"] = dict(canonical.get("meta") or {})
+        canonical["meta"]["chapter"] = entry.chapter
+        canonical["meta"]["status"] = entry.status
+        canonical["extraction_result"] = entry.extraction_result or {}
+        state = build_handle.build_state.get("canon_state_snapshot")
+        if state is None:
+            state = {"entity_state": {}, "progress": {"chapter_status": {}},
+                     "protagonist_state": {}, "strand_tracker": {}}
+        else:
+            state = json.loads(json.dumps(state, ensure_ascii=False))
+        if entry.status == "retracted":
+            state.setdefault("progress", {}).setdefault("chapter_status", {})[str(entry.chapter)] = "retracted"
+        else:
+            self.reduce_state(state, canonical, include_operational_metadata=False)
+        build_handle.build_state["canon_state_snapshot"] = state
+        return write_effective_projection(
+            self.project_root, effective_input, build_handle, "state", "state",
+            {"tombstone": entry.status == "retracted",
+             "materialized_state": state,
+             "state_deltas": extraction.get("state_deltas", []),
+             "entity_deltas": extraction.get("entity_deltas", []),
+             "chapter_status": entry.status},
+        )

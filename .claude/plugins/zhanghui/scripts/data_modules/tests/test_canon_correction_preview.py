@@ -72,13 +72,17 @@ def test_preview_preserves_preexisting_sibling_corrections_and_never_selects_a_w
     assert before == snapshot(tmp_path)
 
 
-def test_normal_runtime_has_no_import_path_to_correction_modules():
+def test_correction_module_imports_are_confined_to_effective_history_boundary():
     root = Path(__file__).resolve().parents[3]
     blocked = ("canon_correction_store", "canon_correction_resolver", "canon_correction_preview")
+    phase9_boundary = "scripts/data_modules/effective_history.py"
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix not in {".py", ".md"}:
             continue
         if "/tests/" in path.as_posix() or "/6.4.0/" in path.as_posix() or "/docs/" in path.as_posix() or path.name.startswith("canon_correction_"):
+            continue
+        if path.relative_to(root).as_posix() == phase9_boundary:
+            # Phase 9 makes this the one runtime facade that resolves correction history.
             continue
         source = path.read_text(encoding="utf-8")
         assert not any(name in source for name in blocked), str(path)

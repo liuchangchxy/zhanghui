@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 from .chapter_commit_service import ChapterCommitService
 from .projection_rebuild import rebuild_projections
 from .projection_log import latest_projection_run
+from .event_projection_router import EventProjectionRouter
 
 
 SCHEMA_VERSION = "webnovel-projections/v1"
@@ -52,6 +54,9 @@ def _projection_failed(payload: dict[str, Any]) -> bool:
 
 def retry_projection(project_root: str | Path, *, chapter: int) -> dict[str, Any]:
     root = Path(project_root)
+    activation = _active_generation_recovery(root, chapter=chapter)
+    if activation is not None:
+        return activation
     path = _commit_path(root, chapter)
     payload, error = _read_commit(path)
     if error:
@@ -80,6 +85,62 @@ def retry_projection(project_root: str | Path, *, chapter: int) -> dict[str, Any
         "projection_status": dict(projected.get("projection_status") or {}),
         "latest_projection_run": latest_run,
     }
+
+
+def _active_generation_recovery(root: Path, *, chapter: int | None = None) -> dict[str, Any] | None:
+    from .effective_history import (EffectiveHistoryStore, append_base_commits,
+                                   require_exact_publication_binding)
+    from .projection_generation import ProjectionGeneration
+    from .projection_rebuild import build_effective_generation
+
+    protocol = ProjectionGeneration(root)
+    if not protocol.enrollment_path.exists():
+        return None
+    try:
+        pending_path = root / ".story-system" / "workflow" / "activation-publication-pending.json"
+        pending = None
+        if pending_path.exists():
+            pending = json.loads(pending_path.read_text(encoding="utf-8"))
+            if pending.get("schema_version") != "activation-publication-pending/v1":
+                raise RuntimeError("PENDING_PUBLICATION_MARKER_INVALID")
+            pending_commit = root / ".story-system" / "commits" / f"chapter_{int(pending['chapter']):03d}.commit.json"
+            if hashlib.sha256(pending_commit.read_bytes()).hexdigest() != pending.get("commit_sha256"):
+                raise RuntimeError("PENDING_PUBLICATION_COMMIT_MISMATCH")
+        active = EffectiveHistoryStore().read_active_snapshot(
+            root, allow_unhealthy_generation_for_recovery=True)
+        if not active.ok:
+            raise RuntimeError(";".join(active.diagnostics))
+        publication_head = protocol.latest_publication_for_recovery()
+        require_exact_publication_binding(active, publication_head)
+        active = append_base_commits(active, root)
+        if chapter is not None and chapter not in active.chapters:
+            raise RuntimeError("chapter is not in the active effective history")
+        built = build_effective_generation(
+            root, active, previous_generation_id=publication_head.body["generation_id"])
+        publication = protocol.publish_generation(
+            built["validated_generation"], publication_head.record_sha256,
+            active.correction_lineage_digest,
+        )
+        if pending_path.exists():
+            pending_path.unlink()
+        return {
+            "schema_version": SCHEMA_VERSION, "action": "same_semantic_recovery", "ok": True,
+            "project_root": str(root), "chapter": chapter,
+            "semantic_activation_id": publication.body["semantic_activation_id"],
+            "effective_history_digest": active.effective_history_digest,
+            "generation_id": publication.body["generation_id"],
+            "publication_record_id": publication.publication_record_id,
+            "candidate_status": "not_considered",
+            "projection_status": {domain: "validated" for domain in EventProjectionRouter.PROJECTION_ORDER},
+            "error": "",
+        }
+    except Exception as exc:
+        return {
+            "schema_version": SCHEMA_VERSION, "action": "same_semantic_recovery", "ok": False,
+            "project_root": str(root), "chapter": chapter,
+            "active_status": "blocked", "candidate_status": "not_considered",
+            "error": str(exc),
+        }
 
 
 def replay_projections(project_root: str | Path, *, start_chapter: int, end_chapter: int) -> dict[str, Any]:

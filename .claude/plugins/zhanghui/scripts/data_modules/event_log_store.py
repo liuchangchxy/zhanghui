@@ -34,6 +34,9 @@ class EventLogStore:
             conn.close()
 
     def write_events(self, commit_or_chapter: Dict[str, Any] | int, events: Any = None) -> Path:
+        from .projection_generation import ProjectionGeneration
+        if ProjectionGeneration(self.project_root).enrollment_path.exists():
+            raise DurableCommitError("activation-managed event writes require an effective generation")
         if isinstance(commit_or_chapter, dict):
             payload = commit_or_chapter
             commit = require_durable_commit_match(self.project_root, payload)
@@ -63,9 +66,30 @@ class EventLogStore:
         return path
 
     def read_events(self, chapter: int) -> List[Dict[str, Any]]:
+        from .owned_project_view import OwnedProjectView
+
+        view = OwnedProjectView.pin_active(self.project_root)
+        if view is not None:
+            result = view.canon_chapter(chapter)
+            events = result["domains"].get("events", {}).get("accepted_events", [])
+            return events if result["effective_status"] == "accepted" and isinstance(events, list) else []
         return list(read_json_if_exists(self.paths.event_json(chapter)) or [])
 
     def list_recent(self, chapter: int | None = None, limit: int = 200) -> List[Dict[str, Any]]:
+        from .owned_project_view import OwnedProjectView
+
+        view = OwnedProjectView.pin_active(self.project_root)
+        if view is not None:
+            rows = []
+            for doc in sorted((view.pinned.generation_root / "events").glob("chapter_*.json")):
+                number = int(doc.stem.removeprefix("chapter_"))
+                if chapter is not None and chapter != number:
+                    continue
+                payload = json.loads(doc.read_text(encoding="utf-8"))
+                events = payload.get("projection", {}).get("accepted_events", [])
+                rows.extend({**event, "chapter": number} for event in events if isinstance(event, dict))
+            rows.sort(key=lambda row: (int(row.get("chapter") or 0), str(row.get("event_id") or "")), reverse=True)
+            return rows[:limit]
         db_path = self.project_root / ".webnovel" / "index.db"
         if not db_path.is_file():
             return []
@@ -169,3 +193,16 @@ class EventLogStore:
                 ],
             )
             conn.commit()
+
+    def apply_effective(self, effective_input, build_handle) -> dict:
+        from .effective_history import EffectiveProjectionInput, write_effective_projection
+        if not isinstance(effective_input, EffectiveProjectionInput):
+            raise TypeError("apply_effective requires EffectiveProjectionInput")
+        entry = effective_input.effective_entry
+        extraction = entry.extraction_result or {}
+        return write_effective_projection(
+            self.project_root, effective_input, build_handle, "events", "events",
+            {"tombstone": entry.status != "accepted",
+             "accepted_events": extraction.get("accepted_events", [])
+             if entry.status == "accepted" else []},
+        )

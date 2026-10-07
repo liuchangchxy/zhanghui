@@ -38,3 +38,15 @@ class SummaryProjectionWriter:
         if commit_payload["meta"]["status"] != "accepted":
             return {"applied": False, "writer": "summary", "reason": "commit_rejected"}
         return append_summary_projection(self.project_root, commit_payload)
+
+    def apply_effective(self, effective_input, build_handle) -> dict:
+        from .effective_history import EffectiveProjectionInput, write_effective_projection
+        if not isinstance(effective_input, EffectiveProjectionInput):
+            raise TypeError("apply_effective requires EffectiveProjectionInput")
+        entry = effective_input.effective_entry
+        extraction = entry.extraction_result or {}
+        return write_effective_projection(
+            self.project_root, effective_input, build_handle, "summary", "summary",
+            {"tombstone": entry.status != "accepted",
+             "summary_text": extraction.get("summary_text", "")},
+        )

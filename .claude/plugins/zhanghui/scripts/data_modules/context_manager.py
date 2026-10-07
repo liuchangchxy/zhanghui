@@ -9,6 +9,7 @@ import json
 import re
 import sys
 import logging
+from copy import deepcopy
 from pathlib import Path
 
 from runtime_compat import enable_windows_utf8_stdio
@@ -32,6 +33,7 @@ from .prewrite_validator import PrewriteValidator
 from .story_contracts import read_json_if_exists
 from .story_runtime_sources import RuntimeSourceSnapshot, load_runtime_sources
 from .context_provenance import build_governed_context
+from .owned_project_view import OwnedProjectView
 from .context_weights import (
     DEFAULT_TEMPLATE as CONTEXT_DEFAULT_TEMPLATE,
     TEMPLATE_WEIGHTS as CONTEXT_TEMPLATE_WEIGHTS,
@@ -116,6 +118,9 @@ class ContextManager:
         template: str | None = None,
         max_chars: Optional[int] = None,
     ) -> Dict[str, Any]:
+        self._operation_owned_view = OwnedProjectView.pin_active(self.config.project_root)
+        self._operation_state_view = (self._operation_owned_view.state_view()
+                                      if self._operation_owned_view is not None else None)
         template = template or self.DEFAULT_TEMPLATE
         self._active_template = template
         if template not in self.TEMPLATE_WEIGHTS:
@@ -177,6 +182,7 @@ class ContextManager:
                 "scene": pack.get("scene"),
                 "plot_structure": pack.get("plot_structure"),
             },
+            owned_view=getattr(self, "_operation_owned_view", None),
         )
         return (
             governed["canon"], governed["intent"], governed["craft"],
@@ -207,11 +213,26 @@ class ContextManager:
 
     def _build_pack(self, chapter: int) -> Dict[str, Any]:
         state = self._load_state()
-        runtime_sources = load_runtime_sources(self.config.project_root, chapter)
+        runtime_sources = load_runtime_sources(
+            self.config.project_root, chapter,
+            owned_view=getattr(self, "_operation_owned_view", None),
+        )
         use_orchestrator = bool(getattr(self.config, "context_use_memory_orchestrator", False))
 
         orchestrator_pack: Dict[str, Any] = {}
-        if use_orchestrator:
+        owned_view = getattr(self, "_operation_owned_view", None)
+        if owned_view is not None:
+            from .config import DataModulesConfig
+            from .memory.store import ScratchpadManager
+
+            data = ScratchpadManager(DataModulesConfig.from_project_root(self.config.project_root)).load()
+            owner_rows = [row.to_dict() for bucket in (
+                "character_state", "story_facts", "world_rules", "timeline",
+                "open_loops", "reader_promises", "relationships",
+            ) for row in getattr(data, bucket)]
+            orchestrator_pack = {"semantic_memory": owned_view.memory.__class__(
+                owned_view.pinned, owner_rows).rows()}
+        elif use_orchestrator:
             try:
                 from .memory.orchestrator import MemoryOrchestrator
 
@@ -725,6 +746,9 @@ class ContextManager:
         return extract_markdown_refs(text, max_items=max_items)
 
     def _load_state(self) -> Dict[str, Any]:
+        owned_view = getattr(self, "_operation_owned_view", None)
+        if owned_view is not None:
+            return deepcopy(self._operation_state_view or {})
         path = self.config.state_file
         if not path.exists():
             return {}
@@ -765,6 +789,11 @@ class ContextManager:
         return results
 
     def _load_recent_appearances(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        owned_view = getattr(self, "_operation_owned_view", None)
+        if owned_view is not None:
+            rows = owned_view.index.read_table("appearances")
+            rows.sort(key=lambda row: int(row.get("chapter") or 0), reverse=True)
+            return rows[:limit] if limit else rows
         appearances = self.index_manager.get_recent_appearances(limit=limit)
         return appearances or []
 
@@ -792,6 +821,19 @@ class ContextManager:
         return excerpt
 
     def _load_summary_text(self, chapter: int, snippet_chars: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        owned_view = getattr(self, "_operation_owned_view", None)
+        if owned_view is not None:
+            try:
+                view = owned_view.canon_chapter(chapter)
+            except Exception as exc:
+                if getattr(exc, "args", ()) and exc.args[0] == "CHAPTER_NOT_IN_PINNED_GENERATION":
+                    return None
+                raise
+            text = str(view["domains"].get("summary", {}).get("summary_text") or "")
+            if not text or view["effective_status"] != "accepted":
+                return None
+            summary_text = self._extract_summary_excerpt(text, snippet_chars) if snippet_chars else text
+            return {"chapter": chapter, "summary": summary_text}
         summary_path = self.config.webnovel_dir / "summaries" / f"ch{chapter:04d}.md"
         if not summary_path.exists():
             return None

@@ -38,7 +38,12 @@ PROTECTED_SOURCE_HINTS = (
 def _domain_for_text(value):
     text = str(value or "").lower()
     domains = set()
-    if any(token in text for token in (".story-system/commits", "commits/", "commit_path", "commit_dir")):
+    if any(token in text for token in (
+        ".story-system/commits", "commits/", "commit_path", "commit_dir",
+        ".story-system/projection-generations", ".story-system/publications",
+        ".story-system/effective-history", "projection_generation.py", "projection_rebuild.py",
+        "event_log_store.py",
+    )):
         domains.add("CANON_COMMIT")
     if any(token in text for token in ("events/", ".story-system/events", "event_path", "event_file")):
         domains.add("EVENTS")

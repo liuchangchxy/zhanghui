@@ -525,6 +525,12 @@ def _validate_outputs(root: Path, commits: list[dict[str, Any]]) -> None:
 
 def rebuild_projections(project_root: str | Path) -> dict[str, Any]:
     root = Path(project_root).expanduser().resolve()
+    if (root / ".story-system/effective-history/enrollment.json").exists():
+        from .projections import _active_generation_recovery
+        result = _active_generation_recovery(root)
+        return result or {"schema_version": "webnovel-projections/v1", "action": "rebuild",
+                          "ok": False, "project_root": str(root),
+                          "error": "activation-managed recovery unavailable"}
     try:
         commits = discover_and_validate_commits(root)
         if not commits:
@@ -590,3 +596,60 @@ def rebuild_projections(project_root: str | Path) -> dict[str, Any]:
         "project_root": str(root), "chapters": [row["chapter"] for row in commits],
         "error": None, "results": results,
     }
+
+
+def build_effective_generation(project_root: str | Path, snapshot: Any, *,
+                              previous_generation_id: str | None = None):
+    """Build every Canon projection from one sealed snapshot without publishing it."""
+    from .effective_history import (
+        ActiveEffectiveHistorySnapshot, EffectiveHistoryStore,
+    )
+    from .chapter_commit_service import ChapterCommitService
+    from .projection_generation import ProjectionGeneration
+
+    root = Path(project_root).expanduser().resolve()
+    # State word counts are computed from chapter prose during this build. Bind
+    # those exact inputs into the generation so later edits cannot silently
+    # change the meaning of a published snapshot.
+    from dataclasses import replace
+    try:
+        from chapter_paths import find_chapter_file
+    except ImportError:  # pragma: no cover
+        from scripts.chapter_paths import find_chapter_file
+    dependencies = list(getattr(snapshot, "dependencies", ()))
+    dependency_paths = {item.get("path") for item in dependencies}
+    for chapter, entry in sorted(snapshot.chapters.items()):
+        if entry.status != "accepted":
+            continue
+        chapter_file = find_chapter_file(root, chapter)
+        if chapter_file is None:
+            continue
+        relative = chapter_file.relative_to(root).as_posix()
+        if relative not in dependency_paths:
+            import hashlib
+            dependencies.append({"path": relative,
+                                 "sha256": hashlib.sha256(chapter_file.read_bytes()).hexdigest(),
+                                 "kind": "chapter_prose"})
+    if hasattr(snapshot, "dependencies"):
+        snapshot = replace(snapshot, dependencies=tuple(dependencies))
+    protocol = ProjectionGeneration(root)
+    handle = protocol.begin(snapshot, previous_generation_id)
+    history = EffectiveHistoryStore()
+    service = ChapterCommitService(root)
+    results = {}
+    for chapter, entry in sorted(snapshot.chapters.items()):
+        effective_input = (history.projection_input(snapshot, chapter)
+                          if isinstance(snapshot, ActiveEffectiveHistorySnapshot)
+                          else history.candidate_projection_input(snapshot, chapter))
+        chapter_results = service.apply_effective_projection(effective_input, handle)
+        results.update({f"{chapter}:{name}": value for name, value in chapter_results.items()})
+    domains = {domain: {} for domain in EventProjectionRouter.PROJECTION_MANIFEST}
+    for path in sorted(p for p in handle.staging_root.rglob("*") if p.is_file()):
+        relative = path.relative_to(handle.staging_root).as_posix()
+        domain = relative.split("/", 1)[0]
+        if domain in domains:
+            domains[domain][relative] = __import__("hashlib").sha256(path.read_bytes()).hexdigest()
+    validated = protocol.validate_generation(handle, {"domains": domains})
+    return {"validated_generation": validated, "results": results,
+            "effective_history_digest": snapshot.effective_history_digest,
+            "generation_id": validated.generation_id}

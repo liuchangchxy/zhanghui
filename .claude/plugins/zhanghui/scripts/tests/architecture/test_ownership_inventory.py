@@ -87,6 +87,33 @@ def test_inventory_records_resolve_and_cover_required_reader_families():
     assert reader_family_coverage(inventory) == []
 
 
+def test_phase9_confirmation_reuses_existing_correction_decision_owner():
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    staged_writers = [row for row in inventory["writers"]
+                      if row["writer_id"] == "canon-correction-staged-writer"]
+    assert len(staged_writers) == 1
+    assert staged_writers[0]["implementation"]["path"].endswith("canon_correction_store.py")
+    confirmation_reader = next(
+        row for row in inventory["readers"]
+        if row["reader_id"] == "canon-correction-confirmation-reader"
+    )
+    assert confirmation_reader["implementation"]["path"].endswith("canon_correction_workflow.py")
+    assert {edge["data_domain"] for edge in confirmation_reader["read_edges"]} == {
+        "WORKFLOW_METADATA", "STATE_JSON",
+    }
+    assert all(edge["story_system"]["authority_claim"] != "CANON_AUTHORITY"
+               for edge in confirmation_reader["read_edges"])
+    assert reader_coverage(inventory, ROOT / ".claude/plugins/zhanghui") == []
+
+    missing_confirmation_owner = copy.deepcopy(inventory)
+    missing_confirmation_owner["readers"] = [
+        row for row in missing_confirmation_owner["readers"]
+        if row["reader_id"] != "canon-correction-confirmation-reader"
+    ]
+    assert any(item[0].endswith("canon_correction_workflow.py")
+               for item in reader_coverage(missing_confirmation_owner, ROOT / ".claude/plugins/zhanghui"))
+
+
 def test_direct_memory_store_reader_cannot_claim_verified_projection():
     inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
     direct_writer = next(row for row in inventory["writers"]
