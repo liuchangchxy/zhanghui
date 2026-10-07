@@ -940,8 +940,8 @@ def test_exact_accepted_occurrence_ref_trusts_sibling_buried_chapter_claim(tmp_p
     commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
     commit = json.loads(commit_path.read_text(encoding="utf-8"))
     commit["extraction_result"]["accepted_events"] = [
-        {"event_id": "CANON-BURY-1", "event_type": "foreshadow_buried",
-         "payload": {"foreshadow_id": "FS-1"}}
+        {"event_id": "CANON-BURY-1", "chapter": 1, "event_type": "open_loop_created",
+         "subject": "TEST ONLY foreshadow", "payload": {"content": "TEST ONLY"}}
     ]
     commit_path.write_text(json.dumps(commit), encoding="utf-8")
     story = _valid_story_craft()
@@ -955,19 +955,19 @@ def test_exact_accepted_occurrence_ref_trusts_sibling_buried_chapter_claim(tmp_p
     assert classes["story_craft.foreshadow_chain.0.buried_chapter"] == "DERIVED_REFERENCE"
 
 
-@pytest.mark.parametrize("event_type,event_chapter,payload", [
-    ("unrelated_event", 1, {"foreshadow_id": "FS-1"}),
-    ("foreshadow_buried", 9, {"foreshadow_id": "FS-1"}),
-    ("foreshadow_buried", 1, {"foreshadow_id": "OTHER"}),
+@pytest.mark.parametrize("event", [
+    {"event_id": "CANON-EVENT", "chapter": 1, "event_type": "foreshadow_buried",
+     "subject": "TEST ONLY", "payload": {}},
+    {"event_id": "CANON-EVENT", "chapter": 1, "event_type": "open_loop_created",
+     "payload": {"content": "TEST ONLY"}},
+    {"event_id": "CANON-EVENT", "event_type": "open_loop_created",
+     "subject": "TEST ONLY", "payload": {}},
 ])
-def test_occurrence_ref_cannot_authorize_mismatched_sibling_claim(tmp_path, event_type, event_chapter, payload):
+def test_invalid_story_event_cannot_authorize_occurrence_claim(tmp_path, event):
     _root_with_base(tmp_path)
     commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
     commit = json.loads(commit_path.read_text(encoding="utf-8"))
-    commit["extraction_result"]["accepted_events"] = [
-        {"event_id": "CANON-EVENT", "event_type": event_type,
-         "chapter": event_chapter, "payload": payload}
-    ]
+    commit["extraction_result"]["accepted_events"] = [event]
     commit_path.write_text(json.dumps(commit), encoding="utf-8")
     story = _valid_story_craft()
     story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
@@ -979,6 +979,50 @@ def test_occurrence_ref_cannot_authorize_mismatched_sibling_claim(tmp_path, even
     report = preflight_project(tmp_path)
     assert not report.ok
     assert any("buried_chapter" in item.get("path", "") for item in report.conflicts)
+    assert state_path.read_bytes() == raw
+
+
+def test_valid_story_event_with_wrong_chapter_cannot_authorize_claim(tmp_path):
+    _root_with_base(tmp_path)
+    commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["accepted_events"] = [
+        {"event_id": "CANON-EVENT", "chapter": 9, "event_type": "open_loop_created",
+         "subject": "TEST ONLY", "payload": {"content": "TEST ONLY"}}
+    ]
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "buried_chapter": 1, "occurrence_ref": {"event_id": "CANON-EVENT"}}]
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    raw = state_path.read_bytes()
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert state_path.read_bytes() == raw
+
+
+def test_one_ref_proves_only_one_matching_occurrence_chapter(tmp_path):
+    _root_with_base(tmp_path)
+    commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["accepted_events"] = [
+        {"event_id": "CANON-EVENT", "chapter": 1, "event_type": "open_loop_created",
+         "subject": "TEST ONLY", "payload": {"content": "TEST ONLY"}}
+    ]
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "buried_chapter": 1, "payoff_chapter": 9,
+                                 "occurrence_ref": {"event_id": "CANON-EVENT"}}]
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    raw = state_path.read_bytes()
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    classes = report.owner_mappings["state"]["field_classifications"]
+    assert classes["story_craft.foreshadow_chain.0.buried_chapter"] == "DERIVED_REFERENCE"
+    assert classes["story_craft.foreshadow_chain.0.payoff_chapter"] == "UNKNOWN"
     assert state_path.read_bytes() == raw
 
 

@@ -17,6 +17,7 @@ from .config import DataModulesConfig
 from .effective_history import EffectiveHistoryStore
 from .owned_project_view import activation_health_report
 from .projection_generation import ProjectionGeneration
+from .story_event_schema import StoryEvent
 from story_craft import classify_story_craft_field
 
 
@@ -152,15 +153,25 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             field_classes["story_craft"] = "UNKNOWN"
             return
         snapshot = EffectiveHistoryStore().read_active_snapshot(root)
-        accepted_events_by_id: dict[str, list[dict[str, Any]]] = {}
+        accepted_events_by_id: dict[str, list[StoryEvent]] = {}
+        accepted_id_counts: dict[str, int] = {}
         for chapter_entry in snapshot.chapters.values():
             if chapter_entry.status != "accepted":
                 continue
             for event in (chapter_entry.extraction_result or {}).get("accepted_events", []):
-                if isinstance(event, dict) and isinstance(event.get("event_id"), str):
-                    accepted_events_by_id.setdefault(event["event_id"], []).append({
-                        **event, "_effective_chapter": int(event.get("chapter") or chapter_entry.chapter),
-                    })
+                if not isinstance(event, dict) or not isinstance(event.get("event_id"), str):
+                    continue
+                event_id = event["event_id"]
+                accepted_id_counts[event_id] = accepted_id_counts.get(event_id, 0) + 1
+                try:
+                    validated_event = StoryEvent.model_validate(event)
+                except Exception:
+                    continue
+                accepted_events_by_id.setdefault(event_id, []).append(validated_event)
+        accepted_events_by_id = {
+            event_id: events for event_id, events in accepted_events_by_id.items()
+            if accepted_id_counts.get(event_id) == 1 and len(events) == 1
+        }
         # Exact known shapes. Nested objects are allowlisted per container;
         # the classifier supplies semantic class for every leaf.
         schemas = {
@@ -251,18 +262,12 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                     def claim_has_link(field_name: str) -> bool:
                         if not linked_event:
                             return False
-                        claim_contract = {
-                            "buried_chapter": ("foreshadow_buried", "foreshadow_id"),
-                            "payoff_chapter": ("foreshadow_paid_off", "foreshadow_id"),
-                            "fulfilled_chapter": ("timed_lock_fulfilled", "timed_lock_id"),
-                        }.get(field_name)
-                        if not claim_contract:
+                        occurrence_fields = {"buried_chapter", "payoff_chapter", "fulfilled_chapter"}
+                        claims = [name for name in occurrence_fields
+                                  if item.get(name) is not None and item.get(name) == linked_event.chapter]
+                        if len(claims) != 1 or claims[0] != field_name:
                             return False
-                        event_type, id_field = claim_contract
-                        payload = linked_event.get("payload") if isinstance(linked_event.get("payload"), dict) else {}
-                        return (linked_event.get("event_type") == event_type
-                                and payload.get(id_field) == item.get("id")
-                                and linked_event.get("_effective_chapter") == item.get(field_name))
+                        return True
                     for child, child_val in item.items():
                         child_path = f"{path}.{idx}.{child}"
                         if child not in allowed_child: bad(child_path); continue
