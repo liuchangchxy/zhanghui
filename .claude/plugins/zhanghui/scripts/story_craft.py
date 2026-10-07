@@ -298,6 +298,8 @@ def classify_story_craft_field(field_path: str, value: Any = None, *,
         root = root[:-2]
     if child and child.endswith("[]"):
         child = child[:-2]
+    if root == "reader_contract" and child == "endgame_reserves":
+        return "UNKNOWN"
     if root in {"rhythm_curve", "volume_beat", "volume_beats", "reader_contract",
                 "volume_anchors", "event_matrix_state", "pacing_history"}:
         # Container-level fields are classified exactly; nested traversal is
@@ -306,18 +308,19 @@ def classify_story_craft_field(field_path: str, value: Any = None, *,
             return "CRAFT"
         return "CRAFT" if child in {"version", "history", "rules", "anchors", "types",
                                     "gentle_window", "max_consecutive_fast", "expectation_debt",
-                                    "causal_credits", "endgame_reserves", "swap_debts",
+                                    "causal_credits", "swap_debts",
                                     "contract_fulfillment", "last_emotion_peak_chapter",
                                     "chapters_since_peak", "warning_threshold", "block_threshold",
                                     "volume", "total_chapters", "beats", "protagonist_actions_used_without_setup"} else "UNKNOWN"
     if root == "foreshadow_chain":
         if child in {"buried_quality", "payoff_quality", "quality_evaluation"}:
             return "CRAFT"
-        if child in {"id", "type", "depth", "content", "buried_chapter",
-                     "expected_payoff_chapter", "payoff_method", "linked_entities", "status"}:
+        if child == "expected_payoff_chapter":
             return "INTENT"
-        if child == "payoff_chapter":
+        if child in {"buried_chapter", "payoff_chapter"}:
             return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        if child in {"id", "type", "depth", "content", "payoff_method", "linked_entities", "status"}:
+            return "INTENT"
         if child == "occurrence_ref":
             return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
         return "UNKNOWN"

@@ -151,6 +151,16 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                               "value_preserved": True, "requires": "preserve source"})
             field_classes["story_craft"] = "UNKNOWN"
             return
+        snapshot = EffectiveHistoryStore().read_active_snapshot(root)
+        accepted_events_by_id: dict[str, list[dict[str, Any]]] = {}
+        for chapter_entry in snapshot.chapters.values():
+            if chapter_entry.status != "accepted":
+                continue
+            for event in (chapter_entry.extraction_result or {}).get("accepted_events", []):
+                if isinstance(event, dict) and isinstance(event.get("event_id"), str):
+                    accepted_events_by_id.setdefault(event["event_id"], []).append({
+                        **event, "_effective_chapter": int(event.get("chapter") or chapter_entry.chapter),
+                    })
         # Exact known shapes. Nested objects are allowlisted per container;
         # the classifier supplies semantic class for every leaf.
         schemas = {
@@ -172,9 +182,11 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             suffix = __import__("re").sub(r"\.(\d+)(?=\.)", r"[\1]", suffix)
             conflicts.append({"kind": kind, "path": f"{prefix}.{suffix}",
                               "value_preserved": True, "requires": "preserve source; exact field mapping required"})
-        def classify(path, val):
-            cls = classify_story_craft_field(path, val)
+        def classify(path, val, *, accepted_evidence_linked=False):
+            cls = classify_story_craft_field(path, val, accepted_evidence_linked=accepted_evidence_linked)
             field_classes[path] = cls
+            if path == "story_craft.reader_contract.endgame_reserves" and val == []:
+                return  # inert legacy default: no authored reserve assertion
             if cls == "UNKNOWN": bad(path)
         def shape(path, value, expected):
             valid = (type(value) is int) if expected == "int" else (
@@ -227,9 +239,37 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                                          "thematic_echoes": {"id", "premise", "echoes"}}[key]
                     if not required_children <= set(item):
                         bad(f"{path}.{idx}", "malformed_story_craft_container")
+                    accepted_occurrence_link = False
+                    linked_event = None
+                    occurrence_ref = item.get("occurrence_ref")
+                    if isinstance(occurrence_ref, dict) and set(occurrence_ref) == {"event_id"}:
+                        event_id = occurrence_ref.get("event_id")
+                        matches = accepted_events_by_id.get(event_id, []) if isinstance(event_id, str) else []
+                        if len(matches) == 1:
+                            accepted_occurrence_link = True
+                            linked_event = matches[0]
+                    def claim_has_link(field_name: str) -> bool:
+                        if not linked_event:
+                            return False
+                        claim_contract = {
+                            "buried_chapter": ("foreshadow_buried", "foreshadow_id"),
+                            "payoff_chapter": ("foreshadow_paid_off", "foreshadow_id"),
+                            "fulfilled_chapter": ("timed_lock_fulfilled", "timed_lock_id"),
+                        }.get(field_name)
+                        if not claim_contract:
+                            return False
+                        event_type, id_field = claim_contract
+                        payload = linked_event.get("payload") if isinstance(linked_event.get("payload"), dict) else {}
+                        return (linked_event.get("event_type") == event_type
+                                and payload.get(id_field) == item.get("id")
+                                and linked_event.get("_effective_chapter") == item.get(field_name))
                     for child, child_val in item.items():
                         child_path = f"{path}.{idx}.{child}"
                         if child not in allowed_child: bad(child_path); continue
+                        if child_val is None and child in {"buried_chapter", "payoff_chapter", "fulfilled_chapter", "occurrence_ref"}:
+                            # Production writers use null as an unasserted placeholder.
+                            # Preserve it without assigning semantic authority.
+                            continue
                         types = {
                             "foreshadow_chain": {"id": "str", "type": "str", "depth": "str", "content": "str", "buried_chapter": "int", "expected_payoff_chapter": "int", "payoff_method": "str", "linked_entities": "list", "status": "str", "buried_quality": "str", "payoff_chapter": "int", "payoff_quality": "str"},
                             "timed_locks": {"id": "str", "description": "str", "trigger_chapter": "int", "deadline_chapter": "int", "status": "str", "fulfilled_chapter": "int"},
@@ -242,13 +282,9 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                             if not isinstance(child_val, dict) or set(child_val) != {"event_id"}:
                                 bad(child_path, "malformed_story_craft_container"); continue
                             event_id = child_val.get("event_id")
-                            snap = EffectiveHistoryStore().read_active_snapshot(root)
-                            accepted = {str(e.get("event_id")) for ce in snap.chapters.values()
-                                        if ce.status == "accepted" for e in (ce.extraction_result or {}).get("accepted_events", [])
-                                        if isinstance(e, dict)}
-                            linked = isinstance(event_id, str) and event_id in accepted
-                            field_classes[child_path] = classify_story_craft_field(child_path, child_val, accepted_evidence_linked=linked)
-                            if not linked: bad(child_path)
+                            field_classes[child_path] = classify_story_craft_field(
+                                child_path, child_val, accepted_evidence_linked=accepted_occurrence_link)
+                            if not accepted_occurrence_link: bad(child_path)
                         elif child == "echoes":
                             if not isinstance(child_val, list): bad(child_path, "malformed_story_craft_container"); continue
                             for ei, echo in enumerate(child_val):
@@ -259,8 +295,9 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                                     ep = f"{child_path}.{ei}.{ec}"
                                     if ec == "chapter": shape(ep, echo[ec], "int")
                                     elif ec == "manifestation": shape(ep, echo[ec], "str")
-                                    classify(ep, echo[ec])
-                        else: classify(child_path, child_val)
+                                    classify(ep, echo[ec], accepted_evidence_linked=accepted_occurrence_link)
+                        else: classify(child_path, child_val,
+                                       accepted_evidence_linked=claim_has_link(child))
                 continue
             if key == "rhythm_curve":
                 if not isinstance(val, dict) or set(val) - allowed:

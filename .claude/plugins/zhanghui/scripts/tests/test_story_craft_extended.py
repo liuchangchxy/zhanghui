@@ -46,6 +46,9 @@ def test_phase10_story_craft_classification_is_field_level_and_exact():
 
     assert classify_story_craft_field("story_craft.foreshadow_chain.expected_payoff_chapter") == "INTENT"
     assert classify_story_craft_field("story_craft.foreshadow_chain[].expected_payoff_chapter") == "INTENT"
+    assert classify_story_craft_field("story_craft.foreshadow_chain.buried_chapter") == "UNKNOWN"
+    assert classify_story_craft_field("story_craft.foreshadow_chain.buried_chapter",
+                                      accepted_evidence_linked=True) == "DERIVED_REFERENCE"
     assert classify_story_craft_field("story_craft.foreshadow_chain.payoff_quality") == "CRAFT"
     assert classify_story_craft_field("story_craft.timed_locks.deadline_chapter") == "INTENT"
     assert classify_story_craft_field("story_craft.timed_locks.fulfilled_chapter") == "UNKNOWN"
