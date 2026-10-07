@@ -626,7 +626,10 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             field_classes.setdefault(path[len(prefix):], "UNCLASSIFIED_CONFLICT")
     field_dispositions = {}
     for path, classification in field_classes.items():
-        if classification in {"OWNER_INTENT", "OWNER_PROJECT_CONFIG"}:
+        if path.startswith("chapter_meta.") and classification in {"CRAFT", "INTENT"}:
+            disposition = {"destination": "owner_overlay." + path, "copied": True,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification in {"OWNER_INTENT", "OWNER_PROJECT_CONFIG"}:
             disposition = {"destination": "owner_overlay.project_info", "copied": True,
                            "visible_in_activation_runtime": True, "conflict_required": False}
         elif classification == "OWNER_INTENT_PLANNING":
@@ -713,6 +716,30 @@ def _candidate_report(root: Path) -> list[dict[str, Any]]:
 def _report_body(root: Path) -> dict[str, Any]:
     active = activation_health_report(root)
     mappings, conflicts = _owner_inventory(root)
+    legacy_state_path = root / ".webnovel/state.json"
+    overlay_path = root / ".webnovel/state-overlay.json"
+    legacy_state = _json_file(legacy_state_path) or {}
+    overlay = _json_file(overlay_path) or {}
+    owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
+                   "workflow", "craft", "intent", "disambiguation_warnings",
+                   "disambiguation_pending", "project_info", "volumes"}
+    legacy_mutable_roots = sorted(owner_roots.intersection(legacy_state))
+    overlay_roots = sorted(set((overlay.get("values") or {})).intersection(owner_roots))
+    active["owner_path_compatibility"] = {
+        "status": "base_only_compatibility" if active.get("mode") == "base_only" else "activation_managed_health",
+        "effective_authority": "state.json" if active.get("mode") == "base_only" else "OwnedProjectView/state-overlay.json",
+        "legacy_state_sha256": hashlib.sha256(legacy_state_path.read_bytes()).hexdigest() if legacy_state_path.is_file() else None,
+        "owner_overlay_sha256": hashlib.sha256(overlay_path.read_bytes()).hexdigest() if overlay_path.is_file() else None,
+        "legacy_mutable_roots": legacy_mutable_roots,
+        "overlay_roots": overlay_roots,
+        "unresolved_legacy_fields": list(conflicts),
+        "writer_retirement": {"ready": False, "status": "guarded_pending_independent_review",
+                              "requires": ["base-only compatibility", "owner-route coverage",
+                                           "effective-reader coverage", "read-after-write tests",
+                                           "exact migration mapping", "rollback evidence",
+                                           "unknown-field fail-closed tests"]},
+        "repeat_enrollment_supported": False,
+    }
     history = EffectiveHistoryStore().read_active_snapshot(root)
     if active.get("mode") == "base_only":
         active["base_history_status"] = "valid" if history.ok else "blocked"

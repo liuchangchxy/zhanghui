@@ -130,6 +130,23 @@ def test_candidate_corruption_does_not_poison_healthy_active_report(tmp_path):
     assert report.active_status == "valid"
     assert report.active["semantic_activation_id"].startswith("semantic-")
     assert report.candidates[0]["status"] == "blocked"
+    compatibility = report.active["owner_path_compatibility"]
+    assert compatibility["effective_authority"] == "OwnedProjectView/state-overlay.json"
+    assert compatibility["repeat_enrollment_supported"] is False
+    assert compatibility["writer_retirement"]["ready"] is False
+
+
+def test_chapter_meta_exact_owner_fields_map_to_overlay_paths(tmp_path):
+    _root_with_base(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"chapter_meta": {"8": {
+        "hook_type": "悬念式", "must_cover": ["goal"], "title": "display only"
+    }}}), encoding="utf-8")
+    report = preflight_project(tmp_path)
+    dispositions = report.owner_mappings["state"]["field_dispositions"]
+    assert dispositions["chapter_meta.8.hook_type"]["destination"] == "owner_overlay.chapter_meta.8.hook_type"
+    assert dispositions["chapter_meta.8.must_cover"]["destination"] == "owner_overlay.chapter_meta.8.must_cover"
+    assert dispositions["chapter_meta.8.title"]["destination"] == "legacy_preserved_source"
 
 
 def test_pending_and_rejected_candidates_do_not_change_active_status(tmp_path):
