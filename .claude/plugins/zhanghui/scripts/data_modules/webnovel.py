@@ -290,6 +290,27 @@ def cmd_projections(args: argparse.Namespace) -> int:
     return 0 if report.get("ok") else 1
 
 
+def cmd_migration(args: argparse.Namespace) -> int:
+    from dataclasses import asdict
+    from .project_migration import (
+        create_verified_backup, dry_run_migration, preflight_project,
+    )
+
+    root = _resolve_root(args.project_root)
+    if args.migration_action == "preflight":
+        report = preflight_project(root)
+        payload = asdict(report)
+    elif args.migration_action == "dry-run":
+        plan = dry_run_migration(root, args.report_digest)
+        payload = asdict(plan)
+    else:
+        report = preflight_project(root)
+        plan = dry_run_migration(root, args.report_digest or report.report_digest)
+        payload = asdict(create_verified_backup(root, plan))
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload.get("ok", True) and not payload.get("unresolved_decisions") else 1
+
+
 def cmd_user_report(args: argparse.Namespace) -> int:
     from .user_report import build_user_report, format_user_report
 
@@ -743,6 +764,17 @@ def main() -> None:
     p_projection_replay.add_argument("--to-chapter", type=int, required=True, help="结束章节号")
     p_projection_replay.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_projection_replay.set_defaults(func=cmd_projections)
+
+    p_migration = sub.add_parser("phase9-migration", help="Phase 9 migration preflight, dry run, and verified backup")
+    migration_sub = p_migration.add_subparsers(dest="migration_action", required=True)
+    p_migration_preflight = migration_sub.add_parser("preflight", help="read-only ownership and candidate preflight")
+    p_migration_preflight.set_defaults(func=cmd_migration)
+    p_migration_dry_run = migration_sub.add_parser("dry-run", help="read-only exact migration plan")
+    p_migration_dry_run.add_argument("--report-digest", required=True)
+    p_migration_dry_run.set_defaults(func=cmd_migration)
+    p_migration_backup = migration_sub.add_parser("backup", help="create and verify the planned project backup")
+    p_migration_backup.add_argument("--report-digest", required=True)
+    p_migration_backup.set_defaults(func=cmd_migration)
 
     p_user_report = sub.add_parser("user-report", help="渲染作者友好的最终报告")
     p_user_report.add_argument("--stage", choices=["init", "plan", "write", "review"], required=True, help="报告阶段")

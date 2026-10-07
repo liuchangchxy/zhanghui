@@ -235,12 +235,12 @@ Implementation constraint: add challenge/provenance validation beside the existi
 - `dry_run_migration(root, report_digest) -> MigrationPlan` lists exact Canon slices, mutable overlays, preserved sources, output hashes and unresolved decisions; it is read-only.
 - `create_verified_backup(root, plan) -> BackupManifest` verifies files, SQLite integrity, vector sidecars and temporary restore.
 
-- [ ] Hash the project before/after preflight and dry run; test pending, rejected, active correction plus conflicted candidate, active evidence corruption, dirty shared stores, and clean base-only project.
-- [ ] Prove pending/rejected proposals do not change `active_status`; candidate conflicts do not invalidate a healthy active record.
-- [ ] Implement deterministic classifications and exact ownership/source evidence; preflight and dry run write no project files.
-- [ ] Verify backup for `.story-system`, `.webnovel`, vector DB sidecars, overlay inputs and configured source files; any integrity/hash/restore failure stops migration.
-- [ ] Report overlay field/table mapping and required human decisions; ambiguous ownership blocks instead of choosing a winner.
-- [ ] Run focused preflight/dry-run/backup tests and commit.
+- [x] Hash the project before/after preflight and dry run; test pending, rejected, active correction plus conflicted candidate, active evidence corruption, dirty shared stores, and clean base-only project.
+- [x] Prove pending/rejected proposals do not change `active_status`; candidate conflicts do not invalidate a healthy active record.
+- [x] Implement deterministic classifications and exact ownership/source evidence; preflight and dry run write no project files.
+- [x] Verify backup for `.story-system`, `.webnovel`, vector DB sidecars, overlay inputs and configured source files; any integrity/hash/restore failure stops migration.
+- [x] Report overlay field/table mapping and required human decisions; ambiguous ownership blocks instead of choosing a winner.
+- [x] Run focused preflight/dry-run/backup tests and commit.
 
 ## Task 9: Execute opt-in migration and same-semantic operational recovery
 

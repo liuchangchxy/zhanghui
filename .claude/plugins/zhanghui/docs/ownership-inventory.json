@@ -4465,6 +4465,87 @@
           "read_edge_id": "phase9-owned-state-overlay-edge"
         }
       ]
+    },
+    {
+      "reader_id": "phase9-migration-evidence-reader",
+      "implementation": {
+        "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+        "symbol": "preflight_project"
+      },
+      "read_edges": [
+        {
+          "data_domain": "COMPATIBILITY",
+          "resource": "project source evidence for ownership classification, plan hashing, and verified backup",
+          "story_system": {
+            "primary_source": "existing .story-system and .webnovel project files",
+            "authority_claim": "PRESERVE_ONLY",
+            "condition": "read and hash only; migration preflight never grants story authority",
+            "fallback": null
+          },
+          "legacy": {
+            "primary_source": "existing .story-system and .webnovel project files",
+            "authority_claim": "LEGACY_COMPATIBILITY",
+            "condition": "classification preserves existing project data pending explicit migration",
+            "fallback": null
+          },
+          "read_edge_id": "phase9-migration-evidence-edge"
+        }
+      ],
+      "active_consumers": [
+        "explicit Phase 9 migration preflight, dry run, and backup command"
+      ],
+      "replacement": null,
+      "retirement_criterion": "Retain while Phase 9 migration preflight, dry run, and backup inspect project source evidence.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def _hash_files"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def preflight_project"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def create_verified_backup"
+        }
+      ],
+      "reader_family": "legacy fallback readers",
+      "lifecycle_status": "guarded",
+      "source_coordinates": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "symbol": "_hash_files",
+          "data_domain": "COMPATIBILITY",
+          "sink": "read_bytes",
+          "reader_id": "phase9-migration-evidence-reader",
+          "read_edge_id": "phase9-migration-evidence-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "symbol": "_json_file",
+          "data_domain": "COMPATIBILITY",
+          "sink": "read_text",
+          "reader_id": "phase9-migration-evidence-reader",
+          "read_edge_id": "phase9-migration-evidence-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "symbol": "dry_run_migration",
+          "data_domain": "COMPATIBILITY",
+          "sink": "read_bytes",
+          "reader_id": "phase9-migration-evidence-reader",
+          "read_edge_id": "phase9-migration-evidence-edge"
+        },
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "symbol": "create_verified_backup",
+          "data_domain": "COMPATIBILITY",
+          "sink": "read_bytes",
+          "reader_id": "phase9-migration-evidence-reader",
+          "read_edge_id": "phase9-migration-evidence-edge"
+        }
+      ]
     }
   ],
   "migrations": [
@@ -5646,6 +5727,108 @@
       ],
       "reader_id": "phase9-owned-project-view-reader",
       "read_edge_id": "phase9-owned-canon-view-edge"
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "create_verified_backup",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "destination",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The dynamically named file is a copied backup or temporary restore artifact whose hash is checked against the source evidence during verified backup.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "BACKUP_RESTORE_HASH_MISMATCH"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "create_verified_backup",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "restored",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The dynamically named file is a copied backup or temporary restore artifact whose hash is checked against the source evidence during verified backup.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "BACKUP_RESTORE_HASH_MISMATCH"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "_hash_files",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The path is resolved from the project root and constrained to source evidence under the .story-system or .webnovel trees.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def _scoped_paths"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "_json_file",
+      "domain": "COMPATIBILITY",
+      "sink": "read_text",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The path is resolved from the project root and constrained to source evidence under the .story-system or .webnovel trees.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def _scoped_paths"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "dry_run_migration",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "path",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The path is resolved from the project root and constrained to source evidence under the .story-system or .webnovel trees.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "def _scoped_paths"
+        }
+      ]
+    },
+    {
+      "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+      "symbol": "create_verified_backup",
+      "domain": "COMPATIBILITY",
+      "sink": "read_bytes",
+      "target_expression": "copied",
+      "reason_code": "DYNAMIC_TARGET_REVIEWED",
+      "reader_id": "phase9-migration-evidence-reader",
+      "read_edge_id": "phase9-migration-evidence-edge",
+      "rationale": "The copied path is a backup file whose manifest hash and size are checked before temporary restore verification.",
+      "evidence": [
+        {
+          "path": ".claude/plugins/zhanghui/scripts/data_modules/project_migration.py",
+          "anchor": "BACKUP_MANIFEST_FILE_MISMATCH"
+        }
+      ]
     }
   ]
 }
