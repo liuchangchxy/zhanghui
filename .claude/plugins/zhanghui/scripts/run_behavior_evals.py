@@ -111,7 +111,8 @@ def _eval_write_blocking_gate(root: Path, case: dict[str, Any]) -> dict[str, Any
     path = _plugin_root(root) / "skills" / "webnovel-write" / "SKILL.md"
     text = _read(path)
     required = [
-        "blocking 命中",
+        "Craft/style scanner finding",
+        "不阻止 Step 5",
         "write-gate --chapter {chapter_num} --stage prewrite",
         "write-gate --chapter {chapter_num} --stage precommit",
         "write-gate --chapter {chapter_num} --stage postcommit",
@@ -123,10 +124,12 @@ def _eval_write_blocking_gate(root: Path, case: dict[str, Any]) -> dict[str, Any
     ordering_ok = precommit_pos >= 0 and commit_pos >= 0 and precommit_pos < commit_pos
     if not ordering_ok:
         missing.append("precommit gate must appear before chapter-commit")
+    if "任一工具报 critical / blocking → 触发整章重写" in text:
+        missing.append("Craft/style detector labels must not force a full-chapter rewrite")
     return _result(
         case,
         passed=not missing,
-        reason="write flow keeps blocking and runtime gates" if not missing else "write flow contract missing",
+        reason="write flow keeps advisory and integrity gates" if not missing else "write flow contract missing",
         evidence=missing or [str(path.relative_to(root))],
     )
 

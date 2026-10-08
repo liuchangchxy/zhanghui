@@ -38,6 +38,7 @@ SCORE_CATEGORIES = (
     "foreshadow_compliance",
     "do_not_copy_violation",
 )
+CRAFT_HEURISTIC_CATEGORIES = {"beat_compliance", "foreshadow_compliance", "pacing"}
 SEVERITY_PENALTIES = {
     "critical": 35.0,
     "high": 15.0,
@@ -181,18 +182,28 @@ def parse_review_output(chapter: int, raw: Dict[str, Any]) -> ReviewResult:
     for item in raw.get("issues", []):
         if not isinstance(item, dict):
             continue
+        category = str(item.get("category", "other"))
+        checker_id = str(item.get("checker_id", "llm_review"))
+        is_craft_heuristic = (
+            category in CRAFT_HEURISTIC_CATEGORIES
+            or checker_id == "story_craft"
+            or str(item.get("gate_id", "")).startswith("story_craft.")
+        )
+        severity = str(item.get("severity", "medium"))
+        if is_craft_heuristic and severity == "critical":
+            severity = "high"
         issues.append(ReviewIssue(
-            severity=str(item.get("severity", "medium")),
-            category=str(item.get("category", "other")),
+            severity=severity,
+            category=category,
             location=str(item.get("location", "")),
             description=str(item.get("description", "")),
             evidence=str(item.get("evidence", "")),
             fix_hint=str(item.get("fix_hint", "")),
-            blocking=item.get("blocking"),
-            checker_id=str(item.get("checker_id", "llm_review")),
+            blocking=False if is_craft_heuristic else item.get("blocking"),
+            checker_id=checker_id,
             gate_id=item.get("gate_id"),
-            authority=item.get("authority"),
-            explicitness=item.get("explicitness"),
+            authority="CRAFT_HEURISTIC" if is_craft_heuristic else item.get("authority"),
+            explicitness="UNKNOWN" if is_craft_heuristic else item.get("explicitness"),
             subject_id=item.get("subject_id"),
             constraint_id=item.get("constraint_id"),
             source_ref=item.get("source_ref"),

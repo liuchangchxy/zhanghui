@@ -683,15 +683,39 @@ def main():
         )
         raise SystemExit(2)
 
+    # Keep base-only installs on the lightweight legacy path. Enrolled projects
+    # must read and write mutable owner state through the pinned owner view.
+    enrollment_path = project_root / ".story-system" / "effective-history" / "enrollment.json"
+    owner_view = None
+    if enrollment_path.exists():
+        from data_modules.owned_project_view import OwnedProjectView
+
+        owner_view = OwnedProjectView.pin_active(project_root)
+        if owner_view is None:
+            print("❌ 已 enrollment 但没有 active owner view；拒绝写入 legacy state.json。")
+            raise SystemExit(2)
+        if not (args.volume_planned or args.add_review):
+            print("❌ enrolled 项目的该更新不属于此 CLI 的 owner overlay 字段；拒绝写入 legacy state.json。")
+            raise SystemExit(2)
+
     # 创建更新器
     updater = StateUpdater(str(state_file_path), args.dry_run)
 
     # 加载状态文件
-    if not updater.load():
+    if owner_view is not None:
+        updater.state = owner_view.state_view()
+        if not isinstance(updater.state.get("progress"), dict):
+            print("❌ active owner state 缺少 progress object；拒绝写入。")
+            raise SystemExit(2)
+        updater.state.setdefault("review_checkpoints", [])
+        if not isinstance(updater.state["review_checkpoints"], list):
+            print("❌ active owner state 的 review_checkpoints 格式无效；拒绝写入。")
+            raise SystemExit(2)
+    elif not updater.load():
         sys.exit(1)
 
     # 备份（除非是 dry-run）
-    if not args.dry_run:
+    if owner_view is None and not args.dry_run:
         if not updater.backup():
             sys.exit(1)
 
@@ -748,12 +772,20 @@ def main():
             updater.update_strand_tracker(strand, int(chapter))
 
         # 保存更新
-        if not updater.save():
+        if owner_view is not None:
+            if not args.dry_run:
+                from data_modules.webnovel import _save_state_via_atomic
+
+                _save_state_via_atomic(project_root, updater.state)
+                saved_view = owner_view.state_view()
+                revision = saved_view.get("_view", {}).get("owner_overlay_revision")
+                print(f"✅ 已保存 owner overlay（revision={revision}）")
+        elif not updater.save():
             sys.exit(1)
 
         print("\n✅ 更新完成！")
 
-        if not args.dry_run:
+        if not args.dry_run and owner_view is None:
             print(f"\n💡 提示:")
             print(f"  - 原文件已备份: {updater.backup_file}")
             print(f"  - 如需回滚，可复制备份文件到 {updater.state_file}")

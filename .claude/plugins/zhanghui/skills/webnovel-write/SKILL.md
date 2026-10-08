@@ -433,14 +433,16 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/text_humanizer.py \
     detect --chapter-file 正文/第{NNNN}章-{title_safe}.md
 
 node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
-    --check --fail-on=blocking \
-    正文/第{NNNN}章-{title_safe}.md
+    --check --json --fail-on=blocking \
+    正文/第{NNNN}章-{title_safe}.md || true
 
 ```
 
 **判定逻辑**：
-- blocking 命中：退回 Step 4 重写正文（**保留 CHANGES 块**）。最多 2 次。
-- advisory 命中：写入 `.story-system/anti_patterns.json`，继续流程。
+- 这两个 scanner 的 `blocking` / `high` 是 detector 的分类，不是架构 gate authority；scanner finding 一律作为 Craft/style advisory 展示。
+- 作者可选择安全、局部、非语义的 cleanup；不得强制退回 Step 4、整章重写或要求先清零 finding。
+- 未处理的 Craft/style scanner finding 不阻止 Step 5。只有 exact stable explicit user-bound style prohibition 可经现有 shared hard-constraint policy 产生硬 action。
+- `check-ai-patterns.js` 对 detector-level `blocking` 可能返回非零；`|| true` 保留输出并避免把该分类误作 workflow veto。输入/执行错误仍需先排查。
 
 可选关闭：在命令前加 `--skip-deslop`。
 
@@ -449,13 +451,12 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
 两个扫描器对同一章可能给出重叠但不一致的判定（例如"仿佛"在 `text_humanizer.py` 报"AI 高频词"frequency-based，在 `check-ai-patterns.js` 报"套词密度 tic"density-based）。仲裁规则如下：
 
 1. **frequency-based finding 优先于 density-based finding**。`text_humanizer.py` 给的是绝对命中次数 + 每千字密度，证据链更精确；`check-ai-patterns.js` 的密度 tic 只是阈值告警（min_hits + per_kilo 双门槛），可能把零散的合规用法一并扫进去。冲突时以 `text_humanizer.py` 的命中次数 + 原文上下文为准决定是否改稿。
-2. **任一工具报 critical / blocking → 触发整章重写**。critical 是硬级别（必须修），blocking 同 critical（必须退回 Step 4）。advisory 是软级别（提示，不阻断）。
-3. **warning 级别（advisory）→ 标 advisory 不阻断**。advisory 项写入 `.story-system/anti_patterns.json`，不退回 Step 4，但作者应在下一轮迭代中处理。
-4. **advisory 命中数 ≤ 2 → 放行**，> 2 但同类别聚集 → 主动改稿。同一 chapter 内同类 advisory 聚集（如同时报 "long-paragraph"、"cliche-density-tic"、"metaphor-density-tic"）说明文风系统性问题，不只是局部。
+2. **所有 scanner 命中默认都是 advisory**，包括 detector 标为 `critical` / `blocking` 的结果；不据此触发整章重写。
+3. 作者可忽略、记录，或选择做最小局部 cleanup；聚集命中可以作为作者考虑的信号，不构成必须改稿的阈值。
 5. **工具彼此各管一段**：density-only finding（`check-ai-patterns.js` 独有，如 long-paragraph / period-stutter / micro-action-tic / action-list-tic / quote-emphasis-tic）和 frequency-only finding（`text_humanizer.py` 独有，如意义膨胀 / 论文式段落结构 / 排比三连）互不覆盖，重叠时按规则 1 仲裁。
 6. **人工最终裁决**：两个工具都是启发式，按 1-5 处理后作者应扫一眼原文 sanity check，再决定是改稿还是放过。不允许"两工具都没报就一定安全"——双盲区是已知 gap。
 
-执行建议：先把 `text_humanizer.py` 的 `severity=high` 和 `check-ai-patterns.js` 的 `--fail-on=blocking` 输出做并集，再按规则 1 仲裁重叠，最后按规则 2/3 决定是否退回 Step 4。
+执行建议：合并两种 scanner 的位置、证据与建议，按规则 1 去重；将结果作为 advisory 呈现，由作者决定是否局部处理。只有 shared hard-constraint policy 验证通过的明确用户禁令可以阻断。
 
 **重要前提**：
 1. **两个工具都假定输入是 UTF-8 文本**。对 binary / GBK / UTF-16 / 截断 UTF-8 输入，
@@ -489,7 +490,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 
 ```
 
-闸门校验：CHANGES 协议、anti-slop、changes_gate、git diff 变更面均通过；任一 fail 阻断 Step 5。
+闸门会检查项目/章节是否具备提交条件，并验证必需 review、fulfillment、disambiguation、extraction artifacts 的存在与 schema。此命令不会把 anti-slop detector 的 exit code 当成硬 gate；Craft/style finding 也不能单独阻止 Step 5。必需产物损坏或缺失、尚未解决的人类决策、以及 shared policy / ChapterCommitService 验证出的真实 Canon、用户约束或 integrity 问题仍按各自既有规则处理。
 
 ### 一致性 apply（写后）
 

@@ -30,6 +30,162 @@ def _snapshot(root):
             for path in root.rglob("*") if path.is_file()}
 
 
+def _activate_owned_project(root):
+    from data_modules.effective_history import EffectiveHistoryStore
+    from data_modules.owned_project_view import OwnedProjectView
+    from data_modules.projection_generation import ProjectionGeneration
+    from data_modules.projection_rebuild import build_effective_generation
+
+    commit = {
+        "meta": {"schema_version": "story-system/v1", "chapter": 1, "status": "accepted"},
+        "review_result": {"blocking_count": 0},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
+        "extraction_result": {"accepted_events": [], "state_deltas": [], "entity_deltas": [],
+                              "chapter_meta": {"title": "Canon title"}, "summary_text": "summary"},
+    }
+    commit_path = root / ".story-system/commits/chapter_001.commit.json"
+    commit_path.parent.mkdir(parents=True, exist_ok=True)
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    snapshot = EffectiveHistoryStore().read_active_snapshot(root)
+    built = build_effective_generation(root, snapshot)
+    protocol = ProjectionGeneration(root)
+    protocol.publish_generation(built["validated_generation"], None, snapshot.correction_lineage_digest)
+    return OwnedProjectView.pin_active(root)
+
+
+@pytest.mark.parametrize(
+    ("option", "expected"),
+    [
+        (("--volume-planned", "1", "--chapters-range", "1-10"), "progress.volumes_planned"),
+        (("--add-review", "1-2", "review/report.md"), "review_checkpoints"),
+    ],
+)
+def test_enrolled_update_state_cli_writes_owner_overlay_without_legacy_mutation(
+    tmp_path, monkeypatch, capsys, option, expected
+):
+    from data_modules.owned_project_view import OwnedProjectView, OwnedStateStore
+    import update_state as update_state_module
+
+    (tmp_path / ".webnovel").mkdir()
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"legacy_sentinel": "unchanged"}), encoding="utf-8")
+    legacy_bytes = state_path.read_bytes()
+    _activate_owned_project(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["update_state.py", "--project-root", str(tmp_path), *option])
+
+    update_state_module.main()
+    output = capsys.readouterr().out
+
+    store = OwnedStateStore(tmp_path)
+    assert state_path.read_bytes() == legacy_bytes
+    assert "已保存 owner overlay" in output
+    assert "备份: None" not in output
+    assert store._overlay()["revision"] == 1
+    view = OwnedProjectView.pin_active(tmp_path)
+    assert view is not None
+    state = view.state_view()
+    if expected == "progress.volumes_planned":
+        assert state["progress"]["volumes_planned"][0]["volume"] == 1
+    else:
+        assert state["review_checkpoints"][-1]["report"] == "review/report.md"
+
+
+def test_enrolled_migrate_story_craft_routes_to_owner_without_legacy_write(tmp_path):
+    from data_modules.owned_project_view import OwnedProjectView, OwnedStateStore
+    from migrate_story_craft import migrate_state_json
+
+    (tmp_path / ".webnovel").mkdir()
+    state_path = tmp_path / ".webnovel/state.json"
+    original = json.dumps({"legacy_sentinel": "retain", "unknown_field": {"x": 1}})
+    state_path.write_text(original, encoding="utf-8")
+    _activate_owned_project(tmp_path)
+
+    result = migrate_state_json(str(state_path))
+
+    assert state_path.read_text(encoding="utf-8") == original
+    store = OwnedStateStore(tmp_path)
+    overlay = store._overlay()
+    assert overlay["revision"] == 1
+    assert "unknown_field" not in overlay["values"]
+    assert "story_craft" in overlay["values"]
+    view = OwnedProjectView.pin_active(tmp_path)
+    assert view is not None
+    assert view.state_view()["story_craft"] == result["story_craft"]
+
+
+def test_enrolled_migrate_story_craft_fails_closed_on_malformed_owner_value(tmp_path):
+    from data_modules.owned_project_view import OwnedProjectView, OwnedStateStore, OwnedViewError
+    from migrate_story_craft import migrate_state_json
+
+    (tmp_path / ".webnovel").mkdir()
+    state_path = tmp_path / ".webnovel/state.json"
+    original = b'{"legacy_sentinel":"retain"}\n'
+    state_path.write_bytes(original)
+    _activate_owned_project(tmp_path)
+    store = OwnedStateStore(tmp_path)
+    store.write_owner_values(
+        {"story_craft": ["unexpected", "legacy"]}, expected_revision=0,
+    )
+    before = store._overlay()
+
+    with pytest.raises(OwnedViewError, match="OWNER_STORY_CRAFT_SHAPE_INVALID"):
+        migrate_state_json(str(state_path))
+
+    after = store._overlay()
+    view = OwnedProjectView.pin_active(tmp_path)
+    assert view is not None
+    assert after["revision"] == before["revision"]
+    assert after["values"]["story_craft"] == ["unexpected", "legacy"]
+    assert view.state_view()["story_craft"] == ["unexpected", "legacy"]
+    assert state_path.read_bytes() == original
+
+
+def test_enrolled_update_state_cli_stale_owner_revision_fails_closed(tmp_path, monkeypatch):
+    from data_modules.owned_project_view import OwnedProjectView, OwnedStateStore
+    import update_state as update_state_module
+
+    (tmp_path / ".webnovel").mkdir()
+    state_path = tmp_path / ".webnovel/state.json"
+    legacy_bytes = b'{"legacy_sentinel":"unchanged"}\n'
+    state_path.write_bytes(legacy_bytes)
+    _activate_owned_project(tmp_path)
+    original_update = update_state_module.StateUpdater.mark_volume_planned
+
+    def race_owner_revision(updater, volume, chapters_range):
+        original_update(updater, volume, chapters_range)
+        OwnedStateStore(tmp_path).write_owner_values(
+            {"review_checkpoints": [{"report": "external"}]}, expected_revision=0
+        )
+
+    monkeypatch.setattr(update_state_module.StateUpdater, "mark_volume_planned", race_owner_revision)
+    monkeypatch.setattr(sys, "argv", [
+        "update_state.py", "--project-root", str(tmp_path), "--volume-planned", "1",
+        "--chapters-range", "1-10",
+    ])
+
+    with pytest.raises(SystemExit) as stopped:
+        update_state_module.main()
+
+    assert stopped.value.code == 1
+    assert state_path.read_bytes() == legacy_bytes
+    view = OwnedProjectView.pin_active(tmp_path)
+    assert view is not None
+    assert view.state_view()["review_checkpoints"] == [{"report": "external"}]
+    assert "volumes_planned" not in view.state_view().get("progress", {})
+
+
+def test_plan_story_craft_initializer_is_not_legacy_only():
+    from pathlib import Path
+
+    scripts = Path(__file__).resolve().parents[2]
+    plan_skill = (scripts.parent / "skills/webnovel-plan/SKILL.md").read_text(encoding="utf-8")
+    helper = (scripts / "migrate_story_craft.py").read_text(encoding="utf-8")
+    assert "migrate_story_craft.py" in plan_skill
+    assert "OwnedProjectView.pin_active" in helper
+    assert "write_owner_values" in helper
+
+
 def test_actual_public_fact_writer_apis_reject_without_commit_before_persisting(tmp_path):
     config = _story_system_project(tmp_path)
     state = StateManager(config)

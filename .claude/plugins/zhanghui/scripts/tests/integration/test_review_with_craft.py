@@ -112,3 +112,35 @@ def test_craft_display_veto_words_never_change_policy_classification():
     decision = GateSeverityPolicy().evaluate(findings, policy_version="v1", scope={"chapter": 8})
     assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
     assert all(row.effective_severity.value == "ADVISORY" for row in decision.decisions)
+
+
+def test_craft_advisory_does_not_weaken_validated_canon_blocker():
+    from data_modules.gate_findings import (
+        DetectedFinding, EvidenceRef, FindingAuthority, FindingCategory, WorkflowAction,
+    )
+    from data_modules.review_schema import parse_review_output
+    craft_result = parse_review_output(8, {"issues": [{
+        "severity": "critical", "category": "beat_compliance", "blocking": True,
+        "checker_id": "llm_review", "description": "Midpoint absent",
+    }]}).issues[0]
+    craft = adapt_legacy_artifacts(
+        chapter=8, review={"issues": [craft_result.to_dict()]},
+        fulfillment={"missed_nodes": []}, disambiguation={"pending": []},
+    )
+    canon = DetectedFinding(
+        gate_id="canon.contradiction", stable_subject_key="event-1",
+        category=FindingCategory.CANON_CONTRADICTION, authority=FindingAuthority.ACCEPTED_CANON,
+        scope={"chapter": 8},
+        evidence=[EvidenceRef(kind="canon_contradiction", identity={
+            "accepted_canon": True, "canon_event_id": "event-1", "validator_id": "v1",
+            "deterministic": True, "contradiction": True,
+        })],
+        checker_id="canon-validator", checker_version="v1",
+    )
+
+    decision = GateSeverityPolicy().evaluate([*craft, canon], policy_version="v1", scope={"chapter": 8})
+
+    assert craft_result.blocking is False
+    assert decision.aggregate_action == WorkflowAction.REJECT
+    assert decision.decisions[0].effective_action == WorkflowAction.ALLOW_WITH_ADVISORY
+    assert decision.decisions[-1].effective_action == WorkflowAction.REJECT

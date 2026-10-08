@@ -225,7 +225,7 @@ metrics 摘要同步输出到 `.webnovel/tmp/review_metrics.json`，供 `webnove
 
 ## Step 6: 写回审查记录到 state.json（必做）
 
-将审查报告记录写回 `state.json.review_checkpoints`，用于后续追踪与回溯（依赖 `update_state.py --add-review`）：
+将审查报告记录写回 `review_checkpoints`，用于后续追踪与回溯（依赖 `update_state.py --add-review`）。Base-only 项目写入 `state.json`；enrolled 项目由该命令通过 pinned owner view、原读 revision/publication CAS 写入 owner overlay，并执行 read-after-write：
 ```bash
 python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" update-state -- --add-review "{start}-{end}" "审查报告/第{start}-{end}章审查报告.md"
 
@@ -233,7 +233,7 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" update-stat
 
 ## Step 7: 处理关键问题
 
-如发现 critical 问题（`severity_counts.critical > 0` 或 `critical_issues` 非空），**必须使用 AskUserQuestion** 询问用户：
+不要根据 LLM reviewer 的 `severity`、`blocking` 或 `blocking_count` 单独决定 gate action。只有 shared policy / 一致性检查给出的 `REQUIRE_HUMAN` 或 `REJECT` 才触发相应的人类裁决或停止当前步骤；reviewer 的 Craft/style findings 默认 advisory。纯 reviewer severity finding 应照常报告，最终章节接受/拒绝由 ChapterCommitService 决定。如 shared policy 确认需要用户选择，再使用 AskUserQuestion 询问：
 - A) 立即修复（推荐）
 - B) 仅保存报告，稍后处理
 
@@ -306,8 +306,8 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" run-log \
 - 审查报告文件路径（`审查报告/第{start}-{end}章审查报告.md`）是否落盘。
 - `.webnovel/tmp/review_results.json` 是否齐全。
 - `.webnovel/tmp/review_metrics.json` 是否生成，并写明 `review_metrics` 关键维度得分。
-- `severity_counts.critical / major / minor` 与阻断问题数量（`critical_issues` 数）。
-- `state.json.review_checkpoints` 是否写回、`update-state --add-review` 是否成功。
+- `severity_counts`、`critical_issues`、归一化后的阻断问题数量与 shared policy action；不要把显示级别当作 hard authority。
+- `review_checkpoints` 是否写回（base-only 为 `state.json`，enrolled 为 owner overlay）、`update-state --add-review` 是否成功。
 - 用户裁决状态（修复 / 仅保留报告）。
 - 如果无阻断，明确可以继续写作。
 
