@@ -20,6 +20,8 @@ SCHEMA_VERSION = "webnovel-artifact-validator/v1"
 
 ERROR_SCHEMA = "schema_error"
 ERROR_MISSING = "missing_artifact"
+# Retained as import-compatible labels for older callers; this validator no
+# longer emits semantic findings from these legacy fields.
 ERROR_BLOCKING_REVIEW = "blocking_review"
 ERROR_MISSED_OUTLINE_NODE = "missed_outline_node"
 ERROR_PENDING_DISAMBIGUATION = "pending_disambiguation"
@@ -108,33 +110,11 @@ def _schema_error_message(exc: Exception) -> str:
 
 def _policy_issues(artifact: str, payload: dict[str, Any], path: str) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
-    if artifact == "review_result":
-        blocking_count = int(payload.get("blocking_count") or 0)
-        if blocking_count > 0:
-            issues.append(
-                _issue(
-                    ERROR_BLOCKING_REVIEW,
-                    message=f"review_result has {blocking_count} blocking issue(s)",
-                    path=path,
-                    field="blocking_count",
-                    impact="存在阻断级审查问题时不应进入提交。",
-                    repair="先定点修复 blocking issue，或让用户明确裁决后再继续。",
-                )
-            )
-    elif artifact == "fulfillment_result":
-        missed = payload.get("missed_nodes") or []
-        if missed:
-            issues.append(
-                _issue(
-                    ERROR_MISSED_OUTLINE_NODE,
-                    message=f"fulfillment_result missed {len(missed)} planned node(s)",
-                    path=path,
-                    field="missed_nodes",
-                    impact="大纲必须节点未覆盖，提交会把偏离章节固化为事实。",
-                    repair="补写遗漏节点，或经用户裁决修改本章规划。",
-                )
-            )
-    elif artifact == "disambiguation_result":
+    # Review blocking_count and fulfillment missed_nodes are evidence/metrics.
+    # Their semantics belong to finding adapters and GateSeverityPolicy, not
+    # this integrity-only artifact validator. Pending disambiguation remains a
+    # required human decision and therefore still blocks this precommit stage.
+    if artifact == "disambiguation_result":
         pending = payload.get("pending") or []
         if pending:
             issues.append(

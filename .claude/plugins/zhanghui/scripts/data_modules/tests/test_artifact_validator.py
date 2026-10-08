@@ -16,8 +16,6 @@ _ensure_scripts_on_path()
 
 from data_modules.artifact_validator import (  # noqa: E402
     ARTIFACT_SCHEMAS,
-    ERROR_BLOCKING_REVIEW,
-    ERROR_MISSED_OUTLINE_NODE,
     ERROR_MISSING,
     ERROR_PENDING_DISAMBIGUATION,
     ERROR_PROJECTION_FAILURE,
@@ -68,7 +66,7 @@ def test_artifact_validator_reports_schema_errors_for_wrapped_payloads(tmp_path)
     assert "nested under fulfillment" in report["errors"][0]["message"]
 
 
-def test_artifact_validator_reports_policy_blockers(tmp_path):
+def test_artifact_validator_does_not_derive_semantic_veto_from_legacy_counts(tmp_path):
     review = _write_json(tmp_path / "review_results.json", {"blocking_count": 1})
     fulfillment = _write_json(
         tmp_path / "fulfillment_result.json",
@@ -81,9 +79,31 @@ def test_artifact_validator_reports_policy_blockers(tmp_path):
     )
     disambiguation = _write_json(tmp_path / "disambiguation_result.json", {"pending": [{"mention": "宗主"}]})
 
-    assert validate_review_result(review)["errors"][0]["type"] == ERROR_BLOCKING_REVIEW
-    assert validate_fulfillment_result(fulfillment)["errors"][0]["type"] == ERROR_MISSED_OUTLINE_NODE
+    review_report = validate_review_result(review)
+    fulfillment_report = validate_fulfillment_result(fulfillment)
     assert validate_disambiguation_result(disambiguation)["errors"][0]["type"] == ERROR_PENDING_DISAMBIGUATION
+    assert review_report["ok"] is True
+    assert review_report["payload"]["blocking_count"] == 1
+    assert fulfillment_report["ok"] is True
+    assert fulfillment_report["payload"]["missed_nodes"] == ["A"]
+
+
+def test_artifact_validator_rejects_malformed_fulfillment_shape_and_json(tmp_path):
+    wrong_shape = _write_json(
+        tmp_path / "wrong_shape.json",
+        {"planned_nodes": [], "covered_nodes": [], "missed_nodes": "node-1", "extra_nodes": []},
+    )
+    malformed_json = tmp_path / "malformed.json"
+    malformed_json.write_text('{"missed_nodes": [}', encoding="utf-8")
+
+    shape_report = validate_fulfillment_result(wrong_shape)
+    json_report = validate_fulfillment_result(malformed_json)
+
+    assert shape_report["ok"] is False
+    assert shape_report["errors"][0]["type"] == ERROR_SCHEMA
+    assert "missed_nodes" in shape_report["errors"][0]["message"]
+    assert json_report["ok"] is False
+    assert json_report["errors"][0]["type"] == ERROR_SCHEMA
 
 
 def test_artifact_validator_accepts_valid_extraction(tmp_path):

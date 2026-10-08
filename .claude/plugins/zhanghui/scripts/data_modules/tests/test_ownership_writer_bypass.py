@@ -114,6 +114,33 @@ def test_enrolled_migrate_story_craft_routes_to_owner_without_legacy_write(tmp_p
     assert view.state_view()["story_craft"] == result["story_craft"]
 
 
+def test_enrolled_migrate_story_craft_fails_closed_on_malformed_owner_value(tmp_path):
+    from data_modules.owned_project_view import OwnedProjectView, OwnedStateStore, OwnedViewError
+    from migrate_story_craft import migrate_state_json
+
+    (tmp_path / ".webnovel").mkdir()
+    state_path = tmp_path / ".webnovel/state.json"
+    original = b'{"legacy_sentinel":"retain"}\n'
+    state_path.write_bytes(original)
+    _activate_owned_project(tmp_path)
+    store = OwnedStateStore(tmp_path)
+    store.write_owner_values(
+        {"story_craft": ["unexpected", "legacy"]}, expected_revision=0,
+    )
+    before = store._overlay()
+
+    with pytest.raises(OwnedViewError, match="OWNER_STORY_CRAFT_SHAPE_INVALID"):
+        migrate_state_json(str(state_path))
+
+    after = store._overlay()
+    view = OwnedProjectView.pin_active(tmp_path)
+    assert view is not None
+    assert after["revision"] == before["revision"]
+    assert after["values"]["story_craft"] == ["unexpected", "legacy"]
+    assert view.state_view()["story_craft"] == ["unexpected", "legacy"]
+    assert state_path.read_bytes() == original
+
+
 def test_enrolled_update_state_cli_stale_owner_revision_fails_closed(tmp_path, monkeypatch):
     from data_modules.owned_project_view import OwnedProjectView, OwnedStateStore
     import update_state as update_state_module

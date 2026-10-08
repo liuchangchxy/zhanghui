@@ -31,8 +31,11 @@ def migrate_state_json(path: str) -> dict:
         state = view.state_view()
         if not isinstance(state, dict):
             raise ValueError("active owner state must be an object")
-        craft = state.get("story_craft")
-        if not isinstance(craft, dict):
+        if "story_craft" in state:
+            craft = state["story_craft"]
+            if not isinstance(craft, dict):
+                raise OwnedViewError("OWNER_STORY_CRAFT_SHAPE_INVALID")
+        else:
             craft = json.loads(json.dumps(EMPTY_STORY_CRAFT))
             read_view = state.get("_view")
             expected_revision = read_view.get("owner_overlay_revision") if isinstance(read_view, dict) else None
