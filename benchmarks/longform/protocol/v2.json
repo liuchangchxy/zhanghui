@@ -134,7 +134,19 @@
       "calibration_cases": "protocol/evaluator-calibration-cases-v1.json",
       "calibration_gold": "protocol/evaluator-calibration-gold-v1.json",
       "evaluator_calibration_required_before_chapter4": true,
-      "primary_metric_policy": "vector_not_weighted_composite"
+      "primary_metric_policy": "vector_not_weighted_composite",
+      "evaluator_prompts": {
+        "consistency": "evaluators/consistency-evaluator-v1.md",
+        "intent_quality": "evaluators/intent-quality-evaluator-v1.md",
+        "adjudicator": "evaluators/adjudicator-v1.md"
+      },
+      "calibration_result_schema": "schemas/evaluator-calibration-result-v1.schema.json",
+      "proposed_evaluator_runtime": {
+        "human_label": "Gemini 3.8 Flash (Medium) via Antigravity consumer entitlement",
+        "machine_label": "MODEL_PLACEHOLDER_M322",
+        "model_id_verifiability": "PARTIAL_INTERNAL_LABEL_ONLY",
+        "status": "must_pass_calibration_before_lock"
+      }
     },
     "stage2": {
       "scenarios_min": 3,
