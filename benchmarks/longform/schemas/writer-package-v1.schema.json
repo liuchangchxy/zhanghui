@@ -17,7 +17,8 @@
     "author_objective",
     "target_length",
     "output_contract",
-    "hashes"
+    "hashes",
+    "forbidden_content_attestation"
   ],
   "properties": {
     "schema_version": {
@@ -125,7 +126,7 @@
         "system_instructions_sha256",
         "system_context_sha256",
         "author_objective_sha256",
-        "serialized_package_sha256"
+        "canonical_payload_sha256"
       ],
       "properties": {
         "system_instructions_sha256": {
@@ -137,8 +138,9 @@
         "author_objective_sha256": {
           "$ref": "#/$defs/sha256"
         },
-        "serialized_package_sha256": {
-          "$ref": "#/$defs/sha256"
+        "canonical_payload_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the canonicalized writer-package object with the top-level hashes field omitted."
         }
       }
     }
