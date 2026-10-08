@@ -95,16 +95,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "future_intents",
+        "benchmark_future_oracle",
         "other_system_content",
         "evaluator_material",
         "controller_mapping",
         "absolute_source_paths"
       ],
       "properties": {
-        "future_intents": {
-          "const": false
-        },
         "other_system_content": {
           "const": false
         },
@@ -116,6 +113,10 @@
         },
         "absolute_source_paths": {
           "const": false
+        },
+        "benchmark_future_oracle": {
+          "const": false,
+          "description": "No future chapter objective or evaluator/oracle information was injected by the benchmark controller beyond future-facing context natively produced/exposed by the compared system."
         }
       }
     },
