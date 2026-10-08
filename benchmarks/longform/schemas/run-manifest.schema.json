@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/liuchangchxy/zhanghui/benchmarks/longform/schemas/run-manifest.schema.json",
+  "title": "Zhanghui Long-Form Benchmark Run Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "protocol_version",
+    "scenario_id",
+    "seed",
+    "track",
+    "arm",
+    "chapter",
+    "model_runtime_label",
+    "generator_template_sha256",
+    "context_manifest_sha256",
+    "chapter_objective_sha256",
+    "output_prose_sha256",
+    "started_at",
+    "ended_at",
+    "elapsed_ms",
+    "retry_count",
+    "token_usage",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "zhanghui-longform-run-manifest/v1"
+    },
+    "protocol_version": {
+      "const": "zhanghui-longform-benchmark-protocol/v1"
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "seed": {
+      "type": [
+        "string",
+        "integer"
+      ]
+    },
+    "track": {
+      "enum": [
+        "memory_truth_architecture",
+        "product_workflow"
+      ]
+    },
+    "arm": {
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    "arm_id": {
+      "enum": [
+        "minimal",
+        "lightweight",
+        "zhanghui"
+      ]
+    },
+    "chapter": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "model_runtime_label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sampling_controls": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Record only controls actually exposed by the host."
+    },
+    "generator_template_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "context_manifest_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "chapter_objective_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "output_prose_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "elapsed_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "intervention_count": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "token_usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "measurement"
+      ],
+      "properties": {
+        "measurement": {
+          "enum": [
+            "measured",
+            "estimated",
+            "unavailable"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "zhanghui_commit_sha": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/sha40"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "evaluator_excluded": {
+      "type": "boolean",
+      "default": false
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed",
+        "aborted"
+      ]
+    },
+    "failure_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "arm": {
+            "const": "C"
+          }
+        },
+        "required": [
+          "arm"
+        ]
+      },
+      "then": {
+        "required": [
+          "zhanghui_commit_sha"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "sha40": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    }
+  }
+}
