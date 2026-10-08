@@ -10,16 +10,16 @@
       "initial_remote_sha": "efc5e1030b33f4bb19fc9509a6f28dafefa59848",
       "tested_sha": "freeze_during_stage_minus_1"
     },
-    "novel-studio": {
-      "repository": "Xiaoyangy/novel-studio",
-      "philosophy": "world_character_simulation_sealed_render_pipeline",
-      "initial_remote_sha": "ed04a106f665f456246af3c4414ba62992a2a1d1",
-      "tested_sha": "freeze_during_stage_minus_1"
-    },
     "zhanghui": {
       "repository": "liuchangchxy/zhanghui",
       "philosophy": "governed_story_truth_chapter_commit_projections",
       "tested_sha": "freeze_at_run_creation"
+    },
+    "ai-novel-generator": {
+      "repository": "YILING0013/AI_NovelGenerator",
+      "philosophy": "multi_stage_architecture_hierarchical_text_vector_memory_consistency_review",
+      "initial_remote_sha": "f9aefef90b1493c579d7f72547efb4a3d8a0da25",
+      "tested_sha": "f9aefef90b1493c579d7f72547efb4a3d8a0da25"
     }
   },
   "reserve_systems": {
@@ -28,10 +28,10 @@
       "reason": "mature workspace and dynamic memory, but public architecture is more session/workspace-centric and less direct for a controlled same-writer comparison",
       "initial_remote_sha": "226d50d3ec284c9cc037c47eb14af39505f9ed74"
     },
-    "ai_novel_generator": {
-      "repository": "YILING0013/AI_NovelGenerator",
-      "reason": "important mature/popular reference, but current production line overlaps an active refactor and is less clean as the first frozen architecture baseline",
-      "initial_remote_sha": "f9aefef90b1493c579d7f72547efb4a3d8a0da25"
+    "novel-studio": {
+      "repository": "Xiaoyangy/novel-studio",
+      "reason": "mature native product comparator, but current Antigravity-only headless runtime does not expose the structured tool-call transport required by its agentcore loop; retain for Track B",
+      "initial_remote_sha": "ed04a106f665f456246af3c4414ba62992a2a1d1"
     }
   },
   "weak_baselines": {
@@ -83,11 +83,11 @@
     "sources": [
       "zhanghui",
       "jarvis-write",
-      "novel-studio"
+      "AI_NovelGenerator"
     ],
     "run_projects": [
       "jarvis-write",
-      "novel-studio",
+      "ai-novel-generator",
       "zhanghui"
     ],
     "controller_dir": "_controller",

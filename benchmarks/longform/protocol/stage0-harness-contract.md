@@ -17,7 +17,7 @@ It does **not** establish architectural superiority.
 Primary systems:
 
 1. `ynnyh/jarvis-write`
-2. `Xiaoyangy/novel-studio`
+2. `YILING0013/AI_NovelGenerator`
 3. `liuchangchxy/zhanghui`
 
 Writer runtime:
@@ -36,7 +36,7 @@ Scenario:
 Chapters:
 
 - jarvis-write: 1-3
-- novel-studio: 1-3
+- AI_NovelGenerator: 1-3
 - Zhanghui: 1-3
 
 Total prose outputs: 9.
@@ -69,13 +69,13 @@ Source and runtime roots remain separate:
   sources/
     zhanghui/
     jarvis-write/
-    novel-studio/
+    AI_NovelGenerator/
 
   runs/
     pilot-tide-archive-001/
       run-001/
         jarvis-write/
-        novel-studio/
+        ai-novel-generator/
         zhanghui/
         _controller/
 
@@ -159,18 +159,20 @@ Allowed adapter behavior:
 
 The adapter must not independently recreate the temporal Story Bible, rolling summary, hard constraints, foreshadow scheduler, resource ledger, style directives, or context assembly.
 
-### novel-studio
+### AI_NovelGenerator
 
 Allowed adapter behavior:
 
-1. run the real planning/world/character simulation required by the system;
-2. obtain the real primed/sealed Drafter message envelope;
-3. serialize the exact Drafter-visible prose context;
-4. call common Antigravity writer;
-5. wrap returned prose through a thin transport bridge equivalent to the expected `draft_chapter(chapter=N, mode="write", content=...)` tool call;
-6. continue the native review / actual-match / acceptance / state pipeline.
+1. invoke the real multi-stage architecture and chapter-blueprint generation workflow for story initialization;
+2. use the real `build_chapter_prompt` chapter-context assembly path, preserving architecture, blueprint, character state, historical summary and native vector-retrieved context;
+3. serialize the exact production prompt presented at the `BaseLLMAdapter.invoke(prompt) -> str` boundary;
+4. call the common Antigravity writer for every prose-mutating call;
+5. return prose through the normal chapter draft/output boundary;
+6. continue the native `finalize_chapter` state pipeline, including global summary and character-state updates;
+7. preserve production Chroma vector memory through a production-supported embedding adapter; the qualified Stage 0 path uses `MLStudioEmbeddingAdapter` against a local LM Studio embedding model;
+8. run native consistency review where the production workflow calls for it.
 
-The adapter must not bypass or reconstruct sealed render packets, character activation state, causal simulation, source receipts, or transaction guards.
+The adapter must not independently recreate architecture generation, chapter blueprints, chapter-context assembly, global summary, character state, vector-memory contents, or consistency conclusions. Controller-authored synthetic embeddings are forbidden in formal Track A runs.
 
 ### Zhanghui
 
