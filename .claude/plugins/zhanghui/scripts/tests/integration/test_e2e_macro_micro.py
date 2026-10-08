@@ -57,7 +57,7 @@ def test_e2e_full_flow(tmp_path):
     ))
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # Pre-write gate at V2 ch110: BLOCKER expected (payoff missed)
+    # Pre-write gate at V2 ch110: overdue foreshadow is an advisory plan deviation.
     state = json.loads(state_path.read_text(encoding="utf-8"))
     mgr = VolumeStateManager(state)
     overdue = mgr.list_overdue_foreshadows(current_chapter=110, current_volume=2)
@@ -67,7 +67,7 @@ def test_e2e_full_flow(tmp_path):
     )
     assert len(issues) == 1
     assert "fs_e2e" in issues[0]
-    assert "BLOCKER" in issues[0]
+    assert "ADVISORY" in issues[0]
 
     # Payoff → re-evaluate → no blocker
     mgr.payoff_foreshadow("fs_e2e", at_chapter=112)
