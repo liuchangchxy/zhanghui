@@ -98,6 +98,38 @@ def test_parse_review_output_tolerates_missing_fields():
     assert result.issues[0].location == ""
 
 
+@pytest.mark.parametrize(
+    ("category", "description"),
+    [
+        ("beat_compliance", "missing Midpoint"),
+        ("foreshadow_compliance", "overdue foreshadow"),
+        ("foreshadow_compliance", "missing hook type"),
+        ("beat_compliance", "incomplete Scene-Sequel"),
+        ("pacing", "rhythm threshold exceeded"),
+    ],
+)
+def test_parse_review_output_cannot_accept_raw_craft_blocking_authority(category, description):
+    result = parse_review_output(3, {"issues": [{
+        "severity": "critical", "category": category, "blocking": True,
+        "description": description, "checker_id": "llm_review",
+    }]})
+
+    issue = result.issues[0]
+    assert issue.blocking is False
+    assert issue.severity == "high"
+    assert issue.authority == "CRAFT_HEURISTIC"
+    assert result.blocking_count == 0
+
+
+def test_parse_review_output_preserves_non_craft_blocking_finding():
+    result = parse_review_output(3, {"issues": [{
+        "severity": "critical", "category": "continuity", "blocking": True,
+        "description": "validated fact issue",
+    }]})
+
+    assert result.issues[0].blocking is True
+
+
 def test_review_result_to_metrics_dict():
     result = ReviewResult(
         chapter=10,

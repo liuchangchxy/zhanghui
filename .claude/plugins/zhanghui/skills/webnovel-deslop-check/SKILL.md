@@ -9,8 +9,10 @@ allowed-tools: Read Write Edit Grep Bash
 ## 目标
 
 对任意已写章节（或全本所有章节）跑 anti-slop 扫描，输出 Markdown 报告：
-- blocking 项位置 + 原文引用 + 修改建议
+- detector 标记的 finding 位置 + 原文引用 + 修改建议
 - advisory 项汇总
+
+这里的 `blocking` / `advisory` 仅是 scanner 的显示分类。所有 style/Craft finding 默认 advisory，不拥有 workflow 或 chapter veto authority；作者可选择局部处理或忽略。
 
 ## 适用场景
 
@@ -27,8 +29,8 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py \
     detect --chapter-file 正文/第{NNNN}章-{title_safe}.md
 
 node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
-    --check --fail-on=blocking \
-    正文/第{NNNN}章-{title_safe}.md
+    --check --json --fail-on=blocking \
+    正文/第{NNNN}章-{title_safe}.md || true
 
 ```
 
@@ -79,11 +81,11 @@ done
 
 # 第 2 段：check-ai-patterns.js 多文件一次性调（design 支持 <file...>）
 node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js --check --json --fail-on=blocking \
-  正文/第*.md > .webnovel/tmp/deslop/check-ai-patterns-batch.json 2>&1
-# 非零退出 = 有 blocking 命中（按 webnovel-write/SKILL.md Step 4.6 仲裁规则处理）
+  正文/第*.md > .webnovel/tmp/deslop/check-ai-patterns-batch.json 2>&1 || true
+# 输出中的 detector 分类仅用于报告；finding 本身不构成 workflow veto。
 ```
 
-然后把两份 JSON 一起读，按 `webnovel-write/SKILL.md` Step 4.6 "anti-slop 双引擎仲裁规则" 仲裁（frequency-based 优先、blocking 触发重写、advisory ≤ 2 放行），最后写 `审查报告/deslop-batch-report.md` 汇总。
+然后把两份 JSON 一起读，按 `webnovel-write/SKILL.md` Step 4.6 合并重复 finding（frequency-based 证据优先），最后写 `审查报告/deslop-batch-report.md` 汇总。所有 finding 都作为 advisory 呈现；作者可选择局部 cleanup，不强制整章重写。只有 exact stable explicit user-bound style prohibition 经 shared hard-constraint policy 验证后才能阻断。
 
 #### 简化版（旧 for-loop 兼容）
 
@@ -105,7 +107,7 @@ done
 
 ## 报告模板
 
-每个 blocking 项：
+每个 scanner finding：
 
 ```markdown
 ### [RULE_ID] 规则名

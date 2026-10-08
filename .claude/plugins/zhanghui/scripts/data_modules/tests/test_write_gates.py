@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -80,6 +81,55 @@ def test_precommit_gate_accepts_valid_artifacts(tmp_path):
 
     assert report["ok"] is True
     assert report["details"]["artifact_report"]["ok"] is True
+
+
+def test_precommit_gate_accepts_normalized_craft_finding_as_advisory(tmp_path):
+    from data_modules.review_schema import parse_review_output
+
+    _make_init_ready(tmp_path)
+    _make_contracts(tmp_path, chapter=1)
+    (tmp_path / "正文" / "第0001章.md").write_text("正文\n", encoding="utf-8")
+    _write_valid_artifacts(tmp_path)
+    raw = {"issues": [{
+        "severity": "critical", "category": "foreshadow_compliance", "blocking": True,
+        "description": "overdue foreshadow heuristic", "checker_id": "llm_review",
+    }]}
+    normalized = parse_review_output(1, raw).to_dict()
+    _write_json(tmp_path / ".webnovel" / "tmp" / "review_results.json", normalized)
+
+    report = run_write_gate(tmp_path, chapter=1, stage="precommit")
+
+    assert normalized["blocking_count"] == 0
+    assert normalized["issues"][0]["blocking"] is False
+    assert report["ok"] is True
+
+
+def test_detector_blocking_style_finding_does_not_veto_precommit(tmp_path):
+    _make_init_ready(tmp_path)
+    _make_contracts(tmp_path, chapter=1)
+    chapter = tmp_path / "正文" / "第0001章.md"
+    chapter.write_text("他转过身——门已经开了。\n", encoding="utf-8")
+    _write_valid_artifacts(tmp_path)
+    scanner = Path(__file__).resolve().parents[2] / "check-ai-patterns.js"
+    detected = subprocess.run(
+        ["node", str(scanner), "--check", "--json", "--fail-on=blocking", str(chapter)],
+        capture_output=True, text=True, check=False,
+    )
+    assert detected.returncode == 1
+    assert '"severity":"blocking"' in detected.stdout.replace(" ", "")
+
+    report = run_write_gate(tmp_path, chapter=1, stage="precommit")
+
+    assert report["ok"] is True
+
+
+def test_write_skill_treats_craft_style_scanners_as_advisory():
+    skill = Path(__file__).resolve().parents[2].parent / "skills/webnovel-write/SKILL.md"
+    text = skill.read_text(encoding="utf-8")
+
+    assert "Craft/style scanner finding" in text
+    assert "不阻止 Step 5" in text
+    assert "任一工具报 critical / blocking → 触发整章重写" not in text
 
 
 def test_precommit_gate_rejects_fulfillment_missing_missed_nodes(tmp_path):
