@@ -143,3 +143,33 @@ def test_init_preserves_corrupt_state_json_before_rebuilding(tmp_path, monkeypat
     assert len(corrupt_copies) == 1
     assert corrupt_copies[0].read_text(encoding="utf-8") == corrupt_text
     assert "原 state.json 已损坏" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("marker_contents", ["", "{malformed json"])
+def test_init_refuses_any_existing_enrollment_marker(tmp_path, monkeypatch, marker_contents):
+    import init_project as init_project_module
+
+    monkeypatch.setattr(init_project_module, "is_git_available", lambda: False)
+    project_root = tmp_path / "book"
+    marker = project_root / ".story-system" / "effective-history" / "enrollment.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text(marker_contents, encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot reinitialize an activation-managed project through the base-only initializer",
+    ):
+        init_project_module.init_project(
+            str(project_root),
+            title="测试书",
+            genre="仙侠",
+            protagonist_name="陆鸣",
+            target_chapters=50,
+        )
+
+
+def test_init_project_does_not_import_activation_runtime():
+    from pathlib import Path
+
+    init_project_source = Path(__file__).resolve().parents[2] / "init_project.py"
+    assert "data_modules.projection_generation" not in init_project_source.read_text(encoding="utf-8")
