@@ -105,7 +105,7 @@ Therefore every controlled writer invocation must satisfy all of the following:
 6. no sibling-system content;
 7. no controller blind mapping;
 8. no evaluator findings;
-9. no future chapter objectives;
+9. no benchmark-only future oracle may be injected directly into the writer package; future-facing context that the compared system itself natively derives or normally exposes (for example jarvis-write's next-chapter brief) is allowed and must be preserved as system-owned context;
 10. no instruction to inspect the filesystem, repository, shell, network, or tools;
 11. output is prose-only;
 12. controller performs all repository/state reads before invocation and all ingestion after invocation.
@@ -131,7 +131,7 @@ Each adapter must produce one normalized outer package containing:
 
 The normalized wrapper must not rewrite or summarize away system-owned context.
 
-System-specific prompt/context must be preserved verbatim where possible.
+System-specific prompt/context must be preserved verbatim where possible. A system may expose its own native future-facing planning context; the controller must not add future benchmark chapter objectives or evaluator/oracle information that the system itself did not produce or normally expose.
 
 ## Common-writer rule
 
