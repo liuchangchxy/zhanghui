@@ -127,7 +127,7 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
       --chapter ${chapter_num} \
       --md
   ```
-- 输出（活跃伏笔 + 超期伏笔）追加到 Step 1 任务书的"活跃伏笔"section，作为本章写作的"必承接"约束。
+- 输出（活跃伏笔 + 超期伏笔）追加到 Step 1 任务书的"活跃伏笔"section，作为规划参考；超期状态表示 plan deviation，不自动成为本章硬约束。
 - 工具执行失败（exit code != 0）只记录警告，不阻断——best-effort。
 
 **个人语料检测**（best-effort，不阻断；Phase E 重定位）：
@@ -199,13 +199,12 @@ issues = evaluate_pre_write_gates(
     overdue_foreshadows=overdue,
 )
 if issues:
-    print("\n".join(issues))
-    raise SystemExit(1)  # 本地写作前置条件未满足，不允许继续写作
+    print("\n".join(issues))  # 伏笔超期是规划偏差提示，不阻断正文写作
 ```
 
-**写作前置条件未满足时**：要求用户先在 plan 阶段调整伏笔账本或回收 overdue 伏笔，方可继续。该检查只决定当前写作步骤能否开始，不属于一致性 GateSeverityPolicy，也不改变章节提交策略。
+伏笔超期和临近回收期仅作为规划建议。作者可以继续写作，并在后续调整计划；只有明确绑定到用户要求的硬约束、Canon 矛盾、必要工作流材料缺失或持久化完整性失败，才由对应 authority 阻断。
 
-**逃生口**：`WEBNOVEL_DISABLE_CHUNKED_GATE=1` 临时跳过本检查。
+该检查是 advisory；不需要通过环境变量跳过。
 
 ### Step 0.6：Snapshot Checkpoint（oh-story 模式）
 

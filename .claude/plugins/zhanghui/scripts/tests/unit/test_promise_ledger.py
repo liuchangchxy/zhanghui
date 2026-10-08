@@ -156,6 +156,54 @@ def test_to_list_empty_ledger():
     assert PromiseLedger().to_list() == []
 
 
+def test_planner_schedule_edit_preserves_exact_canon_reference_and_status():
+    entry = ForeshadowEntry(
+        id="plan-1", type="promise", depth=1, planted_chapter=1, planted_volume=1,
+        expected_payoff_chapter=10, expected_payoff_volume=2,
+        canon_event_ref="evt-opaque-42",
+    )
+    ledger = PromiseLedger([entry])
+    ledger.update_schedule("plan-1", expected_payoff_chapter=12,
+                           expected_payoff_volume=2)
+    updated = ledger.entries[0]
+    assert updated.canon_event_ref == "evt-opaque-42"
+    assert updated.status == ForeshadowStatus.PENDING
+    assert (updated.expected_payoff_chapter, updated.expected_payoff_volume) == (12, 2)
+
+
+def test_planner_canon_reference_must_be_an_exact_nonempty_id():
+    entry = ForeshadowEntry(
+        id="plan-2", type="promise", depth=1, planted_chapter=1, planted_volume=1,
+        expected_payoff_chapter=10, expected_payoff_volume=2,
+    )
+    with pytest.raises(ValueError, match="opaque ID"):
+        PromiseLedger([entry]).update_schedule(
+            "plan-2", expected_payoff_chapter=12, expected_payoff_volume=2,
+            canon_event_ref="  ",
+        )
+
+
+def test_planner_defer_and_cancel_are_audit_actions_not_canon_lifecycle_transitions():
+    entry = ForeshadowEntry(
+        id="plan-3", type="promise", depth=1, planted_chapter=1, planted_volume=1,
+        expected_payoff_chapter=10, expected_payoff_volume=2,
+        canon_event_ref="evt-exact",
+    )
+    ledger = PromiseLedger([entry])
+    ledger.defer("plan-3", expected_payoff_chapter=20, expected_payoff_volume=3)
+    deferred = ledger.entries[0]
+    assert deferred.status == ForeshadowStatus.PENDING
+    assert deferred.canon_event_ref == "evt-exact"
+    assert deferred.audit_log[-1]["action"] == "defer"
+    ledger.cancel("plan-3")
+    cancelled = ledger.entries[0]
+    assert cancelled.status == ForeshadowStatus.PENDING
+    assert cancelled.canon_event_ref == "evt-exact"
+    assert cancelled.audit_log[-1]["action"] == "cancel"
+    assert ledger.is_cancelled("plan-3") is True
+    assert ledger.list_for_volume(2) == []
+
+
 # --- Below: T2 cross-volume ledger API (6 new tests) ---
 
 

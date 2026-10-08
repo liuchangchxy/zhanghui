@@ -110,6 +110,8 @@ def _resolve(
     target["status"] = "resolved" if close_type == "open_loop_closed" else "paid_off"
     target["resolution_event_id"] = str(event.get("event_id") or "")
     target["resolved_chapter"] = int(event.get("chapter") or 0)
+    target["semantic_class"] = "CANON_DERIVED_OBLIGATION"
+    target["source_owner"] = "effective_accepted_canon_events"
     target["link_status"] = link_status
 
 
@@ -118,6 +120,7 @@ def reconcile_intent_events(
     *,
     initial_open_loops: list[dict[str, Any]] | None = None,
     initial_reader_promises: list[dict[str, Any]] | None = None,
+    effective_history_digest: str | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Return Open Loop and reader Promise lifecycles plus unlinked diagnostics.
 
@@ -144,6 +147,9 @@ def reconcile_intent_events(
                 continue
             open_loops.append({
                 "identity_id": event_id,
+                "semantic_class": "CANON_DERIVED_OBLIGATION",
+                "source_owner": "effective_accepted_canon_events",
+                **({"effective_history_digest": effective_history_digest} if effective_history_digest else {}),
                 "source_event_id": event_id,
                 "source_chapter": chapter,
                 "content": content,
@@ -170,6 +176,9 @@ def reconcile_intent_events(
                 continue
             reader_promises.append({
                 "identity_id": event_id,
+                "semantic_class": "CANON_DERIVED_OBLIGATION",
+                "source_owner": "effective_accepted_canon_events",
+                **({"effective_history_digest": effective_history_digest} if effective_history_digest else {}),
                 "source_event_id": event_id,
                 "source_chapter": chapter,
                 "content": content,
@@ -196,3 +205,25 @@ def reconcile_intent_events(
         "reader_promises": reader_promises,
         "diagnostics": diagnostics,
     }
+
+
+def reconcile_effective_history(snapshot: Any) -> dict[str, list[dict[str, Any]]]:
+    """Derive obligations from the snapshot's effective accepted event sequence.
+
+    Rejected/tombstoned base commits are excluded before reconciliation. The
+    snapshot digest is copied as lineage provenance, so a corrected effective
+    set deterministically yields a new projection identity.
+    """
+    digest = str(getattr(snapshot, "effective_history_digest", "") or "")
+    events: list[dict[str, Any]] = []
+    chapters = getattr(snapshot, "chapters", {})
+    for chapter, entry in sorted(chapters.items()):
+        if getattr(entry, "status", None) != "accepted":
+            continue
+        extraction = getattr(entry, "extraction_result", None) or {}
+        source_events = extraction.get("accepted_events", []) if isinstance(extraction, dict) else []
+        for source_event in source_events if isinstance(source_events, list) else []:
+            if not isinstance(source_event, dict):
+                continue
+            events.append({**source_event, "chapter": source_event.get("chapter") or int(chapter)})
+    return reconcile_intent_events(events, effective_history_digest=digest or None)

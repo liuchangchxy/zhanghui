@@ -226,6 +226,37 @@ def validate_inventory(inventory, repository_root):
     """Validate required contracts without importing plugin runtime modules."""
     _require(inventory.get("schema_version") == 1, "schema_version must be 1")
     _require(len(inventory.get("baseline", "")) >= 7, "baseline is required")
+    semantic_rows = inventory.get("semantic_ownership")
+    _require(isinstance(semantic_rows, list) and semantic_rows,
+             "semantic_ownership must be a non-empty list")
+    semantic_ids = set()
+    semantic_classes = {"CANON", "CANON_DERIVED_OBLIGATION", "INTENT", "CRAFT",
+                        "WORKFLOW", "PROJECT_CONFIG", "DERIVED_REFERENCE", "REFERENCE", "UNKNOWN"}
+    source_relations = {"AUTHORITATIVE_SOURCE", "SCOPED_AUTHORED_OVERRIDE", "DERIVED_RUNTIME_COPY"}
+    semantic_fields = ("field_path", "semantic_class", "current_writers", "target_writer",
+                       "storage", "readers", "compatibility_status", "replacement",
+                       "retirement_criterion", "evidence")
+    for row in semantic_rows:
+        identity = row.get("ownership_id")
+        _require(identity and identity not in semantic_ids, f"duplicate or missing ownership_id: {identity}")
+        semantic_ids.add(identity)
+        for field in semantic_fields:
+            _require(row.get(field), f"{identity}: {field} required")
+        _require(row.get("semantic_class") in semantic_classes,
+                 f"{identity}: semantic_class invalid")
+        relation = row.get("source_relationship")
+        _require(relation is None or relation in source_relations,
+                 f"{identity}: source_relationship invalid")
+        for coordinate in [*row.get("current_writers", []), *row.get("readers", [])]:
+            source = repository_root / coordinate.get("path", "")
+            _require(source.is_file(), f"{identity}: field coordinate missing: {source}")
+            _require(coordinate.get("symbol") and coordinate["symbol"] in source.read_text(encoding="utf-8", errors="replace"),
+                     f"{identity}: field coordinate symbol unresolved: {coordinate.get('symbol')}")
+        for evidence in row.get("evidence", []):
+            source = repository_root / evidence.get("path", "")
+            _require(source.is_file(), f"{identity}: evidence path missing: {source}")
+            _require(evidence.get("anchor") and evidence["anchor"] in source.read_text(encoding="utf-8", errors="replace"),
+                     f"{identity}: evidence anchor missing")
     writer_coordinate_owners = {}
     writer_implementation_contracts = {}
     for family, id_key in (("writers", "writer_id"), ("readers", "reader_id"),

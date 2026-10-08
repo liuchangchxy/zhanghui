@@ -221,10 +221,7 @@ def add_thematic_echo(state: dict, premise: str, chapter: int, manifestation: st
     echoes = state["story_craft"]["thematic_echoes"]
     for item in echoes:
         if item["premise"] == premise:
-            item["echoes"].append({
-                "chapter": chapter,
-                "manifestation": manifestation
-            })
+            item["echoes"].append({"chapter": chapter, "manifestation": manifestation})
             return state
     echoes.append({
         "id": _next_thematic_echo_id(echoes),
@@ -257,6 +254,126 @@ ALLOWED_CHAPTER_META_FIELDS = {
     "strand", "coolpoint",
     "time_anchor", "villain_tier",
 }
+
+# R1 semantic ownership is an exact field map. Unknown children do not inherit
+# the parent container's class and are returned untouched for diagnostics.
+_CRAFT_META_FIELDS = frozenset({
+    "beat_position", "hook_type", "scene_goal", "scene_conflict",
+    "scene_setback", "scene_resolution", "sequel_reaction", "sequel_dilemma",
+    "sequel_decision", "quality_evaluation", "craft_evaluation",
+})
+_INTENT_META_FIELDS = frozenset({
+    "must_cover", "forbidden", "CBN", "CPNs", "CEN", "strand",
+    "coolpoint", "time_anchor", "villain_tier",
+})
+_DOCUMENT_META_FIELDS = frozenset({"title", "word_count", "summary"})
+
+
+def classify_story_craft_field(field_path: str, value: Any = None, *,
+                               accepted_evidence_linked: bool = False) -> str:
+    """Classify only exact R1 field paths; never infer from prose or root key."""
+    if not isinstance(field_path, str) or not field_path:
+        return "UNKNOWN"
+    parts = [part for part in field_path.split(".") if not part.isdigit()]
+    if parts[0] == "chapter_meta":
+        if len(parts) == 3 and parts[1].isdigit():
+            key = parts[2]
+        elif len(parts) == 2:
+            key = parts[1]
+        else:
+            return "UNKNOWN"
+        if key in _CRAFT_META_FIELDS:
+            return "CRAFT"
+        if key in _INTENT_META_FIELDS:
+            return "INTENT"
+        if key in _DOCUMENT_META_FIELDS:
+            return "DERIVED_REFERENCE"
+        if key in {"foreshadow_buried", "foreshadow_paid_off"}:
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        return "UNKNOWN"
+    if parts[0] != "story_craft" or len(parts) < 2:
+        return "UNKNOWN"
+    root, child = parts[1], parts[2] if len(parts) > 2 else None
+    if root.endswith("[]"):
+        root = root[:-2]
+    if child and child.endswith("[]"):
+        child = child[:-2]
+    if root == "reader_contract" and child == "endgame_reserves":
+        return "UNKNOWN"
+    if root in {"rhythm_curve", "volume_beat", "volume_beats", "reader_contract",
+                "volume_anchors", "event_matrix_state", "pacing_history"}:
+        # Container-level fields are classified exactly; nested traversal is
+        # performed by migration's shape validator.
+        if child is None:
+            return "CRAFT"
+        return "CRAFT" if child in {"version", "history", "rules", "anchors", "types",
+                                    "gentle_window", "max_consecutive_fast", "expectation_debt",
+                                    "causal_credits", "swap_debts",
+                                    "contract_fulfillment", "last_emotion_peak_chapter",
+                                    "chapters_since_peak", "warning_threshold", "block_threshold",
+                                    "volume", "total_chapters", "beats", "protagonist_actions_used_without_setup"} else "UNKNOWN"
+    if root == "foreshadow_chain":
+        if child in {"buried_quality", "payoff_quality", "quality_evaluation"}:
+            return "CRAFT"
+        if child == "expected_payoff_chapter":
+            return "INTENT"
+        if child in {"buried_chapter", "payoff_chapter"}:
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        if child in {"id", "type", "depth", "content", "payoff_method", "linked_entities", "status"}:
+            return "INTENT"
+        if child == "occurrence_ref":
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        return "UNKNOWN"
+    if root == "timed_locks":
+        if child in {"id", "description", "trigger_chapter", "deadline_chapter", "status"}:
+            return "INTENT"
+        if child == "fulfilled_chapter":
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        if child == "occurrence_ref":
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        return "UNKNOWN"
+    if root == "character_arc":
+        if child in {"name", "starting_state", "ending_state", "transformation", "key_moments",
+                     "desired_change", "milestones", "target"}:
+            return "INTENT"
+        if child in {"quality", "evaluation", "structural_quality"}:
+            return "CRAFT"
+        return "UNKNOWN"
+    if root == "thematic_echoes":
+        if child == "premise":
+            return "INTENT"
+        if child in {"quality", "evaluation", "echo_quality"}:
+            return "CRAFT"
+        if child in {"echoes", "chapter", "manifestation"}:
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        if child == "occurrence_ref":
+            return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
+        return "UNKNOWN"
+    return "UNKNOWN"
+
+
+def classify_mixed_metadata(value: Any, *, container: str,
+                            accepted_evidence_paths: set[str] | None = None) -> dict[str, Any]:
+    """Return field dispositions without mutating or discarding malformed data."""
+    if not isinstance(value, dict):
+        return {"fields": {}, "unknown": {"$value": value},
+                "diagnostics": [f"malformed_{container}"]}
+    evidence = accepted_evidence_paths or set()
+    fields: dict[str, str] = {}
+    unknown: dict[str, Any] = {}
+    for key, item in value.items():
+        path = f"{container}.{key}"
+        if container == "chapter_meta" and isinstance(item, dict):
+            unknown[path] = item
+            fields[path] = "UNKNOWN"
+            continue
+        owner = classify_story_craft_field(
+            path, item, accepted_evidence_linked=path in evidence)
+        fields[path] = owner
+        if owner == "UNKNOWN":
+            unknown[path] = item
+    return {"fields": fields, "unknown": unknown,
+            "diagnostics": [f"unknown_field:{path}" for path in sorted(unknown)]}
 
 
 def set_chapter_meta(state: dict, chapter: int, **fields) -> dict:

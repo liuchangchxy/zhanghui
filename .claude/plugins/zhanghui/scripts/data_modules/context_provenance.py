@@ -9,6 +9,7 @@ import json
 import re
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterable
 
 from .durable_projection import discover_validated_chapter_commits
@@ -17,8 +18,12 @@ from .durable_projection import discover_validated_chapter_commits
 SEMANTIC_ROLES = {"CANON", "INTENT", "CRAFT", "OPERATIONAL", "UNKNOWN"}
 SOURCE_ROLES = {
     "COMMIT", "PROJECTION", "CONTRACT", "OUTLINE", "USER", "LEGACY",
-    "RETRIEVAL", "REVIEW", "SUMMARY", "CONFIG",
+    "RETRIEVAL", "REVIEW", "SUMMARY", "CONFIG", "OWNER_STATE",
 }
+SOURCE_RELATIONSHIPS = {"AUTHORITATIVE_SOURCE", "SCOPED_AUTHORED_OVERRIDE",
+                        "DERIVED_RUNTIME_COPY", "REFERENCE"}
+SEMANTIC_CLASSES = {"CANON_FACT", "CANON_DERIVED_OBLIGATION", "PLANNER_INTENT",
+                    "CRAFT_RECOMMENDATION", "DERIVED_REFERENCE", "UNKNOWN"}
 
 
 @dataclass
@@ -31,6 +36,11 @@ class ContextItem:
     provenance_status: str = "unknown"
     evidence: list[str] = field(default_factory=list)
     fact_key: tuple[str, ...] | None = None
+    semantic_class: str | None = None
+    owner: str | None = None
+    source_relationship: str | None = None
+    source_identity: str | None = None
+    scope: str | None = None
 
     def __post_init__(self) -> None:
         self.semantic_role = self.semantic_role if self.semantic_role in SEMANTIC_ROLES else "UNKNOWN"
@@ -40,6 +50,23 @@ class ContextItem:
         self.evidence = list(dict.fromkeys(str(ref) for ref in refs if ref))
         if self.source_role == "COMMIT" and self.provenance_status == "unknown":
             self.provenance_status = "verified"
+        if self.semantic_class is None:
+            self.semantic_class = ("CANON_FACT" if self.semantic_role == "CANON" else
+                                   "PLANNER_INTENT" if self.semantic_role == "INTENT" else
+                                   "CRAFT_RECOMMENDATION" if self.semantic_role == "CRAFT" else
+                                   "UNKNOWN")
+        if self.semantic_class not in SEMANTIC_CLASSES:
+            self.semantic_class = "UNKNOWN"
+        if self.owner is None:
+            self.owner = self.source_role
+        if self.source_relationship is None:
+            self.source_relationship = "AUTHORITATIVE_SOURCE" if self.semantic_role in {"CANON", "INTENT"} else "DERIVED_RUNTIME_COPY" if self.source_role == "PROJECTION" else "REFERENCE"
+        if self.source_relationship not in SOURCE_RELATIONSHIPS:
+            self.source_relationship = "REFERENCE"
+        if self.source_identity is None:
+            self.source_identity = self.source_ref
+        if self.scope is None and self.chapter is not None:
+            self.scope = f"chapter:{self.chapter}"
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -52,6 +79,11 @@ def _describe(item: ContextItem) -> dict[str, Any]:
     return {
         "source_ref": item.source_ref,
         "source_role": item.source_role,
+        "owner": item.owner,
+        "semantic_class": item.semantic_class,
+        "source_relationship": item.source_relationship,
+        "source_identity": item.source_identity,
+        "scope": item.scope,
         "chapter": item.chapter,
         "content": item.content,
     }
@@ -169,6 +201,20 @@ def load_commit_fact_items(project_root: Path, chapter: int, owned_view=None) ->
         if latest_chapter is None or commit_chapter >= latest_chapter:
             latest_chapter, latest_hash = commit_chapter, digest
         extraction = payload["extraction_result"]
+        chapter_meta = extraction.get("chapter_meta")
+        if isinstance(chapter_meta, dict):
+            from story_craft import classify_story_craft_field
+            for field_name, value in chapter_meta.items():
+                role = classify_story_craft_field(f"chapter_meta.{field_name}")
+                semantic_role = role if role in {"INTENT", "CRAFT"} else "UNKNOWN"
+                items.append(ContextItem(
+                    content={"field": field_name, "value": value}, semantic_role=semantic_role,
+                    source_role="COMMIT", source_ref=ref, chapter=commit_chapter,
+                    provenance_status="commit_snapshot", evidence=["commit_chapter_meta"],
+                    semantic_class="PLANNER_INTENT" if role == "INTENT" else "CRAFT_RECOMMENDATION" if role == "CRAFT" else "UNKNOWN",
+                    source_relationship="DERIVED_RUNTIME_COPY", source_identity=ref,
+                    scope=f"chapter:{commit_chapter}",
+                ))
         for delta in extraction.get("entity_deltas", []) or []:
             if not isinstance(delta, dict):
                 continue
@@ -262,12 +308,79 @@ def _max_chapter(db_path: Path, table: str) -> int | None:
         return None
 
 
+def _effective_context_snapshot(project_root: Path, chapter: int, owned_view=None):
+    """Bind Context evidence to the same effective history as its pinned view."""
+    if owned_view is not None:
+        entries = {}
+        for row in owned_view.effective_commits_before(chapter):
+            payload = row.get("payload", {})
+            meta = payload.get("meta", {}) if isinstance(payload, dict) else {}
+            extraction = payload.get("extraction_result", {}) if isinstance(payload, dict) else {}
+            number = int(row["chapter"])
+            entries[number] = SimpleNamespace(
+                status=meta.get("status"), extraction_result=extraction,
+                effective_revision_id=payload.get("effective_revision_id"),
+                effective_content_sha256=payload.get("effective_content_sha256"),
+            )
+        return SimpleNamespace(
+            chapters=entries,
+            effective_history_digest=owned_view.pinned.manifest.get("effective_history_digest"),
+            generation_id=owned_view.pinned.generation_id,
+        )
+    from .effective_history import EffectiveHistoryStore
+
+    snapshot = EffectiveHistoryStore().read_active_snapshot(project_root)
+    if not snapshot.ok:
+        return SimpleNamespace(chapters={}, effective_history_digest=None, generation_id=None)
+    return SimpleNamespace(
+        chapters={number: entry for number, entry in snapshot.chapters.items() if number < chapter},
+        effective_history_digest=snapshot.effective_history_digest,
+        generation_id=snapshot.generation_id,
+    )
+
+
+def _effective_obligation_rows(snapshot, *, owned_view=None, before_chapter: int) -> list[dict[str, Any]]:
+    if owned_view is None:
+        from .intent_reconciliation import reconcile_effective_history
+
+        reconciled = reconcile_effective_history(snapshot)
+        return [row for name in ("open_loops", "reader_promises")
+                for row in reconciled.get(name, [])
+                if int(row.get("source_chapter") or 0) < before_chapter]
+
+    result = []
+    for memory_row in owned_view.memory.rows():
+        projection = memory_row.get("payload")
+        if not isinstance(projection, dict):
+            continue
+        obligations = projection.get("derived_obligations")
+        if not isinstance(obligations, dict):
+            continue
+        for name in ("open_loops", "reader_promises"):
+            rows = obligations.get(name)
+            for row in rows if isinstance(rows, list) else []:
+                if not isinstance(row, dict) or int(row.get("source_chapter") or 0) >= before_chapter:
+                    continue
+                visible = dict(row)
+                try:
+                    resolution_chapter = int(visible.get("resolved_chapter") or 0)
+                except (TypeError, ValueError):
+                    resolution_chapter = 0
+                if resolution_chapter >= before_chapter:
+                    visible["status"] = "active"
+                    visible.pop("resolution_event_id", None)
+                    visible.pop("resolved_chapter", None)
+                result.append(visible)
+    return result
+
+
 def build_governed_context(
     *, project_root: Path, chapter: int, state: dict[str, Any], source_sections: dict[str, Any],
     owned_view=None,
 ) -> dict[str, Any]:
     """Produce explicit Writer-facing roles and diagnostics without mutating sources."""
     commits, latest_chapter, latest_hash = load_commit_fact_items(project_root, chapter, owned_view)
+    effective_snapshot = _effective_context_snapshot(project_root, chapter, owned_view)
     try:
         state_chapter = int(((state.get("progress") or {}).get("current_chapter") or 0))
     except (TypeError, ValueError):
@@ -317,7 +430,13 @@ def build_governed_context(
     for key in ("outline", "story_contract"):
         value = source_sections.get(key)
         if value:
-            intent.append(ContextItem(value, "INTENT", "OUTLINE" if key == "outline" else "CONTRACT", key, chapter=chapter, provenance_status="authoritative"))
+            is_authored_source = key == "outline"
+            intent.append(ContextItem(value, "INTENT", "OUTLINE" if is_authored_source else "CONTRACT", key,
+                                      chapter=chapter, provenance_status="authoritative" if is_authored_source else "derived_copy",
+                                      semantic_class="PLANNER_INTENT",
+                                      source_relationship="AUTHORITATIVE_SOURCE" if is_authored_source else "DERIVED_RUNTIME_COPY",
+                                      source_identity=str(source_sections.get(f"{key}_source_identity") or ""),
+                                      owner="authored_outline" if is_authored_source else "runtime_contract"))
     for key in ("urgent_loops", "promise_intent"):
         value = source_sections.get(key)
         if value:
@@ -329,27 +448,150 @@ def build_governed_context(
             row.get("content"), "INTENT", str(row.get("source_role") or "CONTRACT"),
             str(row.get("source_ref") or "intent_fact"), chapter=row.get("chapter"),
             provenance_status="authoritative", fact_key=tuple(str(x) for x in row["fact_key"]),
+            source_relationship=str(row.get("source_relationship") or "AUTHORITATIVE_SOURCE"),
+            source_identity=str(row.get("source_identity") or row.get("source_ref") or "intent_fact"),
+            scope=str(row.get("scope") or (f"chapter:{row['chapter']}" if row.get("chapter") is not None else "project")),
         ))
     project_info = state.get("project_info") or {}
     promise_ledger = project_info.get("promise_ledger") if isinstance(project_info, dict) else None
-    if promise_ledger:
-        intent.append(ContextItem(promise_ledger, "INTENT", "PROJECTION", "state.project_info.promise_ledger", provenance_status="unverified_plan"))
+    if isinstance(promise_ledger, list):
+        for index, row in enumerate(promise_ledger):
+            if not isinstance(row, dict):
+                reference.append(ContextItem(row, "UNKNOWN", "OWNER_STATE", f"state.project_info.promise_ledger[{index}]", provenance_status="unverified"))
+                continue
+            promise_id = str(row.get("id") or f"row:{index}")
+            intent.append(ContextItem(row, "INTENT", "OWNER_STATE", f"state.project_info.promise_ledger[{index}]",
+                                      provenance_status="authoritative", fact_key=("planner_promise", promise_id),
+                                      semantic_class="PLANNER_INTENT", owner="promise_ledger",
+                                      source_relationship="AUTHORITATIVE_SOURCE", source_identity=promise_id,
+                                      scope=str(row.get("scope") or row.get("expected_payoff_volume") or "project")))
+    volume_rows = state.get("volumes")
+    if isinstance(volume_rows, list):
+        for index, row in enumerate(volume_rows):
+            if isinstance(row, dict):
+                volume_id = str(row.get("index") or f"row:{index}")
+                intent.append(ContextItem(row, "INTENT", "OWNER_STATE", f"state.volumes[{index}]",
+                                          provenance_status="authoritative", fact_key=("volume_plan", volume_id),
+                                          semantic_class="PLANNER_INTENT", owner="volumes",
+                                          source_relationship="AUTHORITATIVE_SOURCE", source_identity=volume_id,
+                                          scope=f"volume:{volume_id}"))
     story_craft = state.get("story_craft") or {}
-    if isinstance(story_craft, dict):
-        for key in ("timed_locks", "foreshadow_chain"):
-            if story_craft.get(key):
-                intent.append(ContextItem(story_craft[key], "INTENT", "PROJECTION", f"state.story_craft.{key}", provenance_status="unverified_plan"))
     craft: list[ContextItem] = []
+    reference: list[ContextItem] = []
+    for obligation in _effective_obligation_rows(effective_snapshot, owned_view=owned_view,
+                                                 before_chapter=chapter):
+        source_event_id = str(obligation.get("source_event_id") or obligation.get("identity_id") or "")
+        source_chapter = int(obligation.get("source_chapter") or 0)
+        evidence = [f"source_event:{source_event_id}", f"source_chapter:{source_chapter}"]
+        if obligation.get("effective_history_digest"):
+            evidence.append(f"effective_history:{obligation['effective_history_digest']}")
+        if effective_snapshot.generation_id:
+            evidence.append(f"generation:{effective_snapshot.generation_id}")
+        if obligation.get("resolution_event_id"):
+            evidence.extend([f"resolution_event:{obligation['resolution_event_id']}",
+                             f"resolution_chapter:{obligation.get('resolved_chapter')}"])
+        intent.append(ContextItem(
+            obligation, "INTENT", "COMMIT", f"effective-obligation:{source_event_id}",
+            chapter=source_chapter, provenance_status="effective_history_reconciled",
+            evidence=evidence,
+            fact_key=("canon_derived_obligation", str(obligation.get("source_kind") or ""), source_event_id),
+            semantic_class="CANON_DERIVED_OBLIGATION", owner="effective_accepted_canon_events",
+            source_relationship="DERIVED_RUNTIME_COPY", source_identity=source_event_id,
+            scope="story",
+        ))
+    for row in source_sections.get("craft_facts", []) or []:
+        if not isinstance(row, dict) or not row.get("fact_key"):
+            continue
+        craft.append(ContextItem(
+            row.get("content"), "CRAFT", str(row.get("source_role") or "REVIEW"),
+            str(row.get("source_ref") or "craft_recommendation"), chapter=row.get("chapter"),
+            provenance_status="advisory", fact_key=tuple(str(x) for x in row["fact_key"]),
+            semantic_class="CRAFT_RECOMMENDATION", source_relationship="DERIVED_RUNTIME_COPY",
+            source_identity=str(row.get("source_identity") or row.get("source_ref") or "craft_recommendation"),
+            scope=str(row.get("scope") or (f"chapter:{row['chapter']}" if row.get("chapter") is not None else "project")),
+        ))
     for key in ("writing_guidance", "genre_profile", "reader_signal", "preferences", "author_style_patterns", "style_contract", "genre_profile_excerpt"):
         value = source_sections.get(key)
         if value:
             role = "REVIEW" if key == "reader_signal" else "CONFIG"
             craft.append(ContextItem(value, "CRAFT", role, key, provenance_status="advisory"))
     if isinstance(story_craft, dict):
-        craft_fields = {key: value for key, value in story_craft.items() if key not in {"timed_locks", "foreshadow_chain"} and value}
-        if craft_fields:
-            craft.append(ContextItem(craft_fields, "CRAFT", "PROJECTION", "state.story_craft", provenance_status="advisory"))
-    reference: list[ContextItem] = []
+        from story_craft import classify_story_craft_field
+        from .story_craft_evidence import resolve_story_craft_occurrences
+
+        categorized: dict[str, list[dict[str, Any]]] = {"INTENT": [], "CRAFT": [], "UNKNOWN": [], "DERIVED_REFERENCE": []}
+        occurrence_evidence = resolve_story_craft_occurrences(story_craft, effective_snapshot)
+
+        def add_occurrence_item(path: str, value: Any, provenance: dict[str, Any]) -> None:
+            event_id = provenance["event_id"]
+            evidence = [f"event:{event_id}", f"chapter:{provenance['source_chapter']}"]
+            for name in ("effective_history_digest", "generation_id", "effective_revision_id",
+                         "effective_content_sha256"):
+                if provenance.get(name):
+                    evidence.append(f"{name}:{provenance[name]}")
+            reference.append(ContextItem(
+                {"path": path, "value": value, "occurrence": provenance},
+                "UNKNOWN", "COMMIT", f"accepted-event:{event_id}",
+                chapter=provenance["source_chapter"], provenance_status="effective_canon_evidence",
+                evidence=evidence, semantic_class="DERIVED_REFERENCE",
+                owner="effective_accepted_canon_events",
+                source_relationship="DERIVED_RUNTIME_COPY", source_identity=event_id,
+                scope=f"chapter:{provenance['source_chapter']}",
+            ))
+
+        def visit(value: Any, path: str) -> None:
+            if path in occurrence_evidence:
+                add_occurrence_item(path, value, occurrence_evidence[path])
+                return
+            if isinstance(value, dict):
+                if not value:
+                    categorized[classify_story_craft_field(path)].append({"path": path, "value": value})
+                for key, child in value.items():
+                    visit(child, f"{path}.{key}")
+            elif isinstance(value, list):
+                if not value:
+                    categorized[classify_story_craft_field(path)].append({"path": path, "value": value})
+                for index, child in enumerate(value):
+                    visit(child, f"{path}.{index}")
+            else:
+                role = classify_story_craft_field(path, value,
+                                                  accepted_evidence_linked=path in occurrence_evidence)
+                categorized[role if role in categorized else "UNKNOWN"].append({"path": path, "value": value})
+
+        for key, value in story_craft.items():
+            visit(value, f"story_craft.{key}")
+        for role, fields in categorized.items():
+            if not fields:
+                continue
+            item = ContextItem(fields, role if role in {"INTENT", "CRAFT"} else "UNKNOWN",
+                               "PROJECTION", f"state.story_craft.{role.lower()}",
+                               provenance_status="advisory" if role == "CRAFT" else "unverified_plan",
+                               semantic_class="PLANNER_INTENT" if role == "INTENT" else "CRAFT_RECOMMENDATION" if role == "CRAFT" else "UNKNOWN",
+                               owner="story_craft", source_relationship="AUTHORITATIVE_SOURCE" if role in {"INTENT", "CRAFT"} else "REFERENCE",
+                               source_identity=f"owner-overlay:story_craft:{role.lower()}")
+            (intent if role == "INTENT" else craft if role == "CRAFT" else reference).append(item)
+    chapter_meta = state.get("chapter_meta")
+    if isinstance(chapter_meta, dict):
+        from story_craft import classify_story_craft_field
+        for chapter_key, metadata in chapter_meta.items():
+            if not isinstance(metadata, dict):
+                continue
+            buckets: dict[str, dict[str, Any]] = {"INTENT": {}, "CRAFT": {}, "UNKNOWN": {}, "DERIVED_REFERENCE": {}}
+            for field_name, value in metadata.items():
+                role = classify_story_craft_field(f"chapter_meta.{chapter_key}.{field_name}")
+                buckets[role if role in buckets else "UNKNOWN"][field_name] = value
+            for role, values in buckets.items():
+                if values:
+                    try:
+                        chapter_number = int(chapter_key)
+                    except (TypeError, ValueError):
+                        chapter_number = None
+                    item = ContextItem(values, role if role in {"INTENT", "CRAFT"} else "UNKNOWN",
+                                       "PROJECTION", f"state.chapter_meta.{chapter_key}.{role.lower()}",
+                                       chapter=chapter_number,
+                                       semantic_class="PLANNER_INTENT" if role == "INTENT" else "CRAFT_RECOMMENDATION" if role == "CRAFT" else "UNKNOWN",
+                                       source_relationship="DERIVED_RUNTIME_COPY")
+                    (intent if role == "INTENT" else craft if role == "CRAFT" else reference).append(item)
     for key in ("recent_summaries", "story_skeleton", "memory", "scene", "rag_assist", "plot_structure", "fulfillment_result"):
         value = source_sections.get(key)
         if value:
@@ -447,6 +689,15 @@ def build_governed_context(
                             ))
                 if not represented_by_fact:
                     target.append(ContextItem(memory, role, source_role, f"{layer}:{source}:{index}", chapter=memory.get("chapter"), provenance_status="authoritative" if role == "INTENT" else "unverified"))
+    for item in commits:
+        if "commit_chapter_meta" in item.evidence:
+            if item.semantic_role == "INTENT":
+                intent.append(item)
+            elif item.semantic_role == "CRAFT":
+                craft.append(item)
+            else:
+                reference.append(item)
+            continue
     facts, projection_diagnostics = resolve_fact_items([*commits, *projections])
     diagnostics.extend(projection_diagnostics)
     canon_by_key = {tuple(item.fact_key): item for item in facts if item.semantic_role == "CANON" and item.fact_key}
@@ -458,8 +709,56 @@ def build_governed_context(
             if canon_item is not None and item.content != canon_item.content:
                 diagnostics.append({"type": "intent_canon_ambiguity", "fact_key": list(item.fact_key), "canon": _describe(canon_item), "intent": _describe(item)})
     for fact_key, rows in intents_by_key.items():
-        if len({repr(row.content) for row in rows}) > 1:
-            diagnostics.append({"type": "intent_conflict", "fact_key": list(fact_key), "sources": [_describe(row) for row in rows]})
+        scoped: dict[str, list[ContextItem]] = {}
+        for row in rows:
+            scoped.setdefault(row.scope or "project", []).append(row)
+        for exact_scope, scoped_rows in scoped.items():
+            sources = [row for row in scoped_rows if row.source_relationship in {"AUTHORITATIVE_SOURCE", "SCOPED_AUTHORED_OVERRIDE"}]
+            copies = [row for row in scoped_rows if row.source_relationship == "DERIVED_RUNTIME_COPY"]
+            source_ids = {row.source_identity for row in sources}
+            for copy in copies:
+                matching = [row for row in sources if row.source_identity == copy.source_identity]
+                if matching and any(row.content != copy.content for row in matching):
+                    diagnostics.append({"type": "stale_runtime_copy", "source_identity": copy.source_identity,
+                                        "copy_identity": copy.source_ref, "scope": exact_scope,
+                                        "source_value": matching[0].content, "copy_value": copy.content,
+                                        "source_ref": matching[0].source_ref, "copy_ref": copy.source_ref})
+            independent = [row for row in sources if row.semantic_class != "CANON_DERIVED_OBLIGATION"]
+            if len({repr(row.content) for row in independent}) > 1:
+                diagnostics.append({"type": "intent_conflict", "fact_key": list(fact_key),
+                                    "scope": exact_scope, "sources": [_describe(row) for row in independent]})
+            exact_craft = [row for row in craft if row.fact_key == fact_key and (row.scope or "project") == exact_scope]
+            for recommendation in exact_craft:
+                if any(source.content != recommendation.content for source in scoped_rows):
+                    diagnostics.append({"type": "craft_recommendation_differs_from_intent",
+                                        "fact_key": list(fact_key), "scope": exact_scope,
+                                        "intent": [_describe(row) for row in scoped_rows],
+                                        "craft_recommendation": _describe(recommendation),
+                                        "blocking": False})
+    for copy in intent:
+        if copy.source_relationship != "DERIVED_RUNTIME_COPY":
+            continue
+        exact_sources = [row for row in intent
+                         if row.source_relationship in {"AUTHORITATIVE_SOURCE", "SCOPED_AUTHORED_OVERRIDE"}
+                         and (row.scope or "project") == (copy.scope or "project")]
+        if copy.source_identity:
+            exact_matches = [row for row in exact_sources if row.source_identity == copy.source_identity]
+            for source in exact_matches:
+                # Root outline/contract sections have no fact_key, so compare only
+                # their explicit identity and exact scope. Never infer a link.
+                if source.fact_key or copy.fact_key:
+                    continue
+                if source.content != copy.content:
+                    diagnostics.append({"type": "stale_runtime_copy", "source_identity": copy.source_identity,
+                                        "copy_identity": copy.source_ref, "scope": copy.scope or "project",
+                                        "source_value": source.content, "copy_value": copy.content,
+                                        "source_ref": source.source_ref, "copy_ref": copy.source_ref})
+            continue
+        if exact_sources:
+            diagnostics.append({"type": "source_relationship_unresolved",
+                                "copy_ref": copy.source_ref, "scope": copy.scope,
+                                "candidate_sources": [_describe(row) for row in exact_sources],
+                                "requires": "exact semantic identity and source relationship; values were not merged"})
     for item in facts:
         if item.semantic_role == "UNKNOWN":
             reference.append(ContextItem(

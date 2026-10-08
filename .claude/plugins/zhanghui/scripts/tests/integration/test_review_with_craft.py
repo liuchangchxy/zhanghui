@@ -47,7 +47,7 @@ def test_run_craft_checks_flags_missing_hook():
         "scene_goal": "ok", "scene_conflict": "ok", "sequel_decision": "ok"
     }
     issues = run_craft_checks(state, chapter=1)
-    assert any("hook_type" in b for b in issues["blockers"])
+    assert any("hook_type" in b for b in issues["warnings"])
 
 
 def test_run_craft_checks_flags_overdue_timed_lock():
@@ -55,7 +55,7 @@ def test_run_craft_checks_flags_overdue_timed_lock():
     state = init_story_craft(str(_DUMMY_STATE))
     add_timed_lock(state, {"description": "test", "deadline_chapter": 3})
     issues = run_craft_checks(state, chapter=5)
-    assert any("定时锁逾期" in b for b in issues["blockers"])
+    assert any("定时锁逾期" in b for b in issues["warnings"])
 
 
 def test_run_craft_checks_flags_rhythm_block():
@@ -64,7 +64,7 @@ def test_run_craft_checks_flags_rhythm_block():
     state["story_craft"]["rhythm_curve"]["chapters_since_peak"] = 6
     state["story_craft"]["rhythm_curve"]["block_threshold"] = 5
     issues = run_craft_checks(state, chapter=10)
-    assert any("节奏曲线 BLOCK" in b for b in issues["blockers"])
+    assert any("节奏曲线 BLOCK" in b for b in issues["warnings"])
 
 
 def test_craft_findings_have_stable_structured_identity_and_never_block(tmp_path):

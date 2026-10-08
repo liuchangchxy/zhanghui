@@ -210,8 +210,17 @@ def test_promise_event_is_canon_while_payoff_target_is_intent(tmp_path):
         state={},
         source_sections={"promise_intent": {"promise_id": "p1", "payoff_chapter": 30}},
     )
-    assert bundle["canon"][0]["content"]["event_type"] == "promise_created"
-    assert bundle["intent"][0]["content"]["payoff_chapter"] == 30
+    event = next(row for row in bundle["canon"]
+                 if row["content"].get("event_type") == "promise_created")
+    assert event["semantic_role"] == "CANON"
+    derived = next(row for row in bundle["intent"] if row["semantic_class"] == "CANON_DERIVED_OBLIGATION")
+    assert derived["content"]["status"] == "active"
+    assert derived["content"]["source_event_id"] == "p1"
+    assert derived["source_identity"] == "p1"
+    assert derived["chapter"] == 3
+    plan = next(row for row in bundle["intent"] if row["semantic_class"] == "PLANNER_INTENT")
+    assert plan["content"]["payoff_chapter"] == 30
+    assert derived["source_relationship"] == "DERIVED_RUNTIME_COPY"
 
 
 def test_future_planned_death_does_not_become_a_canon_fact(tmp_path):
@@ -316,6 +325,224 @@ def test_conflicting_authoritative_intents_are_exposed_without_failing_canon(tmp
     )
     assert len(bundle["intent"]) == 2
     assert any(row["type"] == "intent_conflict" for row in bundle["diagnostics"])
+
+
+def test_stale_runtime_copy_is_diagnostic_not_authoritative_intent_conflict(tmp_path):
+    bundle = build_governed_context(
+        project_root=tmp_path, chapter=21, state={}, source_sections={"intent_facts": [
+            {"fact_key": ["A", "target"], "content": "death", "source_ref": "outline:vol1",
+             "source_identity": "outline:vol1", "source_relationship": "AUTHORITATIVE_SOURCE", "scope": "chapter:21"},
+            {"fact_key": ["A", "target"], "content": "survival", "source_ref": "brief:21",
+             "source_identity": "outline:vol1", "source_relationship": "DERIVED_RUNTIME_COPY", "scope": "chapter:21"},
+        ]})
+    assert any(row["type"] == "stale_runtime_copy" for row in bundle["diagnostics"])
+    assert not any(row["type"] == "intent_conflict" for row in bundle["diagnostics"])
+
+
+def test_context_splits_story_craft_and_chapter_meta_by_field(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=8, state={
+        "story_craft": {"foreshadow_chain": [{"id": "f1", "expected_payoff_chapter": 12,
+                                               "payoff_quality": "strong"}],
+                        "rhythm_curve": {"chapters_since_peak": 5}},
+        "chapter_meta": {"8": {"must_cover": ["promise"], "hook_type": "reveal", "future_flag": True}},
+    }, source_sections={})
+    assert any(row["semantic_class"] == "PLANNER_INTENT" and
+               any(field["path"].endswith("expected_payoff_chapter") for field in row["content"])
+               for row in bundle["intent"])
+    assert any(row["semantic_class"] == "CRAFT_RECOMMENDATION" and
+               any(field == "hook_type" for field in row["content"])
+               for row in bundle["craft"])
+    assert any(row["semantic_role"] == "UNKNOWN" and "future_flag" in row["content"]
+               for row in bundle["reference"])
+
+
+def test_planner_promise_and_volume_items_have_owner_and_stable_identity(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=8, state={
+        "project_info": {"promise_ledger": [{"id": "P7", "status": "pending"}]},
+        "volumes": [{"index": 2, "title": "second volume"}],
+    }, source_sections={})
+    promise = next(row for row in bundle["intent"] if row["source_identity"] == "P7")
+    volume = next(row for row in bundle["intent"] if row["owner"] == "volumes")
+    assert promise["semantic_class"] == "PLANNER_INTENT"
+    assert promise["source_relationship"] == "AUTHORITATIVE_SOURCE"
+    assert volume["scope"] == "volume:2"
+
+
+def test_commit_carried_mixed_chapter_meta_is_not_a_canon_container(tmp_path):
+    write_commit(tmp_path, 1, valid_commit(1, extraction={
+        "entity_deltas": [], "state_deltas": [], "accepted_events": [],
+        "chapter_meta": {"hook_type": "悬念式", "must_cover": ["target"], "title": "chapter title"},
+    }))
+    bundle = build_governed_context(project_root=tmp_path, chapter=2, state={}, source_sections={})
+    assert bundle["canon"] == []
+    assert any(row["content"].get("field") == "hook_type" for row in bundle["craft"])
+    plan = next(row for row in bundle["intent"] if row["content"].get("field") == "must_cover")
+    assert plan["source_relationship"] == "DERIVED_RUNTIME_COPY"
+    assert any(row["content"].get("field") == "title" for row in bundle["reference"])
+
+
+def test_craft_recommendation_difference_does_not_rewrite_intent(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=20, state={}, source_sections={
+        "intent_facts": [{"fact_key": ["promise:P1", "payoff_chapter"], "content": 20,
+                          "source_ref": "outline:vol1", "scope": "chapter:20"}],
+        "craft_facts": [{"fact_key": ["promise:P1", "payoff_chapter"], "content": 18,
+                         "source_ref": "rhythm-advisor", "scope": "chapter:20"}],
+    })
+    assert next(row for row in bundle["intent"] if row.get("fact_key"))["content"] == 20
+    assert next(row for row in bundle["craft"] if row.get("fact_key"))["content"] == 18
+    diagnostic = next(row for row in bundle["diagnostics"] if row["type"] == "craft_recommendation_differs_from_intent")
+    assert diagnostic["blocking"] is False
+
+
+def test_unlinked_outline_and_generated_contract_are_diagnosed_without_guessing(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=20, state={}, source_sections={
+        "outline": "chapter 20 authored outline", "story_contract": {"chapter": 20, "goal": "generated copy"},
+    })
+    assert len(bundle["intent"]) == 2
+    diagnostic = next(row for row in bundle["diagnostics"] if row["type"] == "source_relationship_unresolved")
+    assert diagnostic["copy_ref"] == "story_contract"
+    assert diagnostic["requires"].startswith("exact semantic identity")
+
+
+def test_exact_identity_and_scope_diagnose_stale_root_contract_copy(tmp_path):
+    bundle = build_governed_context(project_root=tmp_path, chapter=20, state={}, source_sections={
+        "outline": "authored outline", "outline_source_identity": "doc:chapter-20",
+        "story_contract": {"chapter": 20, "goal": "stale generated copy"},
+        "story_contract_source_identity": "doc:chapter-20",
+    })
+    diagnostic = next(row for row in bundle["diagnostics"] if row["type"] == "stale_runtime_copy")
+    assert diagnostic["source_identity"] == "doc:chapter-20"
+    assert diagnostic["scope"] == "chapter:20"
+    assert diagnostic["source_ref"] == "outline"
+    assert diagnostic["copy_ref"] == "story_contract"
+    assert len(bundle["intent"]) == 2
+    assert not any(row["type"] == "intent_conflict" for row in bundle["diagnostics"])
+
+
+def test_exact_identity_and_scope_accept_matching_root_contract_copy(tmp_path):
+    content = {"chapter": 20, "goal": "same content"}
+    bundle = build_governed_context(project_root=tmp_path, chapter=20, state={}, source_sections={
+        "outline": content, "outline_source_identity": "doc:chapter-20",
+        "story_contract": content, "story_contract_source_identity": "doc:chapter-20",
+    })
+    assert not any(row["type"] in {"stale_runtime_copy", "intent_conflict"} for row in bundle["diagnostics"])
+    assert len(bundle["intent"]) == 2
+
+
+def test_context_uses_reconciled_open_loop_and_reader_promise_lifecycle(tmp_path):
+    events = {
+        1: [
+            {"event_id": "L1", "chapter": 1, "event_type": "open_loop_created",
+             "subject": "loop", "payload": {"content": "loop question"}},
+            {"event_id": "P1", "chapter": 1, "event_type": "promise_created",
+             "subject": "promise", "payload": {"content": "promise"}},
+        ],
+        2: [
+            {"event_id": "L1-close", "chapter": 2, "event_type": "open_loop_closed",
+             "subject": "loop", "payload": {"loop_id": "L1"}},
+            {"event_id": "P1-paid", "chapter": 2, "event_type": "promise_paid_off",
+             "subject": "promise", "payload": {"promise_id": "P1"}},
+        ],
+    }
+    for chapter, accepted_events in events.items():
+        write_commit(tmp_path, chapter, valid_commit(chapter, extraction={
+            "entity_deltas": [], "state_deltas": [], "accepted_events": accepted_events,
+        }))
+    bundle = build_governed_context(project_root=tmp_path, chapter=3, state={
+        "project_info": {"promise_ledger": [{"id": "P1", "canon_event_ref": "P1", "status": "deferred"}]},
+    }, source_sections={})
+
+    derived = [row for row in bundle["intent"] if row["semantic_class"] == "CANON_DERIVED_OBLIGATION"]
+    assert len([row for row in derived if row.get("source_identity") == "L1"]) == 1
+    assert len([row for row in derived if row.get("source_identity") == "P1"]) == 1
+    loop = next(row["content"] for row in derived if row.get("source_identity") == "L1")
+    promise = next(row["content"] for row in derived if row.get("source_identity") == "P1")
+    assert (loop["source_event_id"], loop["source_chapter"], loop["status"],
+            loop["resolution_event_id"], loop["resolved_chapter"]) == ("L1", 1, "resolved", "L1-close", 2)
+    assert (promise["source_event_id"], promise["source_chapter"], promise["status"],
+            promise["resolution_event_id"], promise["resolved_chapter"]) == ("P1", 1, "paid_off", "P1-paid", 2)
+    loop_item = next(row for row in derived if row.get("source_identity") == "L1")
+    assert loop_item["source_relationship"] == "DERIVED_RUNTIME_COPY"
+    assert loop_item["owner"] == "effective_accepted_canon_events"
+    assert "source_event:L1" in loop_item["evidence"]
+    assert "resolution_event:L1-close" in loop_item["evidence"]
+    assert {row["content"]["event_type"] for row in bundle["canon"]
+            if row["content"].get("event_type")} >= {
+                "open_loop_created", "open_loop_closed", "promise_created", "promise_paid_off",
+            }
+    planner = [row for row in bundle["intent"] if row["semantic_class"] == "PLANNER_INTENT"]
+    assert len(planner) == 1
+    assert planner[0]["content"]["canon_event_ref"] == "P1"
+    assert not any(row.get("source_identity") in {"L1-close", "P1-paid"} for row in derived)
+    assert not any(row["content"].get("event_type") in {
+        "open_loop_created", "open_loop_closed", "promise_created", "promise_paid_off",
+    } for row in derived)
+
+
+@pytest.mark.parametrize(("claim_field", "story_key", "story_item"), [
+    ("buried_chapter", "foreshadow_chain", {"id": "FS1", "type": "物谶", "depth": "表层"}),
+    ("payoff_chapter", "foreshadow_chain", {"id": "FS1", "type": "物谶", "depth": "表层"}),
+    ("fulfilled_chapter", "timed_locks", {"id": "TL1", "description": "deadline", "deadline_chapter": 8}),
+])
+def test_context_occurrence_is_reference_only_when_exact_event_is_accepted(tmp_path, claim_field, story_key, story_item):
+    write_commit(tmp_path, 1, valid_commit(1, extraction={
+        "entity_deltas": [], "state_deltas": [], "accepted_events": [{
+            "event_id": "E1", "chapter": 1, "event_type": "open_loop_created",
+            "subject": "TEST", "payload": {"content": "TEST"},
+        }],
+    }))
+    story_item = {**story_item, claim_field: 1, "occurrence_ref": {"event_id": "E1"}}
+    bundle = build_governed_context(project_root=tmp_path, chapter=2,
+                                   state={"story_craft": {story_key: [story_item]}}, source_sections={})
+
+    linked = [row for row in bundle["reference"] if row["semantic_class"] == "DERIVED_REFERENCE"
+              and row.get("source_identity") == "E1"
+              and row["content"].get("path", "").endswith(claim_field)]
+    assert len(linked) == 1
+    assert linked[0]["semantic_role"] == "UNKNOWN"
+    assert linked[0]["content"]["value"] == 1
+    assert linked[0]["content"]["occurrence"]["event_id"] == "E1"
+    assert linked[0]["content"]["occurrence"]["source_chapter"] == 1
+    assert all(row["semantic_role"] != "CANON" for row in linked)
+
+
+@pytest.mark.parametrize("event_mutation", [
+    "invalid_schema", "chapter_mismatch", "duplicate_id", "claim_mismatch",
+    "multiple_claims", "missing_ref",
+])
+def test_context_does_not_trust_invalid_story_craft_occurrence_event(tmp_path, event_mutation):
+    event = {"event_id": "E1", "chapter": 1, "event_type": "open_loop_created",
+             "subject": "TEST", "payload": {"content": "TEST"}}
+    if event_mutation == "invalid_schema":
+        event.pop("subject")
+    elif event_mutation == "chapter_mismatch":
+        event["chapter"] = 9
+    write_commit(tmp_path, 1, valid_commit(1, extraction={
+        "entity_deltas": [], "state_deltas": [], "accepted_events": [event],
+    }))
+    if event_mutation == "duplicate_id":
+        write_commit(tmp_path, 2, valid_commit(2, extraction={
+            "entity_deltas": [], "state_deltas": [], "accepted_events": [{
+                "event_id": "E1", "chapter": 2, "event_type": "open_loop_created",
+                "subject": "TEST", "payload": {"content": "duplicate"},
+            }],
+        }))
+    item = {"id": "FS1", "type": "物谶", "depth": "表层", "buried_chapter": 1}
+    if event_mutation == "claim_mismatch":
+        item["buried_chapter"] = 9
+    elif event_mutation == "multiple_claims":
+        item["payoff_chapter"] = 1
+    if event_mutation != "missing_ref":
+        item["occurrence_ref"] = {"event_id": "E1"}
+    bundle = build_governed_context(project_root=tmp_path, chapter=3, state={
+        "story_craft": {"foreshadow_chain": [item]},
+    }, source_sections={})
+    assert not any(row["semantic_class"] == "DERIVED_REFERENCE" and row.get("source_identity") == "E1"
+                   for row in bundle["reference"])
+    assert any(row["semantic_role"] == "UNKNOWN" and isinstance(row["content"], list)
+               and any(field.get("path", "").endswith("buried_chapter")
+                       for field in row["content"])
+               for row in bundle["reference"])
 
 
 def test_relationship_commit_suppresses_conflicting_legacy_row():

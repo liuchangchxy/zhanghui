@@ -130,6 +130,71 @@ def test_candidate_corruption_does_not_poison_healthy_active_report(tmp_path):
     assert report.active_status == "valid"
     assert report.active["semantic_activation_id"].startswith("semantic-")
     assert report.candidates[0]["status"] == "blocked"
+    compatibility = report.active["owner_path_compatibility"]
+    assert compatibility["effective_authority"] == "OwnedProjectView/state-overlay.json"
+    assert compatibility["repeat_enrollment_supported"] is False
+    assert compatibility["writer_retirement"]["ready"] is False
+
+
+def test_chapter_meta_exact_owner_fields_map_to_overlay_paths(tmp_path):
+    _root_with_base(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"chapter_meta": {"8": {
+        "hook_type": "悬念式", "must_cover": ["goal"], "title": "display only"
+    }}}), encoding="utf-8")
+    report = preflight_project(tmp_path)
+    dispositions = report.owner_mappings["state"]["field_dispositions"]
+    assert dispositions["chapter_meta.8.hook_type"]["destination"] == "owner_overlay.chapter_meta.8.hook_type"
+    assert dispositions["chapter_meta.8.must_cover"]["destination"] == "owner_overlay.chapter_meta.8.must_cover"
+    assert dispositions["chapter_meta.8.title"]["destination"] == "legacy_preserved_source"
+
+
+def test_migration_copies_only_classified_chapter_meta_owner_fields(tmp_path):
+    from data_modules.project_migration import migrate_project
+    from data_modules.owned_project_view import OwnedProjectView
+
+    commit_path = _root_with_base(tmp_path)
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["chapter_meta"] = {}
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    state_path = tmp_path / ".webnovel/state.json"
+    legacy_state = {"chapter_meta": {"8": {
+        "hook_type": "悬念式", "must_cover": ["A"], "title": "第八章",
+    }}}
+    legacy_bytes = json.dumps(legacy_state, ensure_ascii=False).encode("utf-8") + b"\n"
+    state_path.write_bytes(legacy_bytes)
+
+    report = preflight_project(tmp_path)
+    paths_reported_copied = [path for path, row in report.owner_mappings["state"]["field_dispositions"].items()
+                              if path.startswith("chapter_meta.") and row["copied"]]
+    assert paths_reported_copied == ["chapter_meta.8.hook_type", "chapter_meta.8.must_cover"]
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+
+    overlay = json.loads((tmp_path / ".webnovel/state-overlay.json").read_text(encoding="utf-8"))
+    assert overlay["values"]["chapter_meta.8.hook_type"] == "悬念式"
+    assert overlay["values"]["chapter_meta.8.must_cover"] == ["A"]
+    assert "chapter_meta.8.title" not in overlay["values"]
+    assert state_path.read_bytes() == legacy_bytes
+    effective = OwnedProjectView.pin_active(tmp_path).state_view()["chapter_meta"]["8"]
+    assert effective["hook_type"] == "悬念式"
+    assert effective["must_cover"] == ["A"]
+    assert "title" not in effective
+
+
+def test_migration_preflight_blocks_non_numeric_chapter_meta_owner_paths(tmp_path):
+    _root_with_base(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"chapter_meta": {"bad": {"hook_type": "悬念式"}}}),
+                          encoding="utf-8")
+
+    report = preflight_project(tmp_path)
+
+    assert not report.ok
+    assert any(row["kind"] == "malformed_chapter_meta_chapter" for row in report.conflicts)
+    dispositions = report.owner_mappings["state"]["field_dispositions"]
+    assert dispositions["chapter_meta.bad.hook_type"]["copied"] is False
 
 
 def test_pending_and_rejected_candidates_do_not_change_active_status(tmp_path):
@@ -435,7 +500,7 @@ def test_migration_moves_known_owner_state_to_overlay_without_rewriting_legacy_s
 
     _root_with_base(tmp_path)
     state_path = tmp_path / ".webnovel/state.json"
-    original = {"story_craft": {"voice": "warm"},
+    original = {"story_craft": _valid_story_craft(),
                 "progress": {"current_volume": 4, "current_chapter": 1,
                              "volumes_completed": [1, 2], "last_updated": "2026-10-07"}}
     state_path.write_text(json.dumps(original), encoding="utf-8")
@@ -444,7 +509,7 @@ def test_migration_moves_known_owner_state_to_overlay_without_rewriting_legacy_s
     backup = create_verified_backup(tmp_path, plan)
     result = migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
     overlay = json.loads((tmp_path / ".webnovel/state-overlay.json").read_text(encoding="utf-8"))
-    assert overlay["values"]["story_craft"] == {"voice": "warm"}
+    assert overlay["values"]["story_craft"] == _valid_story_craft()
     assert overlay["values"]["progress.current_volume"] == 4
     assert overlay["values"]["progress.volumes_completed"] == [1, 2]
     assert overlay["values"]["progress.last_updated"] == "2026-10-07"
@@ -624,16 +689,444 @@ def test_owner_overlay_collision_blocks_without_promoting_craft_or_enrolling(tmp
 
     _root_with_base(tmp_path)
     state_path = tmp_path / ".webnovel/state.json"
-    state_path.write_text(json.dumps({"story_craft": {"tone": "legacy"}}), encoding="utf-8")
+    state_path.write_text(json.dumps({"story_craft": _valid_story_craft()}), encoding="utf-8")
     overlay_path = tmp_path / ".webnovel/state-overlay.json"
+    conflicting_craft = _valid_story_craft()
+    conflicting_craft["rhythm_curve"]["warning_threshold"] = 4
     original_overlay = {"schema_version": "owner-state-overlay/v1", "revision": 3,
-                        "values": {"story_craft": {"tone": "newer-owner-value"}}}
+                        "values": {"story_craft": conflicting_craft}}
     overlay_path.write_text(json.dumps(original_overlay), encoding="utf-8")
     report = preflight_project(tmp_path)
     plan = dry_run_migration(tmp_path, report.report_digest)
     backup = create_verified_backup(tmp_path, plan)
     with pytest.raises(MigrationError, match="OWNER_OVERLAY_CONFLICT:story_craft"):
         migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
-    assert json.loads(state_path.read_text(encoding="utf-8"))["story_craft"]["tone"] == "legacy"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["story_craft"] == _valid_story_craft()
     assert json.loads(overlay_path.read_text(encoding="utf-8")) == original_overlay
     assert not (tmp_path / ".story-system/effective-history/enrollment.json").exists()
+
+
+def test_promise_ledger_migration_is_planner_intent_and_malformed_rows_conflict(tmp_path):
+    from data_modules.project_migration import _owner_inventory
+
+    state = {"project_info": {"promise_ledger": [
+        {"id": "p-1", "type": "promise", "depth": 1, "planted_chapter": 1,
+         "planted_volume": 1, "expected_payoff_chapter": 10,
+         "expected_payoff_volume": 2, "status": "pending", "canon_event_ref": "evt-7"},
+        {"id": "unknown-old-row", "custom": "preserve"},
+    ]}}
+    (tmp_path / ".webnovel").mkdir(exist_ok=True)
+    path = tmp_path / ".webnovel/state.json"
+    original = json.dumps(state)
+    path.write_text(original, encoding="utf-8")
+    mappings, conflicts = _owner_inventory(tmp_path)
+    assert mappings["state"]["field_classifications"]["project_info.promise_ledger"] == "OWNER_INTENT"
+    assert any(row["kind"] == "malformed_planner_promise_entry" for row in conflicts)
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_chapter_meta_migration_splits_fields_and_preserves_unknown_occurrence(tmp_path):
+    from data_modules.project_migration import _owner_inventory
+
+    state = {"chapter_meta": {"1": {"hook_type": "悬念式", "beat_position": "midpoint",
+                                     "must_cover": ["plan-node"],
+                                     "foreshadow_paid_off": ["FS-01"],
+                                     "title": "开篇", "custom": {"note": "keep"}}}}
+    (tmp_path / ".webnovel").mkdir(exist_ok=True)
+    path = tmp_path / ".webnovel/state.json"
+    source = json.dumps(state, ensure_ascii=False)
+    path.write_text(source, encoding="utf-8")
+    mappings, conflicts = _owner_inventory(tmp_path)
+    classes = mappings["state"]["field_classifications"]
+    assert classes["chapter_meta.1.hook_type"] == "CRAFT"
+    assert classes["chapter_meta.1.beat_position"] == "CRAFT"
+    assert classes["chapter_meta.1.must_cover"] == "INTENT"
+    assert classes["chapter_meta.1.foreshadow_paid_off"] == "UNKNOWN"
+    assert classes["chapter_meta.1.title"] == "DERIVED_REFERENCE"
+    assert classes["chapter_meta.1.custom"] == "UNKNOWN"
+    assert any(row["kind"] == "unknown_chapter_meta_field" for row in conflicts)
+    assert path.read_text(encoding="utf-8") == source
+
+
+def _valid_promise_row(**overrides):
+    return {"id": "p1", "type": "promise", "depth": 1, "planted_chapter": 1,
+            "planted_volume": 1, "expected_payoff_chapter": 10,
+            "expected_payoff_volume": 2, "status": "pending", **overrides}
+
+
+@pytest.mark.parametrize("row", [
+    _valid_promise_row(),
+    _valid_promise_row(created_at="2026-01-01", updated_at="2026-01-01",
+                       notes="old row", audit_log=[]),
+    _valid_promise_row(canon_event_ref="evt-opaque"),
+])
+def test_promise_ledger_known_and_legacy_optional_schema_is_accepted(tmp_path, row):
+    _root_with_base(tmp_path)
+    state = {"project_info": {"promise_ledger": [row]}}
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps(state, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is True
+    assert not any("promise_ledger" in conflict.get("path", "") for conflict in report.conflicts)
+    assert path.read_bytes() == raw
+
+
+def test_promise_unknown_field_blocks_preflight_and_migration_without_rewriting_source(tmp_path):
+    _root_with_base(tmp_path)
+    row = _valid_promise_row(mystery_future_semantics=True)
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"project_info": {"promise_ledger": [row]}}, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    expected = ".webnovel/state.json:project_info.promise_ledger[0].mystery_future_semantics"
+    assert report.ok is False
+    assert expected in {conflict.get("path") for conflict in report.conflicts}
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    with pytest.raises(MigrationError, match="MIGRATION_CONFLICTS_UNRESOLVED"):
+        from data_modules.project_migration import migrate_project
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, None)
+    assert path.read_bytes() == raw
+    assert not (tmp_path / ".webnovel/state-overlay.json").exists()
+
+
+@pytest.mark.parametrize("field,value", [
+    ("status", "resolved"), ("type", "mystery"), ("depth", "deep"),
+    ("expected_payoff_chapter", -2), ("audit_log", {"action": "payoff"}),
+    ("canon_event_ref", {"event_id": "evt-1"}),
+])
+def test_promise_ledger_invalid_known_field_shape_or_enum_conflicts(tmp_path, field, value):
+    _root_with_base(tmp_path)
+    row = _valid_promise_row(**{field: value})
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"project_info": {"promise_ledger": [row]}}, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is False
+    assert any(conflict.get("kind") == "invalid_planner_promise_field"
+               and conflict.get("path", "").endswith(f"promise_ledger[0].{field}")
+               for conflict in report.conflicts)
+    assert path.read_bytes() == raw
+
+
+def _valid_story_craft():
+    return {
+        "rhythm_curve": {"last_emotion_peak_chapter": 0, "chapters_since_peak": 0,
+                          "warning_threshold": 3, "block_threshold": 5, "history": []},
+        "foreshadow_chain": [], "timed_locks": [], "thematic_echoes": [],
+        "character_arc": None, "volume_beat": None, "volume_beats": {},
+        "reader_contract": {"version": 1, "expectation_debt": [],
+                            "causal_credits": {"protagonist_actions_used_without_setup": []},
+                            "endgame_reserves": [], "swap_debts": [], "contract_fulfillment": []},
+        "volume_anchors": {"version": 1, "anchors": []},
+        "event_matrix_state": {"version": 1, "types": {}, "history": [],
+                               "gentle_window": 5, "max_consecutive_fast": 2},
+        "pacing_history": {"version": 1, "history": [],
+                           "rules": {"max_consecutive_fast": 1, "slow_per_4_chapters_min": 1}},
+    }
+
+
+def test_story_craft_known_exact_containers_allow_existing_whole_root_overlay_copy(tmp_path):
+    _root_with_base(tmp_path)
+    path = tmp_path / ".webnovel/state.json"
+    value = {"story_craft": _valid_story_craft()}
+    raw = json.dumps(value, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is True
+    classes = report.owner_mappings["state"]["field_classifications"]
+    assert classes["story_craft.rhythm_curve.history"] == "CRAFT"
+    assert "story_craft.foreshadow_chain" not in classes
+    assert classes["story_craft.reader_contract.expectation_debt"] == "CRAFT"
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    backup = create_verified_backup(tmp_path, plan)
+    from data_modules.project_migration import migrate_project
+    migrate_project(tmp_path, report.report_digest, plan.plan_digest, backup)
+    overlay = json.loads((tmp_path / ".webnovel/state-overlay.json").read_text())
+    assert overlay["values"]["story_craft"] == value["story_craft"]
+    assert path.read_bytes() == raw
+
+
+def test_story_craft_unknown_nested_field_blocks_root_copy_and_preserves_source(tmp_path):
+    _root_with_base(tmp_path)
+    value = {"story_craft": _valid_story_craft()}
+    value["story_craft"]["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶",
+                                                  "depth": "表层", "mystery_field": 123}]
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps(value, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    expected = ".webnovel/state.json:story_craft.foreshadow_chain[0].mystery_field"
+    assert report.ok is False
+    assert expected in {conflict.get("path") for conflict in report.conflicts}
+    plan = dry_run_migration(tmp_path, report.report_digest)
+    from data_modules.project_migration import migrate_project
+    with pytest.raises(MigrationError, match="MIGRATION_CONFLICTS_UNRESOLVED"):
+        migrate_project(tmp_path, report.report_digest, plan.plan_digest, None)
+    assert path.read_bytes() == raw
+    assert not (tmp_path / ".webnovel/state-overlay.json").exists()
+
+
+@pytest.mark.parametrize("change,expected_kind", [
+    (lambda root: root.update(foreshadow_chain="not-a-list"), "malformed_story_craft_container"),
+    (lambda root: root.update(rhythm_curve=[]), "malformed_story_craft_container"),
+    (lambda root: root.update(thematic_echoes={"premise": "x"}), "malformed_story_craft_container"),
+    (lambda root: root.update(voice="warm"), "unknown_story_craft_field"),
+])
+def test_story_craft_malformed_or_unmapped_shape_is_preserved_as_conflict(tmp_path, change, expected_kind):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    change(story)
+    path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is False
+    assert any(conflict.get("kind") == expected_kind for conflict in report.conflicts)
+    assert path.read_bytes() == raw
+
+
+@pytest.mark.parametrize("change,path", [
+    (lambda root: root["rhythm_curve"].update(history="not-a-list"), "rhythm_curve.history"),
+    (lambda root: root["rhythm_curve"].update(warning_threshold={}), "rhythm_curve.warning_threshold"),
+])
+def test_story_craft_known_leaf_with_malformed_value_blocks_whole_root_copy(tmp_path, change, path):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    change(story)
+    state_path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert report.ok is False
+    assert any(item.get("kind") == "malformed_story_craft_field"
+               and item.get("path", "").endswith(path) for item in report.conflicts)
+    assert state_path.read_bytes() == raw
+
+
+def test_story_craft_occurrence_reference_rejects_unmapped_descendant(tmp_path):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "occurrence_ref": {"event_id": "accepted-id", "claim": "unmapped"}}]
+    state_path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert any("foreshadow_chain[0].occurrence_ref" in c.get("path", "") for c in report.conflicts)
+    assert state_path.read_bytes() == raw
+
+
+def test_story_craft_empty_mixed_item_is_malformed_and_blocks_copy(tmp_path):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{}]
+    state_path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert any(c.get("kind") == "malformed_story_craft_container" for c in report.conflicts)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda s: s["reader_contract"]["causal_credits"].update(protagonist_actions_used_without_setup="bad"),
+    lambda s: s["volume_anchors"]["anchors"].append({"future_field": 1}),
+    lambda s: s["event_matrix_state"]["history"].append({"unknown": 1}),
+    lambda s: s["pacing_history"]["rules"].update(unmapped=1),
+    lambda s: s["volume_beats"].update({"2": {}}),
+    lambda s: s["reader_contract"]["expectation_debt"].append({}),
+    lambda s: s["reader_contract"]["contract_fulfillment"].append({"promise_id": [], "status": "broken"}),
+    lambda s: s.update(volume_beat={"volume": 1, "total_chapters": 15, "beats": [{}]}),
+])
+def test_story_craft_malformed_nested_descendants_block_copy(tmp_path, mutate):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    mutate(story)
+    state_path = tmp_path / ".webnovel/state.json"
+    raw = json.dumps({"story_craft": story}, ensure_ascii=False).encode("utf-8")
+    state_path.write_bytes(raw)
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert state_path.read_bytes() == raw
+
+
+def test_story_craft_production_volume_beat_initializer_shape_is_accepted(tmp_path):
+    _root_with_base(tmp_path)
+    story = _valid_story_craft()
+    story["volume_beat"] = {"volume": 1, "total_chapters": 80, "beats": [
+        {"name": "Inciting Incident", "chapter": 8, "filled": False, "notes": None}]}
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    report = preflight_project(tmp_path)
+    assert report.ok
+
+
+def _production_story_craft_fixture(tmp_path):
+    from story_craft import init_story_craft
+    _root_with_base(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text("{}", encoding="utf-8")
+    state = init_story_craft(state_path)
+    return state_path, state
+
+
+def test_production_story_craft_add_functions_null_placeholders_are_migration_safe(tmp_path):
+    from story_craft import add_foreshadow, add_timed_lock
+    state_path, state = _production_story_craft_fixture(tmp_path)
+    add_foreshadow(state, {"id": "FS-1", "type": "物谶", "depth": "表层"})
+    add_timed_lock(state, {"id": "TL-1", "description": "约定", "deadline_chapter": 8})
+    state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    assert preflight_project(tmp_path).ok
+
+
+@pytest.mark.parametrize("mutation,conflict_field", [
+    ("payoff", "payoff_chapter"),
+    ("fulfill", "fulfilled_chapter"),
+])
+def test_production_nonnull_occurrence_claim_without_canon_evidence_conflicts(tmp_path, mutation, conflict_field):
+    from story_craft import add_foreshadow, add_timed_lock, fulfill_timed_lock, payoff_foreshadow
+    state_path, state = _production_story_craft_fixture(tmp_path)
+    add_foreshadow(state, {"id": "FS-1", "type": "物谶", "depth": "表层"})
+    add_timed_lock(state, {"id": "TL-1", "description": "约定", "deadline_chapter": 8})
+    if mutation == "payoff": payoff_foreshadow(state, "FS-1", 3, "strong")
+    else: fulfill_timed_lock(state, "TL-1", 4)
+    state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    raw = state_path.read_bytes()
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert any(conflict_field in item.get("path", "") for item in report.conflicts)
+    assert state_path.read_bytes() == raw
+
+
+def test_exact_accepted_occurrence_ref_trusts_sibling_buried_chapter_claim(tmp_path):
+    _root_with_base(tmp_path)
+    commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["accepted_events"] = [
+        {"event_id": "CANON-BURY-1", "chapter": 1, "event_type": "open_loop_created",
+         "subject": "TEST ONLY foreshadow", "payload": {"content": "TEST ONLY"}}
+    ]
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "buried_chapter": 1,
+                                 "occurrence_ref": {"event_id": "CANON-BURY-1"}}]
+    (tmp_path / ".webnovel/state.json").write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    report = preflight_project(tmp_path)
+    assert report.ok
+    classes = report.owner_mappings["state"]["field_classifications"]
+    assert classes["story_craft.foreshadow_chain.0.buried_chapter"] == "DERIVED_REFERENCE"
+
+
+@pytest.mark.parametrize("event", [
+    {"event_id": "CANON-EVENT", "chapter": 1, "event_type": "foreshadow_buried",
+     "subject": "TEST ONLY", "payload": {}},
+    {"event_id": "CANON-EVENT", "chapter": 1, "event_type": "open_loop_created",
+     "payload": {"content": "TEST ONLY"}},
+    {"event_id": "CANON-EVENT", "event_type": "open_loop_created",
+     "subject": "TEST ONLY", "payload": {}},
+])
+def test_invalid_story_event_cannot_authorize_occurrence_claim(tmp_path, event):
+    _root_with_base(tmp_path)
+    commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["accepted_events"] = [event]
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "buried_chapter": 1,
+                                 "occurrence_ref": {"event_id": "CANON-EVENT"}}]
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    raw = state_path.read_bytes()
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert any("buried_chapter" in item.get("path", "") for item in report.conflicts)
+    assert state_path.read_bytes() == raw
+
+
+def test_valid_story_event_with_wrong_chapter_cannot_authorize_claim(tmp_path):
+    _root_with_base(tmp_path)
+    commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["accepted_events"] = [
+        {"event_id": "CANON-EVENT", "chapter": 9, "event_type": "open_loop_created",
+         "subject": "TEST ONLY", "payload": {"content": "TEST ONLY"}}
+    ]
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "buried_chapter": 1, "occurrence_ref": {"event_id": "CANON-EVENT"}}]
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    raw = state_path.read_bytes()
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert state_path.read_bytes() == raw
+
+
+def test_story_event_chapter_must_match_effective_containing_chapter(tmp_path):
+    _root_with_base(tmp_path)
+    commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["accepted_events"] = [
+        {"event_id": "E1", "chapter": 9, "event_type": "open_loop_created",
+         "subject": "TEST", "payload": {"content": "TEST"}}
+    ]
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "buried_chapter": 9, "occurrence_ref": {"event_id": "E1"}}]
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    raw = state_path.read_bytes()
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert any("buried_chapter" in item.get("path", "") for item in report.conflicts)
+    assert state_path.read_bytes() == raw
+
+
+def test_one_ref_proves_only_one_matching_occurrence_chapter(tmp_path):
+    _root_with_base(tmp_path)
+    commit_path = tmp_path / ".story-system/commits/chapter_001.commit.json"
+    commit = json.loads(commit_path.read_text(encoding="utf-8"))
+    commit["extraction_result"]["accepted_events"] = [
+        {"event_id": "CANON-EVENT", "chapter": 1, "event_type": "open_loop_created",
+         "subject": "TEST ONLY", "payload": {"content": "TEST ONLY"}}
+    ]
+    commit_path.write_text(json.dumps(commit), encoding="utf-8")
+    story = _valid_story_craft()
+    story["foreshadow_chain"] = [{"id": "FS-1", "type": "物谶", "depth": "表层",
+                                 "buried_chapter": 1, "payoff_chapter": 9,
+                                 "occurrence_ref": {"event_id": "CANON-EVENT"}}]
+    state_path = tmp_path / ".webnovel/state.json"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    raw = state_path.read_bytes()
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    classes = report.owner_mappings["state"]["field_classifications"]
+    assert classes["story_craft.foreshadow_chain.0.buried_chapter"] == "DERIVED_REFERENCE"
+    assert classes["story_craft.foreshadow_chain.0.payoff_chapter"] == "UNKNOWN"
+    assert state_path.read_bytes() == raw
+
+
+def test_endgame_reserves_empty_is_inert_and_unprovenanced_legacy_rows_conflict(tmp_path):
+    from story_craft import classify_story_craft_field
+    _root_with_base(tmp_path)
+    state_path = tmp_path / ".webnovel/state.json"
+    story = _valid_story_craft()
+    assert classify_story_craft_field("story_craft.reader_contract.endgame_reserves", []) == "UNKNOWN"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    assert preflight_project(tmp_path).ok
+    story["reader_contract"]["endgame_reserves"] = [{"name": "reveal"}]
+    assert classify_story_craft_field("story_craft.reader_contract.endgame_reserves",
+                                      story["reader_contract"]["endgame_reserves"]) == "UNKNOWN"
+    state_path.write_text(json.dumps({"story_craft": story}), encoding="utf-8")
+    raw = state_path.read_bytes()
+    report = preflight_project(tmp_path)
+    assert not report.ok
+    assert any(item.get("path", "").endswith("story_craft.reader_contract.endgame_reserves")
+               and item.get("kind") == "unknown_story_craft_field" for item in report.conflicts)
+    assert state_path.read_bytes() == raw

@@ -17,6 +17,8 @@ from .config import DataModulesConfig
 from .effective_history import EffectiveHistoryStore
 from .owned_project_view import activation_health_report
 from .projection_generation import ProjectionGeneration
+from .story_craft_evidence import resolve_story_craft_occurrences
+from story_craft import classify_story_craft_field
 
 
 class MigrationError(RuntimeError):
@@ -109,7 +111,7 @@ def _json_file(path: Path) -> dict[str, Any] | None:
 def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     webnovel = root / ".webnovel"
     state = _json_file(webnovel / "state.json") or {}
-    state_canon = {"entity_state", "protagonist_state", "strand_tracker", "chapter_meta"}
+    state_canon = {"entity_state", "protagonist_state", "strand_tracker"}
     owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
                    "workflow", "craft", "intent", "disambiguation_warnings", "disambiguation_pending",
                    "project_info", "volumes"}
@@ -117,7 +119,7 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                    "progress.volumes_completed", "progress.last_updated"}
     known = state_canon | owner_roots | {"progress", "meta", "schema_version", "project_info", "state",
                                          "plot_threads", "relationships", "state_changes", "volumes",
-                                         "world_settings", "_migrated_to_sqlite", "_migration_timestamp"}
+                                         "world_settings", "chapter_meta", "_migrated_to_sqlite", "_migration_timestamp"}
     conflicts = []
     unknown = sorted(set(state) - known)
     for key in unknown:
@@ -133,6 +135,311 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                           "requires": "explicit owner mapping"})
 
     field_classes = {}
+    # Promise rows retain their original bytes. Validation is read-only and
+    # exact: additive legacy omissions are accepted, unknown keys are not.
+    promise_known = {"id", "type", "depth", "planted_chapter", "planted_volume",
+                     "expected_payoff_chapter", "expected_payoff_volume", "status",
+                     "created_at", "updated_at", "notes", "audit_log", "canon_event_ref"}
+    promise_optional = {"created_at", "updated_at", "notes", "audit_log", "canon_event_ref"}
+    def promise_conflict(kind, path):
+        conflicts.append({"kind": kind, "path": f".webnovel/state.json:{path}",
+                          "value_preserved": True, "requires": "preserve source; resolve exact Promise schema"})
+
+    def validate_story_craft(value):
+        prefix = ".webnovel/state.json:story_craft"
+        if not isinstance(value, dict):
+            conflicts.append({"kind": "malformed_story_craft_container", "path": prefix,
+                              "value_preserved": True, "requires": "preserve source"})
+            field_classes["story_craft"] = "UNKNOWN"
+            return
+        snapshot = EffectiveHistoryStore().read_active_snapshot(root)
+        occurrence_evidence = resolve_story_craft_occurrences(value, snapshot)
+        # Exact known shapes. Nested objects are allowlisted per container;
+        # the classifier supplies semantic class for every leaf.
+        schemas = {
+            "rhythm_curve": {"last_emotion_peak_chapter", "chapters_since_peak", "warning_threshold", "block_threshold", "history"},
+            "foreshadow_chain": {"id", "type", "depth", "content", "buried_chapter", "expected_payoff_chapter", "payoff_method", "linked_entities", "status", "buried_quality", "payoff_chapter", "payoff_quality", "occurrence_ref"},
+            "timed_locks": {"id", "description", "trigger_chapter", "deadline_chapter", "status", "fulfilled_chapter", "occurrence_ref"},
+            "thematic_echoes": {"id", "premise", "echoes"},
+            "character_arc": {"name", "starting_state", "ending_state", "transformation", "key_moments", "desired_change", "milestones", "target", "quality", "evaluation", "structural_quality"},
+            "volume_beat": {"volume", "total_chapters", "beats"},
+            "volume_beats": None,
+            "reader_contract": {"version", "expectation_debt", "causal_credits", "endgame_reserves", "swap_debts", "contract_fulfillment"},
+            "volume_anchors": {"version", "anchors"},
+            "event_matrix_state": {"version", "types", "history", "gentle_window", "max_consecutive_fast"},
+            "pacing_history": {"version", "history", "rules"},
+        }
+        def bad(path, kind="unknown_story_craft_field"):
+            field_classes[path] = "UNKNOWN"
+            suffix = path.removeprefix("story_craft.")
+            suffix = __import__("re").sub(r"\.(\d+)(?=\.)", r"[\1]", suffix)
+            conflicts.append({"kind": kind, "path": f"{prefix}.{suffix}",
+                              "value_preserved": True, "requires": "preserve source; exact field mapping required"})
+        def classify(path, val, *, accepted_evidence_linked=False):
+            cls = classify_story_craft_field(path, val, accepted_evidence_linked=accepted_evidence_linked)
+            field_classes[path] = cls
+            if path == "story_craft.reader_contract.endgame_reserves" and val == []:
+                return  # inert legacy default: no authored reserve assertion
+            if cls == "UNKNOWN": bad(path)
+        def shape(path, value, expected):
+            valid = (type(value) is int) if expected == "int" else (
+                isinstance(value, str) if expected == "str" else (
+                    isinstance(value, bool) if expected == "bool" else (
+                        isinstance(value, list) if expected == "list" else isinstance(value, dict))))
+            if not valid:
+                bad(path, "malformed_story_craft_field")
+        for key, val in value.items():
+            path = f"story_craft.{key}"
+            if key not in schemas:
+                bad(path)
+                continue
+            allowed = schemas[key]
+            if key == "volume_beats":
+                if not isinstance(val, dict):
+                    bad(path, "malformed_story_craft_container"); continue
+                for vol, sheet in val.items():
+                    if not isinstance(sheet, dict) or set(sheet) - schemas["volume_beat"]:
+                        bad(f"{path}.{vol}", "malformed_story_craft_container"); continue
+                    if not {"volume", "total_chapters", "beats"} <= set(sheet):
+                        bad(f"{path}.{vol}", "malformed_story_craft_container")
+                    for child, child_val in sheet.items():
+                        child_path = f"{path}.{vol}.{child}"
+                        if child == "volume" or child == "total_chapters": shape(child_path, child_val, "int")
+                        elif child == "beats":
+                            shape(child_path, child_val, "list")
+                            if isinstance(child_val, list):
+                                for idx, beat in enumerate(child_val):
+                                    if not isinstance(beat, dict) or set(beat) - {"name", "chapter", "filled", "notes"}:
+                                        bad(f"{child_path}.{idx}", "malformed_story_craft_container")
+                                    else:
+                                        if not {"name", "chapter", "filled"} <= set(beat):
+                                            bad(f"{child_path}.{idx}", "malformed_story_craft_container")
+                                        for leaf, leaf_value in beat.items():
+                                            if leaf == "notes" and leaf_value is None: continue
+                                            shape(f"{child_path}.{idx}.{leaf}", leaf_value,
+                                                  {"name": "str", "chapter": "int", "filled": "bool", "notes": "str"}[leaf])
+                        classify(f"{path}.{child}", child_val)
+                continue
+            if key in {"foreshadow_chain", "timed_locks", "thematic_echoes"}:
+                if not isinstance(val, list):
+                    bad(path, "malformed_story_craft_container"); continue
+                allowed_child = schemas[key]
+                for idx, item in enumerate(val):
+                    if not isinstance(item, dict):
+                        bad(f"{path}.{idx}", "malformed_story_craft_container"); continue
+                    required_children = {"foreshadow_chain": {"id", "type", "depth"},
+                                         "timed_locks": {"id", "description", "deadline_chapter"},
+                                         "thematic_echoes": {"id", "premise", "echoes"}}[key]
+                    if not required_children <= set(item):
+                        bad(f"{path}.{idx}", "malformed_story_craft_container")
+                    item_path = f"story_craft.{key}.{idx}"
+                    accepted_occurrence_link = f"{item_path}.occurrence_ref" in occurrence_evidence
+                    def claim_has_link(field_name: str) -> bool:
+                        return f"{item_path}.{field_name}" in occurrence_evidence
+                    for child, child_val in item.items():
+                        child_path = f"{path}.{idx}.{child}"
+                        if child not in allowed_child: bad(child_path); continue
+                        if child_val is None and child in {"buried_chapter", "payoff_chapter", "fulfilled_chapter", "occurrence_ref"}:
+                            # Production writers use null as an unasserted placeholder.
+                            # Preserve it without assigning semantic authority.
+                            continue
+                        types = {
+                            "foreshadow_chain": {"id": "str", "type": "str", "depth": "str", "content": "str", "buried_chapter": "int", "expected_payoff_chapter": "int", "payoff_method": "str", "linked_entities": "list", "status": "str", "buried_quality": "str", "payoff_chapter": "int", "payoff_quality": "str"},
+                            "timed_locks": {"id": "str", "description": "str", "trigger_chapter": "int", "deadline_chapter": "int", "status": "str", "fulfilled_chapter": "int"},
+                            "thematic_echoes": {"id": "str", "premise": "str", "echoes": "list"},
+                        }
+                        if child in types[key] and child_val is not None:
+                            shape(child_path, child_val, types[key][child])
+                        if child == "occurrence_ref":
+                            # Migration only trusts exact event IDs found in effective accepted history.
+                            if not isinstance(child_val, dict) or set(child_val) != {"event_id"}:
+                                bad(child_path, "malformed_story_craft_container"); continue
+                            event_id = child_val.get("event_id")
+                            field_classes[child_path] = classify_story_craft_field(
+                                child_path, child_val, accepted_evidence_linked=accepted_occurrence_link)
+                            if not accepted_occurrence_link: bad(child_path)
+                        elif child == "echoes":
+                            if not isinstance(child_val, list): bad(child_path, "malformed_story_craft_container"); continue
+                            for ei, echo in enumerate(child_val):
+                                if not isinstance(echo, dict): bad(f"{child_path}.{ei}", "malformed_story_craft_container"); continue
+                                if not {"chapter", "manifestation"} <= set(echo):
+                                    bad(f"{child_path}.{ei}", "malformed_story_craft_container")
+                                for ec in echo:
+                                    ep = f"{child_path}.{ei}.{ec}"
+                                    if ec == "chapter": shape(ep, echo[ec], "int")
+                                    elif ec == "manifestation": shape(ep, echo[ec], "str")
+                                    classify(ep, echo[ec], accepted_evidence_linked=ep in occurrence_evidence)
+                        else: classify(child_path, child_val,
+                                       accepted_evidence_linked=claim_has_link(child))
+                continue
+            if key == "rhythm_curve":
+                if not isinstance(val, dict) or set(val) - allowed:
+                    bad(path, "malformed_story_craft_container"); continue
+                types = {"last_emotion_peak_chapter": "int", "chapters_since_peak": "int",
+                         "warning_threshold": "int", "block_threshold": "int", "history": "list"}
+                for child, child_val in val.items():
+                    child_path = f"{path}.{child}"
+                    shape(child_path, child_val, types[child])
+                    if child == "history" and isinstance(child_val, list):
+                        for idx, item in enumerate(child_val):
+                            if not isinstance(item, dict) or set(item) - {"chapter", "intensity", "type"}:
+                                bad(f"{child_path}.{idx}", "malformed_story_craft_container")
+                            else:
+                                if not {"chapter", "intensity", "type"} <= set(item):
+                                    bad(f"{child_path}.{idx}", "malformed_story_craft_container")
+                                for leaf, leaf_value in item.items(): shape(f"{child_path}.{idx}.{leaf}", leaf_value,
+                                    {"chapter": "int", "intensity": "int", "type": "str"}[leaf])
+                    else:
+                        classify(child_path, child_val)
+                    if child == "history":
+                        classify(child_path, child_val)
+                continue
+            if key in {"character_arc", "volume_beat"} and val is None:
+                field_classes[path] = "INTENT"; continue
+            if key in {"character_arc", "volume_beat", "reader_contract", "volume_anchors", "event_matrix_state", "pacing_history"}:
+                if not isinstance(val, dict) or set(val) - allowed:
+                    bad(path, "malformed_story_craft_container"); continue
+                nested_types = {
+                    "character_arc": {"name": "str", "starting_state": "str", "ending_state": "str", "transformation": "str", "key_moments": "list", "desired_change": "str", "milestones": "list", "target": "str", "quality": "str", "evaluation": "str", "structural_quality": "str"},
+                    "volume_beat": {"volume": "int", "total_chapters": "int", "beats": "list"},
+                    "reader_contract": {"version": "int", "expectation_debt": "list", "causal_credits": "dict", "endgame_reserves": "list", "swap_debts": "list", "contract_fulfillment": "list"},
+                    "volume_anchors": {"version": "int", "anchors": "list"},
+                    "event_matrix_state": {"version": "int", "types": "dict", "history": "list", "gentle_window": "int", "max_consecutive_fast": "int"},
+                    "pacing_history": {"version": "int", "history": "list", "rules": "dict"},
+                }
+                for child, child_val in val.items():
+                    child_path = f"{path}.{child}"
+                    shape(child_path, child_val, nested_types[key][child])
+                    classify(child_path, child_val)
+                    if key == "volume_beat" and child == "beats" and isinstance(child_val, list):
+                        for idx, beat in enumerate(child_val):
+                            bp = f"{child_path}.{idx}"
+                            if not isinstance(beat, dict) or set(beat) - {"name", "chapter", "filled", "notes"}:
+                                bad(bp, "malformed_story_craft_container"); continue
+                            if not {"name", "chapter", "filled"} <= set(beat):
+                                bad(bp, "malformed_story_craft_container")
+                            for field, item_value in beat.items():
+                                if field == "notes" and item_value is None: continue
+                                shape(f"{bp}.{field}", item_value,
+                                      {"name": "str", "chapter": "int", "filled": "bool", "notes": "str"}[field])
+                    if key == "reader_contract" and child == "causal_credits" and isinstance(child_val, dict):
+                        if set(child_val) - {"protagonist_actions_used_without_setup"}:
+                            bad(child_path, "unknown_story_craft_field")
+                        actions = child_val.get("protagonist_actions_used_without_setup", [])
+                        if not isinstance(actions, list) or any(not isinstance(action, str) for action in actions):
+                            bad(f"{child_path}.protagonist_actions_used_without_setup", "malformed_story_craft_container")
+                    if key == "character_arc" and child in {"key_moments", "milestones"} and isinstance(child_val, list):
+                        if any(not isinstance(item, str) for item in child_val):
+                            bad(child_path, "malformed_story_craft_container")
+                    if key == "reader_contract" and child in {"expectation_debt", "endgame_reserves", "swap_debts", "contract_fulfillment"} and isinstance(child_val, list):
+                        row_keys = {
+                            "expectation_debt": {"id", "description", "expected", "expected_chapter", "created_chapter", "satisfied_chapter", "status", "source"},
+                            "endgame_reserves": {"id", "name", "used", "used_chapter", "status"},
+                            "swap_debts": {"risk", "description", "chapter", "status"},
+                            "contract_fulfillment": {"promise_id", "status", "chapter_promised", "chapter_satisfied"},
+                        }[child]
+                        for idx, row in enumerate(child_val):
+                            rp = f"{child_path}.{idx}"
+                            if isinstance(row, dict) and set(row) - row_keys:
+                                bad(rp, "unknown_story_craft_field")
+                            elif isinstance(row, dict):
+                                required = {"expectation_debt": {"description"},
+                                            "endgame_reserves": {"name"},
+                                            "swap_debts": {"risk"},
+                                            "contract_fulfillment": {"promise_id", "status"}}[child]
+                                if not required <= set(row): bad(rp, "malformed_story_craft_container")
+                                for field, item_value in row.items():
+                                    if field in {"id", "description", "expected", "source", "name", "risk", "promise_id", "status"} and not isinstance(item_value, str):
+                                        bad(f"{rp}.{field}", "malformed_story_craft_field")
+                                    elif field.endswith("chapter") and item_value is not None and type(item_value) is not int:
+                                        bad(f"{rp}.{field}", "malformed_story_craft_field")
+                            elif not isinstance(row, (dict, str)):
+                                bad(rp, "malformed_story_craft_container")
+                    if key == "event_matrix_state" and child == "types" and isinstance(child_val, dict):
+                        for type_key, type_value in child_val.items():
+                            if not isinstance(type_key, str) or not isinstance(type_value, (str, int, bool)):
+                                bad(f"{child_path}.{type_key}", "malformed_story_craft_container")
+                    if key == "volume_anchors" and child == "anchors" and isinstance(child_val, list):
+                        for idx, anchor in enumerate(child_val):
+                            ap = f"{child_path}.{idx}"
+                            if not isinstance(anchor, dict) or set(anchor) - {"volume", "total_chapters", "current_chapter", "must_not_reveal"}:
+                                bad(ap, "malformed_story_craft_container"); continue
+                            if not {"volume", "total_chapters"} <= set(anchor):
+                                bad(ap, "malformed_story_craft_container")
+                            for field, item in anchor.items():
+                                expected = "list" if field == "must_not_reveal" else "int"
+                                shape(f"{ap}.{field}", item, expected)
+                                if field == "must_not_reveal" and isinstance(item, list) and any(not isinstance(x, str) for x in item):
+                                    bad(f"{ap}.{field}", "malformed_story_craft_container")
+                    if key == "event_matrix_state" and child == "history" and isinstance(child_val, list):
+                        for idx, record in enumerate(child_val):
+                            if not isinstance(record, dict) or set(record) - {"primary"}:
+                                bad(f"{child_path}.{idx}", "malformed_story_craft_container")
+                            elif "primary" not in record or not isinstance(record["primary"], str):
+                                bad(f"{child_path}.{idx}.primary", "malformed_story_craft_field")
+                    if key == "pacing_history" and child == "rules" and isinstance(child_val, dict):
+                        if set(child_val) - {"max_consecutive_fast", "slow_per_4_chapters_min"}:
+                            bad(child_path, "unknown_story_craft_field")
+                        for rule, rule_value in child_val.items(): shape(f"{child_path}.{rule}", rule_value, "int")
+                    if key == "pacing_history" and child == "history" and isinstance(child_val, list):
+                        for idx, record in enumerate(child_val):
+                            if not isinstance(record, dict) or set(record) - {"tier", "chapter", "type"}:
+                                bad(f"{child_path}.{idx}", "malformed_story_craft_container")
+                            else:
+                                if not {"tier", "chapter"} <= set(record):
+                                    bad(f"{child_path}.{idx}", "malformed_story_craft_container")
+                                for field, item in record.items(): shape(f"{child_path}.{idx}.{field}", item,
+                                    "int" if field == "chapter" else "str")
+
+    if "story_craft" in state:
+        validate_story_craft(state["story_craft"])
+    chapter_meta = state.get("chapter_meta")
+    if chapter_meta is not None:
+        # Exact field names only. No accepted evidence binding is established
+        # by this legacy state migration, so occurrence flags remain UNKNOWN.
+        craft_fields = {"hook_type", "beat_position", "scene_goal", "scene_conflict",
+                        "scene_setback", "scene_resolution", "sequel_reaction",
+                        "sequel_dilemma", "sequel_decision"}
+        intent_fields_meta = {"must_cover", "forbidden", "CBN", "CPNs", "CEN",
+                              "strand", "coolpoint", "time_anchor", "villain_tier"}
+        reference_fields = {"title", "word_count", "summary"}
+        if not isinstance(chapter_meta, dict):
+            conflicts.append({"kind": "malformed_chapter_meta", "path": ".webnovel/state.json:chapter_meta",
+                              "requires": "preserve source; field semantics unavailable"})
+        else:
+            for chapter_key, fields in chapter_meta.items():
+                prefix = f"chapter_meta.{chapter_key}"
+                if not str(chapter_key).isdigit() or int(chapter_key) < 1:
+                    field_classes[prefix] = "UNCLASSIFIED_CONFLICT"
+                    conflicts.append({"kind": "malformed_chapter_meta_chapter",
+                                      "path": f".webnovel/state.json:{prefix}",
+                                      "requires": "positive canonical chapter number"})
+                    if isinstance(fields, dict):
+                        for field_name in fields:
+                            field_classes[f"{prefix}.{field_name}"] = "UNCLASSIFIED_CONFLICT"
+                    continue
+                if not isinstance(fields, dict):
+                    field_classes[prefix] = "UNKNOWN"
+                    conflicts.append({"kind": "malformed_chapter_meta_entry",
+                                      "path": f".webnovel/state.json:{prefix}",
+                                      "requires": "preserve source; explicit field mapping required"})
+                    continue
+                for field_name, value in fields.items():
+                    path = f"{prefix}.{field_name}"
+                    if field_name in craft_fields:
+                        semantic = "CRAFT"
+                    elif field_name in intent_fields_meta:
+                        semantic = "INTENT"
+                    elif field_name in reference_fields:
+                        semantic = "DERIVED_REFERENCE"
+                    else:
+                        semantic = "UNKNOWN"
+                    field_classes[path] = semantic
+                    if semantic == "UNKNOWN":
+                        conflicts.append({"kind": "unknown_chapter_meta_field",
+                                          "path": f".webnovel/state.json:{path}",
+                                          "value_preserved": True,
+                                          "requires": "explicit field and evidence mapping"})
     for key in ("_migrated_to_sqlite", "_migration_timestamp"):
         if key in state:
             field_classes[key] = "PRESERVED_COMPATIBILITY_METADATA"
@@ -149,11 +456,60 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                      "resource_distribution", "gf_visibility", "gf_irreversible_cost", "currency_system",
                      "currency_exchange", "sect_hierarchy", "cultivation_chain", "cultivation_subtiers",
                      "later_volumes_status", "confirmed_through_volume", "cross_volume_beat_map"}
+    # The ledger is planner-owned Intent. Keep its bytes in the existing
+    # project_info owner; malformed rows remain preserved and diagnostic.
+    intent_fields.add("promise_ledger")
     config_fields = {"author", "language", "output_dir", "project_id", "platform", "created_at"}
     project_info = state.get("project_info") if isinstance(state.get("project_info"), dict) else {}
     for key in sorted(project_info):
         if key in intent_fields:
             field_classes[f"project_info.{key}"] = "OWNER_INTENT"
+            if key == "promise_ledger":
+                ledger = project_info[key]
+                if not isinstance(ledger, list):
+                    conflicts.append({"kind": "malformed_planner_promise_ledger",
+                                      "path": ".webnovel/state.json:project_info.promise_ledger",
+                                      "requires": "preserve source and explicitly map ledger shape"})
+                else:
+                    for index, entry in enumerate(ledger):
+                        required = {"id", "type", "depth", "planted_chapter", "planted_volume",
+                                    "expected_payoff_chapter", "expected_payoff_volume", "status"}
+                        if not isinstance(entry, dict) or not required <= set(entry):
+                            conflicts.append({"kind": "malformed_planner_promise_entry",
+                                              "path": f".webnovel/state.json:project_info.promise_ledger[{index}]",
+                                              "requires": "preserve source row and explicitly map its schema"})
+                            continue
+                        for extra in sorted(set(entry) - promise_known):
+                            promise_conflict("unknown_planner_promise_field",
+                                             f"project_info.promise_ledger[{index}].{extra}")
+                        for missing in sorted((promise_known - promise_optional) - set(entry)):
+                            promise_conflict("malformed_planner_promise_field",
+                                             f"project_info.promise_ledger[{index}].{missing}")
+                        try:
+                            from .promise_ledger import ForeshadowEntry
+                            if not isinstance(entry["id"], str) or not entry["id"]: raise ValueError("id")
+                            if entry["status"] not in {"pending", "advanced", "paid_off", "overdue"}:
+                                promise_conflict("invalid_planner_promise_field", f"project_info.promise_ledger[{index}].status")
+                            if entry["type"] not in {"foreshadow", "promise", "callback"}:
+                                promise_conflict("invalid_planner_promise_field", f"project_info.promise_ledger[{index}].type")
+                            for num in ("depth", "planted_chapter", "planted_volume", "expected_payoff_chapter", "expected_payoff_volume"):
+                                if type(entry[num]) is not int: raise ValueError(num)
+                            if entry.get("created_at", "") is not None and not isinstance(entry.get("created_at", ""), str): raise ValueError("created_at")
+                            if entry.get("updated_at", "") is not None and not isinstance(entry.get("updated_at", ""), str): raise ValueError("updated_at")
+                            if entry.get("notes", "") is not None and not isinstance(entry.get("notes", ""), str): raise ValueError("notes")
+                            if not isinstance(entry.get("audit_log", []), list): raise ValueError("audit_log")
+                            for audit in entry.get("audit_log", []):
+                                if (not isinstance(audit, dict) or set(audit) - {"action", "chapter", "ts"}
+                                        or audit.get("action") not in {"advance", "payoff", "mark_overdue", "defer", "cancel"}
+                                        or type(audit.get("chapter")) is not int or not isinstance(audit.get("ts"), str)):
+                                    raise ValueError("audit_log")
+                            if entry.get("canon_event_ref") is not None and not isinstance(entry["canon_event_ref"], str): raise ValueError("canon_event_ref")
+                            ForeshadowEntry.from_dict(entry)
+                        except (ValueError, TypeError, KeyError) as exc:
+                            message = str(exc)
+                            invalid_field = next((name for name in ("expected_payoff_chapter", "planted_chapter", "planted_volume", "depth", "status", "type", "audit_log", "canon_event_ref", "created_at", "updated_at", "notes") if name in message), "row")
+                            promise_conflict("invalid_planner_promise_field",
+                                             f"project_info.promise_ledger[{index}].{invalid_field}")
         elif key in config_fields:
             field_classes[f"project_info.{key}"] = "OWNER_PROJECT_CONFIG"
         else:
@@ -245,7 +601,10 @@ def _owner_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             field_classes.setdefault(path[len(prefix):], "UNCLASSIFIED_CONFLICT")
     field_dispositions = {}
     for path, classification in field_classes.items():
-        if classification in {"OWNER_INTENT", "OWNER_PROJECT_CONFIG"}:
+        if path.startswith("chapter_meta.") and classification in {"CRAFT", "INTENT"}:
+            disposition = {"destination": "owner_overlay." + path, "copied": True,
+                           "visible_in_activation_runtime": True, "conflict_required": False}
+        elif classification in {"OWNER_INTENT", "OWNER_PROJECT_CONFIG"}:
             disposition = {"destination": "owner_overlay.project_info", "copied": True,
                            "visible_in_activation_runtime": True, "conflict_required": False}
         elif classification == "OWNER_INTENT_PLANNING":
@@ -332,6 +691,30 @@ def _candidate_report(root: Path) -> list[dict[str, Any]]:
 def _report_body(root: Path) -> dict[str, Any]:
     active = activation_health_report(root)
     mappings, conflicts = _owner_inventory(root)
+    legacy_state_path = root / ".webnovel/state.json"
+    overlay_path = root / ".webnovel/state-overlay.json"
+    legacy_state = _json_file(legacy_state_path) or {}
+    overlay = _json_file(overlay_path) or {}
+    owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
+                   "workflow", "craft", "intent", "disambiguation_warnings",
+                   "disambiguation_pending", "project_info", "volumes"}
+    legacy_mutable_roots = sorted(owner_roots.intersection(legacy_state))
+    overlay_roots = sorted(set((overlay.get("values") or {})).intersection(owner_roots))
+    active["owner_path_compatibility"] = {
+        "status": "base_only_compatibility" if active.get("mode") == "base_only" else "activation_managed_health",
+        "effective_authority": "state.json" if active.get("mode") == "base_only" else "OwnedProjectView/state-overlay.json",
+        "legacy_state_sha256": hashlib.sha256(legacy_state_path.read_bytes()).hexdigest() if legacy_state_path.is_file() else None,
+        "owner_overlay_sha256": hashlib.sha256(overlay_path.read_bytes()).hexdigest() if overlay_path.is_file() else None,
+        "legacy_mutable_roots": legacy_mutable_roots,
+        "overlay_roots": overlay_roots,
+        "unresolved_legacy_fields": list(conflicts),
+        "writer_retirement": {"ready": False, "status": "guarded_pending_independent_review",
+                              "requires": ["base-only compatibility", "owner-route coverage",
+                                           "effective-reader coverage", "read-after-write tests",
+                                           "exact migration mapping", "rollback evidence",
+                                           "unknown-field fail-closed tests"]},
+        "repeat_enrollment_supported": False,
+    }
     history = EffectiveHistoryStore().read_active_snapshot(root)
     if active.get("mode") == "base_only":
         active["base_history_status"] = "valid" if history.ok else "blocked"
@@ -609,9 +992,14 @@ def _validated_backup(root: Path, plan: MigrationPlan,
 
 
 def _prepare_owner_overlay(root: Path) -> int:
-    from .owned_project_view import OwnedStateStore
+    from .owned_project_view import OwnedStateStore, _is_owner_state_path
 
     state = _json_file(root / ".webnovel/state.json") or {}
+    inventory, inventory_conflicts = _owner_inventory(root)
+    unsafe_story_craft = [item["path"] for item in inventory_conflicts
+                          if item.get("path", "").startswith(".webnovel/state.json:story_craft")]
+    if unsafe_story_craft:
+        raise MigrationError(f"UNCLASSIFIED_STORY_CRAFT:{sorted(unsafe_story_craft)}")
     store = OwnedStateStore(root)
     overlay = store._overlay()
     values = overlay["values"]
@@ -619,10 +1007,7 @@ def _prepare_owner_overlay(root: Path) -> int:
     owner_roots = {"story_craft", "planning", "promise_ledger", "review_checkpoints",
                    "workflow", "craft", "intent", "disambiguation_warnings",
                    "disambiguation_pending", "project_info", "volumes"}
-    allowed_overlay_paths = owner_roots | {"progress.volumes_planned", "progress.current_volume",
-                                           "progress.total_volumes", "progress.chapter_status",
-                                           "progress.volumes_completed", "progress.last_updated"}
-    unknown_overlay_paths = set(overlay["values"]) - allowed_overlay_paths
+    unknown_overlay_paths = {key for key in overlay["values"] if not _is_owner_state_path(key)}
     if unknown_overlay_paths:
         raise MigrationError(f"UNMAPPED_EXISTING_OVERLAY:{sorted(unknown_overlay_paths)}")
     for key in owner_roots:
@@ -632,6 +1017,16 @@ def _prepare_owner_overlay(root: Path) -> int:
     for key in ("volumes_planned", "current_volume", "total_volumes", "volumes_completed", "last_updated"):
         if key in progress:
             additions[f"progress.{key}"] = progress[key]
+    field_classes = inventory.get("state", {}).get("field_classifications", {})
+    chapter_meta = state.get("chapter_meta")
+    if isinstance(chapter_meta, dict):
+        for chapter, fields in chapter_meta.items():
+            if not isinstance(fields, dict) or not str(chapter).isdigit() or int(chapter) < 1:
+                continue
+            for field_name, value in fields.items():
+                path = f"chapter_meta.{chapter}.{field_name}"
+                if field_classes.get(path) in {"CRAFT", "INTENT"}:
+                    additions[path] = value
     for key, value in additions.items():
         if key in values and values[key] != value:
             raise MigrationError(f"OWNER_OVERLAY_CONFLICT:{key}")

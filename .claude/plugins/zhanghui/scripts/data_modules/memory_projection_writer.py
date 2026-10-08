@@ -28,13 +28,24 @@ class MemoryProjectionWriter:
 
     def apply_effective(self, effective_input, build_handle) -> dict:
         from .effective_history import EffectiveProjectionInput, write_effective_projection
+        from .intent_reconciliation import reconcile_effective_history
         if not isinstance(effective_input, EffectiveProjectionInput):
             raise TypeError("apply_effective requires EffectiveProjectionInput")
         entry = effective_input.effective_entry
         extraction = entry.extraction_result or {}
+        global_obligations = reconcile_effective_history(build_handle.snapshot)
+        # Lifecycle is reconciled against the complete accepted history so a
+        # later close/payoff is visible, then each obligation is stored only
+        # in its creation chapter's memory slice.
+        obligations = {}
+        for name in ("open_loops", "reader_promises"):
+            obligations[name] = [row for row in global_obligations.get(name, [])
+                                 if row.get("source_chapter") == entry.chapter]
         return write_effective_projection(
             self.project_root, effective_input, build_handle, "memory", "memory",
             {"tombstone": entry.status != "accepted",
              "accepted_events": extraction.get("accepted_events", []),
-             "state_deltas": extraction.get("state_deltas", [])},
+             "state_deltas": extraction.get("state_deltas", []),
+             "derived_obligations": obligations,
+             "semantic_class": "CANON_DERIVED_OBLIGATION"},
         )

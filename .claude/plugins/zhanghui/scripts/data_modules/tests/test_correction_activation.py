@@ -35,10 +35,12 @@ def _commit(chapter):
     }
 
 
-def _active_root(root, chapters=2, include_state=False):
+def _active_root(root, chapters=2, include_state=False, events_by_chapter=None):
     commits = []
     for chapter in range(1, chapters + 1):
         body = _commit(chapter)
+        if events_by_chapter:
+            body["extraction_result"]["accepted_events"] = events_by_chapter.get(chapter, [])
         body["extraction_result"]["summary_text"] = f"Original Canon summary chapter {chapter}"
         if include_state:
             body["extraction_result"]["entity_deltas"] = [
@@ -51,7 +53,12 @@ def _active_root(root, chapters=2, include_state=False):
         commits.append((body, path))
     webnovel = root / ".webnovel"
     webnovel.mkdir(parents=True, exist_ok=True)
-    (webnovel / "state.json").write_text(json.dumps({"story_craft": {"voice": "warm"}}), encoding="utf-8")
+    (webnovel / "state.json").write_text(json.dumps({"story_craft": {
+        "rhythm_curve": {"last_emotion_peak_chapter": 0, "chapters_since_peak": 0,
+                         "warning_threshold": 3, "block_threshold": 5, "history": []},
+        "foreshadow_chain": [], "timed_locks": [], "thematic_echoes": [],
+        "character_arc": None,
+    }}), encoding="utf-8")
     db = sqlite3.connect(webnovel / "index.db")
     db.execute("CREATE TABLE chapters (chapter INTEGER)")
     db.execute("CREATE TABLE review_attempts (id INTEGER)")
@@ -61,6 +68,118 @@ def _active_root(root, chapters=2, include_state=False):
     backup = create_verified_backup(root, plan)
     migrate_project(root, report.report_digest, plan.plan_digest, backup)
     return commits
+
+
+def test_correction_rebuild_reopens_source_chapter_obligation_without_duplicates(tmp_path):
+    from data_modules.canon_correction_store import activate_correction
+    from data_modules.owned_project_view import OwnedMemoryView
+
+    events = {1: [{"event_id": "L1", "event_type": "open_loop_created",
+                   "payload": {"content": "question"}}],
+              2: [{"event_id": "L1-close", "event_type": "open_loop_closed",
+                   "payload": {"loop_id": "L1"}}]}
+    commits = _active_root(tmp_path, chapters=2, events_by_chapter=events)
+    protocol = ProjectionGeneration(tmp_path)
+    pinned = protocol.pin_active_generation()
+    initial_rows = OwnedMemoryView(pinned).rows()
+    initial_obligations = [item for row in initial_rows
+                           for item in row["payload"].get("derived_obligations", {}).get("open_loops", [])]
+    assert [item["identity_id"] for item in initial_obligations].count("L1") == 1
+    assert initial_obligations[0]["status"] == "resolved"
+    authorization = _stage_retract(tmp_path, 2, commits[1][0], "TEST-ONLY-remove-loop-close")
+    result = activate_correction(tmp_path, "TEST-ONLY-remove-loop-close", authorization)
+    assert result.ok
+    corrected = OwnedMemoryView(protocol.pin_active_generation()).rows()
+    corrected_obligations = [item for row in corrected
+                             for item in row["payload"].get("derived_obligations", {}).get("open_loops", [])]
+    assert [item["identity_id"] for item in corrected_obligations].count("L1") == 1
+    assert corrected_obligations[0]["status"] == "active"
+
+
+def test_context_obligations_follow_effective_correction_replay_without_merging_planner_rows(tmp_path):
+    from data_modules.context_provenance import build_governed_context
+    from data_modules.canon_correction_store import activate_correction
+
+    events = {
+        1: [
+            {"event_id": "L1", "chapter": 1, "event_type": "open_loop_created",
+             "subject": "loop", "payload": {"content": "loop question"}},
+            {"event_id": "P1", "chapter": 1, "event_type": "promise_created",
+             "subject": "promise", "payload": {"content": "promise"}},
+        ],
+        2: [
+            {"event_id": "L1-close", "chapter": 2, "event_type": "open_loop_closed",
+             "subject": "loop", "payload": {"loop_id": "L1"}},
+            {"event_id": "P1-paid", "chapter": 2, "event_type": "promise_paid_off",
+             "subject": "promise", "payload": {"promise_id": "P1"}},
+        ],
+    }
+    commits = _active_root(tmp_path, chapters=2, events_by_chapter=events)
+    OwnedStateStore(tmp_path).write_owner_values({"project_info": {"promise_ledger": [
+        {"id": "P1", "canon_event_ref": "P1", "status": "deferred"},
+    ]}})
+
+    def context_rows():
+        view = OwnedProjectView.pin_active(tmp_path)
+        bundle = build_governed_context(project_root=tmp_path, chapter=3,
+                                        state=view.state_view(), source_sections={}, owned_view=view)
+        return bundle["intent"]
+
+    def derived(rows):
+        return {row["source_identity"]: row["content"] for row in rows
+                if row["semantic_class"] == "CANON_DERIVED_OBLIGATION"}
+
+    initial = context_rows()
+    obligations = derived(initial)
+    assert set(obligations) == {"L1", "P1"}
+    assert obligations["L1"]["status"] == "resolved"
+    assert obligations["P1"]["status"] == "paid_off"
+    assert len([row for row in initial if row.get("owner") == "promise_ledger"]) == 1
+    assert obligations["L1"]["resolution_event_id"] == "L1-close"
+    assert obligations["P1"]["resolution_event_id"] == "P1-paid"
+
+    authorization = _stage_retract(tmp_path, 2, commits[1][0], "TEST-ONLY-context-remove-resolution")
+    assert activate_correction(tmp_path, "TEST-ONLY-context-remove-resolution", authorization).ok
+    reopened = derived(context_rows())
+    assert set(reopened) == {"L1", "P1"}
+    assert reopened["L1"]["status"] == "active"
+    assert reopened["P1"]["status"] == "active"
+    assert "resolution_event_id" not in reopened["L1"]
+    assert "resolution_event_id" not in reopened["P1"]
+
+    source_authorization = _stage_retract(tmp_path, 1, commits[0][0], "TEST-ONLY-context-remove-source")
+    assert activate_correction(tmp_path, "TEST-ONLY-context-remove-source", source_authorization).ok
+    assert derived(context_rows()) == {}
+
+
+def test_context_occurrence_link_is_downgraded_when_effective_event_is_retracted(tmp_path):
+    from data_modules.context_provenance import build_governed_context
+    from data_modules.canon_correction_store import activate_correction
+
+    events = {1: [{"event_id": "E1", "chapter": 1, "event_type": "open_loop_created",
+                   "subject": "TEST", "payload": {"content": "setup"}}]}
+    commits = _active_root(tmp_path, chapters=1, events_by_chapter=events)
+    craft = {"foreshadow_chain": [{"id": "FS1", "type": "物谶", "depth": "表层",
+                                   "buried_chapter": 1, "occurrence_ref": {"event_id": "E1"}}]}
+    OwnedStateStore(tmp_path).write_owner_values({"story_craft": craft})
+
+    def build_context():
+        view = OwnedProjectView.pin_active(tmp_path)
+        return build_governed_context(project_root=tmp_path, chapter=2,
+                                      state=view.state_view(), source_sections={}, owned_view=view)
+
+    linked = build_context()
+    assert any(row["semantic_class"] == "DERIVED_REFERENCE" and row.get("source_identity") == "E1"
+               for row in linked["reference"])
+
+    authorization = _stage_retract(tmp_path, 1, commits[0][0], "TEST-ONLY-remove-occurrence-event")
+    assert activate_correction(tmp_path, "TEST-ONLY-remove-occurrence-event", authorization).ok
+    corrected = build_context()
+    assert not any(row["semantic_class"] == "DERIVED_REFERENCE" and row.get("source_identity") == "E1"
+                   for row in corrected["reference"])
+    assert any(row["semantic_role"] == "UNKNOWN" and isinstance(row["content"], list)
+               and any(field.get("path", "").endswith("buried_chapter") for field in row["content"])
+               for row in corrected["reference"])
 
 
 def _stage_retract(root, chapter, base, correction_id, *, interaction_id=None, prior_verifications=(),
@@ -217,7 +336,7 @@ def test_activation_publishes_only_after_complete_generation_and_keeps_owner_ove
         assert output["projection"]["tombstone"] is True
         assert output["effective_revision_id"] == active_after.chapters[1].effective_revision_id
     owner_view = OwnedProjectView.pin_active(tmp_path)
-    assert owner_view.state_view()["story_craft"]["voice"] == "warm"
+    assert owner_view.state_view()["story_craft"]["rhythm_curve"]["warning_threshold"] == 3
     context = ContextManager(DataModulesConfig.from_project_root(tmp_path)).build_context(2)
     context_pin = context["meta"]["context_snapshot"]
     assert context_pin["publication_record_id"] == result.publication_record_id
