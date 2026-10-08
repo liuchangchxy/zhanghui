@@ -22,13 +22,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install test dependencies
+        run: python -m pip install pytest
       - name: Verify uv binary sha256
         shell: bash
         run: |
           cd .claude/plugins/zhanghui
-          python3 -m pytest scripts/tests/test_uv_vendor.py -v
+          python -m pytest scripts/tests/test_uv_vendor.py -v
       - name: Unit tests for install_python_deps
         shell: bash
         run: |
           cd .claude/plugins/zhanghui
-          python3 -m pytest scripts/tests/test_install_python_deps.py -v
+          python -m pytest scripts/tests/test_install_python_deps.py -v
