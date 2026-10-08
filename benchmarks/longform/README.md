@@ -37,20 +37,20 @@ Important distinction from Zhanghui:
 - foreshadowing and outline change management are first-class author-facing control surfaces;
 - state extraction and consistency review are organized around a temporal Story Bible rather than an event-sourced Canon transaction boundary.
 
-### Xiaoyangy/novel-studio
+### AI_NovelGenerator
 
-Repository: https://github.com/Xiaoyangy/novel-studio
+Repository: https://github.com/YILING0013/AI_NovelGenerator
 
 Design philosophy:
 
-> simulate world/characters -> seal causal plan/context -> render POV prose -> review/accept -> update recoverable state.
+> multi-stage story architecture + chapter blueprint + hierarchical text state + semantic vector memory + consistency review.
 
 Important distinction from Zhanghui:
 
-- planning and character/world simulation precede prose;
-- sealed render packets and role-specific agents are core control mechanisms;
-- recoverable pipeline/checkpoint semantics and source receipts are central to execution;
-- accepted prose and observed outcomes update state through its own lifecycle rather than Zhanghui's Canon/Intent/Craft + projection model.
+- story structure is produced through staged architecture and chapter-blueprint generation rather than Canon / Intent / Craft authority layers;
+- long-term continuity combines `global_summary.txt`, `character_state.txt`, recent chapters and Chroma semantic retrieval;
+- chapter finalization updates text-ledger state and vector memory directly rather than producing a durable ChapterCommit transaction and rebuildable projections;
+- its production LLM boundary is text-in/text-out, enabling a thin Antigravity transport without reimplementing the system.
 
 ### Zhanghui
 
@@ -60,10 +60,10 @@ Design philosophy:
 
 > governed Canon / Intent / Craft separation + durable ChapterCommit acceptance + rebuildable projections + correction lineage + governed context retrieval.
 
-## Reserve systems
+## Track B / reserve systems
 
+- `Xiaoyangy/novel-studio`: mature product-level comparator with world/character simulation, sealed render packets and an acceptance/state lifecycle. It is excluded from the current Antigravity-only Track A because its native `agentcore` requires caller-owned structured tool-calling transport that the current headless Antigravity interface does not expose without reimplementing the agent loop.
 - `iLearn-Lab/NovelClaw`: serious product-level reserve comparator with persistent sessions, storyboards, memory banks, inspectable runs and provider configuration. Its public architecture is more workspace/session centric, so a clean controlled writer comparison is less direct.
-- `YILING0013/AI_NovelGenerator`: important mature/popular external reference with multi-stage generation, state tracking, retrieval and proofreading, but its current line also overlaps with an active refactor. Keep it as a reserve/product comparator unless a later audit identifies a cleaner frozen baseline.
 
 ## What Minimal / Lightweight mean now
 
@@ -82,7 +82,7 @@ They are not mature competitors and must not be used to claim:
 Compare:
 
 1. jarvis-write
-2. Xiaoyangy/novel-studio
+2. AI_NovelGenerator
 3. Zhanghui
 
 Hold constant where practical:
@@ -155,13 +155,13 @@ Recommended layout:
   sources/
     zhanghui/
     jarvis-write/
-    novel-studio/
+    AI_NovelGenerator/
 
   runs/
     pilot-tide-archive-001/
       run-001/
         jarvis-write/
-        novel-studio/
+        ai-novel-generator/
         zhanghui/
         _controller/
 ```
