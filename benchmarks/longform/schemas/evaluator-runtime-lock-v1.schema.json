@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/liuchangchxy/zhanghui/benchmarks/longform/schemas/evaluator-runtime-lock-v1.schema.json",
+  "title": "Stage 1 Evaluator Runtime Lock v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evaluator_version",
+    "locked_before_stage1_generation",
+    "roles",
+    "calibration"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "zhanghui-stage1-evaluator-runtime-lock/v1"
+    },
+    "evaluator_version": {
+      "const": "stage1-evaluator-v1"
+    },
+    "locked_before_stage1_generation": {
+      "const": true
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consistency",
+        "intent_quality"
+      ],
+      "properties": {
+        "consistency": {
+          "$ref": "#/$defs/runtime"
+        },
+        "intent_quality": {
+          "$ref": "#/$defs/runtime"
+        }
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cases_sha256",
+        "gold_sha256",
+        "schema_valid_rate",
+        "material_precision",
+        "material_recall",
+        "taxonomy_macro_f1",
+        "false_confirm_rate",
+        "passed"
+      ],
+      "properties": {
+        "cases_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "gold_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "schema_valid_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "material_precision": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "material_recall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "taxonomy_macro_f1": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "false_confirm_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "human_label",
+        "machine_label",
+        "model_id_verifiability",
+        "prompt_sha256",
+        "fresh_session_per_sample",
+        "filesystem_access",
+        "repository_access"
+      ],
+      "properties": {
+        "human_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "machine_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_id_verifiability": {
+          "enum": [
+            "EXACT",
+            "PARTIAL_INTERNAL_LABEL_ONLY",
+            "UNKNOWN"
+          ]
+        },
+        "prompt_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "fresh_session_per_sample": {
+          "const": true
+        },
+        "filesystem_access": {
+          "const": false
+        },
+        "repository_access": {
+          "const": false
+        }
+      }
+    }
+  }
+}
