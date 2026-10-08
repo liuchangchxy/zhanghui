@@ -34,7 +34,7 @@
     "system_id": {
       "enum": [
         "jarvis-write",
-        "novel-studio",
+        "ai-novel-generator",
         "zhanghui"
       ]
     },
