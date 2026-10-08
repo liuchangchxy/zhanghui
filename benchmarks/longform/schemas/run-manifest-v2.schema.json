@@ -1,0 +1,320 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/liuchangchxy/zhanghui/benchmarks/longform/schemas/run-manifest-v2.schema.json",
+  "title": "Zhanghui Mature-System Benchmark Run Manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "protocol_version",
+    "scenario_id",
+    "seed",
+    "track",
+    "system_id",
+    "source_repository",
+    "source_commit_sha",
+    "chapter",
+    "model_runtime_label",
+    "generation_mode",
+    "generator_template_sha256",
+    "context_manifest_sha256",
+    "chapter_objective_sha256",
+    "output_prose_sha256",
+    "started_at",
+    "ended_at",
+    "elapsed_ms",
+    "retry_count",
+    "token_usage",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "zhanghui-longform-run-manifest/v2"
+    },
+    "protocol_version": {
+      "const": "zhanghui-longform-benchmark-protocol/v2"
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "seed": {
+      "type": [
+        "string",
+        "integer"
+      ]
+    },
+    "track": {
+      "enum": [
+        "mature_architecture_comparison",
+        "product_workflow",
+        "lower_bound_sanity"
+      ]
+    },
+    "system_id": {
+      "enum": [
+        "jarvis-write",
+        "novel-studio",
+        "zhanghui",
+        "minimal-sanity"
+      ]
+    },
+    "source_repository": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_commit_sha": {
+      "$ref": "#/$defs/sha40"
+    },
+    "chapter": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "model_runtime_label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generation_mode": {
+      "enum": [
+        "controlled_common_writer",
+        "native_product_workflow",
+        "sanity_baseline"
+      ]
+    },
+    "adapter_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "adapter_sha256": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sampling_controls": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Record only controls actually exposed by the runtime."
+    },
+    "generator_template_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "context_manifest_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "chapter_objective_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "output_prose_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "elapsed_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "intervention_count": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "token_usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "measurement"
+      ],
+      "properties": {
+        "measurement": {
+          "enum": [
+            "measured",
+            "estimated",
+            "unavailable"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "isolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fresh_session",
+        "cross_system_runtime_hidden",
+        "future_intents_hidden",
+        "evaluator_material_hidden"
+      ],
+      "properties": {
+        "fresh_session": {
+          "type": "boolean"
+        },
+        "cross_system_runtime_hidden": {
+          "type": "boolean"
+        },
+        "future_intents_hidden": {
+          "type": "boolean"
+        },
+        "evaluator_material_hidden": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed",
+        "aborted",
+        "blocked"
+      ]
+    },
+    "failure_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "track": {
+            "const": "mature_architecture_comparison"
+          }
+        },
+        "required": [
+          "track"
+        ]
+      },
+      "then": {
+        "properties": {
+          "system_id": {
+            "enum": [
+              "jarvis-write",
+              "novel-studio",
+              "zhanghui"
+            ]
+          },
+          "generation_mode": {
+            "const": "controlled_common_writer"
+          },
+          "isolation": {
+            "type": "object",
+            "required": [
+              "fresh_session",
+              "cross_system_runtime_hidden",
+              "future_intents_hidden",
+              "evaluator_material_hidden",
+              "evidence"
+            ],
+            "properties": {
+              "fresh_session": {
+                "const": true
+              },
+              "cross_system_runtime_hidden": {
+                "const": true
+              },
+              "future_intents_hidden": {
+                "const": true
+              },
+              "evaluator_material_hidden": {
+                "const": true
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "required": [
+          "isolation"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "system_id": {
+            "const": "minimal-sanity"
+          }
+        },
+        "required": [
+          "system_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "track": {
+            "const": "lower_bound_sanity"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "sha40": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    }
+  }
+}
