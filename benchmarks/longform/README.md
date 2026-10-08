@@ -18,6 +18,10 @@ Authoritative protocol for new work:
 - `protocol/antigravity-runtime-qualification.md`
 - `protocol/stage0-harness-contract.md`
 - `schemas/writer-package-v1.schema.json`
+- `protocol/stage1-evaluation-protocol.md`
+- `schemas/stage1-evaluator-report-v1.schema.json`
+- `schemas/evaluator-runtime-lock-v1.schema.json`
+- `schemas/stage1-dataset-manifest-v1.schema.json`
 
 `protocol/v1.json` and `run-manifest.schema.json` are preserved as historical artifacts from the superseded toy-baseline design and must not be used for new runs.
 
@@ -240,6 +244,23 @@ Core contradiction taxonomy:
 | 3 | 50-100 chapter long-horizon confirmation only if justified |
 
 No architecture conclusion may be drawn from Stage 0.
+
+## Stage 1 evaluator gate
+
+Stage 1 does not immediately regenerate ten chapters from scratch.
+
+The accepted Formal Stage 0 chapters 1-3 are hash-locked and reused. Stage 1 continues each native system from its accepted chapter-3 state and generates only chapters 4-10, producing 21 new chapters and three complete 10-chapter manuscripts.
+
+Before any chapter-4 generation:
+
+1. freeze the evaluator runtime and prompt hashes;
+2. run the checked-in evaluator calibration cases without exposing calibration gold;
+3. satisfy the thresholds in `protocol/stage1-evaluation-protocol.md`;
+4. validate an `evaluator-runtime-lock-v1` artifact.
+
+Consistency grading uses only immutable seed + generated prose as story truth. Chapter intent is scored separately for instruction compliance and may never be promoted into Canon merely because it was planned.
+
+Stage 1 reports a metric vector rather than one weighted winner score and does not authorize architectural superiority claims.
 
 ## Existing Zhanghui facilities
 
