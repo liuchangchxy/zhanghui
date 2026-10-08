@@ -22,6 +22,10 @@ Authoritative protocol for new work:
 - `schemas/stage1-evaluator-report-v1.schema.json`
 - `schemas/evaluator-runtime-lock-v1.schema.json`
 - `schemas/stage1-dataset-manifest-v1.schema.json`
+- `evaluators/consistency-evaluator-v1.md`
+- `evaluators/intent-quality-evaluator-v1.md`
+- `evaluators/adjudicator-v1.md`
+- `schemas/evaluator-calibration-result-v1.schema.json`
 
 `protocol/v1.json` and `run-manifest.schema.json` are preserved as historical artifacts from the superseded toy-baseline design and must not be used for new runs.
 

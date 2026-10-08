@@ -384,6 +384,16 @@ Use `UNRESOLVED` when the evidence does not support a confident decision.
 
 Majority vote never overrides the evidence rule.
 
+## Frozen evaluator prompt artifacts
+
+Stage 1 evaluator behavior is defined by checked-in, hashable prompt artifacts:
+
+- consistency: `evaluators/consistency-evaluator-v1.md`
+- intent + prose quality: `evaluators/intent-quality-evaluator-v1.md`
+- blinded adjudication: `evaluators/adjudicator-v1.md`
+
+The first runtime candidate is the already-entitled Antigravity `Gemini 3.8 Flash (Medium)` runtime with machine label `MODEL_PLACEHOLDER_M322`. This is a candidate only until calibration passes. A failed calibration does not authorize prompt tuning after seeing participant outputs; prompt/runtime changes must be versioned and re-calibrated before chapter 4 generation.
+
 ## Evaluator calibration gate
 
 Before Stage 1 chapter 4 generation, the chosen evaluator runtime must pass the checked-in calibration fixtures without access to calibration gold.
