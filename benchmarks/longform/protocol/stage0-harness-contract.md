@@ -135,7 +135,7 @@ System-specific prompt/context must be preserved verbatim where possible. A syst
 
 ## Common-writer rule
 
-Controlled prose generation must use the same Antigravity runtime for all three systems.
+Every prose-mutating model call must use the same Antigravity runtime for all three systems. A system may require more than one prose-mutating call per accepted chapter (for example draft, finalize, rework, compression, or polish); preserving those native stages is required rather than forcing one call per chapter.
 
 Record both:
 
@@ -231,7 +231,7 @@ Stage 0 is valid only if:
 
 - all three source SHAs remain frozen;
 - production source trees remain unchanged;
-- 9 fresh writer invocations are recorded;
+- 9 accepted chapter outputs are produced (3 systems × 3 chapters);\n- every prose-mutating model call is recorded and uses a fresh isolated Antigravity session; the number of such calls may exceed 9 when a native pipeline performs finalize/rework/polish stages;
 - all 9 manifests contain isolation evidence;
 - no cross-system prompt leakage is detected;
 - each prose output is ingested through the system's real native boundary;
