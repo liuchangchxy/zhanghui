@@ -1,0 +1,87 @@
+{
+  "schema_version": "zhanghui-stage1-scenario-evaluator/v1",
+  "scenario_id": "pilot-tide-archive-001",
+  "purpose": "Evaluator-only stress annotations. These are authored expectations, not generated-prose truth.",
+  "may_enter_generation_bundle": false,
+  "may_seed_prose_truth_ledger": false,
+  "truth_rule": "Only immutable_seed plus evidence from generated prose may establish manuscript truth. Chapter intent and these annotations remain non-canonical.",
+  "stress_points": [
+    {
+      "chapter": 1,
+      "checks": [
+        "humanly removed/missing White Tower archive page is introduced",
+        "brass key remains with 梅叔 unless prose explicitly transfers it",
+        "paper fragment remains with 梅叔 unless prose explicitly transfers it"
+      ]
+    },
+    {
+      "chapter": 2,
+      "checks": [
+        "brass key transfer 梅叔 -> 林越 is an intended change",
+        "key purpose remains unresolved",
+        "the 'forgotten road' wording is a clue, not objective proof of exact mechanism"
+      ]
+    },
+    {
+      "chapter": 3,
+      "checks": [
+        "韩策's statement that 乔宁 touched the safety valve remains an attributed allegation",
+        "乔宁's involvement must remain UNRESOLVED absent independent prose evidence"
+      ]
+    },
+    {
+      "chapter": 4,
+      "checks": [
+        "林越's left hand is intended to become lightly burned",
+        "林越 and 乔宁 are intended to move from strangers toward limited cooperation, not instant intimacy"
+      ]
+    },
+    {
+      "chapter": 5,
+      "checks": [
+        "offline paper archives must not be described as automatically rewritten by the city network",
+        "White Tower responsibility remains unresolved"
+      ]
+    },
+    {
+      "chapter": 6,
+      "checks": [
+        "main body is ten years in the past",
+        "historical character states must not overwrite current state",
+        "patrol-standard raincoat evidence does not identify 韩策 personally"
+      ]
+    },
+    {
+      "chapter": 7,
+      "checks": [
+        "left hand is intended to be recovering rather than magically normal",
+        "brass key is intended to move temporarily 林越 -> 乔宁",
+        "chapter-end owner should be 乔宁 unless prose explicitly narrates another transfer"
+      ]
+    },
+    {
+      "chapter": 8,
+      "checks": [
+        "brass key is intended to return 乔宁 -> 林越",
+        "material match to old maintenance-track lock may narrow the clue",
+        "key-use payoff should not be fully completed before chapter 9 unless prose materially changes the authored intent"
+      ]
+    },
+    {
+      "chapter": 9,
+      "checks": [
+        "local key-use payoff is intended: mechanical switching box / abandoned maintenance route",
+        "who built/used the route and White Tower responsibility remain unresolved"
+      ]
+    },
+    {
+      "chapter": 10,
+      "checks": [
+        "乔宁 is intended to be a stable collaborator rather than abruptly intimate",
+        "韩策's chapter-3 accusation remains unproven absent new evidence",
+        "left hand may approach recovery only if prose supports the recovery path",
+        "key-use local mystery is resolved while White Tower ultimate responsibility remains open"
+      ]
+    }
+  ]
+}
