@@ -9,14 +9,11 @@ import pytest
 
 
 def _make_healthy_venv(venv: Path) -> None:
-    """Create a fake bin/python so ``is_venv_corrupted`` returns False.
-
-    Tests that exercise stamp logic (missing/stale/ok/corrupt-stamp) want a
-    structurally valid venv — only the .install-stamp varies. A real venv
-    always has bin/python; absence is the corrupted-venv case (tested by the
-    is_venv_corrupted_* tests below).
-    """
-    fake_py = venv / "bin" / "python"
+    """Create a fake platform-native Python executable for venv checks."""
+    if sys.platform == "win32":
+        fake_py = venv / "Scripts" / "python.exe"
+    else:
+        fake_py = venv / "bin" / "python"
     fake_py.parent.mkdir(parents=True, exist_ok=True)
     fake_py.write_text("#!/bin/sh\nexit 0\n")
     fake_py.chmod(0o755)
@@ -33,15 +30,15 @@ if str(_PLUGIN_ROOT) not in sys.path:
 
 def test_compute_install_stamp_returns_sha256(tmp_path):
     from hooks.install_python_deps import compute_install_stamp
-    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    (tmp_path / "pyproject.toml").write_bytes(b"[project]\nname='x'\n")
     expected = hashlib.sha256(b"[project]\nname='x'\n").hexdigest()
     assert compute_install_stamp(tmp_path) == expected
 
 
 def test_compute_install_stamp_includes_requirements_txt(tmp_path):
     from hooks.install_python_deps import compute_install_stamp
-    (tmp_path / "pyproject.toml").write_text("[project]\n")
-    (tmp_path / "requirements.txt").write_text("foo>=1.0\n")
+    (tmp_path / "pyproject.toml").write_bytes(b"[project]\n")
+    (tmp_path / "requirements.txt").write_bytes(b"foo>=1.0\n")
     base = hashlib.sha256(b"[project]\n").hexdigest()
     with_reqs = compute_install_stamp(tmp_path)
     assert with_reqs != base
@@ -370,6 +367,7 @@ def test_install_module_creates_venv_and_stamp(tmp_path, monkeypatch):
     """集成测试：mock uv subprocess 调用，验证 venv + stamp 创建。"""
     from hooks import install_python_deps as ipd
     monkeypatch.setattr(ipd, "resolve_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setattr(ipd._platform, "machine", lambda: "AMD64" if sys.platform == "win32" else "x86_64")
     monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
     fake_uv_calls = []
 
@@ -402,6 +400,7 @@ def test_install_module_failure_writes_log(tmp_path, monkeypatch):
     """uv 失败的场景：写 log + 尝试多 URL。"""
     from hooks import install_python_deps as ipd
     monkeypatch.setattr(ipd, "resolve_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setattr(ipd._platform, "machine", lambda: "AMD64" if sys.platform == "win32" else "x86_64")
     monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
 
     def fake_uv_fail(argv, **kwargs):
@@ -529,10 +528,13 @@ def test_is_venv_corrupted_under_2s_with_hung_binary(tmp_path, monkeypatch):
     monkeypatch.setattr("hooks.install_python_deps.resolve_cache_dir", lambda: tmp_path / "cache")
     venv = tmp_path / "cache" / "venvs" / "x"
     venv.mkdir(parents=True)
-    (venv / "bin").mkdir(parents=True)
     # Write a python that would block forever IF called. Existence check should
     # short-circuit and never invoke it.
-    py_path = venv / "bin" / "python"
+    if sys.platform == "win32":
+        py_path = venv / "Scripts" / "python.exe"
+    else:
+        py_path = venv / "bin" / "python"
+    py_path.parent.mkdir(parents=True)
     py_path.write_text("#!/bin/sh\nsleep 999\n")
     py_path.chmod(0o755)
 
