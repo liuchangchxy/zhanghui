@@ -181,7 +181,7 @@ Directory isolation is not enough.
 
 For a controlled writer comparison:
 
-- every system/chapter writer call uses a fresh isolated invocation/session;
+- every prose-mutating writer call uses a fresh isolated invocation/session; a native chapter pipeline may make multiple such calls (draft/finalize/rework/etc.);
 - the writer sees only the package produced by that system for that chapter;
 - no Antigravity session may write one system and then another while retaining hidden chat history;
 - future chapter objectives are hidden;

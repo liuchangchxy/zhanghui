@@ -56,7 +56,8 @@
     "preferred_exact_runtime_if_explicitly_available": "Gemini 3.8 Flash",
     "invent_model_id": false,
     "new_paid_api_required": false,
-    "fresh_isolated_session_per_system_chapter": true
+    "fresh_isolated_session_per_prose_mutating_call": true,
+    "accepted_chapter_outputs_stage0": 9
   },
   "stage_minus_1": {
     "required": true,
