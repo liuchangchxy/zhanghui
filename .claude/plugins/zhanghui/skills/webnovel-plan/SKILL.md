@@ -113,6 +113,8 @@ GENRE="$(python3 -X utf8 -c "import json; s=json.load(open('${PROJECT_ROOT}/.web
 python "${SCRIPTS_DIR}/migrate_story_craft.py" "${PROJECT_ROOT}/.webnovel/state.json"
 ```
 
+此 helper 保持 base-only 项目的 legacy 初始化兼容。检测到 enrollment marker 时，它改为读取 pinned owner state，经现有 `OwnedProjectView` writer 使用原读 revision/publication CAS 写入 `state-overlay.json`，并 read-after-write；不会改写 legacy `state.json`，也不会提升其中未知字段。
+
 按需读取设定集：`设定集/世界观.md`、`设定集/力量体系.md`、`设定集/主角卡.md`、`设定集/反派设计.md`、`.webnovel/idea_bank.json`。
 
 #### 按需读取 reference_research 拆书产物

@@ -44,6 +44,29 @@ def test_update_state_cli_add_review_writes_checkpoint(tmp_path, monkeypatch):
     assert checkpoints[-1]["report"] == report_file
 
 
+def test_update_state_cli_volume_planned_keeps_base_only_compatibility(tmp_path, monkeypatch):
+    import update_state as update_state_module
+
+    webnovel_dir = tmp_path / ".webnovel"
+    webnovel_dir.mkdir(parents=True, exist_ok=True)
+    state_file = webnovel_dir / "state.json"
+    state_file.write_text(json.dumps({
+        "schema_version": "v6.2.1", "project_info": {}, "progress": {},
+        "protagonist_state": {"power": {}, "location": ""}, "relationships": {},
+        "world_settings": {}, "plot_threads": {}, "review_checkpoints": [],
+    }), encoding="utf-8")
+    monkeypatch.setattr(update_state_module.StateUpdater, "backup", lambda self: True)
+    monkeypatch.setattr(sys, "argv", [
+        "update_state", "--project-root", str(tmp_path), "--volume-planned", "2",
+        "--chapters-range", "11-20",
+    ])
+
+    update_state_module.main()
+
+    saved = json.loads(state_file.read_text(encoding="utf-8"))
+    assert saved["progress"]["volumes_planned"][0]["volume"] == 2
+
+
 def test_update_state_rejects_canon_mutation_in_story_system_mode(tmp_path, monkeypatch):
     import pytest
     import update_state as update_state_module
