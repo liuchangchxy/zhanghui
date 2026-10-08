@@ -1,0 +1,155 @@
+{
+  "schema_version": "zhanghui-longform-benchmark-protocol/v2",
+  "issue": 13,
+  "supersedes": "zhanghui-longform-benchmark-protocol/v1",
+  "primary_track": "mature_architecture_comparison",
+  "primary_systems": {
+    "jarvis-write": {
+      "repository": "ynnyh/jarvis-write",
+      "philosophy": "temporal_story_bible_outline_foreshadow_control",
+      "initial_remote_sha": "efc5e1030b33f4bb19fc9509a6f28dafefa59848",
+      "tested_sha": "freeze_during_stage_minus_1"
+    },
+    "novel-studio": {
+      "repository": "Xiaoyangy/novel-studio",
+      "philosophy": "world_character_simulation_sealed_render_pipeline",
+      "initial_remote_sha": "ed04a106f665f456246af3c4414ba62992a2a1d1",
+      "tested_sha": "freeze_during_stage_minus_1"
+    },
+    "zhanghui": {
+      "repository": "liuchangchxy/zhanghui",
+      "philosophy": "governed_story_truth_chapter_commit_projections",
+      "tested_sha": "freeze_at_run_creation"
+    }
+  },
+  "reserve_systems": {
+    "novelclaw": {
+      "repository": "iLearn-Lab/NovelClaw",
+      "reason": "mature workspace and dynamic memory, but public architecture is more session/workspace-centric and less direct for a controlled same-writer comparison",
+      "initial_remote_sha": "226d50d3ec284c9cc037c47eb14af39505f9ed74"
+    },
+    "ai_novel_generator": {
+      "repository": "YILING0013/AI_NovelGenerator",
+      "reason": "important mature/popular reference, but current production line overlaps an active refactor and is less clean as the first frozen architecture baseline",
+      "initial_remote_sha": "f9aefef90b1493c579d7f72547efb4a3d8a0da25"
+    }
+  },
+  "weak_baselines": {
+    "allowed_role": "lower_bound_sanity_check_only",
+    "may_support_complexity_claim": false,
+    "may_support_marginal_benefit_claim_against_mature_alternative": false
+  },
+  "controlled_comparison": {
+    "same_story_seed": true,
+    "same_author_level_plot_requirements": true,
+    "same_chapter_objective": true,
+    "same_target_length": true,
+    "same_language": true,
+    "same_writer_runtime": "where_fair_adapter_is_possible",
+    "same_evaluation_protocol": true,
+    "preserve_native_internal_representation": true,
+    "do_not_reimplement_comparators": true
+  },
+  "writer_policy": {
+    "intended_family": "Gemini",
+    "intended_entitlement": "existing Gemini Pro / Antigravity or other already-entitled execution path",
+    "preferred_exact_runtime_if_explicitly_available": "Gemini 3.8 Flash",
+    "invent_model_id": false,
+    "new_paid_api_required": false,
+    "fresh_isolated_session_per_system_chapter": true
+  },
+  "stage_minus_1": {
+    "required": true,
+    "purpose": "comparator_compatibility_and_adapter_audit",
+    "fields": [
+      "tested_commit_sha",
+      "license",
+      "installation_requirements",
+      "chapter_generation_entrypoint",
+      "context_prompt_assembly_boundary",
+      "memory_state_update_boundary",
+      "model_provider_boundary",
+      "same_writer_feasibility",
+      "external_prose_ingest_feasibility",
+      "post_chapter_model_call_requirements",
+      "adapter_invasiveness",
+      "controlled_track_eligibility"
+    ],
+    "disqualify_if_adapter_reimplements_architecture": true
+  },
+  "physical_topology": {
+    "source_root": "<benchmark-root>/sources",
+    "run_root": "<benchmark-root>/runs/<scenario>/<run>",
+    "sources": [
+      "zhanghui",
+      "jarvis-write",
+      "novel-studio"
+    ],
+    "run_projects": [
+      "jarvis-write",
+      "novel-studio",
+      "zhanghui"
+    ],
+    "controller_dir": "_controller",
+    "runtime_outside_source_repos": true,
+    "cross_system_runtime_access": false
+  },
+  "stages": {
+    "stage-1": {
+      "purpose": "compatibility_audit",
+      "prose_generation": false
+    },
+    "stage0": {
+      "chapters_per_system": 3,
+      "purpose": "isolation_capture_blinding_smoke",
+      "architecture_conclusion_allowed": false
+    },
+    "stage1": {
+      "chapters_per_system": 10,
+      "purpose": "pilot_and_evaluator_validation",
+      "architecture_conclusion_allowed": false
+    },
+    "stage2": {
+      "scenarios_min": 3,
+      "chapters_per_system": 30,
+      "purpose": "formal_comparison"
+    },
+    "stage3": {
+      "chapters_per_system_range": [
+        50,
+        100
+      ],
+      "purpose": "long_horizon_confirmation_if_justified"
+    }
+  },
+  "evaluation": {
+    "prose_grounded_truth": true,
+    "blind_system_identity_where_practical": true,
+    "unresolved_allowed": true,
+    "evaluator_version_locked": true,
+    "prose_quality_separate_from_consistency": true,
+    "taxonomy": [
+      "FACTUAL_ENTITY",
+      "CHARACTER_STATE",
+      "RELATIONSHIP",
+      "WORLD_RULE",
+      "TEMPORAL",
+      "LOCATION",
+      "OBJECT_OWNERSHIP",
+      "EPISTEMIC",
+      "OPEN_LOOP"
+    ]
+  },
+  "mechanism_audits": {
+    "zhanghui_data_agent_precision_recall": true,
+    "comparator_native_state_update_audit": "analogous_where_meaningful",
+    "force_common_internal_schema": false
+  },
+  "production_scope": {
+    "phase11": false,
+    "modify_zhanghui_to_improve_score": false,
+    "modify_comparators_to_simplify_grading": false,
+    "fake_competitor": false,
+    "automatic_100_chapter_run": false
+  }
+}
