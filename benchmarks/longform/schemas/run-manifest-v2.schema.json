@@ -184,7 +184,7 @@
       "required": [
         "fresh_session",
         "cross_system_runtime_hidden",
-        "future_intents_hidden",
+        "benchmark_future_oracle_hidden",
         "evaluator_material_hidden"
       ],
       "properties": {
@@ -192,9 +192,6 @@
           "type": "boolean"
         },
         "cross_system_runtime_hidden": {
-          "type": "boolean"
-        },
-        "future_intents_hidden": {
           "type": "boolean"
         },
         "evaluator_material_hidden": {
@@ -205,6 +202,9 @@
             "string",
             "null"
           ]
+        },
+        "benchmark_future_oracle_hidden": {
+          "type": "boolean"
         }
       }
     },
@@ -258,7 +258,7 @@
             "required": [
               "fresh_session",
               "cross_system_runtime_hidden",
-              "future_intents_hidden",
+              "benchmark_future_oracle_hidden",
               "evaluator_material_hidden",
               "evidence"
             ],
@@ -269,15 +269,15 @@
               "cross_system_runtime_hidden": {
                 "const": true
               },
-              "future_intents_hidden": {
-                "const": true
-              },
               "evaluator_material_hidden": {
                 "const": true
               },
               "evidence": {
                 "type": "string",
                 "minLength": 1
+              },
+              "benchmark_future_oracle_hidden": {
+                "const": true
               }
             }
           }
