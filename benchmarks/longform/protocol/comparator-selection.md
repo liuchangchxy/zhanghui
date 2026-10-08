@@ -5,11 +5,13 @@ Audit date: 2026-10-08
 
 ## Decision
 
-The first primary benchmark set is:
+The current controlled Track A benchmark set is:
 
 1. `ynnyh/jarvis-write`
-2. `Xiaoyangy/novel-studio`
+2. `YILING0013/AI_NovelGenerator`
 3. `liuchangchxy/zhanghui`
+
+`Xiaoyangy/novel-studio` remains a mature comparator, but is assigned to Track B under the current Antigravity-only runtime because its native `agentcore` loop requires caller-owned structured tool-calling transport that Antigravity's headless interface does not expose.
 
 The previous benchmark-authored Minimal/Lightweight pair is no longer a primary comparison set. A minimal run may remain only as a lower-bound sanity check.
 
@@ -72,49 +74,67 @@ Canon / Intent / Craft authority separation
 
 This is a legitimate alternative design, not a deliberately weaker baseline.
 
-## Selected: Xiaoyangy/novel-studio
+## Selected: AI_NovelGenerator
 
-Repository: https://github.com/Xiaoyangy/novel-studio
+Repository: https://github.com/YILING0013/AI_NovelGenerator
 
-Observed remote SHA during selection:
+Frozen Track A SHA:
 
-`ed04a106f665f456246af3c4414ba62992a2a1d1`
+`f9aefef90b1493c579d7f72547efb4a3d8a0da25`
 
 Why it qualifies:
 
-- complete local-first CLI/production engine;
-- stable release path plus current-source execution;
-- repository includes architecture, lifecycle, observability, evaluation and operations documentation;
-- role-specific model routing with Gemini support;
-- RAG and source-receipt design;
-- explicit world/character simulation;
-- arc-level planning and sealed rendering bundles;
-- chapter draft/review/rewrite/commit lifecycle;
-- recoverable checkpoints;
-- accepted prose and observed outcomes become formal state.
+- mature modular V1.4.x production line with multiple public releases;
+- multi-stage architecture generation and chapter-blueprint generation;
+- a simple production LLM seam, `BaseLLMAdapter.invoke(prompt) -> str`, that can be connected to Antigravity through a thin text transport without rebuilding the system;
+- native chapter-context assembly that combines architecture, chapter blueprint, character state, historical summary and vector-retrieved memory;
+- native finalization that updates global summary and character state;
+- native Chroma vector memory;
+- production-supported `MLStudioEmbeddingAdapter`, qualified locally with LM Studio and Nomic Embed Text without new paid API access;
+- consistency-review workflow;
+- external prose can enter the normal chapter/finalization path without controller-authored state synthesis.
 
 Why it is useful against Zhanghui:
 
-Its central idea is not merely better retrieval. It shifts control earlier:
-
 ```text
-novel-studio:
-simulate world and characters
--> seal causal/POV plan
--> render prose
--> review/accept
--> update recoverable state
+AI_NovelGenerator:
+multi-stage architecture + chapter blueprint
+-> assemble text/vector memory
+-> draft chapter
+-> finalize summary + character state
+-> persist semantic vector memory
+-> optional consistency review
 
 Zhanghui:
-assemble governed context
+governed Canon / Intent / Craft
 -> draft/review
 -> extract observed changes
 -> reconcile
--> accept ChapterCommit
+-> durable ChapterCommit
 -> rebuild projections
 ```
 
-This tests whether consistency is better achieved through pre-generation causal simulation/sealing or through post-generation truth acceptance and governance.
+This compares a conventional hierarchical-text-plus-vector-memory architecture against Zhanghui's governed truth/acceptance model.
+
+## Track B: Xiaoyangy/novel-studio
+
+Repository: https://github.com/Xiaoyangy/novel-studio
+
+Frozen audited SHA:
+
+`ed04a106f665f456246af3c4414ba62992a2a1d1`
+
+Why it remains important:
+
+- complete local-first production engine;
+- explicit world/character simulation, sealed render packets, review/actual-match/acceptance lifecycle and recoverable state;
+- architecturally valuable contrast with Zhanghui.
+
+Why it is not current Track A:
+
+The Stage 0 transport audit found that its production `agentcore.ChatModel` path requires caller-owned structured tool definitions, interceptable tool calls and tool-result continuation. Antigravity's current headless/programmatic surface keeps its own host tool loop internal and does not expose that wire boundary. A controller-side emulation would reimplement novel-studio's agent loop, violating the thin-adapter rule.
+
+It therefore remains a native product/workflow comparator in Track B rather than being replaced by a benchmark-authored imitation.
 
 ## Reserve: NovelClaw
 
@@ -135,27 +155,6 @@ Why it remains important:
 Why it is not first-line Track A:
 
 Its public design is intentionally workspace/session centric. Persistent conversation itself is part of the product philosophy, which makes "same isolated writer invocation" harder to impose without changing the behavior being tested. It remains a strong Track B / product-level comparator and can be promoted after Stage -1 if a clean adapter boundary is found.
-
-## Reserve: AI_NovelGenerator
-
-Repository: https://github.com/YILING0013/AI_NovelGenerator
-
-Observed remote SHA:
-
-`f9aefef90b1493c579d7f72547efb4a3d8a0da25`
-
-Why it remains important:
-
-- long-running public project with a large user/fork base and multiple releases;
-- multi-stage novel generation;
-- state tracking;
-- semantic retrieval;
-- continuity/proofreading flow;
-- configurable model routing including Gemini.
-
-Why it is not first-line Track A:
-
-The project is simultaneously carrying a mature older line and an active refactor/newer line. That is useful for product benchmarking but creates ambiguity over which architecture should be treated as the clean current philosophical baseline.
 
 ## Research implementations not selected as mature product comparators
 
@@ -179,4 +178,4 @@ Stage -1 must prove that for each selected project:
 - state updates can continue after externally supplied prose if the controlled track uses external Gemini;
 - no hidden cross-system context is introduced.
 
-If either external project fails that test, do not replace it with a benchmark-authored imitation. Promote a reserve mature system or run it only in the native product track.
+If an external project fails that test, do not replace it with a benchmark-authored imitation. Promote a mature reserve only after its own compatibility audit, or keep the incompatible system in the native product track. The novel-studio -> AI_NovelGenerator Track A substitution followed exactly this rule.
