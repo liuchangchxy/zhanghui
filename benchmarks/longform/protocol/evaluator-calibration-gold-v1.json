@@ -1,0 +1,65 @@
+{
+  "schema_version": "zhanghui-stage1-evaluator-calibration-gold/v1",
+  "cases": [
+    {
+      "id": "C01",
+      "material_violation": true,
+      "primary_category": "WORLD_RULE"
+    },
+    {
+      "id": "C02",
+      "material_violation": true,
+      "primary_category": "EPISTEMIC"
+    },
+    {
+      "id": "C03",
+      "material_violation": false,
+      "primary_category": null
+    },
+    {
+      "id": "C04",
+      "material_violation": false,
+      "primary_category": null
+    },
+    {
+      "id": "C05",
+      "material_violation": true,
+      "primary_category": "OBJECT_OWNERSHIP"
+    },
+    {
+      "id": "C06",
+      "material_violation": false,
+      "primary_category": null
+    },
+    {
+      "id": "C07",
+      "material_violation": true,
+      "primary_category": "EPISTEMIC"
+    },
+    {
+      "id": "C08",
+      "material_violation": false,
+      "primary_category": null
+    },
+    {
+      "id": "C09",
+      "material_violation": false,
+      "primary_category": null
+    },
+    {
+      "id": "C10",
+      "material_violation": true,
+      "primary_category": "RELATIONSHIP"
+    },
+    {
+      "id": "C11",
+      "material_violation": false,
+      "primary_category": null
+    },
+    {
+      "id": "C12",
+      "material_violation": true,
+      "primary_category": "FACTUAL_ENTITY"
+    }
+  ]
+}

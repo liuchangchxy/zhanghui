@@ -108,7 +108,33 @@
     "stage1": {
       "chapters_per_system": 10,
       "purpose": "pilot_and_evaluator_validation",
-      "architecture_conclusion_allowed": false
+      "architecture_conclusion_allowed": false,
+      "continuation_from_valid_stage0": true,
+      "reused_stage0_chapters": [
+        1,
+        2,
+        3
+      ],
+      "newly_generated_chapters": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "new_accepted_outputs": 21,
+      "total_pilot_outputs": 30,
+      "evaluation_protocol": "protocol/stage1-evaluation-protocol.md",
+      "evaluator_report_schema": "schemas/stage1-evaluator-report-v1.schema.json",
+      "evaluator_runtime_lock_schema": "schemas/evaluator-runtime-lock-v1.schema.json",
+      "dataset_manifest_schema": "schemas/stage1-dataset-manifest-v1.schema.json",
+      "evaluator_scenario_annotations": "scenarios/pilot-tide-archive-001.evaluator.json",
+      "calibration_cases": "protocol/evaluator-calibration-cases-v1.json",
+      "calibration_gold": "protocol/evaluator-calibration-gold-v1.json",
+      "evaluator_calibration_required_before_chapter4": true,
+      "primary_metric_policy": "vector_not_weighted_composite"
     },
     "stage2": {
       "scenarios_min": 3,
@@ -139,7 +165,18 @@
       "OBJECT_OWNERSHIP",
       "EPISTEMIC",
       "OPEN_LOOP"
-    ]
+    ],
+    "stage1_truth_ledger_source": "immutable_seed_plus_generated_prose_only",
+    "chapter_intent_is_ground_truth": false,
+    "participant_state_is_ground_truth": false,
+    "stage1_blind_modes": [
+      "consistency",
+      "intent_quality"
+    ],
+    "stage1_consistency_raters_per_manuscript": 3,
+    "stage1_intent_quality_raters_per_manuscript": 3,
+    "stage1_adjudication": "evidence_grounded_blinded",
+    "stage1_winner_allowed": false
   },
   "mechanism_audits": {
     "zhanghui_data_agent_precision_recall": true,
