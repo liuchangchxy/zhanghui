@@ -15,6 +15,9 @@ Authoritative protocol for new work:
 - `protocol/v2.json`
 - `protocol/comparator-selection.md`
 - `schemas/run-manifest-v2.schema.json`
+- `protocol/antigravity-runtime-qualification.md`
+- `protocol/stage0-harness-contract.md`
+- `schemas/writer-package-v1.schema.json`
 
 `protocol/v1.json` and `run-manifest.schema.json` are preserved as historical artifacts from the superseded toy-baseline design and must not be used for new runs.
 
