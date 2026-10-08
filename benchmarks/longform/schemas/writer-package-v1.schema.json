@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/liuchangchxy/zhanghui/benchmarks/longform/schemas/writer-package-v1.schema.json",
+  "title": "Stage 0 Common Writer Package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "protocol_version",
+    "scenario_id",
+    "system_id",
+    "chapter",
+    "source_commit_sha",
+    "runtime_label",
+    "system_instructions",
+    "system_context",
+    "author_objective",
+    "target_length",
+    "output_contract",
+    "hashes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "zhanghui-longform-writer-package/v1"
+    },
+    "protocol_version": {
+      "const": "zhanghui-longform-benchmark-protocol/v2"
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "system_id": {
+      "enum": [
+        "jarvis-write",
+        "novel-studio",
+        "zhanghui"
+      ]
+    },
+    "chapter": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "source_commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "runtime_label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "human_visible",
+        "machine_reported",
+        "model_id_verifiability"
+      ],
+      "properties": {
+        "human_visible": {
+          "type": "string",
+          "minLength": 1
+        },
+        "machine_reported": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_id_verifiability": {
+          "enum": [
+            "EXACT",
+            "PARTIAL_INTERNAL_LABEL_ONLY",
+            "UNKNOWN"
+          ]
+        }
+      }
+    },
+    "system_instructions": {
+      "type": "string",
+      "minLength": 1
+    },
+    "system_context": {
+      "type": "string",
+      "minLength": 1
+    },
+    "author_objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_length": {
+      "type": "string",
+      "minLength": 1
+    },
+    "output_contract": {
+      "const": "PROSE_ONLY_NO_ANALYSIS_NO_TOOL_USE"
+    },
+    "forbidden_content_attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "future_intents",
+        "other_system_content",
+        "evaluator_material",
+        "controller_mapping",
+        "absolute_source_paths"
+      ],
+      "properties": {
+        "future_intents": {
+          "const": false
+        },
+        "other_system_content": {
+          "const": false
+        },
+        "evaluator_material": {
+          "const": false
+        },
+        "controller_mapping": {
+          "const": false
+        },
+        "absolute_source_paths": {
+          "const": false
+        }
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system_instructions_sha256",
+        "system_context_sha256",
+        "author_objective_sha256",
+        "serialized_package_sha256"
+      ],
+      "properties": {
+        "system_instructions_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "system_context_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "author_objective_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "serialized_package_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}
