@@ -1,0 +1,187 @@
+{
+  "schema_version": "zhanghui-longform-scenario/v1",
+  "scenario_id": "pilot-tide-archive-001",
+  "title": "潮汐档案",
+  "language": "zh-CN",
+  "genre": "近未来悬疑",
+  "target_chapter_chars": [
+    1800,
+    2600
+  ],
+  "purpose": "Stage 0/1 pilot scenario stressing long-form memory without being only adversarial edge cases.",
+  "immutable_seed": {
+    "premise": "临海城市临汐城依靠潮汐能源维持防潮穹顶。档案修复员林越在一次旧站事故后，开始调查十年前被封存的‘白塔事故’记录。",
+    "world_facts": [
+      "临汐城的防潮穹顶由潮汐能源站供能。",
+      "白塔事故发生在故事现在时的十年前。",
+      "未经授权的人不能直接进入能源站核心层。",
+      "离线纸质档案不会被城市网络自动改写。"
+    ],
+    "characters": [
+      {
+        "id": "lin_yue",
+        "name": "林越",
+        "role": "主角",
+        "initial_state": [
+          "档案修复员",
+          "左手无伤",
+          "与韩策互相信任但并不亲近"
+        ]
+      },
+      {
+        "id": "han_ce",
+        "name": "韩策",
+        "role": "巡防队长",
+        "initial_state": [
+          "负责旧城区巡防",
+          "掌握部分白塔事故内部信息"
+        ]
+      },
+      {
+        "id": "qiao_ning",
+        "name": "乔宁",
+        "role": "能源工程师",
+        "initial_state": [
+          "负责潮汐站维护",
+          "与林越初次见面前没有私人关系"
+        ]
+      },
+      {
+        "id": "mei_shu",
+        "name": "梅叔",
+        "role": "退休档案员",
+        "initial_state": [
+          "保管一批未数字化旧档案",
+          "行动不便"
+        ]
+      }
+    ],
+    "important_objects": [
+      {
+        "id": "brass_key",
+        "name": "黄铜钥匙",
+        "initial_owner": "mei_shu"
+      },
+      {
+        "id": "paper_fragment",
+        "name": "白塔纸质残页",
+        "initial_owner": "mei_shu"
+      }
+    ]
+  },
+  "master_outline": [
+    "林越从纸质档案发现白塔事故记录存在缺页，并逐步接近潮汐站。",
+    "韩策提供帮助但其叙述并不等于客观事实。",
+    "乔宁从可疑对象逐渐转为合作对象。",
+    "黄铜钥匙与一处旧维护间有关。",
+    "十章结束时解决‘钥匙打开什么’这一局部悬念，但白塔事故真正责任人仍保持未决。"
+  ],
+  "generation_rules": [
+    "每次生成只提供 immutable_seed、master_outline、当前 chapter_intent，以及该 arm 允许的动态上下文。",
+    "不得把后续章节 chapter_intent 直接提供给生成模型。",
+    "chapter_intent 是作者 Intent，不自动视为已经发生的 Canon；以实际生成正文为准。",
+    "人物的说法、传闻、猜测、梦境和回忆中的主观判断不得自动升级为客观世界事实。"
+  ],
+  "chapters": [
+    {
+      "chapter": 1,
+      "chapter_intent": {
+        "objective": "林越在梅叔处修复旧纸档案，发现白塔事故档案存在人为撕去的一页。",
+        "ordinary_story_goal": "建立人物、城市和调查动机，不要一开始就给出幕后真相。",
+        "intended_changes": [
+          "林越开始调查白塔事故",
+          "梅叔仍持有黄铜钥匙与残页"
+        ]
+      }
+    },
+    {
+      "chapter": 2,
+      "chapter_intent": {
+        "objective": "梅叔把黄铜钥匙交给林越，并提到‘钥匙不是开门，是开一段被忘掉的路’，形成延迟回收的悬念。",
+        "intended_changes": [
+          "黄铜钥匙所有权从梅叔转移给林越"
+        ],
+        "open_development": "钥匙究竟对应什么仍未解决"
+      }
+    },
+    {
+      "chapter": 3,
+      "chapter_intent": {
+        "objective": "林越在旧城区调查时遇到韩策。韩策声称‘乔宁当年动过白塔的安全阀’，但必须写成韩策的说法，而不是已经确认的世界真相。",
+        "epistemic_stress": "乔宁是否动过安全阀保持 UNRESOLVED。",
+        "ordinary_story_goal": "让林越对乔宁产生怀疑，但保留证据不足。"
+      }
+    },
+    {
+      "chapter": 4,
+      "chapter_intent": {
+        "objective": "林越第一次进入潮汐站外围，与乔宁发生冲突后短暂合作。一次设备故障使林越左手被灼伤。",
+        "intended_changes": [
+          "林越左手从无伤变为轻度灼伤",
+          "林越与乔宁由陌生转为有限合作"
+        ],
+        "continuity_stress": "后续章节在伤势恢复前不能无理由把左手写成完全正常。"
+      }
+    },
+    {
+      "chapter": 5,
+      "chapter_intent": {
+        "objective": "两人调查一段旧维护记录。乔宁解释城市网络记录可能被后续同步覆盖，但纸质档案不会被自动改写。",
+        "world_rule_stress": "不得推翻 immutable_seed 中纸质档案不会被城市网络自动改写的规则。",
+        "ordinary_story_goal": "推进调查但不给出白塔事故责任人。"
+      }
+    },
+    {
+      "chapter": 6,
+      "chapter_intent": {
+        "objective": "整章主体是一段十年前的回忆/档案重建：年轻的梅叔在白塔事故当夜看到有人携带巡防制式雨衣进入维护区，但没有看清脸。",
+        "temporal_stress": "这是十年前，不是当前时间线；回忆中的人物状态不能覆盖现在时状态。",
+        "epistemic_stress": "制式雨衣只能证明装备特征，不能直接证明韩策本人在场。"
+      }
+    },
+    {
+      "chapter": 7,
+      "chapter_intent": {
+        "objective": "回到现在时。林越左手伤势仍在但有所缓解；他把黄铜钥匙暂时交给乔宁检查材质，乔宁承诺次日归还。",
+        "intended_changes": [
+          "黄铜钥匙从林越暂时转移给乔宁",
+          "林越左手状态从轻度灼伤变为恢复中"
+        ],
+        "object_stress": "章末钥匙应在乔宁手里，除非正文明确发生新的转移。"
+      }
+    },
+    {
+      "chapter": 8,
+      "chapter_intent": {
+        "objective": "乔宁归还黄铜钥匙，并发现它与停用的旧维护轨道锁芯材质一致。韩策再次出现，但不新增关于白塔责任人的确定证据。",
+        "intended_changes": [
+          "黄铜钥匙从乔宁归还林越"
+        ],
+        "open_development": "钥匙用途接近答案但本章不完全打开对应地点。"
+      }
+    },
+    {
+      "chapter": 9,
+      "chapter_intent": {
+        "objective": "林越与乔宁用黄铜钥匙打开旧维护轨道的机械切换盒，发现一条绕开主入口的废弃检修路线。回收‘钥匙打开什么’的局部悬念。",
+        "payoff": "黄铜钥匙对应废弃检修路线的机械切换盒。",
+        "unresolved": "谁制造或利用这条路线、谁应对白塔事故负责仍未解决。"
+      }
+    },
+    {
+      "chapter": 10,
+      "chapter_intent": {
+        "objective": "三人围绕新路线产生分歧。林越决定继续调查；乔宁成为稳定合作方；韩策仍然提供帮助但其早先指控没有被证实。",
+        "continuity_stress": "不得把韩策第3章的说法自动写成已证实事实。",
+        "end_state_goal": [
+          "钥匙用途这一局部悬念已解决",
+          "白塔事故责任人保持未决",
+          "林越与乔宁关系为合作而非突然亲密",
+          "林越左手可接近恢复但需要正文给出合理恢复过程"
+        ]
+      }
+    }
+  ],
+  "evaluator_only_material": "NOT_INCLUDED_IN_PUBLIC_SCENARIO",
+  "notes": "Gold/audited claims must be derived from generated prose and kept out of generation bundles. A future evaluator-only artifact may annotate expected stress points but cannot be exposed to generation."
+}
