@@ -231,7 +231,8 @@ Stage 0 is valid only if:
 
 - all three source SHAs remain frozen;
 - production source trees remain unchanged;
-- 9 accepted chapter outputs are produced (3 systems × 3 chapters);\n- every prose-mutating model call is recorded and uses a fresh isolated Antigravity session; the number of such calls may exceed 9 when a native pipeline performs finalize/rework/polish stages;
+- 9 accepted chapter outputs are produced (3 systems × 3 chapters);
+- every prose-mutating model call is recorded and uses a fresh isolated Antigravity session; the number of such calls may exceed 9 when a native pipeline performs finalize/rework/polish stages;
 - all 9 manifests contain isolation evidence;
 - no cross-system prompt leakage is detected;
 - each prose output is ingested through the system's real native boundary;
