@@ -252,8 +252,39 @@
           },
           "generation_mode": {
             "const": "controlled_common_writer"
+          },
+          "isolation": {
+            "type": "object",
+            "required": [
+              "fresh_session",
+              "cross_system_runtime_hidden",
+              "future_intents_hidden",
+              "evaluator_material_hidden",
+              "evidence"
+            ],
+            "properties": {
+              "fresh_session": {
+                "const": true
+              },
+              "cross_system_runtime_hidden": {
+                "const": true
+              },
+              "future_intents_hidden": {
+                "const": true
+              },
+              "evaluator_material_hidden": {
+                "const": true
+              },
+              "evidence": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
           }
-        }
+        },
+        "required": [
+          "isolation"
+        ]
       }
     },
     {
