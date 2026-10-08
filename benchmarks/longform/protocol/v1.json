@@ -1,0 +1,112 @@
+{
+  "schema_version": "zhanghui-longform-benchmark-protocol/v1",
+  "issue": 13,
+  "primary_track": "memory_truth_architecture",
+  "common_controls": {
+    "same_model_runtime": true,
+    "same_story_seed": true,
+    "same_master_outline": true,
+    "same_chapter_intent": true,
+    "same_target_length": true,
+    "same_common_prose_instructions": true,
+    "sampling_reproducibility": "record_only_if_exposed_by_host"
+  },
+  "arms": {
+    "A": {
+      "id": "minimal",
+      "recent_chapters": 2,
+      "story_bible": false,
+      "long_term_rag": false,
+      "structured_canon": false,
+      "zhanghui_truth_system": false
+    },
+    "B": {
+      "id": "lightweight",
+      "recent_chapters": 2,
+      "story_bible": true,
+      "long_term_rag": "simple",
+      "structured_canon": false,
+      "immutable_commit_ledger": false,
+      "correction_lineage": false,
+      "zhanghui_gate_authority": false
+    },
+    "C": {
+      "id": "zhanghui",
+      "governed_context": true,
+      "structured_canon": true,
+      "chapter_commit": true,
+      "rebuildable_projections": true,
+      "governed_retrieval": true,
+      "correction_lineage": true
+    }
+  },
+  "stages": {
+    "stage0": {
+      "scenarios": 1,
+      "chapters_per_arm": 3,
+      "purpose": "harness_smoke",
+      "architecture_conclusion_allowed": false
+    },
+    "stage1": {
+      "scenarios": 1,
+      "chapters_per_arm": 10,
+      "purpose": "pilot_and_evaluator_audit",
+      "architecture_conclusion_allowed": false
+    },
+    "stage2": {
+      "scenarios_min": 3,
+      "chapters_per_arm": 30,
+      "purpose": "formal_comparison"
+    },
+    "stage3": {
+      "chapters_per_arm_range": [
+        50,
+        100
+      ],
+      "purpose": "long_horizon_confirmation_if_justified"
+    }
+  },
+  "metrics": [
+    "canon_contradictions_per_10_chapters",
+    "temporal_contradictions_per_10_chapters",
+    "character_state_contradictions_per_10_chapters",
+    "open_loop_errors_per_10_chapters",
+    "extraction_precision",
+    "extraction_recall",
+    "interventions_per_10_accepted_chapters",
+    "elapsed_ms_per_accepted_chapter",
+    "retry_count",
+    "token_usage_when_measured",
+    "blinded_prose_quality"
+  ],
+  "contradiction_taxonomy": [
+    "FACTUAL_ENTITY",
+    "CHARACTER_STATE",
+    "RELATIONSHIP",
+    "WORLD_RULE",
+    "TEMPORAL",
+    "LOCATION",
+    "OBJECT_OWNERSHIP",
+    "EPISTEMIC",
+    "OPEN_LOOP"
+  ],
+  "evaluation_rules": {
+    "projections_are_ground_truth": false,
+    "prose_evidence_required": true,
+    "blind_arm_identity_where_practical": true,
+    "unresolved_allowed": true,
+    "evaluator_version_locked_per_comparison": true,
+    "external_generation_ingest_required": true,
+    "hidden_oracle_must_not_enter_generation": true
+  },
+  "token_measurement": {
+    "reliable_runtime_measurement": "measured",
+    "derived_from_documented_source": "estimated",
+    "otherwise": "unavailable"
+  },
+  "production_scope": {
+    "modify_story_truth_to_improve_score": false,
+    "phase11": false,
+    "new_paid_api_required": false
+  }
+}
