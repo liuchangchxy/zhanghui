@@ -1,0 +1,33 @@
+{
+  "schema_version": "zhanghui-stage1-mechanism-retrieval-probes/v1",
+  "scenario_id": "pilot-tide-archive-001",
+  "use_only_after_primary_blind_result_frozen": true,
+  "scoring_role": "secondary_mechanism_audit_only",
+  "probes": [
+    {
+      "id": "R01",
+      "query": "白塔事故 缺失档案 纸质残页",
+      "purpose": "early investigation / archive evidence"
+    },
+    {
+      "id": "R02",
+      "query": "林越 左手 灼伤 恢复",
+      "purpose": "character-state transition"
+    },
+    {
+      "id": "R03",
+      "query": "黄铜钥匙 所有权 乔宁 归还 林越",
+      "purpose": "object-ownership transitions"
+    },
+    {
+      "id": "R04",
+      "query": "乔宁 安全阀 韩策 指控 是否证实",
+      "purpose": "epistemic status of allegation"
+    },
+    {
+      "id": "R05",
+      "query": "废弃检修路线 机械切换盒 黄铜钥匙",
+      "purpose": "delayed key-use payoff"
+    }
+  ]
+}
