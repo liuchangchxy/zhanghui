@@ -146,6 +146,23 @@
         "machine_label": "MODEL_PLACEHOLDER_M322",
         "model_id_verifiability": "PARTIAL_INTERNAL_LABEL_ONLY",
         "status": "must_pass_calibration_before_lock"
+      },
+      "truth_ledger": {
+        "prompt": "evaluators/truth-ledger-extractor-v1.md",
+        "schema": "schemas/stage1-truth-ledger-v1.schema.json",
+        "input_boundary": "immutable_seed_plus_blinded_manuscript_only",
+        "primary_score_mutation_allowed": false
+      },
+      "native_mechanism_audit": {
+        "prompt": "evaluators/native-mechanism-auditor-v1.md",
+        "schema": "schemas/stage1-mechanism-audit-v1.schema.json",
+        "checkpoints": [
+          3,
+          6,
+          10
+        ],
+        "run_after_primary_blind_result_frozen": true,
+        "primary_score_mutation_allowed": false
       }
     },
     "stage2": {
