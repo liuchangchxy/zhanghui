@@ -26,6 +26,10 @@ Authoritative protocol for new work:
 - `evaluators/intent-quality-evaluator-v1.md`
 - `evaluators/adjudicator-v1.md`
 - `schemas/evaluator-calibration-result-v1.schema.json`
+- `evaluators/truth-ledger-extractor-v1.md`
+- `schemas/stage1-truth-ledger-v1.schema.json`
+- `evaluators/native-mechanism-auditor-v1.md`
+- `schemas/stage1-mechanism-audit-v1.schema.json`
 
 `protocol/v1.json` and `run-manifest.schema.json` are preserved as historical artifacts from the superseded toy-baseline design and must not be used for new runs.
 
