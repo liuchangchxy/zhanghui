@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/liuchangchxy/zhanghui/benchmarks/longform/schemas/stage1-mechanism-audit-v1.schema.json",
+  "title": "Stage 1 Native Mechanism Audit v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "auditor_version",
+    "system_id",
+    "checkpoint",
+    "native_assertions",
+    "material_changes",
+    "metrics"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "zhanghui-stage1-mechanism-audit/v1"
+    },
+    "auditor_version": {
+      "const": "stage1-native-mechanism-auditor-v1"
+    },
+    "system_id": {
+      "enum": [
+        "jarvis-write",
+        "ai-novel-generator",
+        "zhanghui"
+      ]
+    },
+    "checkpoint": {
+      "enum": [
+        3,
+        6,
+        10
+      ]
+    },
+    "native_assertions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nativeAssertion"
+      }
+    },
+    "material_changes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/materialChange"
+      }
+    },
+    "vector_retrieval": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "precision_numerator",
+        "precision_denominator",
+        "precision",
+        "recall_numerator",
+        "recall_denominator",
+        "recall"
+      ],
+      "properties": {
+        "precision_numerator": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "precision_denominator": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "precision": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "recall_numerator": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recall_denominator": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recall": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nativeAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assertion_id",
+        "text",
+        "status",
+        "evidence_item_ids"
+      ],
+      "properties": {
+        "assertion_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "SUPPORTED",
+            "UNSUPPORTED",
+            "STALE",
+            "ATTRIBUTION_LOST"
+          ]
+        },
+        "evidence_item_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "materialChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ledger_item_id",
+        "status",
+        "native_reference"
+      ],
+      "properties": {
+        "ledger_item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "REPRESENTED",
+            "MISSED",
+            "NOT_IN_SCOPE"
+          ]
+        },
+        "native_reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

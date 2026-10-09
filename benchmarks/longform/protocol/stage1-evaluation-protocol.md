@@ -291,7 +291,33 @@ Report each system as a vector:
 
 Any later composite metric requires a separate pre-registered protocol revision.
 
+## Prose-grounded truth-ledger operationalization
+
+The mechanism-audit truth ledger is produced from each blinded manuscript using the frozen artifact:
+
+- `evaluators/truth-ledger-extractor-v1.md`
+- `schemas/stage1-truth-ledger-v1.schema.json`
+
+This extractor receives only the immutable seed and the blinded manuscript. It does not receive chapter intent, participant-native state, system identity, or evaluator-only stress annotations.
+
+The ledger is a secondary evidence structure for mechanism auditing. It does not replace the independent consistency finding/adjudication pipeline and must not be used to revise primary prose scores after unblinding.
+
 ## Native mechanism audit
+
+Native mechanism auditing uses the frozen artifacts:
+
+- `evaluators/native-mechanism-auditor-v1.md`
+- `schemas/stage1-mechanism-audit-v1.schema.json`
+
+Sequencing is mandatory:
+
+1. freeze all blinded consistency reports;
+2. freeze all intent/prose-quality reports;
+3. finish blind finding normalization/adjudication;
+4. freeze the primary blind evaluation result;
+5. only then reveal the controller mapping for the secondary native mechanism audit.
+
+Mechanism-audit output may explain architecture behavior but may not alter the already-frozen primary blind finding set or prose-quality ratings.
 
 Mechanism audits are secondary and must not become participant ground truth.
 
