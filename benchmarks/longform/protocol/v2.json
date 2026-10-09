@@ -162,7 +162,8 @@
           10
         ],
         "run_after_primary_blind_result_frozen": true,
-        "primary_score_mutation_allowed": false
+        "primary_score_mutation_allowed": false,
+        "retrieval_probes": "protocol/stage1-mechanism-retrieval-probes-v1.json"
       }
     },
     "stage2": {
