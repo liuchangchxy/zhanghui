@@ -258,6 +258,10 @@ def test_quality_gate_rolls_back_staccato_chopping():
     assert gate_decision.final_text == before
 
 
+def _make_safe_judge():
+    return lambda b, a: {"outcome": "STYLE_ONLY_SAFE", "changes": []}
+
+
 def test_quality_gate_accepts_safe_stylistic_polish():
     before = """
 不得不说，梅叔这个人其实并不好打交道。
@@ -270,7 +274,7 @@ def test_quality_gate_accepts_safe_stylistic_polish():
 今晚无论如何得拿到那本账册。
 林越裹紧领口迎着冷风走上前，抬手扣了扣油腻的柜台。
 """
-    diff_res = compare_semantic_facts(before, after)
+    diff_res = compare_semantic_facts(before, after, semantic_judge=_make_safe_judge())
     assert diff_res.outcome == SemanticDiffOutcome.STYLE_ONLY_SAFE
 
     gate_decision = evaluate_prose_quality_and_decide(before, after, diff_res)
@@ -296,7 +300,7 @@ def test_variety_1_dialogue_heavy_preserves_voice():
 “老头子，少废话，”刀疤三手里的厚背砍刀狠狠剁在砧板上，“老子要的三百两现银，今晚见不着，明早拆你的铺子。”
 梅叔慢条斯理地翻着旧账册，眼皮都没抬：“三爷好大的火气。银子锁在库里，钥匙在巡检司。三爷若有这通天的本事，自去取便是。”
 """
-    diff_res = compare_semantic_facts(before, safe_edit)
+    diff_res = compare_semantic_facts(before, safe_edit, semantic_judge=_make_safe_judge())
     assert diff_res.outcome == SemanticDiffOutcome.STYLE_ONLY_SAFE
     decision = evaluate_prose_quality_and_decide(before, safe_edit, diff_res)
     assert decision.accepted
@@ -316,7 +320,7 @@ def test_variety_2_action_combat_no_forced_three_step_template():
 林越贴着石壁侧身滑步，青砖被刚猛拳劲擦得碎屑迸溅。
 他右手翻出短刃，顺着对方小臂筋络反切而下，鲜血顷刻浸透了粗麻袖口。
 """
-    diff_res = compare_semantic_facts(before, safe_edit)
+    diff_res = compare_semantic_facts(before, safe_edit, semantic_judge=_make_safe_judge())
     assert diff_res.outcome == SemanticDiffOutcome.STYLE_ONLY_SAFE
     decision = evaluate_prose_quality_and_decide(before, safe_edit, diff_res)
     assert decision.accepted
@@ -337,7 +341,7 @@ def test_variety_3_quiet_atmospheric_breathing_room():
 茶炉里的火快灭了，余烬吐出最后一缕带着焦苦味的细烟。
 屋里很静，静得只剩灯油燃烧时极轻微的噼啪声。
 """
-    diff_res = compare_semantic_facts(before, safe_edit)
+    diff_res = compare_semantic_facts(before, safe_edit, semantic_judge=_make_safe_judge())
     assert diff_res.outcome == SemanticDiffOutcome.STYLE_ONLY_SAFE
     decision = evaluate_prose_quality_and_decide(before, safe_edit, diff_res)
     assert decision.accepted
@@ -355,7 +359,7 @@ def test_variety_4_direct_emotion_no_forced_twitching():
 看到那块被血染红的长命锁，林越僵在原地，眼泪毫无预兆地涌了出来。
 母亲死的那晚也是这样冷，他哭得嗓音沙哑，胸口像被重锤砸裂般剧痛。
 """
-    diff_res = compare_semantic_facts(before, safe_edit)
+    diff_res = compare_semantic_facts(before, safe_edit, semantic_judge=_make_safe_judge())
     assert diff_res.outcome == SemanticDiffOutcome.STYLE_ONLY_SAFE
     decision = evaluate_prose_quality_and_decide(before, safe_edit, diff_res)
     assert decision.accepted
@@ -659,13 +663,27 @@ def test_clue_drift_counterexample():
     assert gate.final_text == before
 
 
-def test_safe_stylistic_edit_fast_path():
-    """Safe stylistic edit: 梅叔的声音沙哑，像粗砂纸摩擦 -> 梅叔嗓音粗哑，像砂纸擦过木面."""
+def test_synonym_rewrite_without_judge_returns_uncertain():
+    """Synonym rewrite (lexical change) without judge fails closed to UNCERTAIN."""
     before = "梅叔的声音沙哑，像粗砂纸摩擦。"
     after = "梅叔嗓音粗哑，像砂纸擦过木面。"
 
-    # Pure surface stylistic polish: fast-path accepts without requiring semantic judge
     diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
+    assert not diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_synonym_rewrite_with_safe_judge_returns_style_only_safe():
+    """Synonym rewrite verified by safe semantic judge returns STYLE_ONLY_SAFE and is accepted."""
+    before = "梅叔的声音沙哑，像粗砂纸摩擦。"
+    after = "梅叔嗓音粗哑，像砂纸擦过木面。"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=_make_safe_judge())
     assert diff_res.outcome == SemanticDiffOutcome.STYLE_ONLY_SAFE
     assert diff_res.safe
 
@@ -699,6 +717,68 @@ def test_semantic_judge_invalid_response_fails_closed():
     diff_res = compare_semantic_facts(before, after, semantic_judge=lambda b, a: "INVALID_NOT_JSON")
     assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
     assert not diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_forgive_to_kill_without_judge_returns_uncertain():
+    """林越原谅了韩策。 -> 林越杀死了韩策。 changes core action verb and returns UNCERTAIN without judge."""
+    before = "林越原谅了韩策。"
+    after = "林越杀死了韩策。"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
+    assert not diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_forgive_to_kill_with_judge_returns_semantic_change():
+    """林越原谅了韩策。 -> 林越杀死了韩策。 with judge returns SEMANTIC_CHANGE_PROPOSED."""
+    before = "林越原谅了韩策。"
+    after = "林越杀死了韩策。"
+
+    judge = _make_mock_judge("event_outcome", "角色关系与事件结果从原谅篡改为杀死")
+    diff_res = compare_semantic_facts(before, after, semantic_judge=judge)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("event_outcome" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_open_to_lock_door_without_judge_returns_uncertain():
+    """林越打开了门。 -> 林越锁上了门。 changes object state and returns UNCERTAIN without judge."""
+    before = "林越打开了门。"
+    after = "林越锁上了门。"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
+    assert not diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_open_to_lock_door_with_judge_returns_semantic_change():
+    """林越打开了门。 -> 林越锁上了门。 with judge returns SEMANTIC_CHANGE_PROPOSED."""
+    before = "林越打开了门。"
+    after = "林越锁上了门。"
+
+    judge = _make_mock_judge("event_outcome", "门的状态从打开被篡改为锁上")
+    diff_res = compare_semantic_facts(before, after, semantic_judge=judge)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("event_outcome" in item.dimension for item in diff_res.drift_items)
 
     gate = evaluate_prose_quality_and_decide(before, after, diff_res)
     assert not gate.accepted
