@@ -29,8 +29,14 @@ from chapter_outline_loader import (
     volume_num_for_chapter_from_state,
 )
 from project_locator import resolve_project_root
+from changes_gate import run_changes_gate
 
-from .chapter_commit_service import ChapterCommitService, WorkflowAttemptResult
+from .chapter_commit_service import (
+    ChapterCommitService,
+    WorkflowAttemptResult,
+    ChapterCommitError,
+)
+from .config import DataModulesConfig
 from .context_manager import ContextManager
 from .gate_finding_adapters import adapt_changes_gate_result, adapt_legacy_artifacts
 from .projections import retry_projection
@@ -123,6 +129,8 @@ class ChapterCommitOutcomeResult:
     error_code: Optional[str] = None
     error: Optional[str] = None
     commit_payload: Optional[dict[str, Any]] = None
+    next_required_action: Optional[str] = None
+    required_artifacts: Optional[list[str]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -396,14 +404,22 @@ class ChapterRuntime:
         - current chapter intent is present
         - accepted past Canon is present
         - future chapter intent is strictly absent
+        - reuses native ContextManager as the single context authority
         """
         self._ensure_story_contracts(chapter)
         source_fps = self.compute_source_fingerprints(chapter)
         package_fp = self.compute_package_fingerprint(chapter)
 
+        # Build context through native ContextManager authority
+        cfg = DataModulesConfig.from_project_root(self.project_root)
+        ctx_mgr = ContextManager(cfg)
+        native_ctx = ctx_mgr.build_context(chapter)
+
+        core = native_ctx.get("core") or {}
         state = read_json_if_exists(self.project_root / ".webnovel" / "state.json") or {}
         project_info = state.get("project_info") if isinstance(state.get("project_info"), dict) else {}
-        volume = volume_num_for_chapter_from_state(self.project_root, chapter) or 1
+        progress = state.get("progress") if isinstance(state.get("progress"), dict) else {}
+        volume = progress.get("current_volume") or volume_num_for_chapter_from_state(self.project_root, chapter) or 1
 
         story_identity = {
             "title": str(project_info.get("title") or ""),
@@ -413,64 +429,91 @@ class ChapterRuntime:
             "chapter": chapter,
         }
 
-        # Current chapter intent ONLY (future chapters never loaded)
-        outline = load_chapter_outline(self.project_root, chapter, max_chars=None)
+        # Current chapter intent ONLY (future chapters strictly isolated and filtered)
         directive = load_chapter_execution_directive(self.project_root, chapter)
-        plot_structure = load_chapter_plot_structure(self.project_root, chapter)
-        chapter_contract = read_json_if_exists(self.paths.chapter_json(chapter)) or {}
+        plot_structure = native_ctx.get("plot_structure") or load_chapter_plot_structure(self.project_root, chapter)
+        chapter_contract = (native_ctx.get("story_contract") or {}).get("chapter") or read_json_if_exists(self.paths.chapter_json(chapter)) or {}
+
+        # Future-intent isolation: only keep items for current chapter or un-scoped
+        raw_intent = native_ctx.get("intent") or []
+        intent_items: list[dict[str, Any]] = []
+        for item in raw_intent:
+            item_d = item.to_dict() if hasattr(item, "to_dict") else (dict(item) if isinstance(item, dict) else {"content": str(item)})
+            item_ch = item_d.get("chapter")
+            if item_ch is not None and isinstance(item_ch, int) and item_ch > chapter:
+                continue
+            intent_items.append(item_d)
 
         current_intent = {
             "chapter": chapter,
-            "outline": outline,
+            "outline": core.get("chapter_outline") or load_chapter_outline(self.project_root, chapter, max_chars=None),
             "directive": directive,
             "plot_structure": plot_structure,
             "chapter_brief": chapter_contract.get("override_allowed") or {},
+            "intent_items": intent_items,
         }
 
-        # Governed Canon from past accepted commits before this chapter
-        sources = load_runtime_sources(self.project_root, chapter)
-        latest_accepted = sources.latest_accepted_commit
-
-        accepted_entities: dict[str, Any] = {}
-        accepted_events: list[dict[str, Any]] = []
-        if latest_accepted:
-            ext = latest_accepted.get("extraction_result") or {}
-            for ed in ext.get("entity_deltas", []) or []:
-                if isinstance(ed, dict) and ed.get("entity_id"):
-                    accepted_entities[ed["entity_id"]] = ed.get("current") or {}
-            accepted_events = list(ext.get("accepted_events", []) or [])
-
+        # Governed Canon from native ContextManager output
+        raw_canon = native_ctx.get("canon") or []
+        canon_items = [
+            item.to_dict() if hasattr(item, "to_dict") else (dict(item) if isinstance(item, dict) else {"content": str(item)})
+            for item in raw_canon
+        ]
+        scene = native_ctx.get("scene") or {}
         governed_canon = {
-            "latest_accepted_commit_chapter": (latest_accepted.get("meta") or {}).get("chapter") if latest_accepted else None,
-            "accepted_entities": accepted_entities,
-            "recent_accepted_events": accepted_events[-10:],
+            "canon_items": canon_items,
+            "appearing_characters": scene.get("appearing_characters") or [],
+            "scene": scene,
+            "memory": native_ctx.get("memory") or [],
+            "long_term_memory": native_ctx.get("long_term_memory") or [],
+            "context_snapshot": (native_ctx.get("meta") or {}).get("context_snapshot") or {},
         }
 
-        # Constraints
-        master_contract = read_json_if_exists(self.paths.master_json) or {}
-        volume_contract = read_json_if_exists(self.paths.volume_json(volume)) or {}
-        review_contract = read_json_if_exists(self.paths.review_json(chapter)) or {}
+        # Constraints from native ContextManager output
+        raw_craft = native_ctx.get("craft") or []
+        craft_items = [
+            item.to_dict() if hasattr(item, "to_dict") else (dict(item) if isinstance(item, dict) else {"content": str(item)})
+            for item in raw_craft
+        ]
+        prefs = native_ctx.get("preferences") or {}
+        contracts = native_ctx.get("story_contract") or {}
+        master_contract = contracts.get("master") or {}
+        volume_contract = contracts.get("volume") or {}
+        review_contract = contracts.get("review") or {}
         anti_patterns = read_json_if_exists(self.paths.anti_patterns_json) or []
 
         constraints = {
+            "craft_items": craft_items,
+            "preferences": prefs,
+            "core_tone": prefs.get("tone") or master_contract.get("master_constraints", {}).get("core_tone", ""),
+            "pacing_strategy": master_contract.get("master_constraints", {}).get("pacing_strategy", ""),
             "system_constraints": volume_contract.get("system_constraints") or master_contract.get("master_constraints", {}).get("core_tone", ""),
             "prohibitions": list(plot_structure.get("prohibitions") or []),
             "mandatory_nodes": list(plot_structure.get("mandatory_nodes") or []),
             "anti_patterns": [row.get("text", "") for row in anti_patterns if isinstance(row, dict) and row.get("text")],
-            "core_tone": master_contract.get("master_constraints", {}).get("core_tone", ""),
-            "pacing_strategy": master_contract.get("master_constraints", {}).get("pacing_strategy", ""),
+            "writing_guidance": native_ctx.get("writing_guidance") or {},
         }
 
-        # Context (genre profile, promises, writer guidance)
+        # Context (references, reader signals, diagnostics)
+        raw_ref = native_ctx.get("reference") or []
+        ref_items = [
+            item.to_dict() if hasattr(item, "to_dict") else (dict(item) if isinstance(item, dict) else {"content": str(item)})
+            for item in raw_ref
+        ]
         writer_context = {
+            "reference": ref_items,
             "volume_goal": volume_contract.get("volume_goal") or {},
             "selected_tropes": volume_contract.get("selected_tropes") or [],
             "must_check_nodes": review_contract.get("must_check") or [],
+            "reader_signal": native_ctx.get("reader_signal") or {},
+            "context_diagnostics": native_ctx.get("context_diagnostics") or [],
+            "context_contract_version": (native_ctx.get("meta") or {}).get("context_contract_version") or "v3",
         }
 
         meta = {
             "schema_version": "runtime-api/v1",
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "native_context_authority": "ContextManager.build_context",
         }
 
         package = WriterPackage(
@@ -547,6 +590,11 @@ class ChapterRuntime:
         }
 
         runtime_dir = self._chapter_runtime_dir(chapter)
+        drafts_dir = runtime_dir / "drafts"
+        drafts_dir.mkdir(parents=True, exist_ok=True)
+        (drafts_dir / f"{draft_id}.json").write_text(
+            json.dumps(draft_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         (runtime_dir / "draft.json").write_text(
             json.dumps(draft_payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -624,8 +672,6 @@ class ChapterRuntime:
         chapter: int,
         *,
         draft_id: Optional[str] = None,
-        prose: Optional[str] = None,
-        package_fingerprint: Optional[str] = None,
         review_result: Optional[dict[str, Any]] = None,
         fulfillment_result: Optional[dict[str, Any]] = None,
         disambiguation_result: Optional[dict[str, Any]] = None,
@@ -635,15 +681,101 @@ class ChapterRuntime:
         human_response: Optional[dict[str, Any]] = None,
         on_conflict: Optional[str] = None,
         artifacts: Optional[dict[str, Any]] = None,
+        _internal_direct_prose: Optional[str] = None,
+        _internal_package_fingerprint: Optional[str] = None,
     ) -> ChapterCommitOutcomeResult:
         """
         Attempt a durable chapter commit via the canonical ChapterCommitService boundary.
         Maintains the invariant: draft != Canon until accepted through ChapterCommit.
+        Enforces mandatory draft_id binding to staged drafts.
         """
-        # Stale package check if package_fingerprint is provided
-        if package_fingerprint:
-            current_fp = self.compute_package_fingerprint(chapter)
-            if package_fingerprint != current_fp:
+        # 1. Mandatory draft_id check (unless internal compatibility direct prose is used)
+        if not draft_id and _internal_direct_prose is None:
+            return ChapterCommitOutcomeResult(
+                ok=False,
+                chapter=chapter,
+                action="reject",
+                attempt_id=f"nodraft-{uuid.uuid4().hex[:8]}",
+                chapter_outcome="rejected",
+                gate_decision_ref="",
+                durable_commit_persisted=False,
+                projection_status={},
+                projection_success=False,
+                can_retry_projection=False,
+                error_code="WORKFLOW_INCOMPLETE",
+                error="Missing required draft_id: ingest draft first.",
+                next_required_action="ingest_draft",
+                required_artifacts=["draft_id"],
+            )
+
+        # 2. Resolve staged draft and verify integrity
+        if draft_id:
+            runtime_dir = self._chapter_runtime_dir(chapter)
+            draft_file = runtime_dir / "drafts" / f"{draft_id}.json"
+            if not draft_file.is_file():
+                active_file = runtime_dir / "draft.json"
+                if active_file.is_file():
+                    active_data = read_json_if_exists(active_file) or {}
+                    if active_data.get("draft_id") == draft_id:
+                        draft_file = active_file
+            if not draft_file.is_file():
+                return ChapterCommitOutcomeResult(
+                    ok=False,
+                    chapter=chapter,
+                    action="reject",
+                    attempt_id=f"unknowndraft-{uuid.uuid4().hex[:8]}",
+                    chapter_outcome="rejected",
+                    gate_decision_ref="",
+                    durable_commit_persisted=False,
+                    projection_status={},
+                    projection_success=False,
+                    can_retry_projection=False,
+                    error_code="UNKNOWN_DRAFT",
+                    error=f"Draft ID not found in staging for chapter {chapter}: {draft_id}",
+                    next_required_action="ingest_draft",
+                )
+
+            draft_data = read_json_if_exists(draft_file) or {}
+            if draft_data.get("chapter") != chapter:
+                return ChapterCommitOutcomeResult(
+                    ok=False,
+                    chapter=chapter,
+                    action="reject",
+                    attempt_id=f"chmismatch-{uuid.uuid4().hex[:8]}",
+                    chapter_outcome="rejected",
+                    gate_decision_ref="",
+                    durable_commit_persisted=False,
+                    projection_status={},
+                    projection_success=False,
+                    can_retry_projection=False,
+                    error_code="UNKNOWN_DRAFT",
+                    error=f"Draft chapter {draft_data.get('chapter')} does not match requested chapter {chapter}",
+                    next_required_action="ingest_draft",
+                )
+
+            staged_prose = str(draft_data.get("prose") or "")
+            expected_fp = draft_data.get("draft_fingerprint")
+            actual_fp = hashlib.sha256(staged_prose.encode("utf-8")).hexdigest()
+            if actual_fp != expected_fp:
+                return ChapterCommitOutcomeResult(
+                    ok=False,
+                    chapter=chapter,
+                    action="reject",
+                    attempt_id=f"fpmismatch-{uuid.uuid4().hex[:8]}",
+                    chapter_outcome="rejected",
+                    gate_decision_ref="",
+                    durable_commit_persisted=False,
+                    projection_status={},
+                    projection_success=False,
+                    can_retry_projection=False,
+                    error_code="DRAFT_FINGERPRINT_MISMATCH",
+                    error="Staged draft content has been modified or corrupted (fingerprint mismatch).",
+                    next_required_action="ingest_draft",
+                )
+
+            draft_pkg_fp = draft_data.get("package_fingerprint")
+            current_pkg_fp = self.compute_package_fingerprint(chapter)
+            if draft_pkg_fp != current_pkg_fp:
                 return ChapterCommitOutcomeResult(
                     ok=False,
                     chapter=chapter,
@@ -656,44 +788,72 @@ class ChapterRuntime:
                     projection_success=False,
                     can_retry_projection=False,
                     error_code="STALE_WRITER_PACKAGE",
-                    error="Cannot commit: Writer package is stale.",
+                    error="Cannot commit: Authoritative inputs changed since writer package was generated.",
+                    next_required_action="obtain_writer_package",
                 )
+            resolved_prose = staged_prose
+        else:
+            resolved_prose = _internal_direct_prose or ""
+            if _internal_package_fingerprint:
+                current_fp = self.compute_package_fingerprint(chapter)
+                if _internal_package_fingerprint != current_fp:
+                    return ChapterCommitOutcomeResult(
+                        ok=False,
+                        chapter=chapter,
+                        action="reject",
+                        attempt_id=f"stale-{uuid.uuid4().hex[:8]}",
+                        chapter_outcome="rejected",
+                        gate_decision_ref="",
+                        durable_commit_persisted=False,
+                        projection_status={},
+                        projection_success=False,
+                        can_retry_projection=False,
+                        error_code="STALE_WRITER_PACKAGE",
+                        error="Cannot commit: Writer package is stale.",
+                        next_required_action="obtain_writer_package",
+                    )
 
-        # Resolve prose
-        resolved_prose = prose
-        runtime_dir = self._chapter_runtime_dir(chapter)
-        if resolved_prose is None:
-            draft_file = runtime_dir / "draft.json"
-            if draft_file.is_file():
-                draft_data = read_json_if_exists(draft_file) or {}
-                resolved_prose = draft_data.get("prose")
+        # 3. Required semantic workflow artifacts validation (NO FAKE DEFAULTS)
+        art = artifacts or {}
+        rev = review_result if review_result is not None else art.get("review_result")
+        ext = extraction_result if extraction_result is not None else art.get("extraction_result")
+        ful = fulfillment_result if fulfillment_result is not None else art.get("fulfillment_result")
+        dis = disambiguation_result if disambiguation_result is not None else art.get("disambiguation_result")
+        rec = reconciliation_result if reconciliation_result is not None else art.get("reconciliation_result")
 
-        if not isinstance(resolved_prose, str) or not resolved_prose.strip():
+        missing_artifacts = []
+        if rev is None:
+            missing_artifacts.append("review_result")
+        if ext is None:
+            missing_artifacts.append("extraction_result")
+        if ful is None:
+            missing_artifacts.append("fulfillment_result")
+        if dis is None:
+            missing_artifacts.append("disambiguation_result")
+        if rec is None:
+            missing_artifacts.append("reconciliation_result")
+
+        if missing_artifacts:
             return ChapterCommitOutcomeResult(
                 ok=False,
                 chapter=chapter,
                 action="reject",
-                attempt_id=f"noprose-{uuid.uuid4().hex[:8]}",
+                attempt_id=f"missingart-{uuid.uuid4().hex[:8]}",
                 chapter_outcome="rejected",
                 gate_decision_ref="",
                 durable_commit_persisted=False,
                 projection_status={},
                 projection_success=False,
                 can_retry_projection=False,
-                error_code="MISSING_PROSE",
-                error="No prose text or ingested draft available for commit.",
+                error_code="REQUIRED_ARTIFACTS_MISSING",
+                error=f"Required semantic workflow artifacts missing: {', '.join(missing_artifacts)}",
+                required_artifacts=missing_artifacts,
+                next_required_action=f"generate_{missing_artifacts[0]}",
             )
 
-        # Unpack artifacts bundle if passed
-        art = artifacts or {}
-        review_result = review_result or art.get("review_result")
-        fulfillment_result = fulfillment_result or art.get("fulfillment_result")
-        disambiguation_result = disambiguation_result or art.get("disambiguation_result")
-        extraction_result = extraction_result or art.get("extraction_result")
-        reconciliation_result = reconciliation_result or art.get("reconciliation_result")
-        proposed_changes = proposed_changes or art.get("proposed_changes")
-
         # Parse proposed changes from prose if not passed
+        if proposed_changes is None:
+            proposed_changes = art.get("proposed_changes")
         if proposed_changes is None:
             try:
                 _, parsed_proposal = split_chapter_and_changes(resolved_prose)
@@ -705,85 +865,24 @@ class ChapterRuntime:
                     for k in REQUIRED_TOP_LEVEL_FIELDS
                 }
 
-        # Default extraction result if omitted
-        if extraction_result is None:
-            extraction_result = {
-                "accepted_events": [],
-                "state_deltas": [],
-                "entity_deltas": [],
-                "chapter_meta": {},
-            }
-
-        # Default reconciliation if omitted
-        if reconciliation_result is None:
-            reconciliation_result = reconcile_changes(
-                proposed_changes, extraction_result, chapter_text=resolved_prose
-            )
-
-        # Default fulfillment if omitted
-        if fulfillment_result is None:
-            directive = load_chapter_execution_directive(self.project_root, chapter)
-            nodes = list(directive.get("must_cover_nodes") or [])
-            fulfillment_result = {
-                "planned_nodes": nodes,
-                "covered_nodes": nodes,
-                "missed_nodes": [],
-                "extra_nodes": [],
-            }
-
-        # Default disambiguation if omitted
-        if disambiguation_result is None:
-            disambiguation_result = {"pending": []}
-
-        # Default review result if omitted
-        if review_result is None:
-            review_result = {
-                "blocking_count": 0,
-                "must_check_results": [],
-                "blocking_rule_results": [],
-            }
-
-        # Changes gate validation
-        from changes_gate import parse_changes, check_r01_protocol, check_r02_enums
-        gate_failures: list[dict[str, Any]] = []
-        parsed, parse_err = parse_changes(resolved_prose)
-        if parse_err:
-            gate_failures.append({
-                "rule_id": "R0", "severity": "blocking", "message": parse_err, "location": "chapter_text"
-            })
-        elif isinstance(parsed, dict):
-            for f in check_r01_protocol(parsed):
-                gate_failures.append({"rule_id": f.rule_id, "severity": f.severity, "message": f.message, "location": f.location})
-            for f in check_r02_enums(parsed):
-                gate_failures.append({"rule_id": f.rule_id, "severity": f.severity, "message": f.message, "location": f.location})
-
-        # Also allow explicit gate failures or issues from caller
-        if isinstance(review_result, dict):
-            for row in review_result.get("failures", []):
-                if isinstance(row, dict):
-                    gate_failures.append(row)
-            for row in review_result.get("issues", []):
-                if isinstance(row, dict) and row.get("checker_id") == "changes_gate":
-                    rule_id = str(row.get("gate_id") or "").replace("changes_gate.", "") or "R1"
-                    gate_failures.append({
-                        "rule_id": rule_id,
-                        "severity": "blocking",
-                        "message": str(row.get("message") or "changes gate violation"),
-                        "location": "review",
-                    })
-
-        gate_result = {
-            "passed": not any(f.get("severity") == "blocking" for f in gate_failures),
-            "failures": gate_failures,
-        }
+        # 4. Authoritative changes-gate execution
+        db_path = self.project_root / ".webnovel" / "index.db"
+        state_path = self.project_root / ".webnovel" / "state.json"
+        changes_gate_res = run_changes_gate(
+            chapter_text=resolved_prose,
+            db_path=db_path if db_path.is_file() else None,
+            state_path=state_path if state_path.is_file() else None,
+            chapter=chapter,
+        )
+        gate_result = changes_gate_res.to_dict()
 
         # Adapt findings
         contracts = load_runtime_sources(self.project_root, chapter).contracts
         findings = adapt_legacy_artifacts(
             chapter=chapter,
-            review=review_result,
-            fulfillment=fulfillment_result,
-            disambiguation=disambiguation_result,
+            review=rev,
+            fulfillment=ful,
+            disambiguation=dis,
             contract_payloads=contracts,
         )
         findings.extend(adapt_changes_gate_result(gate_result, chapter=chapter))
@@ -792,34 +891,49 @@ class ChapterRuntime:
         attempt_kwargs = {
             "policy_version": "phase6a-v1",
             "scope": {"chapter": chapter},
-            "review_result": review_result,
-            "fulfillment_result": fulfillment_result,
-            "disambiguation_result": disambiguation_result,
-            "extraction_result": extraction_result,
+            "review_result": rev,
+            "fulfillment_result": ful,
+            "disambiguation_result": dis,
+            "extraction_result": ext,
             "chapter_text": resolved_prose,
             "proposed_changes": proposed_changes,
-            "reconciliation_result": reconciliation_result,
+            "reconciliation_result": rec,
             "on_conflict": on_conflict,
         }
 
         service = ChapterCommitService(self.project_root)
-        if human_response:
-            attempt = service.evaluate_after_human_response(
-                chapter,
-                findings,
-                prior_attempt_id=str(human_response.get("prior_attempt_id") or ""),
-                response_id=str(human_response.get("response_id") or attempt_id),
-                finding_id=str(human_response.get("finding_id") or ""),
-                choice=str(human_response.get("choice") or ""),
-                actor_ref=str(human_response.get("actor_ref") or "runtime_caller"),
-                **attempt_kwargs,
-            )
-        else:
-            attempt = service.evaluate_attempt(
+        try:
+            if human_response:
+                attempt = service.evaluate_after_human_response(
+                    chapter,
+                    findings,
+                    prior_attempt_id=str(human_response.get("prior_attempt_id") or ""),
+                    response_id=str(human_response.get("response_id") or attempt_id),
+                    finding_id=str(human_response.get("finding_id") or ""),
+                    choice=str(human_response.get("choice") or ""),
+                    actor_ref=str(human_response.get("actor_ref") or "runtime_caller"),
+                    **attempt_kwargs,
+                )
+            else:
+                attempt = service.evaluate_attempt(
+                    chapter=chapter,
+                    findings=findings,
+                    attempt_id=attempt_id,
+                    **attempt_kwargs,
+                )
+        except (ChapterCommitError, ValueError) as exc:
+            return ChapterCommitOutcomeResult(
+                ok=False,
                 chapter=chapter,
-                findings=findings,
+                action="reject",
                 attempt_id=attempt_id,
-                **attempt_kwargs,
+                chapter_outcome="rejected",
+                gate_decision_ref="",
+                durable_commit_persisted=False,
+                projection_status={},
+                projection_success=False,
+                can_retry_projection=False,
+                error=str(exc),
             )
 
         is_accepted = attempt.attempt_status == "accepted"
@@ -861,3 +975,18 @@ class ChapterRuntime:
     def retry_projection(self, chapter: int) -> dict[str, Any]:
         """Replay or retry projections from the existing durable commit."""
         return retry_projection(self.project_root, chapter=chapter)
+
+    def _commit_direct_internal(
+        self,
+        chapter: int,
+        prose: str,
+        package_fingerprint: Optional[str] = None,
+        **kwargs: Any,
+    ) -> ChapterCommitOutcomeResult:
+        """Internal compatibility helper for direct prose commit. Not for public happy path."""
+        return self.commit(
+            chapter=chapter,
+            _internal_direct_prose=prose,
+            _internal_package_fingerprint=package_fingerprint,
+            **kwargs,
+        )

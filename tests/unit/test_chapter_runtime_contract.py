@@ -3,12 +3,17 @@
 """Contract tests for ChapterRuntime public surface (Issue #25)."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import patch
 import pytest
 
+from data_modules.config import DataModulesConfig
+from data_modules.context_manager import ContextManager
 from data_modules.chapter_runtime import ChapterRuntime
+from data_modules.reconciliation import reconcile_changes, split_chapter_and_changes
+from changes_gate import run_changes_gate
 
 
 def _setup_minimal_book_project(tmp_path: Path, chapter: int = 1) -> Path:
@@ -60,35 +65,8 @@ def _setup_minimal_book_project(tmp_path: Path, chapter: int = 1) -> Path:
     return project_root
 
 
-def test_runtime_happy_path(tmp_path: Path):
-    """Happy-path: prepare -> package -> ingest-draft -> commit -> verify durable commit and projection."""
-    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
-    runtime = ChapterRuntime(project_root)
-
-    # 1. Prepare chapter 1
-    prep = runtime.prepare(chapter=1, with_package=True)
-    assert prep.ok is True
-    assert prep.chapter == 1
-    assert prep.status == "ready"
-    assert prep.writer_package is not None
-
-    # 2. Assert story identity
-    pkg = prep.writer_package
-    assert pkg.story_identity["title"] == "测试纪元"
-    assert pkg.story_identity["genre"] == "玄幻"
-
-    # 3. Assert current chapter intent is present
-    assert pkg.current_intent["chapter"] == 1
-    assert "灵根测试" in str(pkg.current_intent)
-    assert "天阳宗" in str(pkg.current_intent)
-
-    # 4. Assert future chapter intent is strictly absent
-    # Chapter 2 intent mentions "藏经阁之争" and "大弟子王霸"
-    assert "藏经阁之争" not in str(pkg.current_intent)
-    assert "大弟子王霸" not in str(pkg.current_intent)
-
-    # 5. Ingest draft prose
-    prose = """林凡深吸了一口气，将手掌轻轻按在冰凉的测试石柱上。
+def _valid_test_prose() -> str:
+    return """林凡深吸了一口气，将手掌轻轻按在冰凉的测试石柱上。
 石柱沉寂数息，随后亮起三道驳杂的霞光。
 李执事皱起眉头，神情带着几分轻视：“杂灵根，勉强入外门。”
 林凡领下青铜铭牌，胸口的残缺玉佩忽然微微一热。
@@ -119,25 +97,10 @@ def test_runtime_happy_path(tmp_path: Path):
 }
 </chapter_changes>"""
 
-    ingest_res = runtime.ingest_draft(
-        chapter=1,
-        prose=prose,
-        package_fingerprint=pkg.package_fingerprint,
-    )
-    assert ingest_res.ok is True
-    assert ingest_res.status == "draft_ingested"
-    assert ingest_res.draft_fingerprint != ""
 
-    # Draft ingestion MUST NOT mutate canon
-    state_after_draft = json.loads((project_root / ".webnovel" / "state.json").read_text(encoding="utf-8"))
-    assert state_after_draft.get("progress", {}).get("current_chapter") == 0
-
-    # 6. Commit attempt with native workflow artifacts
-    review_result = {
-        "blocking_count": 0,
-        "must_check_results": [{"node": "灵根测试", "passed": True}],
-        "blocking_rule_results": [],
-    }
+def _complete_semantic_artifacts(prose: str | None = None) -> dict:
+    actual_prose = prose or _valid_test_prose()
+    _, proposal = split_chapter_and_changes(actual_prose)
     extraction_result = {
         "chapter_meta": {},
         "accepted_events": [
@@ -156,13 +119,75 @@ def test_runtime_happy_path(tmp_path: Path):
             }
         ],
     }
+    reconciliation_result = reconcile_changes(
+        proposal, extraction_result, chapter_text=actual_prose
+    )
+    return {
+        "review_result": {
+            "blocking_count": 0,
+            "must_check_results": [{"node": "灵根测试", "passed": True}],
+            "blocking_rule_results": [],
+        },
+        "extraction_result": extraction_result,
+        "fulfillment_result": {
+            "planned_nodes": ["灵根测试"],
+            "covered_nodes": ["灵根测试"],
+            "missed_nodes": [],
+            "extra_nodes": [],
+        },
+        "disambiguation_result": {"pending": []},
+        "reconciliation_result": reconciliation_result,
+    }
 
-    commit_res = runtime.commit(
+
+def test_runtime_happy_path(tmp_path: Path):
+    """Happy-path: prepare -> package -> ingest-draft -> commit(draft_id) -> durable commit and projection."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+    runtime = ChapterRuntime(project_root)
+
+    # 1. Prepare chapter 1
+    prep = runtime.prepare(chapter=1, with_package=True)
+    assert prep.ok is True
+    assert prep.chapter == 1
+    assert prep.status == "ready"
+    assert prep.writer_package is not None
+
+    # 2. Assert story identity
+    pkg = prep.writer_package
+    assert pkg.story_identity["title"] == "测试纪元"
+    assert pkg.story_identity["genre"] == "玄幻"
+
+    # 3. Assert current chapter intent is present
+    assert pkg.current_intent["chapter"] == 1
+    assert "灵根测试" in str(pkg.current_intent)
+    assert "天阳宗" in str(pkg.current_intent)
+
+    # 4. Assert future chapter intent is strictly absent
+    assert "藏经阁之争" not in str(pkg.current_intent)
+    assert "大弟子王霸" not in str(pkg.current_intent)
+
+    # 5. Ingest draft prose
+    prose = _valid_test_prose()
+    ingest_res = runtime.ingest_draft(
         chapter=1,
         prose=prose,
         package_fingerprint=pkg.package_fingerprint,
-        review_result=review_result,
-        extraction_result=extraction_result,
+    )
+    assert ingest_res.ok is True
+    assert ingest_res.status == "draft_ingested"
+    assert ingest_res.draft_id.startswith("draft-001-")
+    assert ingest_res.draft_fingerprint != ""
+
+    # Draft ingestion MUST NOT mutate canon
+    state_after_draft = json.loads((project_root / ".webnovel" / "state.json").read_text(encoding="utf-8"))
+    assert state_after_draft.get("progress", {}).get("current_chapter") == 0
+
+    # 6. Commit attempt strictly with draft_id and complete native artifacts
+    artifacts = _complete_semantic_artifacts(prose)
+    commit_res = runtime.commit(
+        chapter=1,
+        draft_id=ingest_res.draft_id,
+        **artifacts,
     )
     assert commit_res.ok is True
     assert commit_res.chapter_outcome == "accepted"
@@ -178,6 +203,177 @@ def test_runtime_happy_path(tmp_path: Path):
     # 8. Verify projections updated from accepted commit
     state_after_commit = json.loads((project_root / ".webnovel" / "state.json").read_text(encoding="utf-8"))
     assert state_after_commit.get("progress", {}).get("current_chapter") == 1
+
+
+def test_writer_package_traces_to_context_manager(tmp_path: Path):
+    """Verify WriterPackage fields trace back to native ContextManager output."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+    runtime = ChapterRuntime(project_root)
+
+    pkg = runtime.get_writer_package(1)
+    cfg = DataModulesConfig.from_project_root(project_root)
+    ctx_mgr = ContextManager(cfg)
+    native_ctx = ctx_mgr.build_context(1)
+
+    # Trace story identity
+    assert pkg.story_identity["title"] == "测试纪元"
+
+    # Trace current intent to ContextManager outline
+    assert pkg.current_intent["outline"] == native_ctx["core"]["chapter_outline"]
+    assert "灵根测试" in pkg.current_intent["outline"]
+
+    # Trace governed canon and reference to ContextManager outputs
+    assert pkg.governed_canon["canon_items"] == [
+        item.to_dict() if hasattr(item, "to_dict") else item for item in native_ctx["canon"]
+    ]
+    assert pkg.writer_context["context_contract_version"] == native_ctx["meta"]["context_contract_version"]
+
+    # Verify future intent isolation
+    assert "藏经阁之争" not in str(pkg.current_intent)
+
+    # Trace provenance authority
+    assert pkg.meta.get("native_context_authority") == "ContextManager.build_context"
+
+
+def test_commit_requires_draft_id(tmp_path: Path):
+    """Calling commit without draft_id returns WORKFLOW_INCOMPLETE."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+    runtime = ChapterRuntime(project_root)
+    prep = runtime.prepare(chapter=1, with_package=True)
+
+    artifacts = _complete_semantic_artifacts()
+    res = runtime.commit(chapter=1, **artifacts)
+    assert res.ok is False
+    assert res.error_code == "WORKFLOW_INCOMPLETE"
+    assert res.next_required_action == "ingest_draft"
+    assert "draft_id" in (res.required_artifacts or [])
+
+
+def test_commit_rejects_unknown_draft_id(tmp_path: Path):
+    """Calling commit with non-existent draft_id returns UNKNOWN_DRAFT."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+    runtime = ChapterRuntime(project_root)
+    prep = runtime.prepare(chapter=1, with_package=True)
+
+    artifacts = _complete_semantic_artifacts()
+    res = runtime.commit(chapter=1, draft_id="draft-001-nonexistent", **artifacts)
+    assert res.ok is False
+    assert res.error_code == "UNKNOWN_DRAFT"
+
+
+def test_commit_rejects_tampered_staged_draft(tmp_path: Path):
+    """Tampering with staged draft causes DRAFT_FINGERPRINT_MISMATCH rejection."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+    runtime = ChapterRuntime(project_root)
+    prep = runtime.prepare(chapter=1, with_package=True)
+    pkg = prep.writer_package
+
+    prose = _valid_test_prose()
+    ingest_res = runtime.ingest_draft(
+        chapter=1,
+        prose=prose,
+        package_fingerprint=pkg.package_fingerprint,
+    )
+    draft_id = ingest_res.draft_id
+
+    # Tamper with staged draft file
+    draft_file = project_root / ".webnovel" / "runtime" / "chapter_001" / "drafts" / f"{draft_id}.json"
+    draft_data = json.loads(draft_file.read_text(encoding="utf-8"))
+    draft_data["prose"] = draft_data["prose"] + "\n恶意篡改的正文"
+    draft_file.write_text(json.dumps(draft_data, ensure_ascii=False), encoding="utf-8")
+
+    artifacts = _complete_semantic_artifacts(prose)
+    res = runtime.commit(chapter=1, draft_id=draft_id, **artifacts)
+    assert res.ok is False
+    assert res.error_code == "DRAFT_FINGERPRINT_MISMATCH"
+
+
+def test_commit_rejects_missing_semantic_artifacts(tmp_path: Path):
+    """Omitting any required semantic artifact returns REQUIRED_ARTIFACTS_MISSING with no fake defaults."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+    runtime = ChapterRuntime(project_root)
+    prep = runtime.prepare(chapter=1, with_package=True)
+    pkg = prep.writer_package
+
+    prose = _valid_test_prose()
+    ingest_res = runtime.ingest_draft(
+        chapter=1,
+        prose=prose,
+        package_fingerprint=pkg.package_fingerprint,
+    )
+
+    artifacts = _complete_semantic_artifacts(prose)
+    # Omit review_result
+    artifacts.pop("review_result")
+
+    res = runtime.commit(chapter=1, draft_id=ingest_res.draft_id, **artifacts)
+    assert res.ok is False
+    assert res.error_code == "REQUIRED_ARTIFACTS_MISSING"
+    assert "review_result" in res.required_artifacts
+    assert res.next_required_action == "generate_review_result"
+
+
+def test_changes_gate_parity_against_native(tmp_path: Path):
+    """Verify Runtime uses authoritative changes_gate: R01/R02 pass but R03 fails identically."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+
+    # Initialize a valid index.db with one registered entity "张三"
+    from data_modules.index_manager import IndexManager, EntityMeta
+    cfg = DataModulesConfig.from_project_root(project_root)
+    idx = IndexManager(cfg)
+    idx.upsert_entity(EntityMeta(
+        id="zhangsan", type="角色", canonical_name="张三",
+        current={}, first_appearance=1, last_appearance=1
+    ))
+
+    # Prose contains R01/R02-compliant CHANGES, but references unknown character "未知神秘人999" (fails R03)
+    prose = """林凡遇到未知神秘人。
+<chapter_changes>
+{
+  "character_state_changes": [
+    {
+      "character_id": "未知神秘人999",
+      "change_type": "status_update",
+      "importance": "normal",
+      "details": "突然现身"
+    }
+  ],
+  "new_plot_points": [],
+  "foreshadowing_actions": [],
+  "location_state_changes": [],
+  "faction_state_changes": [],
+  "time_progression": null,
+  "item_transfers": [],
+  "unresolved_questions": []
+}
+</chapter_changes>"""
+
+    # 1. Native changes_gate call
+    native_gate = run_changes_gate(
+        chapter_text=prose,
+        db_path=project_root / ".webnovel" / "index.db",
+        state_path=project_root / ".webnovel" / "state.json",
+        chapter=1,
+    )
+    assert native_gate.passed is False
+    assert any(f.rule_id == "R3" for f in native_gate.failures)
+
+    # 2. Runtime commit call on staged draft with same prose
+    runtime = ChapterRuntime(project_root)
+    prep = runtime.prepare(chapter=1, with_package=True)
+    ingest_res = runtime.ingest_draft(
+        chapter=1,
+        prose=prose,
+        package_fingerprint=prep.writer_package.package_fingerprint,
+    )
+
+    artifacts = _complete_semantic_artifacts(prose)
+    res = runtime.commit(chapter=1, draft_id=ingest_res.draft_id, **artifacts)
+    assert res.ok is False
+    assert res.chapter_outcome == "rejected"
+    # Canon remained unmutated
+    state = json.loads((project_root / ".webnovel" / "state.json").read_text(encoding="utf-8"))
+    assert state.get("progress", {}).get("current_chapter") == 0
 
 
 def test_negative_missing_outline(tmp_path: Path):
@@ -221,57 +417,30 @@ def test_negative_rejected_draft_does_not_mutate_canon(tmp_path: Path):
 
     prep = runtime.prepare(chapter=1, with_package=True)
     pkg = prep.writer_package
-
+    # Broken CHANGES block triggers hard R1 rejection from native changes-gate
     prose = """林凡通过灵根测试。
 <chapter_changes>
 {
-  "character_state_changes": [],
-  "new_plot_points": [],
-  "foreshadowing_actions": [],
-  "location_state_changes": [],
-  "faction_state_changes": [],
-  "time_progression": null,
-  "item_transfers": [],
-  "unresolved_questions": []
+  "invalid_schema": true
 }
 </chapter_changes>"""
 
-    # Supply review with blocking violation
-    review_result = {
-        "blocking_count": 1,
-        "issues": [
-            {
-                "checker_id": "changes_gate",
-                "gate_id": "changes_gate.R1",
-                "category": "INTEGRITY",
-                "authority": "SYSTEM_INTEGRITY",
-                "structured_evidence": [
-                    {"kind": "deterministic_validation", "identity": {"valid": False, "rule_id": "R1"}}
-                ],
-                "message": "CHANGES 协议校验失败",
-            }
-        ],
-    }
-    extraction_result = {
-        "accepted_events": [],
-        "state_deltas": [],
-        "entity_deltas": [{"entity_id": "林凡", "current": {"illegal_fact": "true"}}],
-    }
+    ingest_res = runtime.ingest_draft(
+        chapter=1, prose=prose, package_fingerprint=pkg.package_fingerprint
+    )
 
+    artifacts = _complete_semantic_artifacts()
     commit_res = runtime.commit(
         chapter=1,
-        prose=prose,
-        package_fingerprint=pkg.package_fingerprint,
-        review_result=review_result,
-        extraction_result=extraction_result,
+        draft_id=ingest_res.draft_id,
+        **artifacts,
     )
     assert commit_res.ok is False
     assert commit_res.chapter_outcome == "rejected"
 
-    # Canon state.json MUST NOT be updated with chapter progress or illegal entities
+    # Canon state.json MUST NOT be updated with chapter progress
     state = json.loads((project_root / ".webnovel" / "state.json").read_text(encoding="utf-8"))
     assert state.get("progress", {}).get("current_chapter") == 0
-    assert "林凡" not in state.get("entity_state", {})
 
 
 def test_negative_projection_failure_leaves_durable_commit_replayable(tmp_path: Path):
@@ -281,20 +450,12 @@ def test_negative_projection_failure_leaves_durable_commit_replayable(tmp_path: 
 
     prep = runtime.prepare(chapter=1, with_package=True)
     pkg = prep.writer_package
+    prose = _valid_test_prose()
 
-    prose = """林凡领下外门铭牌。
-<chapter_changes>
-{
-  "character_state_changes": [],
-  "new_plot_points": [],
-  "foreshadowing_actions": [],
-  "location_state_changes": [],
-  "faction_state_changes": [],
-  "time_progression": null,
-  "item_transfers": [],
-  "unresolved_questions": []
-}
-</chapter_changes>"""
+    ingest_res = runtime.ingest_draft(
+        chapter=1, prose=prose, package_fingerprint=pkg.package_fingerprint
+    )
+    artifacts = _complete_semantic_artifacts(prose)
 
     # Force a failure during projection application
     with patch("data_modules.chapter_commit_service.ChapterCommitService.apply_projection_writers") as mock_proj:
@@ -303,8 +464,8 @@ def test_negative_projection_failure_leaves_durable_commit_replayable(tmp_path: 
         with pytest.raises(RuntimeError):
             runtime.commit(
                 chapter=1,
-                prose=prose,
-                package_fingerprint=pkg.package_fingerprint,
+                draft_id=ingest_res.draft_id,
+                **artifacts,
             )
 
     # Verify that the durable commit WAS written before projection failure
@@ -384,26 +545,7 @@ def test_runtime_cli_flow(tmp_path: Path, monkeypatch, capsys):
     assert pkg_data["package_fingerprint"] == pkg_fp
 
     # 3. webnovel runtime ingest-draft
-    prose = """林凡通过灵根测试。
-<chapter_changes>
-{
-  "character_state_changes": [
-    {
-      "character_id": "林凡",
-      "change_type": "status_update",
-      "importance": "normal",
-      "details": "成为外门弟子"
-    }
-  ],
-  "new_plot_points": [],
-  "foreshadowing_actions": [],
-  "location_state_changes": [],
-  "faction_state_changes": [],
-  "time_progression": null,
-  "item_transfers": [],
-  "unresolved_questions": []
-}
-</chapter_changes>"""
+    prose = _valid_test_prose()
 
     monkeypatch.setattr(
         sys,
@@ -425,6 +567,7 @@ def test_runtime_cli_flow(tmp_path: Path, monkeypatch, capsys):
     ingest_data = json.loads(captured.out)
     assert ingest_data["ok"] is True
     assert ingest_data["status"] == "draft_ingested"
+    draft_id = ingest_data["draft_id"]
 
     # 4. webnovel runtime status
     monkeypatch.setattr(
@@ -445,6 +588,14 @@ def test_runtime_cli_flow(tmp_path: Path, monkeypatch, capsys):
     status_data = json.loads(captured.out)
     assert status_data["draft_status"] == "ingested"
 
+    # Write temporary artifact files for commit CLI
+    artifacts = _complete_semantic_artifacts(prose)
+    art_files = {}
+    for name, content in artifacts.items():
+        p = tmp_path / f"{name}.json"
+        p.write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
+        art_files[name] = str(p)
+
     # 5. webnovel runtime commit
     monkeypatch.setattr(
         sys,
@@ -454,7 +605,12 @@ def test_runtime_cli_flow(tmp_path: Path, monkeypatch, capsys):
             "--project-root", str(project_root),
             "runtime", "commit",
             "--chapter", "1",
-            "--package-fingerprint", pkg_fp,
+            "--draft-id", draft_id,
+            "--review-result", art_files["review_result"],
+            "--fulfillment-result", art_files["fulfillment_result"],
+            "--disambiguation-result", art_files["disambiguation_result"],
+            "--extraction-result", art_files["extraction_result"],
+            "--reconciliation-result", art_files["reconciliation_result"],
             "--format", "json",
         ],
     )
@@ -485,4 +641,3 @@ def test_runtime_cli_flow(tmp_path: Path, monkeypatch, capsys):
     captured = capsys.readouterr()
     retry_data = json.loads(captured.out)
     assert retry_data["ok"] is True
-

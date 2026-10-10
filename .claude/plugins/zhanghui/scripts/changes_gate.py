@@ -1186,6 +1186,182 @@ def _emit(result: GateResult, as_json: bool, rc: int) -> int:
     return rc
 
 
+def run_changes_gate(
+    *,
+    chapter_file: str | Path | None = None,
+    chapter_text: str | None = None,
+    db_path: str | Path | None = None,
+    state_path: str | Path | None = None,
+    chapter: int | None = None,
+    rule: str | set[str] | None = None,
+    strict: bool = False,
+) -> GateResult:
+    """Authoritative execution of CHANGES gate rules."""
+    result = GateResult(passed=True)
+
+    # --- rule parsing ---
+    wanted_rules: set[str] | None = None
+    if rule:
+        if isinstance(rule, str):
+            raw_rules = {r.strip() for r in rule.split(",") if r.strip()}
+        else:
+            raw_rules = {str(r).strip() for r in rule if str(r).strip()}
+        id_map = {r.upper(): r for r in KNOWN_RULE_IDS}
+        wanted_rules = {id_map.get(r.upper(), r) for r in raw_rules}
+        unknown = set()
+        for r in raw_rules:
+            if r not in KNOWN_RULE_IDS and r.upper() not in {k.upper() for k in KNOWN_RULE_IDS}:
+                unknown.add(r)
+        if not wanted_rules or unknown:
+            result.passed = False
+            result.failures.append(Failure(
+                rule_id="R0",
+                severity="blocking",
+                message=f"未知规则：{', '.join(sorted(unknown)) or str(rule)!r}；可选值：{', '.join(sorted(KNOWN_RULE_IDS))}",
+                location="--rule",
+            ))
+            return result
+
+    # --- resolve chapter text ---
+    chapter_path: Path | None = None
+    if chapter_text is None:
+        if not chapter_file:
+            result.passed = False
+            result.failures.append(Failure(
+                rule_id="R0", severity="blocking", message="未指定章节文件或正文文本", location="chapter_file"
+            ))
+            return result
+        chapter_path = Path(chapter_file)
+        if not chapter_path.is_file():
+            result.passed = False
+            result.failures.append(Failure(
+                rule_id="R0", severity="blocking", message=f"章节文件不存在或不是文件：{chapter_file}", location="chapter_file"
+            ))
+            return result
+        try:
+            chapter_text = chapter_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            result.passed = False
+            result.failures.append(Failure(
+                rule_id="R0", severity="blocking", message=f"章节文件不是 UTF-8 编码：{chapter_file}", location="chapter_file"
+            ))
+            return result
+        except OSError as exc:
+            result.passed = False
+            result.failures.append(Failure(
+                rule_id="R0", severity="blocking", message=f"读取章节文件失败：{exc}", location="chapter_file"
+            ))
+            return result
+    elif chapter_file:
+        chapter_path = Path(chapter_file)
+
+    if not chapter_text.strip():
+        result.passed = False
+        result.failures.append(Failure(
+            rule_id="R0", severity="blocking", message=f"章节文件为空：{chapter_file or '<text>'}", location="chapter_file"
+        ))
+        return result
+
+    # --- db validity check ---
+    db_available = False
+    if db_path:
+        is_valid, err_msg = _check_db_validity(db_path)
+        if not is_valid and err_msg:
+            result.passed = False
+            result.failures.append(Failure(
+                rule_id="R0", severity="blocking", message=f"{err_msg}；门禁将拒绝通过以确保一致性", location="db"
+            ))
+            return result
+        if is_valid and Path(db_path).is_file():
+            db_available = True
+        else:
+            result.failures.append(Failure(
+                rule_id="R0",
+                severity="advisory",
+                message=f"未初始化项目（db 不存在：{db_path}），跳过账本相关校验（R3/R4/R5/R7/R8）",
+                location="db",
+            ))
+
+    # --- parse CHANGES ---
+    parsed, err = parse_changes(chapter_text)
+    result.parsed_changes = parsed
+    if err:
+        result.failures.append(Failure(
+            rule_id="R0", severity="blocking", message=err, location="chapter_file"
+        ))
+    elif not isinstance(parsed, dict):
+        result.failures.append(Failure(
+            rule_id="R0", severity="blocking", message="CHANGES 顶层必须是 JSON 对象", location="chapter_changes"
+        ))
+        parsed = None
+
+    # --- evaluate rules ---
+    if parsed is not None:
+        check_failures: list[Failure] = []
+        check_failures.extend(check_r01_protocol(parsed))
+        check_failures.extend(check_r02_enums(parsed))
+        if db_available:
+            db_p = Path(db_path)
+            check_failures.extend(check_r03_entities(parsed, db_p))
+            check_failures.extend(check_r04_foreshadowing(parsed, db_p))
+            check_failures.extend(check_r05_relationships(parsed, db_p))
+            check_failures.extend(check_r07_item_state(parsed, db_p))
+            chapter_num = chapter or _extract_chapter_number(chapter_text) or 0
+            check_failures.extend(check_r08_timeline(parsed, db_p, chapter_num))
+
+        chapter_num_for_r4b = chapter or _extract_chapter_number(chapter_text) or 0
+        if chapter_num_for_r4b <= 0:
+            try:
+                _state_for_chap = Path(state_path) if state_path else (
+                    chapter_path.parent.parent / ".webnovel" / "state.json" if chapter_path else None
+                )
+                if _state_for_chap and _state_for_chap.is_file():
+                    if _state_for_chap.stat().st_size <= MAX_STATE_BYTES:
+                        import json as _json_for_chap
+                        _s = _json_for_chap.loads(_state_for_chap.read_text(encoding="utf-8"))
+                        if isinstance(_s, dict):
+                            _prog = _s.get("progress")
+                            if isinstance(_prog, dict):
+                                _cur = _prog.get("current_chapter")
+                                if isinstance(_cur, int) and _cur > 0:
+                                    chapter_num_for_r4b = _cur
+            except (OSError, Exception):
+                pass
+
+        if chapter_num_for_r4b > 0:
+            _state_path = (
+                Path(state_path) if state_path
+                else (chapter_path.parent.parent / ".webnovel" / "state.json" if chapter_path else None)
+            )
+            if _state_path and _state_path.is_file():
+                check_failures.extend(
+                    check_r04b_overdue_foreshadow(
+                        parsed, _state_path, chapter_num_for_r4b,
+                    )
+                )
+            if _is_r6_enabled() and db_available:
+                registered_ids, registered_aliases, _tables_ok = _load_entity_lookup(Path(db_path))
+                all_known = registered_ids | registered_aliases
+                if all_known:
+                    check_failures.extend(
+                        check_r06_unregistered(chapter_text, parsed, all_known)
+                    )
+        result.failures.extend(check_failures)
+
+    if wanted_rules is not None:
+        result.failures = [
+            f for f in result.failures
+            if f.rule_id in wanted_rules or f.rule_id == "R0"
+        ]
+
+    if strict:
+        result.passed = not result.failures
+    else:
+        result.passed = not any(f.severity == "blocking" for f in result.failures)
+
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CHANGES 协议门禁")
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
@@ -1196,162 +1372,13 @@ def main() -> int:
     parser.add_argument("--strict", action="store_true", help="advisory 也算 blocking")
     args = parser.parse_args()
 
-    result = GateResult(passed=True)
-
-    def fail_fast(message: str, location: str) -> int:
-        result.passed = False
-        result.failures.append(Failure(
-            rule_id="R0", severity="blocking", message=message, location=location,
-        ))
-        return _emit(result, args.json, 1)
-
-    # --- --rule 解析（Bug E：恢复被移除的参数，并真正实现过滤）---
-    wanted_rules: set[str] | None = None
-    if args.rule:
-        # C-R4-4 修复：保留用户输入的大小写（KNOWN_RULE_IDS 含 "R4b" 而非 "R4B"），
-        # 但匹配时做 case-insensitive 比较以允许用户写 "r4b" / "R4B" 等形式
-        raw_rules = {r.strip() for r in args.rule.split(",") if r.strip()}
-        # 兼容大小写：建立 upper → canonical 映射，把所有输入规范化
-        id_map = {r.upper(): r for r in KNOWN_RULE_IDS}
-        wanted_rules = {id_map.get(r.upper(), r) for r in raw_rules}
-        # unknown = 任何无法映射到 KNOWN_RULE_IDS 的输入
-        unknown = set()
-        for r in raw_rules:
-            if r not in KNOWN_RULE_IDS and r.upper() not in {k.upper() for k in KNOWN_RULE_IDS}:
-                unknown.add(r)
-        if not wanted_rules or unknown:
-            # 未知规则名会把所有 failure 过滤光 → 新的静默通过。必须报错。
-            return fail_fast(
-                f"未知规则：{', '.join(sorted(unknown)) or args.rule!r}；"
-                f"可选值：{', '.join(sorted(KNOWN_RULE_IDS))}",
-                "--rule",
-            )
-
-    # --- 章节文件 ---
-    chapter_path = Path(args.chapter_file)
-    # Bug 12: 用 is_file() 而非 exists()，避免 --chapter-file 指向目录
-    if not chapter_path.is_file():
-        return fail_fast(
-            f"章节文件不存在或不是文件：{args.chapter_file}", "chapter_file"
-        )
-    # Bug C: 非 UTF-8（UTF-16 / GBK / 截断 UTF-8 / 二进制）必须报 R0 而非 traceback
-    try:
-        chapter_text = chapter_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        return fail_fast(
-            f"章节文件不是 UTF-8 编码：{args.chapter_file}", "chapter_file"
-        )
-    except OSError as exc:
-        return fail_fast(f"读取章节文件失败：{exc}", "chapter_file")
-
-    if not chapter_text.strip():
-        return fail_fast(f"章节文件为空：{args.chapter_file}", "chapter_file")
-
-    # --- db 三态判定（Bug A/B：绝不静默跳过）---
-    db_available = False
-    if args.db:
-        is_valid, err_msg = _check_db_validity(args.db)
-        if not is_valid and err_msg:
-            # 状态 2：db 存在但无效 → 大声失败。静默跳过 R3-R8 是安全漏洞：
-            # 攻击者可构造 /dev/null、纯文本等特殊文件让门禁永远 passed=true。
-            return fail_fast(f"{err_msg}；门禁将拒绝通过以确保一致性", "db")
-        if is_valid and Path(args.db).is_file():
-            db_available = True  # 状态 3：db 有效（可以是全新空账本）
-        else:
-            # 状态 1：db 文件不存在 —— 未初始化项目，合法，但必须告知用户
-            result.failures.append(Failure(
-                rule_id="R0",
-                severity="advisory",
-                message=f"未初始化项目（db 不存在：{args.db}），跳过账本相关校验（R3/R4/R5/R7/R8）",
-                location="db",
-            ))
-
-    # --- 解析 CHANGES ---
-    parsed, err = parse_changes(chapter_text)
-    result.parsed_changes = parsed
-    if err:
-        result.failures.append(Failure(
-            rule_id="R0", severity="blocking", message=err, location="chapter_file",
-        ))
-    elif not isinstance(parsed, dict):
-        result.failures.append(Failure(
-            rule_id="R0", severity="blocking",
-            message="CHANGES 顶层必须是 JSON 对象", location="chapter_changes",
-        ))
-        parsed = None
-
-    # --- 跑规则 ---
-    if parsed is not None:
-        check_failures: list[Failure] = []
-        check_failures.extend(check_r01_protocol(parsed))
-        check_failures.extend(check_r02_enums(parsed))
-        if db_available:
-            db_p = Path(args.db)
-            check_failures.extend(check_r03_entities(parsed, db_p))
-            check_failures.extend(check_r04_foreshadowing(parsed, db_p))
-            check_failures.extend(check_r05_relationships(parsed, db_p))
-            check_failures.extend(check_r07_item_state(parsed, db_p))
-            # R8 需要章号
-            chapter_num = _extract_chapter_number(chapter_text) or 0
-            check_failures.extend(check_r08_timeline(parsed, db_p, chapter_num))
-        # R4b: state.json 超期伏笔 advisory（与 db 解耦；不阻塞）
-        # 章号优先用正文解析值；缺省时回退 progress.current_chapter（state.json）
-        chapter_num_for_r4b = _extract_chapter_number(chapter_text) or 0
-        if chapter_num_for_r4b <= 0:
-            # 兜底：state.json progress.current_chapter
-            try:
-                _state_for_chap = Path(args.state_path) if args.state_path else (
-                    chapter_path.parent.parent / ".webnovel" / "state.json"
-                )
-                if _state_for_chap.is_file():
-                    # H-R4-1: 先检查大小，避免 read_text + json.loads 解析超大文件
-                    if _state_for_chap.stat().st_size > MAX_STATE_BYTES:
-                        pass  # 跳过兜底解析，不报错
-                    else:
-                        import json as _json_for_chap
-                        _s = _json_for_chap.loads(_state_for_chap.read_text(encoding="utf-8"))
-                        if isinstance(_s, dict):
-                            _prog = _s.get("progress")
-                            if isinstance(_prog, dict):
-                                _cur = _prog.get("current_chapter")
-                                if isinstance(_cur, int) and _cur > 0:
-                                    chapter_num_for_r4b = _cur
-            except (OSError, _json_for_chap.JSONDecodeError, UnicodeDecodeError):
-                pass
-        if chapter_num_for_r4b > 0:
-            _state_path = (
-                Path(args.state_path) if args.state_path
-                else chapter_path.parent.parent / ".webnovel" / "state.json"
-            )
-            check_failures.extend(
-                check_r04b_overdue_foreshadow(
-                    parsed, _state_path, chapter_num_for_r4b,
-                )
-            )
-            # Bug 4: R6 默认禁用（高误报），仅在 WEBNOVEL_ENABLE_R6 设置时运行
-            if _is_r6_enabled():
-                registered_ids, registered_aliases, _tables_ok = _load_entity_lookup(db_p)
-                all_known = registered_ids | registered_aliases
-                if all_known:
-                    check_failures.extend(
-                        check_r06_unregistered(chapter_text, parsed, all_known)
-                    )
-        result.failures.extend(check_failures)
-
-    # --- Bug E: --rule 过滤。R0 永远保留 ---
-    # R0 是基础设施错误（解析失败 / 文件问题 / db 无效），不是可选规则；
-    # 若被过滤掉，`--rule R1` 会把致命错误藏起来 → 新的静默通过。
-    if wanted_rules is not None:
-        result.failures = [
-            f for f in result.failures
-            if f.rule_id in wanted_rules or f.rule_id == "R0"
-        ]
-
-    if args.strict:
-        result.passed = not result.failures
-    else:
-        result.passed = not any(f.severity == "blocking" for f in result.failures)
-
+    result = run_changes_gate(
+        chapter_file=args.chapter_file,
+        db_path=args.db or None,
+        state_path=args.state_path or None,
+        rule=args.rule or None,
+        strict=args.strict,
+    )
     return _emit(result, args.json, 0 if result.passed else 1)
 
 

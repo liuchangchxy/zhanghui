@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Antigravity Host Adapter & Canary (Issue #25).
+External Host Adapter (Issue #25).
 
-Verifies that Antigravity as an external host can orchestrate a complete chapter
-lifecycle via ChapterRuntime public surface with:
+Demonstrates and verifies that an arbitrary external host can orchestrate a complete chapter
+lifecycle strictly via ChapterRuntime public surface with:
 - 0 private story-system contract writes;
 - 0 knowledge of internal outline directory layout;
 - 0 direct calls to ContextManager private implementation;
 - 0 manual construction of ChapterCommit internal schema.
 
-Preserves evidence:
+Collects workflow artifacts into a caller-designated evidence directory:
 1. request.json
 2. writer_package.json
 3. final_writer_prompt.txt
@@ -28,10 +28,11 @@ from pathlib import Path
 from typing import Any, Dict
 
 from data_modules.chapter_runtime import ChapterRuntime
+from data_modules.reconciliation import reconcile_changes, split_chapter_and_changes
 
 
-class AntigravityHostAdapter:
-    """Host adapter for Antigravity, interacting strictly with the public ChapterRuntime surface."""
+class ExternalHostAdapter:
+    """External host adapter interacting strictly with the public ChapterRuntime surface."""
 
     def __init__(self, project_root: Path, evidence_dir: Path):
         self.project_root = Path(project_root).resolve()
@@ -45,7 +46,7 @@ class AntigravityHostAdapter:
         """Run 1 chapter through the public runtime and collect evidence."""
         # 1. Record host request
         request_payload = {
-            "host": "Antigravity",
+            "host": "ExternalHostAdapter",
             "protocol": "runtime-api/v1",
             "action": "orchestrate_chapter",
             "chapter": chapter,
@@ -69,7 +70,7 @@ class AntigravityHostAdapter:
         prompt = self._format_writer_prompt(writer_pkg)
         (self.evidence_dir / "final_writer_prompt.txt").write_text(prompt, encoding="utf-8")
 
-        # 4. Generate draft prose (for canary: realistic prose conforming to Intent & CHANGES)
+        # 4. Generate draft prose (for contract test: conforming prose)
         prose = self._generate_prose(writer_pkg)
 
         # 5. Ingest draft via public runtime
@@ -77,7 +78,7 @@ class AntigravityHostAdapter:
             chapter=chapter,
             prose=prose,
             package_fingerprint=writer_pkg.package_fingerprint,
-            metadata={"generator": "antigravity_canary_model"},
+            metadata={"generator": "deterministic_external_host"},
         )
         if not ingest_res.ok:
             raise RuntimeError(f"Draft ingestion failed: {ingest_res.error}")
@@ -93,12 +94,14 @@ class AntigravityHostAdapter:
         )
 
         # 7. Commit attempt via public runtime
-        # Supply native review & extraction artifacts
+        # Host provides all 5 required semantic artifacts
+        _, proposal = split_chapter_and_changes(prose)
+        must_nodes = list(writer_pkg.current_intent.get("directive", {}).get("must_cover_nodes", []))
         review_result = {
             "blocking_count": 0,
             "must_check_results": [
                 {"node": n, "passed": True}
-                for n in writer_pkg.current_intent.get("directive", {}).get("must_cover_nodes", [])
+                for n in must_nodes
             ],
             "blocking_rule_results": [],
         }
@@ -120,14 +123,25 @@ class AntigravityHostAdapter:
                 }
             ],
         }
+        fulfillment_result = {
+            "planned_nodes": must_nodes,
+            "covered_nodes": must_nodes,
+            "missed_nodes": [],
+            "extra_nodes": [],
+        }
+        disambiguation_result = {"pending": []}
+        reconciliation_result = reconcile_changes(
+            proposal, extraction_result, chapter_text=prose
+        )
 
         commit_res = self.runtime.commit(
             chapter=chapter,
             draft_id=ingest_res.draft_id,
-            prose=prose,
-            package_fingerprint=writer_pkg.package_fingerprint,
             review_result=review_result,
             extraction_result=extraction_result,
+            fulfillment_result=fulfillment_result,
+            disambiguation_result=disambiguation_result,
+            reconciliation_result=reconciliation_result,
         )
 
         (self.evidence_dir / "commit_outcome.json").write_text(
@@ -210,17 +224,17 @@ class AntigravityHostAdapter:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run Antigravity canary chapter")
+    parser = argparse.ArgumentParser(description="Run external host chapter test")
     parser.add_argument("--project-root", required=True, help="书项目根目录")
     parser.add_argument("--chapter", type=int, default=1, help="章节号")
     parser.add_argument("--evidence-dir", required=True, help="证据保存目录")
     args = parser.parse_args()
 
-    adapter = AntigravityHostAdapter(Path(args.project_root), Path(args.evidence_dir))
+    adapter = ExternalHostAdapter(Path(args.project_root), Path(args.evidence_dir))
     result = adapter.run_chapter(args.chapter)
 
     commit_res = result["commit_res"]
-    print(f"CANARY STATUS: {'SUCCESS' if commit_res.ok else 'FAILED'}")
+    print(f"STATUS: {'SUCCESS' if commit_res.ok else 'FAILED'}")
     print(f"OUTCOME: {commit_res.chapter_outcome}")
     print(f"PRIVATE_CONTRACT_WRITES: {adapter.private_contract_writes}")
     print(f"EVIDENCE_DIR: {result['evidence_dir']}")

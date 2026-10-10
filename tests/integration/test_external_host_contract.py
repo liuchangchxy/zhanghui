@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Antigravity Canary Test for Runtime API v1 (Issue #25)."""
+"""External Host Contract Test for Runtime API v1 (Issue #25)."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 import pytest
 
-from antigravity_canary import AntigravityHostAdapter
+from external_host_adapter import ExternalHostAdapter
 
 
 def _setup_minimal_book_project(tmp_path: Path, chapter: int = 1) -> Path:
@@ -19,7 +19,6 @@ def _setup_minimal_book_project(tmp_path: Path, chapter: int = 1) -> Path:
     outline_dir = project_root / "大纲"
     outline_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. state.json (no private story-system contracts)
     state = {
         "project_info": {
             "title": "测试纪元",
@@ -39,7 +38,6 @@ def _setup_minimal_book_project(tmp_path: Path, chapter: int = 1) -> Path:
     }
     (webnovel_dir / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # 2. Outline with current chapter and future chapter
     outline_text = f"""# 第一卷 觉醒
 
 ### 第{chapter}章：初入宗门
@@ -59,25 +57,20 @@ def _setup_minimal_book_project(tmp_path: Path, chapter: int = 1) -> Path:
     return project_root
 
 
-def test_antigravity_canary_orchestration(tmp_path: Path):
-    """Verify external host Antigravity completes chapter 1 via Runtime API without private knowledge."""
-    # 1. Setup isolated book project with only state and outline
+def test_external_host_contract_orchestration(tmp_path: Path):
+    """Verify an external host completes chapter 1 via Runtime API without private layout knowledge."""
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
-    
-    # 2. Evidence destination (both in tmp and synced to repo canary evidence)
-    evidence_dir = tmp_path / "canary_evidence"
-    
-    adapter = AntigravityHostAdapter(project_root=project_root, evidence_dir=evidence_dir)
+    evidence_dir = tmp_path / "evidence"
+
+    adapter = ExternalHostAdapter(project_root=project_root, evidence_dir=evidence_dir)
     res = adapter.run_chapter(chapter=1)
-    
-    # 3. Assertions on canary run
+
     assert adapter.private_contract_writes == 0
     commit_res = res["commit_res"]
     assert commit_res.ok is True
     assert commit_res.chapter_outcome == "accepted"
     assert commit_res.projection_success is True
-    
-    # 4. Assert all 7 required evidence files exist and are non-empty
+
     required_files = [
         "request.json",
         "writer_package.json",
@@ -89,42 +82,29 @@ def test_antigravity_canary_orchestration(tmp_path: Path):
     ]
     for filename in required_files:
         filepath = evidence_dir / filename
-        assert filepath.exists(), f"Missing canary evidence: {filename}"
-        assert filepath.stat().st_size > 0, f"Empty canary evidence: {filename}"
+        assert filepath.exists(), f"Missing evidence: {filename}"
+        assert filepath.stat().st_size > 0, f"Empty evidence: {filename}"
 
-    # 5. Check request.json content
     req = json.loads((evidence_dir / "request.json").read_text(encoding="utf-8"))
-    assert req["host"] == "Antigravity"
+    assert req["action"] == "orchestrate_chapter"
     assert req["chapter"] == 1
 
-    # 6. Check writer_package.json content
     pkg = json.loads((evidence_dir / "writer_package.json").read_text(encoding="utf-8"))
     assert pkg["chapter"] == 1
     assert "灵根测试" in str(pkg["current_intent"])
     assert "藏经阁之争" not in str(pkg["current_intent"])
 
-    # 7. Check draft_receipt.json content
     receipt = json.loads((evidence_dir / "draft_receipt.json").read_text(encoding="utf-8"))
     assert receipt["ok"] is True
     assert receipt["draft_id"].startswith("draft-001-")
 
-    # 8. Check runtime_workflow_state.json content
     state = json.loads((evidence_dir / "runtime_workflow_state.json").read_text(encoding="utf-8"))
     assert state["draft_status"] == "ingested"
     assert state["draft_id"] == receipt["draft_id"]
 
-    # 9. Check commit_outcome.json content
     commit_out = json.loads((evidence_dir / "commit_outcome.json").read_text(encoding="utf-8"))
     assert commit_out["ok"] is True
     assert commit_out["chapter_outcome"] == "accepted"
 
-    # 10. Check projection_status.json content
     proj_out = json.loads((evidence_dir / "projection_status.json").read_text(encoding="utf-8"))
     assert proj_out["projection_success"] is True
-
-    # 11. Sync evidence to docs/canary_evidence for permanent repository audit
-    repo_evidence_dir = Path(__file__).resolve().parent.parent.parent / "docs" / "canary_evidence"
-    repo_evidence_dir.mkdir(parents=True, exist_ok=True)
-    for filename in required_files:
-        content = (evidence_dir / filename).read_text(encoding="utf-8")
-        (repo_evidence_dir / filename).write_text(content, encoding="utf-8")

@@ -359,12 +359,6 @@ def cmd_runtime(args: argparse.Namespace) -> int:
         return 0
 
     if action == "commit":
-        prose = getattr(args, "prose", "") or ""
-        ch_file = getattr(args, "chapter_file", "") or ""
-        if not prose and ch_file:
-            ch_p = Path(ch_file)
-            prose = ch_p.read_text(encoding="utf-8") if ch_p.is_file() else ""
-
         def _load_json_opt(p: str | None) -> dict | None:
             if p and Path(p).is_file():
                 return json.loads(Path(p).read_text(encoding="utf-8"))
@@ -379,8 +373,6 @@ def cmd_runtime(args: argparse.Namespace) -> int:
         res = runtime.commit(
             chapter=args.chapter,
             draft_id=getattr(args, "draft_id", None) or None,
-            prose=prose or None,
-            package_fingerprint=getattr(args, "package_fingerprint", None) or None,
             review_result=review_res,
             fulfillment_result=fulfillment_res,
             disambiguation_result=disambiguation_res,
@@ -1030,10 +1022,7 @@ def main() -> None:
 
     p_rt_commit = runtime_sub.add_parser("commit", help="尝试提交章节至 Canon")
     p_rt_commit.add_argument("--chapter", type=int, required=True, help="章节号")
-    p_rt_commit.add_argument("--package-fingerprint", default="", help="Writer Package 指纹")
-    p_rt_commit.add_argument("--draft-id", default="", help="草稿 ID")
-    p_rt_commit.add_argument("--prose", default="", help="正文文本")
-    p_rt_commit.add_argument("--chapter-file", default="", help="正文文件路径")
+    p_rt_commit.add_argument("--draft-id", default="", help="草稿 ID（从 ingest-draft 获取）")
     p_rt_commit.add_argument("--review-result", default="", help="review_result JSON 路径")
     p_rt_commit.add_argument("--fulfillment-result", default="", help="fulfillment_result JSON 路径")
     p_rt_commit.add_argument("--disambiguation-result", default="", help="disambiguation_result JSON 路径")

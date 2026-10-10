@@ -1,0 +1,34 @@
+{
+  "canary_type": "REAL_ANTIGRAVITY_WRITER_CANARY",
+  "status": "LIVE_CANARY_PARTIAL",
+  "timestamp": "2026-10-10T09:18:59.614140+00:00",
+  "conversation_id": "d64606da-e239-4036-b8fd-27108483e058",
+  "agent_role": "Antigravity Live Canary Writer",
+  "model": "flash",
+  "chapter": 1,
+  "package_fingerprint": "118bf22be22bf5af2216bf98b394234f5a6787d17a19fafb884cd868beb45789",
+  "prompt_hash": "d4bf144998bb1885dd6ea34c179d4bd8e3559d6a854624dfffe4c7ad4d3bf42c",
+  "response_hash": "feb3c39f770bdee043559b26cdbeea56a1c7bf02b6c1853b93cf6f42580c4bcc",
+  "draft_id": "draft-001-c4889590",
+  "draft_fingerprint": "feb3c39f770bdee043559b26cdbeea56a1c7bf02b6c1853b93cf6f42580c4bcc",
+  "prose_excerpt": "夜色深沉，冷月如钩。\n青云后山的断崖之下，一口白雾蒸腾的灵泉正泛着幽微荧光。\n苏云盘膝端坐在灵泉边的一方青石之上，屏息凝神，五心朝天。周遭冰凉的泉水雾气丝丝缕缕渗入经络，洗涤着体内沉积的凡尘浊气。连续数日的灵泉静修，已令他体内干涸的经脉隐隐...",
+  "ingest_receipt": {
+    "ok": true,
+    "chapter": 1,
+    "status": "draft_ingested",
+    "draft_id": "draft-001-c4889590",
+    "draft_fingerprint": "feb3c39f770bdee043559b26cdbeea56a1c7bf02b6c1853b93cf6f42580c4bcc",
+    "package_fingerprint": "118bf22be22bf5af2216bf98b394234f5a6787d17a19fafb884cd868beb45789",
+    "next_required_action": "review_and_extract",
+    "required_artifacts": [
+      "review_result",
+      "extraction_result",
+      "fulfillment_result",
+      "disambiguation_result",
+      "reconciliation_result"
+    ],
+    "error_code": null,
+    "error": null
+  },
+  "note": "Writer phase verified end-to-end with live Antigravity subagent invocation. Reviewer/Data Agent remain deterministic in test suite; hence marked LIVE_CANARY_PARTIAL."
+}
