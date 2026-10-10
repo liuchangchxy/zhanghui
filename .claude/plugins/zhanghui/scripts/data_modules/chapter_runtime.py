@@ -504,6 +504,11 @@ class ChapterRuntime:
                     error=f"Failed to assemble writer package: {exc}",
                 )
 
+        if writer_package:
+            next_action = "ingest_draft" if writer_package.is_writer_ready else "attach_creative_brief"
+        else:
+            next_action = "obtain_writer_package"
+
         return ChapterPrepareResult(
             ok=True,
             chapter=chapter,
@@ -511,7 +516,7 @@ class ChapterRuntime:
             writer_package=writer_package,
             blockers=[],
             advisories=advisories,
-            next_required_action="ingest_draft" if writer_package else "obtain_writer_package",
+            next_required_action=next_action,
         )
 
     def compute_source_fingerprints(self, chapter: int) -> dict[str, str]:
