@@ -98,6 +98,12 @@ class WriterPackage:
         5. constraints & craft
         6. relevant writer_context
         """
+        if not self.is_writer_ready:
+            raise RuntimeError(
+                f"Cannot render writer prompt: WriterPackage for chapter {self.chapter} is unsealed "
+                "(missing authentic creative_brief). Context Agent creative brief must be attached first."
+            )
+
         story_id = self.story_identity or {}
         intent = self.current_intent or {}
         directive = intent.get("directive") or {}

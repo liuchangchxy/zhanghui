@@ -342,3 +342,54 @@ def test_stale_package_detection_with_brief_fingerprint(test_book_project: Path)
     )
     assert stale_res.ok is False
     assert stale_res.error_code == "STALE_WRITER_PACKAGE"
+
+
+def test_unsealed_package_to_writer_prompt_fails_closed(test_book_project: Path):
+    """Unsealed package (missing creative brief) must refuse to render writer prompt."""
+    runtime = ChapterRuntime(test_book_project)
+    raw_pkg = runtime.get_writer_package(chapter=1)
+    assert raw_pkg.is_writer_ready is False
+
+    with pytest.raises(RuntimeError, match="Cannot render writer prompt: WriterPackage.*is unsealed"):
+        raw_pkg.to_writer_prompt()
+
+
+def test_cli_package_format_prompt_fails_on_unsealed_package(test_book_project: Path):
+    """CLI runtime package --format prompt fails-closed when no brief is provided."""
+    import subprocess
+    import sys
+
+    cli_script = (
+        test_book_project.parent.parent
+        / ".claude"
+        / "plugins"
+        / "zhanghui"
+        / "scripts"
+        / "data_modules"
+        / "webnovel.py"
+    )
+    # Use repo webnovel script directly
+    res = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "data_modules.webnovel",
+            "runtime",
+            "package",
+            "--project-root",
+            str(test_book_project),
+            "--chapter",
+            "1",
+            "--format",
+            "prompt",
+        ],
+        capture_output=True,
+        text=True,
+        env={
+            **subprocess.os.environ,
+            "PYTHONPATH": str(Path(__file__).resolve().parents[2] / ".claude/plugins/zhanghui/scripts"),
+        },
+    )
+    assert res.returncode != 0
+    assert "is unsealed" in res.stderr
+
