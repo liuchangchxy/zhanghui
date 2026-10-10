@@ -862,3 +862,19 @@ def test_pure_surface_punctuation_edit_fast_path():
     assert gate.final_text == after
 
 
+def test_semantic_punctuation_change_requires_judge():
+    """林越说：“韩策，杀了乔宁。” -> 林越说：“韩策杀了乔宁。” changes syntax/intent and returns UNCERTAIN without judge."""
+    before = "林越说：“韩策，杀了乔宁。”"
+    after = "林越说：“韩策杀了乔宁。”"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
+    assert not diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+

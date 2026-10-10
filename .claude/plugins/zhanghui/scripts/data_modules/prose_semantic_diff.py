@@ -453,31 +453,29 @@ def _split_sentences(text: str) -> List[str]:
 
 def normalize_surface_text(text: str) -> str:
     """
-    Normalize text for surface formatting comparison by stripping whitespace,
-    punctuation, and applying Unicode NFKC normalization.
-    Retains only content/lexical characters (alphanumeric and CJK).
+    Normalize text for surface formatting comparison using Unicode NFKC
+    and whitespace normalization only, strictly preserving punctuation.
     """
     norm = unicodedata.normalize("NFKC", text)
-    chars = re.findall(r"[\u4e00-\u9fffA-Za-z0-9]", norm)
-    return "".join(chars)
+    return re.sub(r"\s+", "", norm)
 
 
 def is_surface_only_edit(before_text: str, after_text: str) -> bool:
     """
     Check if the change between before_text and after_text is strictly
-    normalization-equivalent formatting only (whitespace, punctuation,
-    full-width / half-width conversions).
+    normalization-equivalent formatting only (Unicode NFKC + whitespace normalization).
+    Preserves all punctuation.
 
     Strict Contract:
-    - If any lexical or content characters change, Python fast-path MUST NOT declare it safe.
-    - All lexical rewrites (including synonyms) must be delegated to the Semantic Judge.
+    - If any lexical characters or punctuation change, Python fast-path MUST NOT declare it safe.
+    - All semantic and syntactic changes must be delegated to the Semantic Judge.
     - If Semantic Judge is unavailable or fails, returns UNCERTAIN (fail-closed).
     """
     # 1. Uncovered dimension keywords must not mutate
     if touches_uncovered_dimensions(before_text, after_text):
         return False
 
-    # 2. Strict normalization equivalence: content/lexical character sequence must be 100% identical
+    # 2. Strict normalization equivalence: NFKC + whitespace normalization
     norm_before = normalize_surface_text(before_text)
     norm_after = normalize_surface_text(after_text)
     if not norm_before or not norm_after:
