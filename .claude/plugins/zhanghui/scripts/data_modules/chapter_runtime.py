@@ -38,6 +38,7 @@ from .chapter_commit_service import (
 )
 from .config import DataModulesConfig
 from .context_manager import ContextManager
+from .durable_projection import discover_validated_chapter_commits
 from .gate_finding_adapters import adapt_changes_gate_result, adapt_legacy_artifacts
 from .projections import retry_projection
 from .reconciliation import reconcile_changes, split_chapter_and_changes
@@ -345,6 +346,29 @@ class ChapterRuntime:
                 return c
         return candidates[0]
 
+    def _has_durable_story_history(self) -> bool:
+        """Check if project has durable history indicating an existing story rather than an uninitialized project."""
+        try:
+            if len(discover_validated_chapter_commits(self.project_root)) > 0:
+                return True
+        except Exception:
+            commits_dir = self.project_root / ".story-system" / "commits"
+            if commits_dir.is_dir() and any(commits_dir.glob("chapter_*.commit.json")):
+                return True
+
+        state_path = self.project_root / ".webnovel" / "state.json"
+        state = read_json_if_exists(state_path) or {}
+        progress = state.get("progress") if isinstance(state.get("progress"), dict) else {}
+        if int(progress.get("current_chapter") or 0) > 0:
+            return True
+
+        # Legacy official prose compatibility
+        prose_dir = self.project_root / "正文"
+        if prose_dir.is_dir() and any(prose_dir.glob("*.md")):
+            return True
+
+        return False
+
     def _ensure_story_contracts(self, chapter: int) -> None:
         """Ensure Story System 4 contracts exist without caller needing to know their internal paths."""
         state_path = self.project_root / ".webnovel" / "state.json"
@@ -358,8 +382,22 @@ class ChapterRuntime:
         csv_dir = self._default_csv_dir()
         engine = StorySystemEngine(csv_dir=csv_dir)
 
-        # 1. Master setting & anti-patterns
-        if not self.paths.master_json.is_file() or not self.paths.anti_patterns_json.is_file():
+        # 1. Master setting & anti-patterns check
+        master_missing = not self.paths.master_json.is_file()
+        anti_missing = not self.paths.anti_patterns_json.is_file()
+
+        if (master_missing or anti_missing) and self._has_durable_story_history():
+            missing_names = []
+            if master_missing:
+                missing_names.append(self.paths.master_json.name)
+            if anti_missing:
+                missing_names.append(self.paths.anti_patterns_json.name)
+            raise RuntimeError(
+                f"Existing story is missing foundational contract ({', '.join(missing_names)}). "
+                "Automatic truth regeneration is forbidden to protect existing story intent."
+            )
+
+        if master_missing or anti_missing:
             seed = engine.build(
                 query=query,
                 genre=genre,
@@ -374,7 +412,8 @@ class ChapterRuntime:
             )
 
         # 2. Chapter contract
-        if not self.paths.chapter_json(chapter).is_file():
+        ch_path = self.paths.chapter_json(chapter)
+        if not ch_path.is_file():
             seed = engine.build(
                 query=query,
                 genre=genre,
@@ -383,14 +422,15 @@ class ChapterRuntime:
             )
             if seed.get("chapter_brief"):
                 from .story_contracts import write_json, write_marked_markdown, render_chapter_markdown
-                ch_path = self.paths.chapter_json(chapter)
                 ch_path.parent.mkdir(parents=True, exist_ok=True)
                 write_json(ch_path, seed["chapter_brief"])
                 write_marked_markdown(ch_path.with_suffix(".md"), render_chapter_markdown(seed["chapter_brief"]))
 
         # 3. Volume brief and Review contract
         volume = volume_num_for_chapter_from_state(self.project_root, chapter) or 1
-        if not self.paths.volume_json(volume).is_file() or not self.paths.review_json(chapter).is_file():
+        vol_path = self.paths.volume_json(volume)
+        rev_path = self.paths.review_json(chapter)
+        if not vol_path.is_file() or not rev_path.is_file():
             builder = RuntimeContractBuilder(self.project_root)
             volume_brief, review_contract = builder.build_for_chapter(chapter)
             persist_runtime_contracts(self.project_root, chapter, volume_brief, review_contract)
