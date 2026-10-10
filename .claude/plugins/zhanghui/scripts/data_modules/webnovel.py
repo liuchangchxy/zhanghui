@@ -403,7 +403,10 @@ def cmd_runtime(args: argparse.Namespace) -> int:
 
 def cmd_prose(args: argparse.Namespace) -> int:
     """Dispatch prose-quality v2 pipeline subcommands (Issue #26)."""
-    root = _resolve_root(args.project_root)
+    try:
+        root = _resolve_root(args.project_root)
+    except Exception:
+        root = Path(".")
     action = args.prose_action
 
     from .prose_pipeline import ProseQualityPipeline
@@ -453,8 +456,16 @@ def cmd_prose(args: argparse.Namespace) -> int:
         elif getattr(args, "after", None):
             after_text = args.after
 
+        judge_callable = None
+        judge_payload = getattr(args, "judge_result", "") or ""
+        judge_file = getattr(args, "judge_file", "") or ""
+        if judge_file and Path(judge_file).is_file():
+            judge_payload = Path(judge_file).read_text(encoding="utf-8")
+        if judge_payload:
+            judge_callable = lambda b, a: judge_payload
+
         from .prose_semantic_diff import compare_semantic_facts
-        res = compare_semantic_facts(before_text, after_text)
+        res = compare_semantic_facts(before_text, after_text, semantic_judge=judge_callable)
         if args.format == "json":
             print(res.to_json())
         else:
@@ -481,8 +492,16 @@ def cmd_prose(args: argparse.Namespace) -> int:
         elif getattr(args, "after", None):
             after_text = args.after
 
+        judge_callable = None
+        judge_payload = getattr(args, "judge_result", "") or ""
+        judge_file = getattr(args, "judge_file", "") or ""
+        if judge_file and Path(judge_file).is_file():
+            judge_payload = Path(judge_file).read_text(encoding="utf-8")
+        if judge_payload:
+            judge_callable = lambda b, a: judge_payload
+
         chapter = getattr(args, "chapter", 1) or 1
-        res = pipeline.process_and_validate(before_text, after_text, chapter=chapter)
+        res = pipeline.process_and_validate(before_text, after_text, chapter=chapter, semantic_judge=judge_callable)
         if args.format == "json":
             print(res.to_json())
         else:
@@ -1150,6 +1169,8 @@ def main() -> None:
     p_prose_diff.add_argument("--before-file", default="", help="修改前正文文件")
     p_prose_diff.add_argument("--after", default="", help="修改后正文内容")
     p_prose_diff.add_argument("--after-file", default="", help="修改后正文文件")
+    p_prose_diff.add_argument("--judge-result", default="", help="Semantic Judge 裁决结果 JSON 字符串")
+    p_prose_diff.add_argument("--judge-file", default="", help="Semantic Judge 裁决结果 JSON 文件路径")
     p_prose_diff.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_prose_diff.set_defaults(func=cmd_prose)
 
@@ -1159,6 +1180,8 @@ def main() -> None:
     p_prose_val.add_argument("--after", default="", help="修改后正文内容")
     p_prose_val.add_argument("--after-file", default="", help="修改后正文文件")
     p_prose_val.add_argument("--chapter", type=int, default=1, help="章节号")
+    p_prose_val.add_argument("--judge-result", default="", help="Semantic Judge 裁决结果 JSON 字符串")
+    p_prose_val.add_argument("--judge-file", default="", help="Semantic Judge 裁决结果 JSON 文件路径")
     p_prose_val.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_prose_val.set_defaults(func=cmd_prose)
 

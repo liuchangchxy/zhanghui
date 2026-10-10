@@ -83,6 +83,7 @@ def evaluate_prose_quality_and_decide(
     diagnosis_summary: Optional[Any] = None,
     edit_plan: Optional[str] = None,
     max_shrinkage_ratio: float = 0.20,  # Max allowable length reduction (20%)
+    semantic_judge: Optional[Callable[[str, str], Any]] = None,
 ) -> QualityGateDecision:
     """Evaluate edited prose against quality and fact-safety criteria, rolling back if regressed."""
     before_len = len(before_text)
@@ -94,10 +95,10 @@ def evaluate_prose_quality_and_decide(
         diagnosis_dict = {}
     elif isinstance(diagnosis_summary, dict) and "outcome" in diagnosis_summary:
         # Caller passed serialized semantic diff
-        semantic_res = compare_semantic_facts(before_text, after_text)
+        semantic_res = compare_semantic_facts(before_text, after_text, semantic_judge=semantic_judge)
         diagnosis_dict = diagnosis_summary
     else:
-        semantic_res = compare_semantic_facts(before_text, after_text)
+        semantic_res = compare_semantic_facts(before_text, after_text, semantic_judge=semantic_judge)
         diagnosis_dict = diagnosis_summary if isinstance(diagnosis_summary, dict) else {}
 
     metrics_before = compute_prose_metrics(before_text)
@@ -109,7 +110,8 @@ def evaluate_prose_quality_and_decide(
         "metrics_after": metrics_after,
     }
 
-    if semantic_res.outcome != SemanticDiffOutcome.STYLE_ONLY_SAFE:
+    # 1. Semantic Fact Drift Check (Hard Block on explicit drift)
+    if semantic_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED:
         reason = f"触发事实安全红线回滚：{semantic_res.summary}"
         audit_record = {
             "before": before_text,
@@ -183,6 +185,34 @@ def evaluate_prose_quality_and_decide(
             f"电报体节奏严重退化回滚：平均句长自 {avg_len_before:.1f} 字骤降至 {avg_len_after:.1f} 字 "
             f"(跌幅 {staccato_drop * 100:.1f}%)，短句占比高达 {short_after_ratio * 100:.1f}%，丧失叙事呼吸感。"
         )
+        audit_record = {
+            "before": before_text,
+            "diagnosis": diagnosis_dict,
+            "edit_plan": edit_plan or "",
+            "after": after_text,
+            "validation": audit_validation,
+            "metrics_before": metrics_before,
+            "metrics_after": metrics_after,
+            "decision": {
+                "accepted": False,
+                "status": "ROLLEDBACK",
+                "rollback_reason": reason,
+            },
+        }
+        return QualityGateDecision(
+            accepted=False,
+            status="ROLLEDBACK",
+            rollback_reason=reason,
+            semantic_outcome=semantic_res.outcome.value,
+            shrinkage_ratio=shrinkage,
+            staccato_score=staccato_drop,
+            final_prose=before_text,
+            audit_record=audit_record,
+        )
+
+    # 3.5 Semantic Uncertainty Check (Fail-Closed on UNCERTAIN)
+    if semantic_res.outcome != SemanticDiffOutcome.STYLE_ONLY_SAFE:
+        reason = f"触发事实安全红线回滚：{semantic_res.summary}"
         audit_record = {
             "before": before_text,
             "diagnosis": diagnosis_dict,

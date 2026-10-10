@@ -335,7 +335,8 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 
 判定逻辑：
 - `status == ACCEPTED`：文风调整通过，将候选正文覆盖回原章节文件 `正文/第{chapter_padded}章-{title_safe}.md`。
-- `status == ROLLEDBACK` 或 `UNCERTAIN`：检测到事实漂移、新增未授权履历/设定或质量退化，**自动保留 Step 2A Draft 原稿**，记录回退审计信息。
+- `status == UNCERTAIN` 且提示需要 Semantic Judge：若改动超出确定性检查覆盖（涉及知情状态/事件结果/因果/线索等），调用 Semantic Judge 并传入 `--judge-result '<json>'`（或 `--judge-file`）重验；若未配置或执行失败，严格遵循 fail-closed 保持 `ROLLEDBACK`。
+- `status == ROLLEDBACK`：检测到事实漂移、新增未授权履历/设定或质量退化，**自动保留 Step 2A Draft 原稿**，记录回退审计信息。
 
 输出：
 - 文风适配后正文（通过则覆盖，未通过则保持 Step 2A 原正文）。
@@ -422,7 +423,8 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
    - 检查质量退化（字数缩水率 > 20%、电报式断句率飙升）。
 4. **决策判定**：
    - 若 `status == ACCEPTED`：接受润色结果，覆盖章节文件。
-   - 若 `status == ROLLEDBACK` 或 `UNCERTAIN`：自动回退至编辑前版本（即 Step 3 审查版本），记录回退原因与审计记录。
+   - 若 `status == UNCERTAIN` 且提示需要 Semantic Judge：若候选修改超出确定性覆盖范围，调用 Semantic Judge 并传入 `--judge-result '<json>'`（或 `--judge-file`）重验；若 Judge 未配置或失败，严格遵循 fail-closed 保持回滚。
+   - 若 `status == ROLLEDBACK`：自动回退至编辑前版本（即 Step 3 审查版本），记录回退原因与审计记录。
 
 输出：
 - 最终正文（通过则为润色正文，回退则为原正文）

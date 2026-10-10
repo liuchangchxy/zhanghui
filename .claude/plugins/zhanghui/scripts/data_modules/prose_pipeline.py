@@ -115,6 +115,7 @@ class ProseQualityPipeline:
         chapter: int = 1,
         diagnosis_report: Optional[DiagnosisReport] = None,
         edit_plan: Optional[str] = None,
+        semantic_judge: Optional[Callable[[str, str], Any]] = None,
     ) -> ProsePipelineResult:
         """
         Validate edited prose through Fact-Safe Semantic Diff & Quality Regression Gate.
@@ -126,6 +127,7 @@ class ProseQualityPipeline:
             after_text=after_text,
             diagnosis_summary=diag.to_dict(),
             edit_plan=edit_plan,
+            semantic_judge=semantic_judge,
         )
 
         return ProsePipelineResult(

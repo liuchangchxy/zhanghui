@@ -574,3 +574,134 @@ def test_voice_target_prompt_surfaces_author_identity_and_rules(tmp_path: Path):
     assert "18-28" not in prompt_block
     assert "句长随场景自然起伏" in prompt_block
 
+
+# ----------------------------------------------------------------------
+# 9. Semantic Judge Fallback & Fail-Closed Tests (Section VI & XI)
+# ----------------------------------------------------------------------
+
+def _make_mock_judge(dimension: str, reason: str):
+    def _judge(before: str, after: str):
+        return {
+            "outcome": "SEMANTIC_CHANGE_PROPOSED",
+            "changes": [
+                {
+                    "dimension": dimension,
+                    "before": before,
+                    "after": after,
+                    "reason": reason,
+                }
+            ],
+        }
+    return _judge
+
+
+def test_epistemic_drift_counterexample():
+    """Epistemic drift: 韩策亲眼看见林越拿走钥匙 -> 韩策从未看见林越拿走钥匙."""
+    before = "韩策亲眼看见林越拿走钥匙。"
+    after = "韩策从未看见林越拿走钥匙。"
+
+    judge = _make_mock_judge("epistemic", "知情状态从目击反转为从未看见")
+    diff_res = compare_semantic_facts(before, after, semantic_judge=judge)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("epistemic" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_event_outcome_drift_counterexample():
+    """Event Outcome drift: 乔宁关闭了回流阀 -> 乔宁没有关闭回流阀."""
+    before = "乔宁关闭了回流阀。"
+    after = "乔宁没有关闭回流阀。"
+
+    judge = _make_mock_judge("event_outcome", "回流阀操作结果从关闭被篡改为未关闭")
+    diff_res = compare_semantic_facts(before, after, semantic_judge=judge)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("event_outcome" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_causality_drift_counterexample():
+    """Causality drift: 爆炸导致东侧闸门坍塌 -> 爆炸与东侧闸门坍塌无关."""
+    before = "爆炸导致东侧闸门坍塌。"
+    after = "爆炸与东侧闸门坍塌无关。"
+
+    judge = _make_mock_judge("causality", "爆炸与坍塌的因果关系被切断否定")
+    diff_res = compare_semantic_facts(before, after, semantic_judge=judge)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("causality" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_clue_drift_counterexample():
+    """Clue drift: 卡片背面写着“B7” -> 卡片背面没有任何字迹."""
+    before = "卡片背面写着“B7”。"
+    after = "卡片背面没有任何字迹。"
+
+    judge = _make_mock_judge("clue", "物理线索字迹被凭空抹除")
+    diff_res = compare_semantic_facts(before, after, semantic_judge=judge)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("clue" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_safe_stylistic_edit_fast_path():
+    """Safe stylistic edit: 梅叔的声音沙哑，像粗砂纸摩擦 -> 梅叔嗓音粗哑，像砂纸擦过木面."""
+    before = "梅叔的声音沙哑，像粗砂纸摩擦。"
+    after = "梅叔嗓音粗哑，像砂纸擦过木面。"
+
+    # Pure surface stylistic polish: fast-path accepts without requiring semantic judge
+    diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.STYLE_ONLY_SAFE
+    assert diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert gate.accepted
+    assert gate.status == "ACCEPTED"
+    assert gate.final_text == after
+
+
+def test_semantic_judge_unavailable_fails_closed():
+    """When candidate has substantial rewrite beyond deterministic coverage and judge is unavailable, fails closed to UNCERTAIN."""
+    before = "乔宁关闭了回流阀。"
+    after = "乔宁没有关闭回流阀。"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
+    assert not diff_res.safe
+    assert "fail-closed" in diff_res.summary or "UNCERTAIN" in diff_res.summary
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_semantic_judge_invalid_response_fails_closed():
+    """When judge returns invalid/malformed response, fails closed to UNCERTAIN."""
+    before = "乔宁关闭了回流阀。"
+    after = "乔宁没有关闭回流阀。"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=lambda b, a: "INVALID_NOT_JSON")
+    assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
+    assert not diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
