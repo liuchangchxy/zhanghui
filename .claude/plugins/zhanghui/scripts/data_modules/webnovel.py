@@ -418,7 +418,6 @@ def cmd_runtime(args: argparse.Namespace) -> int:
         extraction_res = _load_json_opt(getattr(args, "extraction_result", None))
         reconciliation_res = _load_json_opt(getattr(args, "reconciliation_result", None))
 
-        publish_flag = bool(getattr(args, "publish", False))
         res = runtime.commit(
             chapter=args.chapter,
             draft_id=getattr(args, "draft_id", None) or None,
@@ -428,15 +427,12 @@ def cmd_runtime(args: argparse.Namespace) -> int:
             extraction_result=extraction_res,
             reconciliation_result=reconciliation_res,
             on_conflict=getattr(args, "on_conflict", None),
-            publish_on_accept=publish_flag,
         )
         if args.format == "json":
             print(res.to_json())
         else:
             status = "OK" if res.ok else "FAILED"
             print(f"{status} commit chapter {args.chapter}: {res.chapter_outcome}")
-            if res.published_file:
-                print(f"  published: {res.published_file}")
             if res.error:
                 print(f"  error: {res.error}")
         return 0 if res.ok else 1
@@ -445,7 +441,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
         try:
             target = runtime.publish_accepted_draft(
                 chapter=args.chapter,
-                draft_id=getattr(args, "draft_id", None) or None,
+                draft_id=args.draft_id,
             )
             if args.format == "json":
                 print(json.dumps({"ok": True, "published_file": str(target)}, ensure_ascii=False, indent=2))
@@ -1226,13 +1222,12 @@ def main() -> None:
     p_rt_commit.add_argument("--extraction-result", default="", help="extraction_result JSON 路径")
     p_rt_commit.add_argument("--reconciliation-result", default="", help="reconciliation_result JSON 路径")
     p_rt_commit.add_argument("--on-conflict", choices=["overwrite", "skip"], default=None, help="冲突策略")
-    p_rt_commit.add_argument("--publish", action="store_true", help="当章节提交 accepted 时自动发布到 正文/")
     p_rt_commit.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_commit.set_defaults(func=cmd_runtime)
 
     p_rt_publish = runtime_sub.add_parser("publish-draft", help="将已 accepted 的草稿发布至 正文/")
     p_rt_publish.add_argument("--chapter", type=int, required=True, help="章节号")
-    p_rt_publish.add_argument("--draft-id", default="", help="草稿 ID（可选，默认使用当前草稿）")
+    p_rt_publish.add_argument("--draft-id", required=True, help="草稿 ID（必需，必须与 accepted commit 一致）")
     p_rt_publish.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_publish.set_defaults(func=cmd_runtime)
 

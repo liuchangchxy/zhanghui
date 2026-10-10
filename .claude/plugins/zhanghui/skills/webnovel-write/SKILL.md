@@ -693,9 +693,11 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" st
 - 占位 query 禁止文本：`{章纲目标}` / `第N章章纲目标` 仅作"禁用示例"出现，不得作为命令实参。
 - 失败兜底：retry 一次；仍失败则停止本次提交调用并报告提交失败，之后由 `ChapterCommitService` 按其既有契约处理。
 
-#### Step 5.5：runtime commit / chapter-commit 事实提交与正文发布（本章主链真源）
+#### Step 5.5：runtime commit 事实提交与 publish-draft 正文发布（本章主链真源）
 
-`chapter-commit` / `CHAPTER_COMMIT` 是本章写作事实的唯一 Canon 提交权威，**取代旧的 state 流程（process-chapter / 同步落库链路）**。收敛架构下，主流程统一通过 `runtime commit` 命令执行事实提交与正文发布：
+`chapter-commit` / `CHAPTER_COMMIT` 是本章写作事实的唯一 Canon 提交权威，**取代旧的 state 流程（process-chapter / 同步落库链路）**。收敛架构下，主流程分为两个独立而精确契合的阶段：首先执行事实提交（Canon Acceptance），提交 accepted 后显式发布正文草稿（Publication Gate）。
+
+##### 5.5A. 事实提交（Runtime Commit）
 
 ```bash
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime commit \
@@ -706,7 +708,6 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
   --disambiguation-result "${PROJECT_ROOT}/.webnovel/tmp/disambiguation_result.json" \
   --extraction-result "${PROJECT_ROOT}/.webnovel/tmp/extraction_result.json" \
   --reconciliation-result "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json" \
-  --publish \
   --format json
 ```
 
@@ -714,21 +715,27 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 
 Story System canonical mode 下，禁止用 `StateManager.process_chapter_result`、`IndexManager.process_chapter_data`、`SQLStateManager.process_chapter_entities` 或 `update_state` 的章节事实参数旁路写入；审查 checkpoint 等 workflow metadata 与规划配置仍可由各自入口维护。章节 commit 必须按递增章号执行；旧章 projection retry 若会倒退 state 会失败，历史全量 rebuild 属于 migration 流程。
 
-**正文发布门禁（Publication Gate）**：
-- **Accepted 门禁**：仅当 durable commit 成功落盘且 `chapter_outcome == "accepted"` 时，`--publish` 才会将暂存的 draft prose 发布写入正式文件 `正文/第{chapter_padded}章[-title].md`。
-- **发布命令**：亦可通过独立命令发布已 accepted 的草稿：
-  ```bash
-  python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime publish-draft \
-    --chapter {chapter_num} \
-    --draft-id {draft_id} \
-    --format json
-  ```
-- **拒收禁写**：若提交被拒（`chapter-commit rejected`），严禁创建或修改正式正文文件！
-
 `chapter-commit` 拒收（`chapter-commit rejected`）时：
 - 最终状态不得写“已完成”。
+- 严禁调用 `publish-draft`，严禁向 `正文/` 目录写正文！
 - 立即进入最终报告"必须处理"段，输出 reject 原因 + 重提命令。
 - 不重跑 Step 1-4，只重跑 Step 5.5 提交。
+
+##### 5.5B. 正文发布门禁（Publication Gate）
+
+检查 5.5A 返回的 `chapter_outcome`。仅当 `chapter_outcome == "accepted"` 时，显式执行 `runtime publish-draft`：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime publish-draft \
+  --chapter {chapter_num} \
+  --draft-id {draft_id} \
+  --format json
+```
+
+**发布安全保证（Exact Accepted Draft 绑定）**：
+- **Exact SHA 校验**：`publish_accepted_draft` 强制校验待发布草稿的 SHA-256 与 durable commit 中的 `provenance.reconciliation_chapter_sha256` 完全一致；任何未被该 commit 接受的草稿（例如 commit 后新生成的 draft B）均被严格拒绝（`ACCEPTED_DRAFT_MISMATCH`），杜绝非 accepted 草稿冒充发布到正式 `正文/`。
+- **显式草稿 ID**：必须显式传入 `--draft-id {draft_id}`，严禁猜测或退回 active draft。
+- **发布失败隔离**：若 publication 失败，明确报告“Canon 已 accepted，但正式正文尚未发布”并提示重试发布命令；绝不重跑起草（Writer）、审查（Reviewer）或数据提炼（Data Agent）。
 
 #### Step 5.6：postcommit projection 五项验证与重试
 

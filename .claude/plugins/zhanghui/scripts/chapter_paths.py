@@ -141,7 +141,7 @@ def find_chapter_file(project_root: Path, chapter_num: int, *, include_working: 
         working_draft = working_chapter_draft_path(project_root, chapter_num)
         if working_draft.is_file():
             return working_draft
-        runtime_draft = project_root / ".webnovel" / "runtime" / "chapters" / f"{chapter_num:03d}" / "draft.md"
+        runtime_draft = project_root / ".webnovel" / "runtime" / f"chapter_{chapter_num:03d}" / "draft.md"
         if runtime_draft.is_file():
             return runtime_draft
 

@@ -3,6 +3,7 @@
 """Unit tests for PR3: Draft -> Review -> Commit Native Workflow Convergence."""
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -152,7 +153,7 @@ def test_working_chapter_draft_path(tmp_path: Path):
 
 def test_find_chapter_file_with_include_working(tmp_path: Path):
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
-    
+
     # 1. No formal chapter file, no working draft
     assert find_chapter_file(project_root, 1) is None
     assert find_chapter_file(project_root, 1, include_working=True) is None
@@ -193,14 +194,19 @@ def test_publish_accepted_draft_requires_accepted_commit(tmp_path: Path):
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
     runtime = ChapterRuntime(project_root)
 
-    # 1. No durable commit exists
-    with pytest.raises(RuntimeError, match="No durable commit exists"):
-        runtime.publish_accepted_draft(chapter=1)
+    # 1. Missing explicit draft_id raises ValueError
+    with pytest.raises(ValueError, match="explicit draft_id is required"):
+        runtime.publish_accepted_draft(chapter=1, draft_id="")
 
-    # Prepare and ingest draft first
+    # 2. No durable commit exists
+    with pytest.raises(RuntimeError, match="No durable commit exists"):
+        runtime.publish_accepted_draft(chapter=1, draft_id="draft_dummy")
+
+    # Prepare and ingest draft
     runtime.prepare(chapter=1, with_package=True)
     sealed_pkg = runtime.attach_creative_brief(chapter=1, creative_brief="策划任务书测试")
     prose = _valid_test_prose()
+    prose_sha = hashlib.sha256(prose.encode("utf-8")).hexdigest()
     ingest_res = runtime.ingest_draft(
         chapter=1,
         package_fingerprint=sealed_pkg.package_fingerprint,
@@ -209,7 +215,7 @@ def test_publish_accepted_draft_requires_accepted_commit(tmp_path: Path):
     assert ingest_res.ok is True
     draft_id = ingest_res.draft_id
 
-    # 2. Durable commit exists but status is rejected
+    # 3. Durable commit exists but status is rejected
     commit_file = project_root / ".story-system" / "commits" / "chapter_001.commit.json"
     commit_file.parent.mkdir(parents=True, exist_ok=True)
     commit_file.write_text(
@@ -218,22 +224,28 @@ def test_publish_accepted_draft_requires_accepted_commit(tmp_path: Path):
                 "schema_version": "story-system/v1",
                 "status": "rejected",
                 "chapter": 1,
-            }
+            },
+            "provenance": {
+                "reconciliation_chapter_sha256": prose_sha,
+            },
         }, ensure_ascii=False),
         encoding="utf-8",
     )
 
     with pytest.raises(RuntimeError, match="Durable commit status is 'rejected'"):
-        runtime.publish_accepted_draft(chapter=1)
+        runtime.publish_accepted_draft(chapter=1, draft_id=draft_id)
 
-    # 3. Commit status is accepted, verify publish succeeds
+    # 4. Commit status is accepted and SHA matches, verify publish succeeds
     commit_file.write_text(
         json.dumps({
             "meta": {
                 "schema_version": "story-system/v1",
                 "status": "accepted",
                 "chapter": 1,
-            }
+            },
+            "provenance": {
+                "reconciliation_chapter_sha256": prose_sha,
+            },
         }, ensure_ascii=False),
         encoding="utf-8",
     )
@@ -244,43 +256,90 @@ def test_publish_accepted_draft_requires_accepted_commit(tmp_path: Path):
     assert published_file.read_text(encoding="utf-8") == prose
 
 
-def test_runtime_commit_with_publish_flag(tmp_path: Path):
+def test_non_accepted_draft_strictly_rejected_on_publish(tmp_path: Path):
+    """
+    Controller Blocker B:
+    draft A -> commit A accepted.
+    Afterward ingest draft B (different content).
+    publish B must fail with ACCEPTED_DRAFT_MISMATCH and never overwrite/publish with B.
+    """
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
     runtime = ChapterRuntime(project_root)
     runtime.prepare(chapter=1, with_package=True)
     sealed_pkg = runtime.attach_creative_brief(chapter=1, creative_brief="策划任务书测试")
 
-    prose = _valid_test_prose()
-    ingest_res = runtime.ingest_draft(
+    # Ingest Draft A
+    prose_a = _valid_test_prose()
+    ingest_a = runtime.ingest_draft(
         chapter=1,
         package_fingerprint=sealed_pkg.package_fingerprint,
-        prose=prose,
+        prose=prose_a,
     )
-    artifacts = _complete_semantic_artifacts(prose)
+    assert ingest_a.ok is True
 
-    # Formal 正文 file should NOT exist yet
-    formal_path = default_chapter_draft_path(project_root, 1)
-    assert not formal_path.exists()
+    # Ingest Draft B (e.g. alternate or targeted polish candidate)
+    prose_b = prose_a.replace("林凡深吸了一口气", "林凡长长吐出一口浊气，拔剑斩出惊鸿一剑")
+    ingest_b = runtime.ingest_draft(
+        chapter=1,
+        package_fingerprint=sealed_pkg.package_fingerprint,
+        prose=prose_b,
+    )
+    assert ingest_b.ok is True
+    assert ingest_b.draft_id != ingest_a.draft_id
 
-    # Commit with publish_on_accept=True
+    # Commit Draft A
+    artifacts_a = _complete_semantic_artifacts(prose_a)
     commit_res = runtime.commit(
         chapter=1,
-        draft_id=ingest_res.draft_id,
-        review_result=artifacts["review_result"],
-        fulfillment_result=artifacts["fulfillment_result"],
-        disambiguation_result=artifacts["disambiguation_result"],
-        extraction_result=artifacts["extraction_result"],
-        reconciliation_result=artifacts["reconciliation_result"],
-        publish_on_accept=True,
+        draft_id=ingest_a.draft_id,
+        review_result=artifacts_a["review_result"],
+        fulfillment_result=artifacts_a["fulfillment_result"],
+        disambiguation_result=artifacts_a["disambiguation_result"],
+        extraction_result=artifacts_a["extraction_result"],
+        reconciliation_result=artifacts_a["reconciliation_result"],
     )
     assert commit_res.ok is True
     assert commit_res.chapter_outcome == "accepted"
-    assert commit_res.published_file == str(formal_path)
-    assert formal_path.is_file()
-    assert formal_path.read_text(encoding="utf-8") == prose
+
+    # Attempting to publish Draft B must FAIL with ACCEPTED_DRAFT_MISMATCH
+    with pytest.raises(RuntimeError, match="ACCEPTED_DRAFT_MISMATCH"):
+        runtime.publish_accepted_draft(chapter=1, draft_id=ingest_b.draft_id)
+
+    # Formal chapter file must not contain prose B
+    formal_path = default_chapter_draft_path(project_root, 1)
+    if formal_path.exists():
+        assert formal_path.read_text(encoding="utf-8") != prose_b
+    else:
+        assert not formal_path.exists()
+
+    # Publishing the genuine accepted Draft A succeeds
+    pub_a = runtime.publish_accepted_draft(chapter=1, draft_id=ingest_a.draft_id)
+    assert pub_a == formal_path
+    assert formal_path.read_text(encoding="utf-8") == prose_a
 
 
-def test_cli_runtime_commit_publish_and_publish_draft(tmp_path: Path, monkeypatch, capsys):
+def test_cli_publish_draft_requires_draft_id(tmp_path: Path, monkeypatch):
+    """CLI runtime publish-draft requires --draft-id."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "webnovel",
+            "--project-root", str(project_root),
+            "runtime", "publish-draft",
+            "--chapter", "1",
+        ],
+    )
+    # Missing required argument exits with error (code 2 in argparse)
+    with pytest.raises(SystemExit) as exc:
+        webnovel.main()
+    assert exc.value.code != 0
+
+
+def test_cli_runtime_commit_and_publish_draft_decoupled_flow(tmp_path: Path, monkeypatch, capsys):
+    """CLI runtime commit accepts Canon, followed by explicit publish-draft."""
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
     runtime = ChapterRuntime(project_root)
     runtime.prepare(chapter=1, with_package=True)
@@ -299,7 +358,7 @@ def test_cli_runtime_commit_publish_and_publish_draft(tmp_path: Path, monkeypatc
         p.write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
         art_files[name] = str(p)
 
-    # CLI commit with --publish
+    # 1. CLI commit (without --publish)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -314,7 +373,6 @@ def test_cli_runtime_commit_publish_and_publish_draft(tmp_path: Path, monkeypatc
             "--disambiguation-result", art_files["disambiguation_result"],
             "--extraction-result", art_files["extraction_result"],
             "--reconciliation-result", art_files["reconciliation_result"],
-            "--publish",
             "--format", "json",
         ],
     )
@@ -324,11 +382,15 @@ def test_cli_runtime_commit_publish_and_publish_draft(tmp_path: Path, monkeypatc
     captured = capsys.readouterr()
     res_data = json.loads(captured.out)
     assert res_data["ok"] is True
-    assert res_data["published_file"] is not None
-    published_file = Path(res_data["published_file"])
-    assert published_file.is_file()
+    assert res_data["chapter_outcome"] == "accepted"
+    # Ensure published_file is not in the outcome
+    assert "published_file" not in res_data or res_data.get("published_file") is None
 
-    # CLI publish-draft subcommand works idempotently
+    # Official file should NOT exist yet prior to publish-draft
+    formal_file = default_chapter_draft_path(project_root, 1)
+    assert not formal_file.exists()
+
+    # 2. CLI publish-draft with explicit draft-id
     monkeypatch.setattr(
         sys,
         "argv",
@@ -347,7 +409,9 @@ def test_cli_runtime_commit_publish_and_publish_draft(tmp_path: Path, monkeypatc
     captured = capsys.readouterr()
     pub_data = json.loads(captured.out)
     assert pub_data["ok"] is True
-    assert pub_data["published_file"] == str(published_file)
+    assert pub_data["published_file"] == str(formal_file)
+    assert formal_file.is_file()
+    assert formal_file.read_text(encoding="utf-8") == prose
 
 
 def test_polish_invalidation_generates_new_draft_id(tmp_path: Path):
@@ -394,10 +458,11 @@ def test_skill_md_enforces_draft_review_commit_convergence():
     assert "Targeted Polish Invalidation Rule" in text
     assert "旧草稿的审查结果彻底失效" in text
 
-    # Runtime commit & publication gate
+    # Runtime commit & publication gate decoupled
     assert "runtime commit" in text
-    assert "--publish" in text
+    assert "--publish" not in text  # Ensure --publish flag is completely removed from skill
     assert "runtime publish-draft" in text
+    assert "ACCEPTED_DRAFT_MISMATCH" in text
     assert "Publication Gate" in text or "发布门禁" in text
     assert "chapter-commit rejected" in text
 
