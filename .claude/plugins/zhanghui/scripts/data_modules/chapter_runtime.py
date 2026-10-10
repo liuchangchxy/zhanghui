@@ -1383,6 +1383,76 @@ class ChapterRuntime:
             error=None if is_accepted else f"Commit outcome was {attempt.attempt_status}",
         )
 
+    def publish_accepted_draft(
+        self,
+        chapter: int,
+        draft_id: str,
+    ) -> Path:
+        """
+        Publish the exact accepted staged draft to 正文/第NNNN章[-title].md.
+        Enforces invariants:
+        - Only publishes if durable commit exists with status == 'accepted'.
+        - draft_id is strictly required (no guessing, no active draft fallback).
+        - Candidate staged draft SHA-256 must exactly match accepted commit's
+          provenance.reconciliation_chapter_sha256.
+        - Fails closed if commit is rejected, missing, or SHA-256 does not match.
+        """
+        if not draft_id or not isinstance(draft_id, str) or not draft_id.strip():
+            raise ValueError(f"Cannot publish draft for chapter {chapter}: explicit draft_id is required.")
+        target_draft_id = draft_id.strip()
+
+        commit_file = self.paths.commit_json(chapter)
+        if not commit_file.is_file():
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: No durable commit exists.")
+
+        commit_data = read_json_if_exists(commit_file) or {}
+        commit_meta = commit_data.get("meta") or {}
+        commit_status = str(commit_meta.get("status") or "")
+        if commit_status != "accepted":
+            raise RuntimeError(
+                f"Cannot publish draft for chapter {chapter}: Durable commit status is '{commit_status}', not 'accepted'."
+            )
+
+        provenance = commit_data.get("provenance") or {}
+        accepted_sha = provenance.get("reconciliation_chapter_sha256")
+        if not accepted_sha:
+            raise RuntimeError(
+                f"Cannot publish draft for chapter {chapter}: Durable commit missing provenance.reconciliation_chapter_sha256."
+            )
+
+        runtime_dir = self._chapter_runtime_dir(chapter)
+        draft_file = runtime_dir / "drafts" / f"{target_draft_id}.json"
+        if not draft_file.is_file():
+            active_file = runtime_dir / "draft.json"
+            if active_file.is_file():
+                active_data = read_json_if_exists(active_file) or {}
+                if active_data.get("draft_id") == target_draft_id:
+                    draft_file = active_file
+        if not draft_file.is_file():
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: Staged draft '{target_draft_id}' not found.")
+
+        draft_data = read_json_if_exists(draft_file) or {}
+        prose = str(draft_data.get("prose") or "")
+        if not prose.strip():
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: Staged draft prose is empty.")
+
+        expected_fp = draft_data.get("draft_fingerprint")
+        actual_fp = hashlib.sha256(prose.encode("utf-8")).hexdigest()
+        if expected_fp and actual_fp != expected_fp:
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: Draft internal fingerprint mismatch.")
+
+        if actual_fp != accepted_sha:
+            raise RuntimeError(
+                f"Cannot publish draft for chapter {chapter}: ACCEPTED_DRAFT_MISMATCH "
+                f"(draft SHA-256 '{actual_fp}' does not match accepted commit reconciliation_chapter_sha256 '{accepted_sha}')."
+            )
+
+        from chapter_paths import default_chapter_draft_path
+        target_file = default_chapter_draft_path(self.project_root, chapter)
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        target_file.write_text(prose, encoding="utf-8")
+        return target_file
+
     def retry_projection(self, chapter: int) -> dict[str, Any]:
         """Replay or retry projections from the existing durable commit."""
         return retry_projection(self.project_root, chapter=chapter)

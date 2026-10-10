@@ -56,7 +56,7 @@ def run_precommit_gate(project_root: Path, chapter: int) -> dict:
             )
         )
 
-    chapter_file = find_chapter_file(project_root, chapter)
+    chapter_file = find_chapter_file(project_root, chapter, include_working=True)
     if chapter_file is None:
         errors.append(
             issue(

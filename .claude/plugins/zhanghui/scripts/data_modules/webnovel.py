@@ -437,6 +437,24 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                 print(f"  error: {res.error}")
         return 0 if res.ok else 1
 
+    if action == "publish-draft":
+        try:
+            target = runtime.publish_accepted_draft(
+                chapter=args.chapter,
+                draft_id=args.draft_id,
+            )
+            if args.format == "json":
+                print(json.dumps({"ok": True, "published_file": str(target)}, ensure_ascii=False, indent=2))
+            else:
+                print(f"OK publish-draft chapter {args.chapter} to {target}")
+            return 0
+        except Exception as exc:
+            if args.format == "json":
+                print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2))
+            else:
+                print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
     if action == "retry-projection":
         report = runtime.retry_projection(chapter=args.chapter)
         if args.format == "json":
@@ -1206,6 +1224,12 @@ def main() -> None:
     p_rt_commit.add_argument("--on-conflict", choices=["overwrite", "skip"], default=None, help="冲突策略")
     p_rt_commit.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_commit.set_defaults(func=cmd_runtime)
+
+    p_rt_publish = runtime_sub.add_parser("publish-draft", help="将已 accepted 的草稿发布至 正文/")
+    p_rt_publish.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_publish.add_argument("--draft-id", required=True, help="草稿 ID（必需，必须与 accepted commit 一致）")
+    p_rt_publish.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_publish.set_defaults(func=cmd_runtime)
 
     p_rt_retry = runtime_sub.add_parser("retry-projection", help="重试或重放指定章节的 projection")
     p_rt_retry.add_argument("--chapter", type=int, required=True, help="章节号")
