@@ -401,6 +401,119 @@ def cmd_runtime(args: argparse.Namespace) -> int:
     return 2
 
 
+def cmd_prose(args: argparse.Namespace) -> int:
+    """Dispatch prose-quality v2 pipeline subcommands (Issue #26)."""
+    try:
+        root = _resolve_root(args.project_root)
+    except Exception:
+        root = Path(".")
+    action = args.prose_action
+
+    from .prose_pipeline import ProseQualityPipeline
+    pipeline = ProseQualityPipeline(root)
+
+    if action == "voice-target":
+        chapter = getattr(args, "chapter", 1) or 1
+        vt = pipeline.get_voice_target(chapter=chapter)
+        if args.format == "json":
+            print(vt.to_json())
+        else:
+            print(vt.format_prompt_block())
+        return 0
+
+    if action == "diagnose":
+        text = ""
+        if getattr(args, "file", None):
+            fp = Path(args.file)
+            if fp.is_file():
+                text = fp.read_text(encoding="utf-8")
+        elif getattr(args, "text", None):
+            text = args.text
+        if not text:
+            print("ERROR: --file or --text is required", file=sys.stderr)
+            return 2
+        diag = pipeline.diagnose(text)
+        if args.format == "json":
+            print(diag.to_json())
+        else:
+            print(diag.format_markdown_report())
+        return 0
+
+    if action == "diff-semantic":
+        before_text = ""
+        after_text = ""
+        if getattr(args, "before_file", None):
+            p = Path(args.before_file)
+            if p.is_file():
+                before_text = p.read_text(encoding="utf-8")
+        elif getattr(args, "before", None):
+            before_text = args.before
+
+        if getattr(args, "after_file", None):
+            p = Path(args.after_file)
+            if p.is_file():
+                after_text = p.read_text(encoding="utf-8")
+        elif getattr(args, "after", None):
+            after_text = args.after
+
+        judge_callable = None
+        judge_payload = getattr(args, "judge_result", "") or ""
+        judge_file = getattr(args, "judge_file", "") or ""
+        if judge_file and Path(judge_file).is_file():
+            judge_payload = Path(judge_file).read_text(encoding="utf-8")
+        if judge_payload:
+            judge_callable = lambda b, a: judge_payload
+
+        from .prose_semantic_diff import compare_semantic_facts
+        res = compare_semantic_facts(before_text, after_text, semantic_judge=judge_callable)
+        if args.format == "json":
+            print(res.to_json())
+        else:
+            print(f"Outcome: {res.outcome.value} (Safe: {res.safe})")
+            print(f"Summary: {res.summary}")
+            for d in res.drift_items:
+                print(f"  - [{d.dimension}] {d.description}")
+        return 0 if res.safe else 1
+
+    if action == "validate":
+        before_text = ""
+        after_text = ""
+        if getattr(args, "before_file", None):
+            p = Path(args.before_file)
+            if p.is_file():
+                before_text = p.read_text(encoding="utf-8")
+        elif getattr(args, "before", None):
+            before_text = args.before
+
+        if getattr(args, "after_file", None):
+            p = Path(args.after_file)
+            if p.is_file():
+                after_text = p.read_text(encoding="utf-8")
+        elif getattr(args, "after", None):
+            after_text = args.after
+
+        judge_callable = None
+        judge_payload = getattr(args, "judge_result", "") or ""
+        judge_file = getattr(args, "judge_file", "") or ""
+        if judge_file and Path(judge_file).is_file():
+            judge_payload = Path(judge_file).read_text(encoding="utf-8")
+        if judge_payload:
+            judge_callable = lambda b, a: judge_payload
+
+        chapter = getattr(args, "chapter", 1) or 1
+        res = pipeline.process_and_validate(before_text, after_text, chapter=chapter, semantic_judge=judge_callable)
+        if args.format == "json":
+            print(res.to_json())
+        else:
+            status = "ACCEPTED" if res.ok else "ROLLEDBACK"
+            print(f"Status: {status} | Semantic: {res.semantic_outcome}")
+            if res.rollback_reason:
+                print(f"Rollback reason: {res.rollback_reason}")
+        return 0 if res.ok else 1
+
+    return 2
+
+
 def cmd_migration(args: argparse.Namespace) -> int:
     from dataclasses import asdict
     from .project_migration import (
@@ -1036,6 +1149,41 @@ def main() -> None:
     p_rt_retry.add_argument("--chapter", type=int, required=True, help="章节号")
     p_rt_retry.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_retry.set_defaults(func=cmd_runtime)
+
+    p_prose = sub.add_parser("prose", help="Prose Quality v2 润色与文风安全入口 (Issue #26)")
+    prose_sub = p_prose.add_subparsers(dest="prose_action", required=True)
+
+    p_prose_vt = prose_sub.add_parser("voice-target", help="获取章节正向文风锚 (Voice Target)")
+    p_prose_vt.add_argument("--chapter", type=int, default=1, help="章节号")
+    p_prose_vt.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_prose_vt.set_defaults(func=cmd_prose)
+
+    p_prose_diag = prose_sub.add_parser("diagnose", help="定向诊断章节正文瑕疵 (Diagnose First)")
+    p_prose_diag.add_argument("--file", default="", help="章节正文文件路径")
+    p_prose_diag.add_argument("--text", default="", help="章节正文内容")
+    p_prose_diag.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_prose_diag.set_defaults(func=cmd_prose)
+
+    p_prose_diff = prose_sub.add_parser("diff-semantic", help="事实安全语义比对 (Fact-safe Semantic Diff)")
+    p_prose_diff.add_argument("--before", default="", help="修改前正文内容")
+    p_prose_diff.add_argument("--before-file", default="", help="修改前正文文件")
+    p_prose_diff.add_argument("--after", default="", help="修改后正文内容")
+    p_prose_diff.add_argument("--after-file", default="", help="修改后正文文件")
+    p_prose_diff.add_argument("--judge-result", default="", help="Semantic Judge 裁决结果 JSON 字符串")
+    p_prose_diff.add_argument("--judge-file", default="", help="Semantic Judge 裁决结果 JSON 文件路径")
+    p_prose_diff.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_prose_diff.set_defaults(func=cmd_prose)
+
+    p_prose_val = prose_sub.add_parser("validate", help="润色稿综合质检与回滚裁决")
+    p_prose_val.add_argument("--before", default="", help="修改前正文内容")
+    p_prose_val.add_argument("--before-file", default="", help="修改前正文文件")
+    p_prose_val.add_argument("--after", default="", help="修改后正文内容")
+    p_prose_val.add_argument("--after-file", default="", help="修改后正文文件")
+    p_prose_val.add_argument("--chapter", type=int, default=1, help="章节号")
+    p_prose_val.add_argument("--judge-result", default="", help="Semantic Judge 裁决结果 JSON 字符串")
+    p_prose_val.add_argument("--judge-file", default="", help="Semantic Judge 裁决结果 JSON 文件路径")
+    p_prose_val.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_prose_val.set_defaults(func=cmd_prose)
 
     p_migration = sub.add_parser("phase9-migration", help="Phase 9 migration preflight, dry run, and verified backup")
     migration_sub = p_migration.add_subparsers(dest="migration_action", required=True)

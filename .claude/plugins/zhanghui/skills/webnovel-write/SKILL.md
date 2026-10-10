@@ -311,16 +311,35 @@ CHANGES 是 Writer 对变化的提案，不是已发生事实或 Canon。Step 2A
 
 8 个顶级字段必须全部显式存在（即使无变化也要写 `[]` 或 `null`）。
 
-### Step 2B：风格适配（`--fast` / `--minimal` 跳过）
+### Step 2B：文风适配与候选门禁（Voice Candidate & Fact-Safe Validation；`--fast` / `--minimal` 跳过）
 
-执行前加载：（本 Step 已被 `--fast`/`--minimal` 跳过；删版内联风格契约，由 `Step 2A 写作执行包` 直接消费）
+执行前加载：
+```bash
+cat "${SKILL_ROOT}/references/style-adapter.md"
+```
 
-硬要求：
-- 只做表达层转译，不改剧情事实、事件顺序、角色行为结果、设定规则。
-- 对"模板腔、说明腔、机械腔"做定向改写，为 Step 4 留出问题修复空间。
+职责与候选生成：
+- 负责语调、句式呼吸感、人物台词差异化、叙事距离，锚定本作品 Positive Voice Target。
+- 允许丰富局部文学质感、增加合理的场景环境细节，不破坏剧情事实、事件顺序、角色行为结果与已有设定。
+- 严禁机械切碎句子、严禁套用固定三段式动作模板；保护不同角色的口吻差异。
+- 生成文风候选稿并保存至临时路径：`.webnovel/tmp/step2b_candidate_{chapter_padded}.md`。**严禁绕过门禁直接覆盖章节文件**。
+
+门禁校验（必须执行）：
+运行事实安全比对与质量门禁：
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
+  --before-file "正文/第{chapter_padded}章-{title_safe}.md" \
+  --after-file "${PROJECT_ROOT}/.webnovel/tmp/step2b_candidate_{chapter_padded}.md" \
+  --chapter {chapter_num}
+```
+
+判定逻辑：
+- `status == ACCEPTED`：文风调整通过，将候选正文覆盖回原章节文件 `正文/第{chapter_padded}章-{title_safe}.md`。
+- `status == UNCERTAIN` 且提示需要 Semantic Judge：若改动超出确定性检查覆盖（涉及知情状态/事件结果/因果/线索等），调用 Semantic Judge 并传入 `--judge-result '<json>'`（或 `--judge-file`）重验；若未配置或执行失败，严格遵循 fail-closed 保持 `ROLLEDBACK`。
+- `status == ROLLEDBACK`：检测到事实漂移、新增未授权履历/设定或质量退化，**自动保留 Step 2A Draft 原稿**，记录回退审计信息。
 
 输出：
-- 风格化正文（覆盖原章节文件）。
+- 文风适配后正文（通过则覆盖，未通过则保持 Step 2A 原正文）。
 
 ### Step 3：审查（auto 路由，必须由 Agent 子代理执行）
 
@@ -382,23 +401,34 @@ review_metrics 字段约束（当前工作流约定只传以下字段）：
 - `--minimal` 也必须产出 `overall_score`。
 - 未落库 `review_metrics` 不得进入 Step 5。
 
-### Step 4：润色（问题修复优先）
+### Step 4：定向安全润色与回滚门禁（Targeted Fact-Safe Editing）
 
 执行前必须加载：
 ```bash
+cat "${SKILL_ROOT}/references/polish-guide.md"
 cat "${SKILL_ROOT}/references/writing/typesetting.md"
-
 ```
 
-执行顺序：
-1. 修复 `critical`（必须）
-2. 修复 `high`（不能修复则记录 deviation）
-3. 处理 `medium/low`（按收益择优）
-4. 执行 Anti-AI 与 No-Poison 全文终检（必须输出 `anti_ai_force_check: pass/fail`）
+执行原则（先诊断再修改，定向小修优先）：
+1. **先诊断**：运行 `python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose diagnose --file 正文/第{chapter_padded}章-{title_safe}.md`，列出真实病灶，不得无病呻吟或整篇机械改写。
+2. **定向生成候选**：针对审查意见与诊断项生成润色候选稿（Targeted Edit Candidate），保存至 `${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md`。严禁为了修补逻辑漏洞或增加合理性而私自发明履历、设定、翻转所有权或颠倒意图。
+3. **事实与退化校验**：运行：
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
+  --before-file "正文/第{chapter_padded}章-{title_safe}.md" \
+  --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
+  --chapter {chapter_num}
+```
+   - 检查语义事实差异（`diff-semantic`）：禁止新增未授权履历/故意行为转变/所有权翻转/规则极性颠倒。
+   - 检查质量退化（字数缩水率 > 20%、电报式断句率飙升）。
+4. **决策判定**：
+   - 若 `status == ACCEPTED`：接受润色结果，覆盖章节文件。
+   - 若 `status == UNCERTAIN` 且提示需要 Semantic Judge：若候选修改超出确定性覆盖范围，调用 Semantic Judge 并传入 `--judge-result '<json>'`（或 `--judge-file`）重验；若 Judge 未配置或失败，严格遵循 fail-closed 保持回滚。
+   - 若 `status == ROLLEDBACK`：自动回退至编辑前版本（即 Step 3 审查版本），记录回退原因与审计记录。
 
 输出：
-- 润色后正文（覆盖章节文件）
-- 变更摘要（至少含：修复项、保留项、deviation、`anti_ai_force_check`）
+- 最终正文（通过则为润色正文，回退则为原正文）
+- 编辑与校验审计记录（包含 diagnosis, edit_plan, diff_result, decision）
 
 ### Step 4.5：刷新 ProposedChanges 并校验协议
 
