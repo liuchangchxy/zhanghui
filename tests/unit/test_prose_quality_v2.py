@@ -705,3 +705,80 @@ def test_semantic_judge_invalid_response_fails_closed():
     assert gate.status == "ROLLEDBACK"
     assert gate.final_text == before
 
+
+def test_subject_object_swap_without_judge_returns_uncertain():
+    """林越把钥匙交给韩策。 -> 韩策把钥匙交给林越。 fails fast-path due to participant swap and returns UNCERTAIN without judge."""
+    before = "林越把钥匙交给韩策。"
+    after = "韩策把钥匙交给林越。"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
+    assert not diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_subject_object_swap_with_judge_returns_semantic_change():
+    """林越把钥匙交给韩策。 -> 韩策把钥匙交给林越。 with semantic judge returns SEMANTIC_CHANGE_PROPOSED."""
+    before = "林越把钥匙交给韩策。"
+    after = "韩策把钥匙交给林越。"
+
+    judge = _make_mock_judge("event_outcome", "钥匙的实际转移方向与控制权被反转")
+    diff_res = compare_semantic_facts(before, after, semantic_judge=judge)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("event_outcome" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_numeric_change_requires_judge():
+    """韩策等了三天。 -> 韩策等了五天。 changes quantity and fails fast-path to UNCERTAIN without judge."""
+    before = "韩策等了三天。"
+    after = "韩策等了五天。"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
+    assert not diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_quoted_clue_change_requires_judge():
+    """纸条上写着“B7”。 -> 纸条上写着“C9”。 alters quoted clue and fails fast-path to UNCERTAIN without judge."""
+    before = "纸条上写着“B7”。"
+    after = "纸条上写着“C9”。"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.UNCERTAIN
+    assert not diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_pure_surface_punctuation_edit_fast_path():
+    """梅叔低声道：“走吧。” -> 梅叔低声道: “走吧。” is pure punctuation/spacing and succeeds via fast-path."""
+    before = "梅叔低声道：“走吧。”"
+    after = "梅叔低声道: “走吧。”"
+
+    diff_res = compare_semantic_facts(before, after, semantic_judge=None)
+    assert diff_res.outcome == SemanticDiffOutcome.STYLE_ONLY_SAFE
+    assert diff_res.safe
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert gate.accepted
+    assert gate.status == "ACCEPTED"
+    assert gate.final_text == after
+
+

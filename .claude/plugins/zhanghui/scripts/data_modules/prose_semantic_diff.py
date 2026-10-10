@@ -24,6 +24,7 @@ FAILS CLOSED to UNCERTAIN (never silently guesses STYLE_ONLY_SAFE).
 """
 from __future__ import annotations
 
+from collections import Counter
 import difflib
 import json
 import os
@@ -449,24 +450,132 @@ def _split_sentences(text: str) -> List[str]:
     return [s.strip() for s in re.split(r"[。！？\n!?]+", text) if s.strip()]
 
 
+MEASURE_WORDS = "个只条本张天月年分秒两度步座栋位名道块套组轮件门页层次声下日刻丈尺里寸"
+KNOWN_ENTITIES = [
+    "林越", "韩策", "梅叔", "乔宁", "刀疤三", "三爷", "苏云", "巡检司",
+    "技术监督局", "特别调度处", "防潮指挥部", "防潮所", "白塔", "暗夜门",
+]
+HIGH_RISK_NEGATIONS = [
+    "没有", "未曾", "从未", "不能", "无法", "不可", "严禁", "并非", "毫无", "不曾", "免除", "禁止",
+]
+
+
+def extract_quantities(text: str) -> List[str]:
+    """Extract numeric values, counts, and Chinese numeral quantities."""
+    d = re.findall(r"\d+", text)
+    cleaned = re.sub(r"刀疤[一二三四五六七八九十]|(?:[老小阿])?[一二三四五六七八九十]爷", "", text)
+    cn = re.findall(rf"第[零一二两三四五六七八九十]+|[零一二两三四五六七八九十百千万亿]+[{MEASURE_WORDS}]", cleaned)
+    return d + cn
+
+
+def extract_quotes(text: str) -> List[str]:
+    """Extract codes, identifiers, or inscription text inside quotes/brackets."""
+    codes = re.findall(r'["“「『]([A-Za-z0-9_\-]+)["”」』]', text)
+    inscriptions = re.findall(r'(?:写着|印着|刻着|编号|字样|名为|念作)["“「『]([^"”」』]+)["”」』]', text)
+    return codes + inscriptions
+
+
+def has_negation_shift(before: str, after: str) -> bool:
+    """Detect presence/absence shifts in high-risk negation keywords."""
+    for neg in HIGH_RISK_NEGATIONS:
+        if (neg in before) != (neg in after):
+            return True
+    return False
+
+
+def extract_entities(text: str) -> List[str]:
+    """Extract known named entities in appearance order."""
+    found = []
+    for name in KNOWN_ENTITIES:
+        pos = 0
+        while True:
+            idx = text.find(name, pos)
+            if idx == -1:
+                break
+            found.append((idx, name))
+            pos = idx + len(name)
+    found.sort(key=lambda x: x[0])
+    return [name for _, name in found]
+
+
+def has_participant_or_token_swap(before: str, after: str) -> bool:
+    """Check if any participants, named entities, or clause-level tokens had their relative order swapped."""
+    # 1. Entity-level presence and order
+    b_ents = extract_entities(before)
+    a_ents = extract_entities(after)
+    if b_ents != a_ents:
+        if Counter(b_ents) == Counter(a_ents) and b_ents != a_ents:
+            return True
+        if set(b_ents) != set(a_ents):
+            return True
+
+    # 2. Clause-level token inversion (subject/object reversal in actions)
+    def get_bigrams(text: str) -> List[str]:
+        return [text[i:i+2] for i in range(len(text)-1) if all("\u4e00" <= c <= "\u9fa5" for c in text[i:i+2])]
+
+    b_clauses = [c.strip() for c in re.split(r"[。！？；\n!?]+", before) if c.strip()]
+    a_clauses = [c.strip() for c in re.split(r"[。！？；\n!?]+", after) if c.strip()]
+
+    if len(b_clauses) == len(a_clauses):
+        for bc, ac in zip(b_clauses, a_clauses):
+            b_grams = get_bigrams(bc)
+            shared = [g for g in set(b_grams) if g in ac]
+            for i in range(len(shared)):
+                for j in range(i + 1, len(shared)):
+                    g1, g2 = shared[i], shared[j]
+                    b1, b2 = bc.find(g1), bc.find(g2)
+                    a1, a2 = ac.find(g1), ac.find(g2)
+                    if (b1 < b2 and a1 > a2) or (b1 > b2 and a1 < a2):
+                        return True
+    return False
+
+
 def is_surface_only_edit(before_text: str, after_text: str) -> bool:
     """
-    Check if the change between before_text and after_text is a pure surface-level
-    stylistic edit with a small footprint that can be safely accepted via fast-path.
+    Check if the change between before_text and after_text is a strictly narrowed,
+    provably surface-level edit with no potential for factual alteration.
+
+    Fast-path ONLY permits:
+    - Whitespace & punctuation adjustments
+    - Negation-neutral modal/auxiliary particle adjustments
+    - Conservative surface rewrites where entities, numbers, quotes, and participants are strictly preserved and not swapped.
+
+    Any edit with potential semantic mutation or substantive content-word change MUST fail this check
+    and be delegated to the Semantic Judge (fail-closed to UNCERTAIN if unavailable).
     """
+    # 1. Uncovered dimension keywords must not mutate
     if touches_uncovered_dimensions(before_text, after_text):
         return False
 
+    # 2. Numbers / quantities must be strictly identical
+    if extract_quantities(before_text) != extract_quantities(after_text):
+        return False
+
+    # 3. Quoted content / citations must be strictly identical
+    if extract_quotes(before_text) != extract_quotes(after_text):
+        return False
+
+    # 4. Negations must not invert
+    if has_negation_shift(before_text, after_text):
+        return False
+
+    # 5. Participants / shared tokens must not be swapped or inverted
+    if has_participant_or_token_swap(before_text, after_text):
+        return False
+
+    # 6. Sentence count must match
     b_sentences = _split_sentences(before_text)
     a_sentences = _split_sentences(after_text)
     if len(b_sentences) != len(a_sentences):
         return False
 
+    # 7. Similarity check: must not be unbounded rewrite
     matcher = difflib.SequenceMatcher(None, before_text, after_text)
     ratio = matcher.ratio()
     if ratio < 0.45:
         return False
 
+    # 8. Length difference must be small
     len_diff = abs(len(before_text) - len(after_text))
     max_allowed_len_diff = max(15, int(len(before_text) * 0.15))
     if len_diff > max_allowed_len_diff:
