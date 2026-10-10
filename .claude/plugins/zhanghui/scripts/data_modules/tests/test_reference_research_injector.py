@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+from pathlib import Path
 import pytest
 import sys
 
@@ -158,7 +159,7 @@ def test_cli_build_step1_summary(tmp_path):
     import subprocess
     import sys
     _build_minimal_tree(tmp_path, borrowable=["宗门升级"])
-    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/reference_research_injector.py"
+    helper = str(Path(__file__).resolve().parent.parent / "reference_research_injector.py")
     result = subprocess.run(
         [sys.executable, helper, "build-step1-summary", "--project-root", str(tmp_path)],
         capture_output=True, text=True, timeout=10,
@@ -170,7 +171,7 @@ def test_cli_build_step1_summary(tmp_path):
 def test_cli_build_step2a_section(tmp_path):
     import subprocess, sys
     _build_minimal_tree(tmp_path, do_not_copy=["韩立人设"])
-    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/reference_research_injector.py"
+    helper = str(Path(__file__).resolve().parent.parent / "reference_research_injector.py")
     result = subprocess.run(
         [sys.executable, helper, "build-step2a-section", "--project-root", str(tmp_path)],
         capture_output=True, text=True, timeout=10,
@@ -182,7 +183,7 @@ def test_cli_build_step2a_section(tmp_path):
 def test_cli_build_do_not_copy_check_data(tmp_path):
     import subprocess, sys, json
     _build_minimal_tree(tmp_path, do_not_copy=["韩立人设"])
-    helper = "/Users/chang/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/scripts/data_modules/reference_research_injector.py"
+    helper = str(Path(__file__).resolve().parent.parent / "reference_research_injector.py")
     # Use full forbidden token to trigger violation under the new 3-char
     # matcher (see C3 fix).
     chapter_text = "韩立人设不能照搬。\n"
