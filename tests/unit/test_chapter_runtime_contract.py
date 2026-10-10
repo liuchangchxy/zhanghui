@@ -176,12 +176,16 @@ def test_runtime_happy_path(tmp_path: Path):
     assert "藏经阁之争" not in str(pkg.current_intent)
     assert "大弟子王霸" not in str(pkg.current_intent)
 
+    # 4b. Context Agent seals the package with authentic creative brief
+    sealed_pkg = runtime.attach_creative_brief(chapter=1, creative_brief="【策划任务书】林凡问心石测试，隐忍藏拙。")
+    assert sealed_pkg.is_writer_ready is True
+
     # 5. Ingest draft prose
     prose = _valid_test_prose()
     ingest_res = runtime.ingest_draft(
         chapter=1,
         prose=prose,
-        package_fingerprint=pkg.package_fingerprint,
+        package_fingerprint=sealed_pkg.package_fingerprint,
     )
     assert ingest_res.ok is True
     assert ingest_res.status == "draft_ingested"
@@ -275,7 +279,7 @@ def test_commit_rejects_tampered_staged_draft(tmp_path: Path):
     """Tampering with staged draft causes DRAFT_FINGERPRINT_MISMATCH rejection."""
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
     runtime = ChapterRuntime(project_root)
-    prep = runtime.prepare(chapter=1, with_package=True)
+    prep = runtime.prepare(chapter=1, with_package=True, creative_brief="测试策划")
     pkg = prep.writer_package
 
     prose = _valid_test_prose()
@@ -302,7 +306,7 @@ def test_commit_rejects_missing_semantic_artifacts(tmp_path: Path):
     """Omitting any required semantic artifact returns REQUIRED_ARTIFACTS_MISSING with no fake defaults."""
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
     runtime = ChapterRuntime(project_root)
-    prep = runtime.prepare(chapter=1, with_package=True)
+    prep = runtime.prepare(chapter=1, with_package=True, creative_brief="测试策划")
     pkg = prep.writer_package
 
     prose = _valid_test_prose()
@@ -370,7 +374,7 @@ def test_changes_gate_parity_against_native(tmp_path: Path):
 
     # 2. Runtime commit call on staged draft with same prose
     runtime = ChapterRuntime(project_root)
-    prep = runtime.prepare(chapter=1, with_package=True)
+    prep = runtime.prepare(chapter=1, with_package=True, creative_brief="测试策划")
     ingest_res = runtime.ingest_draft(
         chapter=1,
         prose=prose,
@@ -403,7 +407,7 @@ def test_negative_stale_package(tmp_path: Path):
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
     runtime = ChapterRuntime(project_root)
 
-    prep = runtime.prepare(chapter=1, with_package=True)
+    prep = runtime.prepare(chapter=1, with_package=True, creative_brief="测试策划")
     pkg = prep.writer_package
 
     # Invalidate authoritative source by changing the outline
@@ -425,7 +429,7 @@ def test_negative_rejected_draft_does_not_mutate_canon(tmp_path: Path):
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
     runtime = ChapterRuntime(project_root)
 
-    prep = runtime.prepare(chapter=1, with_package=True)
+    prep = runtime.prepare(chapter=1, with_package=True, creative_brief="测试策划")
     pkg = prep.writer_package
     # Broken CHANGES block triggers hard R1 rejection from native changes-gate
     prose = """林凡通过灵根测试。
@@ -458,7 +462,7 @@ def test_negative_projection_failure_leaves_durable_commit_replayable(tmp_path: 
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
     runtime = ChapterRuntime(project_root)
 
-    prep = runtime.prepare(chapter=1, with_package=True)
+    prep = runtime.prepare(chapter=1, with_package=True, creative_brief="测试策划")
     pkg = prep.writer_package
     prose = _valid_test_prose()
 
@@ -554,6 +558,26 @@ def test_runtime_cli_flow(tmp_path: Path, monkeypatch, capsys):
     pkg_data = json.loads(captured.out)
     assert pkg_data["package_fingerprint"] == pkg_fp
 
+    # 2b. webnovel runtime attach-creative-brief
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "webnovel",
+            "--project-root", str(project_root),
+            "runtime", "attach-creative-brief",
+            "--chapter", "1",
+            "--brief", "【策划任务书】测试策划内容",
+            "--format", "json",
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        webnovel.main()
+    assert exc.value.code == 0
+    captured = capsys.readouterr()
+    brief_data = json.loads(captured.out)
+    sealed_fp = brief_data["package_fingerprint"]
+
     # 3. webnovel runtime ingest-draft
     prose = _valid_test_prose()
 
@@ -565,7 +589,7 @@ def test_runtime_cli_flow(tmp_path: Path, monkeypatch, capsys):
             "--project-root", str(project_root),
             "runtime", "ingest-draft",
             "--chapter", "1",
-            "--package-fingerprint", pkg_fp,
+            "--package-fingerprint", sealed_fp,
             "--prose", prose,
             "--format", "json",
         ],

@@ -395,7 +395,13 @@ class ChapterRuntime:
             volume_brief, review_contract = builder.build_for_chapter(chapter)
             persist_runtime_contracts(self.project_root, chapter, volume_brief, review_contract)
 
-    def prepare(self, chapter: int, *, with_package: bool = True) -> ChapterPrepareResult:
+    def prepare(
+        self,
+        chapter: int,
+        *,
+        with_package: bool = True,
+        creative_brief: Optional[str] = None,
+    ) -> ChapterPrepareResult:
         """
         Validate environment, native outline, and Story System contracts.
         Returns structured blockers / advisories.
@@ -487,7 +493,7 @@ class ChapterRuntime:
         writer_package = None
         if with_package:
             try:
-                writer_package = self.get_writer_package(chapter)
+                writer_package = self.get_writer_package(chapter, creative_brief=creative_brief)
             except Exception as exc:
                 return ChapterPrepareResult(
                     ok=False,
@@ -831,18 +837,48 @@ class ChapterRuntime:
                 error="Prose content must be a non-empty string",
             )
 
-        # Stale package check
+        # Active sealed writer package check
         pkg_file = self._chapter_runtime_dir(chapter) / "writer_package.json"
-        saved_brief_fp = ""
-        if pkg_file.is_file():
-            saved_pkg = read_json_if_exists(pkg_file) or {}
-            saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+        if not pkg_file.is_file():
+            return DraftIngestResult(
+                ok=False,
+                chapter=chapter,
+                status="writer_package_missing",
+                error_code="WRITER_PACKAGE_MISSING",
+                error="No active writer package found for chapter: generate and seal a writer package first.",
+                package_fingerprint=package_fingerprint,
+            )
+
+        saved_pkg = read_json_if_exists(pkg_file) or {}
+        saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+        saved_is_writer_ready = bool(saved_pkg.get("is_writer_ready") or False)
+        saved_brief = str(saved_pkg.get("creative_brief") or "").strip()
+
+        if not saved_is_writer_ready or not saved_brief_fp or not saved_brief:
+            return DraftIngestResult(
+                ok=False,
+                chapter=chapter,
+                status="writer_package_unsealed",
+                error_code="WRITER_PACKAGE_UNSEALED",
+                error="Writer package is unsealed: Context Agent creative brief must be attached first.",
+                package_fingerprint=package_fingerprint,
+            )
 
         current_fp = self.compute_package_fingerprint(
             chapter,
             creative_brief_fingerprint=saved_brief_fp,
         )
-        if package_fingerprint != current_fp and package_fingerprint != self.compute_package_fingerprint(chapter):
+        if package_fingerprint != current_fp:
+            base_unsealed_fp = self.compute_package_fingerprint(chapter)
+            if package_fingerprint == base_unsealed_fp:
+                return DraftIngestResult(
+                    ok=False,
+                    chapter=chapter,
+                    status="writer_package_unsealed",
+                    error_code="WRITER_PACKAGE_UNSEALED",
+                    error="Supplied package fingerprint is unsealed: writer path requires sealed package fingerprint.",
+                    package_fingerprint=package_fingerprint,
+                )
             return DraftIngestResult(
                 ok=False,
                 chapter=chapter,
@@ -860,6 +896,8 @@ class ChapterRuntime:
             "draft_id": draft_id,
             "chapter": chapter,
             "package_fingerprint": package_fingerprint,
+            "package_brief_fingerprint": saved_brief_fp,
+            "is_writer_ready": True,
             "draft_fingerprint": draft_fp,
             "created_at": created_at,
             "metadata": metadata or {},
@@ -921,7 +959,7 @@ class ChapterRuntime:
                 chapter,
                 creative_brief_fingerprint=saved_brief_fp,
             )
-            is_stale = (pkg_fp != current_fp and pkg_fp != self.compute_package_fingerprint(chapter))
+            is_stale = (pkg_fp != current_fp)
 
         # Durable commit status
         commit_file = self.paths.commit_json(chapter)
@@ -1057,15 +1095,85 @@ class ChapterRuntime:
 
             draft_pkg_fp = draft_data.get("package_fingerprint")
             pkg_file = runtime_dir / "writer_package.json"
-            saved_brief_fp = ""
-            if pkg_file.is_file():
-                saved_pkg = read_json_if_exists(pkg_file) or {}
-                saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+            if not pkg_file.is_file():
+                return ChapterCommitOutcomeResult(
+                    ok=False,
+                    chapter=chapter,
+                    action="reject",
+                    attempt_id=f"nopkg-{uuid.uuid4().hex[:8]}",
+                    chapter_outcome="rejected",
+                    gate_decision_ref="",
+                    durable_commit_persisted=False,
+                    projection_status={},
+                    projection_success=False,
+                    can_retry_projection=False,
+                    error_code="WRITER_PACKAGE_MISSING",
+                    error="Cannot commit: Active writer package not found for chapter.",
+                    next_required_action="obtain_writer_package",
+                )
+
+            saved_pkg = read_json_if_exists(pkg_file) or {}
+            saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+            saved_is_writer_ready = bool(saved_pkg.get("is_writer_ready") or False)
+            if not saved_is_writer_ready or not saved_brief_fp:
+                return ChapterCommitOutcomeResult(
+                    ok=False,
+                    chapter=chapter,
+                    action="reject",
+                    attempt_id=f"unsealed-{uuid.uuid4().hex[:8]}",
+                    chapter_outcome="rejected",
+                    gate_decision_ref="",
+                    durable_commit_persisted=False,
+                    projection_status={},
+                    projection_success=False,
+                    can_retry_projection=False,
+                    error_code="WRITER_PACKAGE_UNSEALED",
+                    error="Cannot commit: Active writer package is unsealed (missing Context Agent creative brief).",
+                    next_required_action="obtain_writer_package",
+                )
+
+            draft_pkg_fp = draft_data.get("package_fingerprint")
+            draft_brief_fp = draft_data.get("package_brief_fingerprint")
+            if not draft_brief_fp or not draft_data.get("is_writer_ready", True):
+                return ChapterCommitOutcomeResult(
+                    ok=False,
+                    chapter=chapter,
+                    action="reject",
+                    attempt_id=f"unsealed-{uuid.uuid4().hex[:8]}",
+                    chapter_outcome="rejected",
+                    gate_decision_ref="",
+                    durable_commit_persisted=False,
+                    projection_status={},
+                    projection_success=False,
+                    can_retry_projection=False,
+                    error_code="WRITER_PACKAGE_UNSEALED",
+                    error="Cannot commit: Staged draft was not created against a sealed Native Writer Package.",
+                    next_required_action="obtain_writer_package",
+                )
+
             current_pkg_fp = self.compute_package_fingerprint(
                 chapter,
                 creative_brief_fingerprint=saved_brief_fp,
             )
-            if draft_pkg_fp != current_pkg_fp and draft_pkg_fp != self.compute_package_fingerprint(chapter):
+            base_unsealed_fp = self.compute_package_fingerprint(chapter)
+            if draft_pkg_fp == base_unsealed_fp or not draft_pkg_fp:
+                return ChapterCommitOutcomeResult(
+                    ok=False,
+                    chapter=chapter,
+                    action="reject",
+                    attempt_id=f"unsealed-{uuid.uuid4().hex[:8]}",
+                    chapter_outcome="rejected",
+                    gate_decision_ref="",
+                    durable_commit_persisted=False,
+                    projection_status={},
+                    projection_success=False,
+                    can_retry_projection=False,
+                    error_code="WRITER_PACKAGE_UNSEALED",
+                    error="Cannot commit: Staged draft was created with an unsealed package fingerprint.",
+                    next_required_action="obtain_writer_package",
+                )
+
+            if draft_pkg_fp != current_pkg_fp or draft_brief_fp != saved_brief_fp:
                 return ChapterCommitOutcomeResult(
                     ok=False,
                     chapter=chapter,
@@ -1094,7 +1202,7 @@ class ChapterRuntime:
                     chapter,
                     creative_brief_fingerprint=saved_brief_fp,
                 )
-                if _internal_package_fingerprint != current_fp and _internal_package_fingerprint != self.compute_package_fingerprint(chapter):
+                if _internal_package_fingerprint != current_fp:
                     return ChapterCommitOutcomeResult(
                         ok=False,
                         chapter=chapter,

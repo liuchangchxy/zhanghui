@@ -393,3 +393,93 @@ def test_cli_package_format_prompt_fails_on_unsealed_package(test_book_project: 
     assert res.returncode != 0
     assert "is unsealed" in res.stderr
 
+
+def test_unsealed_package_ingest_draft_rejected(test_book_project: Path):
+    """A. unsealed pkg = runtime.get_writer_package(chapter) -> ingest_draft fails explicitly."""
+    runtime = ChapterRuntime(test_book_project)
+    unsealed_pkg = runtime.get_writer_package(chapter=1)
+    assert unsealed_pkg.is_writer_ready is False
+
+    prose = "山门前，灵石泛起微光。\n<chapter_changes>{}</chapter_changes>"
+    res = runtime.ingest_draft(
+        chapter=1,
+        prose=prose,
+        package_fingerprint=unsealed_pkg.package_fingerprint,
+    )
+    assert res.ok is False
+    assert res.error_code == "WRITER_PACKAGE_UNSEALED"
+    assert res.status == "writer_package_unsealed"
+
+
+def test_sealed_package_ingest_draft_succeeds(test_book_project: Path):
+    """B. sealed pkg = attach_creative_brief(...) -> ingest_draft succeeds."""
+    runtime = ChapterRuntime(test_book_project)
+    sealed_pkg = runtime.attach_creative_brief(chapter=1, creative_brief="策划任务书：通过灵根测试。")
+    assert sealed_pkg.is_writer_ready is True
+
+    prose = "山门前，灵石泛起微光。\n<chapter_changes>{}</chapter_changes>"
+    res = runtime.ingest_draft(
+        chapter=1,
+        prose=prose,
+        package_fingerprint=sealed_pkg.package_fingerprint,
+    )
+    assert res.ok is True
+    assert res.status == "draft_ingested"
+    assert res.draft_id.startswith("draft-001-")
+
+
+def test_sealed_active_package_rejects_old_unsealed_fingerprint(test_book_project: Path):
+    """C. Once active package is sealed, old unsealed base fingerprint must still fail."""
+    runtime = ChapterRuntime(test_book_project)
+    unsealed_pkg = runtime.get_writer_package(chapter=1)
+    unsealed_fp = unsealed_pkg.package_fingerprint
+
+    # Context Agent seals active package
+    runtime.attach_creative_brief(chapter=1, creative_brief="策划任务书：通过灵根测试。")
+
+    prose = "山门前，灵石泛起微光。\n<chapter_changes>{}</chapter_changes>"
+    res = runtime.ingest_draft(
+        chapter=1,
+        prose=prose,
+        package_fingerprint=unsealed_fp,
+    )
+    assert res.ok is False
+    assert res.error_code == "WRITER_PACKAGE_UNSEALED"
+
+
+def test_commit_rejects_draft_bound_to_unsealed_package(test_book_project: Path):
+    """D. commit refuses draft bound to/ingested with an unsealed package fingerprint."""
+    runtime = ChapterRuntime(test_book_project)
+    unsealed_fp = runtime.compute_package_fingerprint(chapter=1)
+    draft_id = "draft-001-unsealed"
+    prose = "山门前，灵石泛起微光。\n<chapter_changes>{}</chapter_changes>"
+    runtime_dir = runtime._chapter_runtime_dir(1)
+    drafts_dir = runtime_dir / "drafts"
+    drafts_dir.mkdir(parents=True, exist_ok=True)
+    draft_payload = {
+        "draft_id": draft_id,
+        "chapter": 1,
+        "package_fingerprint": unsealed_fp,
+        "draft_fingerprint": hashlib.sha256(prose.encode("utf-8")).hexdigest(),
+        "created_at": "2026-10-10T00:00:00Z",
+        "metadata": {},
+        "prose": prose,
+        "status": "ingested",
+    }
+    (drafts_dir / f"{draft_id}.json").write_text(json.dumps(draft_payload, ensure_ascii=False), encoding="utf-8")
+
+    # Even if active package is sealed now, draft bound to unsealed package cannot commit
+    runtime.attach_creative_brief(chapter=1, creative_brief="策划任务书：通过灵根测试。")
+
+    artifacts = {
+        "review_result": {"blocking_count": 0, "must_check_results": [], "blocking_rule_results": []},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
+        "extraction_result": {"chapter_meta": {}, "accepted_events": [], "state_deltas": [], "entity_deltas": []},
+        "reconciliation_result": {"conflicts": [], "resolutions": [], "resolved_proposal": {}},
+    }
+    res = runtime.commit(chapter=1, draft_id=draft_id, **artifacts)
+    assert res.ok is False
+    assert res.error_code == "WRITER_PACKAGE_UNSEALED"
+
+
