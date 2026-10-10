@@ -309,13 +309,61 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                 print(f"  ADVISORY: {a}")
         return 0 if res.ok else 1
 
+    if action == "governed-context":
+        try:
+            ctx = runtime.get_governed_context(chapter=args.chapter)
+            if args.format == "json":
+                print(json.dumps(ctx, ensure_ascii=False, indent=2))
+            else:
+                print(f"OK governed-context chapter {args.chapter}")
+            return 0
+        except Exception as exc:
+            if args.format == "json":
+                print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2))
+            else:
+                print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
     if action == "package":
         try:
-            pkg = runtime.get_writer_package(chapter=args.chapter)
+            brief = getattr(args, "brief", None)
+            brief_file = getattr(args, "brief_file", None)
+            if not brief and brief_file:
+                bf_p = Path(brief_file)
+                if bf_p.is_file():
+                    brief = bf_p.read_text(encoding="utf-8")
+            pkg = runtime.get_writer_package(chapter=args.chapter, creative_brief=brief)
             if args.format == "json":
                 print(pkg.to_json())
+            elif args.format == "prompt":
+                print(pkg.to_writer_prompt())
             else:
                 print(f"OK package chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
+            return 0
+        except Exception as exc:
+            if args.format == "json":
+                print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2))
+            else:
+                print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "attach-creative-brief":
+        try:
+            brief = getattr(args, "brief", "") or ""
+            brief_file = getattr(args, "brief_file", "") or ""
+            if not brief and brief_file:
+                bf_p = Path(brief_file)
+                if bf_p.is_file():
+                    brief = bf_p.read_text(encoding="utf-8")
+            if not brief:
+                raise ValueError("Either --brief or --brief-file must be provided and non-empty")
+            pkg = runtime.attach_creative_brief(chapter=args.chapter, creative_brief=brief)
+            if args.format == "json":
+                print(pkg.to_json())
+            elif args.format == "prompt":
+                print(pkg.to_writer_prompt())
+            else:
+                print(f"OK attach-creative-brief chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
             return 0
         except Exception as exc:
             if args.format == "json":
@@ -1114,10 +1162,24 @@ def main() -> None:
     p_rt_prep.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_prep.set_defaults(func=cmd_runtime)
 
+    p_rt_gov = runtime_sub.add_parser("governed-context", help="获取受治理的上下文 (ContextManager authority)")
+    p_rt_gov.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_gov.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_gov.set_defaults(func=cmd_runtime)
+
     p_rt_pkg = runtime_sub.add_parser("package", help="获取指定章节的 Writer Package")
     p_rt_pkg.add_argument("--chapter", type=int, required=True, help="章节号")
-    p_rt_pkg.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_pkg.add_argument("--brief", default=None, help="Context Agent 提供的 Creative Brief 文本")
+    p_rt_pkg.add_argument("--brief-file", default=None, help="Context Agent 提供的 Creative Brief 文件路径")
+    p_rt_pkg.add_argument("--format", choices=["json", "text", "prompt"], default="json", help="输出格式")
     p_rt_pkg.set_defaults(func=cmd_runtime)
+
+    p_rt_brief = runtime_sub.add_parser("attach-creative-brief", help="将 Context Agent 的 Creative Brief 封入 Native Writer Package")
+    p_rt_brief.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_brief.add_argument("--brief", default="", help="Creative Brief 文本")
+    p_rt_brief.add_argument("--brief-file", default="", help="Creative Brief 文件路径")
+    p_rt_brief.add_argument("--format", choices=["json", "text", "prompt"], default="json", help="输出格式")
+    p_rt_brief.set_defaults(func=cmd_runtime)
 
     p_rt_ingest = runtime_sub.add_parser("ingest-draft", help="摄入正文草稿（draft != Canon）")
     p_rt_ingest.add_argument("--chapter", type=int, required=True, help="章节号")

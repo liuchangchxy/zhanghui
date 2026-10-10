@@ -167,7 +167,9 @@ class ExternalHostAdapter:
         }
 
     def _format_writer_prompt(self, pkg: Any) -> str:
-        """Format writer prompt using only public package fields."""
+        """Format writer prompt using the canonical package renderer."""
+        if hasattr(pkg, "to_writer_prompt"):
+            return pkg.to_writer_prompt()
         title = pkg.story_identity.get("title", "")
         genre = pkg.story_identity.get("genre", "")
         intent = pkg.current_intent

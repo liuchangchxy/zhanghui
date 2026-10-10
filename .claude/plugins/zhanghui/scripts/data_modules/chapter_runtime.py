@@ -63,13 +63,54 @@ class WriterPackage:
     governed_canon: dict[str, Any]
     constraints: dict[str, Any]
     writer_context: dict[str, Any]
+    creative_brief: str = ""
+    creative_brief_fingerprint: str = ""
     meta: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def constraints_and_craft(self) -> dict[str, Any]:
+        """Alias exposing governed constraints and craft items."""
+        return self.constraints
+
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        data["constraints_and_craft"] = self.constraints
+        return data
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
+
+    def to_writer_prompt(self) -> str:
+        """Format the unified, canonical prompt for the Writer model."""
+        directive = self.current_intent.get("directive", {})
+        must_nodes = list(directive.get("must_cover_nodes") or self.constraints.get("mandatory_nodes") or [])
+        prohibitions = list(directive.get("forbidden_zones") or self.constraints.get("prohibitions") or [])
+        tone = self.constraints.get("core_tone") or ""
+        pacing = self.constraints.get("pacing_strategy") or ""
+        anti_patterns = list(self.constraints.get("anti_patterns") or [])
+
+        lines = [
+            f"=== 写作任务：第{self.chapter}章 ===",
+            f"书名：{self.story_identity.get('title', '')} | 题材：{self.story_identity.get('genre', '')} | 目标读者：{self.story_identity.get('target_readers', '')}",
+            "",
+            "## 创作执行任务书 (Creative Brief)",
+            self.creative_brief or "（未提供独立创作任务书，严格依照以下大纲与约束起草）",
+            "",
+            "## 章节硬约束与禁区",
+            f"- 必须覆盖节点：{', '.join(must_nodes) if must_nodes else '无'}",
+            f"- 本章禁区：{', '.join(prohibitions) if prohibitions else '无'}",
+            f"- 调性与节奏：{tone} / {pacing}",
+        ]
+        if anti_patterns:
+            lines.append(f"- 规避模式 (Anti-patterns)：{'; '.join(anti_patterns[:5])}")
+        lines.extend([
+            "",
+            "## 写作输出协议",
+            "1. 输出纯正文，严格按中文叙事逻辑组织；",
+            "2. 正文末尾必须输出完整的 <chapter_changes>...</chapter_changes> 结构化提案块；",
+            f"3. 封包验证指纹：{self.package_fingerprint}",
+        ])
+        return "\n".join(lines)
 
 
 @dataclass
@@ -394,37 +435,43 @@ class ChapterRuntime:
             "latest_commit": latest_commit_fp,
         }
 
-    def compute_package_fingerprint(self, chapter: int) -> str:
-        """Deterministic fingerprint computed over chapter and source inputs."""
+    def compute_package_fingerprint(
+        self,
+        chapter: int,
+        creative_brief: Optional[str] = None,
+        creative_brief_fingerprint: Optional[str] = None,
+    ) -> str:
+        """Deterministic fingerprint computed over chapter, source inputs, and creative brief."""
         source_fps = self.compute_source_fingerprints(chapter)
         state = read_json_if_exists(self.project_root / ".webnovel" / "state.json") or {}
         project_info = state.get("project_info") if isinstance(state.get("project_info"), dict) else {}
         title = str(project_info.get("title") or "")
         genre = str(project_info.get("genre") or "")
-        payload = {
+        brief_fp = creative_brief_fingerprint or (
+            hashlib.sha256(creative_brief.encode("utf-8")).hexdigest()
+            if creative_brief
+            else ""
+        )
+        payload: dict[str, Any] = {
             "chapter": chapter,
             "title": title,
             "genre": genre,
             "source_fingerprints": source_fps,
         }
+        if brief_fp:
+            payload["creative_brief_fingerprint"] = brief_fp
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
 
-    def get_writer_package(self, chapter: int) -> WriterPackage:
+    def get_governed_context(self, chapter: int) -> dict[str, Any]:
         """
-        Assemble and return the stable Writer Package for the specified chapter.
-        Guarantees:
-        - current chapter intent is present
-        - accepted past Canon is present
-        - future chapter intent is strictly absent
-        - reuses native ContextManager as the single context authority
+        Extract governed factual context assembled by ContextManager.
+        Consumed by Context Agent for creative planning without parallel authority querying.
         """
         self._ensure_story_contracts(chapter)
         source_fps = self.compute_source_fingerprints(chapter)
-        package_fp = self.compute_package_fingerprint(chapter)
 
-        # Build context through native ContextManager authority
         cfg = DataModulesConfig.from_project_root(self.project_root)
         ctx_mgr = ContextManager(cfg)
         native_ctx = ctx_mgr.build_context(chapter)
@@ -443,12 +490,18 @@ class ChapterRuntime:
             "chapter": chapter,
         }
 
-        # Current chapter intent ONLY (future chapters strictly isolated and filtered)
         directive = load_chapter_execution_directive(self.project_root, chapter)
         plot_structure = native_ctx.get("plot_structure") or load_chapter_plot_structure(self.project_root, chapter)
         chapter_contract = (native_ctx.get("story_contract") or {}).get("chapter") or read_json_if_exists(self.paths.chapter_json(chapter)) or {}
+        if not chapter_contract:
+            all_ch_contracts = read_json_if_exists(self.project_root / ".story-system" / "chapter_contracts.json") or {}
+            chapter_contract = all_ch_contracts.get(str(chapter)) or all_ch_contracts.get(chapter) or {}
 
-        # Future-intent isolation: only keep items for current chapter or un-scoped
+        merged_directive = dict(directive)
+        for k in ("goal", "conflict", "cost", "must_cover_nodes", "forbidden_zones", "ending_question"):
+            if not merged_directive.get(k) and chapter_contract.get(k):
+                merged_directive[k] = chapter_contract.get(k)
+
         raw_intent = native_ctx.get("intent") or []
         intent_items: list[dict[str, Any]] = []
         for item in raw_intent:
@@ -461,13 +514,12 @@ class ChapterRuntime:
         current_intent = {
             "chapter": chapter,
             "outline": core.get("chapter_outline") or load_chapter_outline(self.project_root, chapter, max_chars=None),
-            "directive": directive,
+            "directive": merged_directive,
             "plot_structure": plot_structure,
             "chapter_brief": chapter_contract.get("override_allowed") or {},
             "intent_items": intent_items,
         }
 
-        # Governed Canon from native ContextManager output
         raw_canon = native_ctx.get("canon") or []
         canon_items = [
             item.to_dict() if hasattr(item, "to_dict") else (dict(item) if isinstance(item, dict) else {"content": str(item)})
@@ -483,7 +535,6 @@ class ChapterRuntime:
             "context_snapshot": (native_ctx.get("meta") or {}).get("context_snapshot") or {},
         }
 
-        # Constraints from native ContextManager output
         raw_craft = native_ctx.get("craft") or []
         craft_items = [
             item.to_dict() if hasattr(item, "to_dict") else (dict(item) if isinstance(item, dict) else {"content": str(item)})
@@ -491,24 +542,46 @@ class ChapterRuntime:
         ]
         prefs = native_ctx.get("preferences") or {}
         contracts = native_ctx.get("story_contract") or {}
-        master_contract = contracts.get("master") or {}
-        volume_contract = contracts.get("volume") or {}
+        master_contract = (
+            contracts.get("master")
+            or read_json_if_exists(self.paths.master_json)
+            or read_json_if_exists(self.project_root / ".story-system" / "master_contract.json")
+            or {}
+        )
+        volume_contract = contracts.get("volume") or read_json_if_exists(self.paths.volume_json(volume)) or {}
         review_contract = contracts.get("review") or {}
         anti_patterns = read_json_if_exists(self.paths.anti_patterns_json) or []
+
+        core_tone = (
+            master_contract.get("core_tone")
+            or master_contract.get("master_constraints", {}).get("core_tone", "")
+            or prefs.get("tone")
+            or ""
+        )
+        pacing_strategy = (
+            master_contract.get("pacing_strategy")
+            or master_contract.get("master_constraints", {}).get("pacing_strategy", "")
+            or volume_contract.get("pacing_strategy", "")
+        )
+        raw_anti = anti_patterns or master_contract.get("anti_patterns") or []
+        anti_patterns_list = [
+            (row.get("text") if isinstance(row, dict) else str(row))
+            for row in raw_anti
+            if (isinstance(row, dict) and row.get("text")) or isinstance(row, str)
+        ]
 
         constraints = {
             "craft_items": craft_items,
             "preferences": prefs,
-            "core_tone": prefs.get("tone") or master_contract.get("master_constraints", {}).get("core_tone", ""),
-            "pacing_strategy": master_contract.get("master_constraints", {}).get("pacing_strategy", ""),
-            "system_constraints": volume_contract.get("system_constraints") or master_contract.get("master_constraints", {}).get("core_tone", ""),
+            "core_tone": core_tone,
+            "pacing_strategy": pacing_strategy,
+            "system_constraints": volume_contract.get("system_constraints") or core_tone,
             "prohibitions": list(plot_structure.get("prohibitions") or []),
             "mandatory_nodes": list(plot_structure.get("mandatory_nodes") or []),
-            "anti_patterns": [row.get("text", "") for row in anti_patterns if isinstance(row, dict) and row.get("text")],
+            "anti_patterns": anti_patterns_list,
             "writing_guidance": native_ctx.get("writing_guidance") or {},
         }
 
-        # Context (references, reader signals, diagnostics)
         raw_ref = native_ctx.get("reference") or []
         ref_items = [
             item.to_dict() if hasattr(item, "to_dict") else (dict(item) if isinstance(item, dict) else {"content": str(item)})
@@ -525,10 +598,120 @@ class ChapterRuntime:
             "voice_target": self.get_voice_target(chapter, genre=story_identity.get("genre")).to_dict(),
         }
 
+        return {
+            "chapter": chapter,
+            "source_fingerprints": source_fps,
+            "story_identity": story_identity,
+            "current_intent": current_intent,
+            "governed_canon": governed_canon,
+            "constraints": constraints,
+            "writer_context": writer_context,
+            "meta": {
+                "schema_version": "governed-context/v1",
+                "authority": "ContextManager.build_context",
+            },
+        }
+
+    def synthesize_creative_brief(
+        self,
+        chapter: int,
+        governed_context: Optional[dict[str, Any]] = None,
+    ) -> str:
+        """
+        Synthesize the canonical 5-section Creative Brief from governed context.
+        Ensures cognitive planning parity across all hosts (Claude Skill & External Host).
+        Sections:
+        1. 开篇委托
+        2. 这章的故事
+        3. 这章的人物
+        4. 怎么写更顺
+        5. 收在哪里
+        """
+        ctx = governed_context or self.get_governed_context(chapter)
+        story_id = ctx.get("story_identity", {})
+        intent = ctx.get("current_intent", {})
+        directive = intent.get("directive", {})
+        canon = ctx.get("governed_canon", {})
+        constraints = ctx.get("constraints", {})
+        writer_ctx = ctx.get("writer_context", {})
+
+        title = story_id.get("title", "")
+        genre = story_id.get("genre", "")
+        goal = directive.get("goal") or "推动情节发展"
+        conflict = directive.get("conflict") or directive.get("obstacles") or "外部阻力与困境"
+        cost = directive.get("cost") or "付出相应代价"
+        must_nodes = list(directive.get("must_cover_nodes") or constraints.get("mandatory_nodes") or [])
+        prohibitions = list(directive.get("forbidden_zones") or constraints.get("prohibitions") or [])
+        ending_q = directive.get("ending_question") or directive.get("chapter_end_open_question") or "留有悬念与余味"
+        tone = constraints.get("core_tone") or "沉浸真实"
+        pacing = constraints.get("pacing_strategy") or "张弛有度"
+        voice_target = (writer_ctx.get("voice_target") or {}).get("target_voice", "")
+
+        entities = canon.get("entities", {})
+        characters = entities.get("characters", []) or entities.get("character", [])
+        char_lines = []
+        if isinstance(characters, list):
+            for c in characters[:3]:
+                if isinstance(c, dict):
+                    name = c.get("name") or c.get("id", "主要角色")
+                    status = c.get("current_status") or c.get("status", "正常")
+                    char_lines.append(f"- {name}：当前状态【{status}】，本章驱动力在于应对即时危机与目标。")
+        if not char_lines:
+            char_lines.append("- 主要角色：承接前文状态，按章纲设定推进冲突与目标。")
+
+        anti = list(constraints.get("anti_patterns") or [])
+        anti_summary = "; ".join(anti[:3]) if anti else "避免空泛套话，拒绝机械反转"
+
+        sections = [
+            f"1. 开篇委托：作品《{title}》第{chapter}章，题材定位【{genre}】。本章一句话核心目标：{goal}。",
+            f"2. 这章的故事：围绕目标展开激烈博弈。主要阻力在于【{conflict}】，必须支付代价【{cost}】。必须覆盖节点：{', '.join(must_nodes) if must_nodes else '按章纲推进'}；严格遵守本章禁区：{', '.join(prohibitions) if prohibitions else '无额外禁区'}。",
+            f"3. 这章的人物：\n" + "\n".join(char_lines),
+            f"4. 怎么写更顺：全章基调贯彻【{tone}】，叙事节奏遵循【{pacing}】。文风靶向：{voice_target or '贴合题材语言风格，注重细节质感'}。时刻警惕避坑：{anti_summary}。",
+            f"5. 收在哪里：章末紧扣悬念【{ending_q}】，停留在情绪高点或未解疑问，为下一章留足追读期待。",
+        ]
+        return "\n\n".join(sections)
+
+    def get_writer_package(
+        self,
+        chapter: int,
+        creative_brief: Optional[str] = None,
+    ) -> WriterPackage:
+        """
+        Assemble and return the stable Native Writer Package for the specified chapter.
+        Guarantees:
+        - current chapter intent is present
+        - accepted past Canon is present
+        - future chapter intent is strictly absent
+        - reuses native ContextManager as the single context authority
+        - embeds creative planning brief (synthesized or provided by Context Agent)
+        - computes deterministic package fingerprint over source and brief fingerprints
+        """
+        gov_ctx = self.get_governed_context(chapter)
+        source_fps = gov_ctx["source_fingerprints"]
+        story_identity = gov_ctx["story_identity"]
+        current_intent = gov_ctx["current_intent"]
+        governed_canon = gov_ctx["governed_canon"]
+        constraints = gov_ctx["constraints"]
+        writer_context = gov_ctx["writer_context"]
+
+        final_brief = (
+            creative_brief
+            if creative_brief is not None
+            else self.synthesize_creative_brief(chapter, gov_ctx)
+        )
+        brief_fp = hashlib.sha256(final_brief.encode("utf-8")).hexdigest() if final_brief else ""
+
+        package_fp = self.compute_package_fingerprint(
+            chapter,
+            creative_brief=final_brief,
+            creative_brief_fingerprint=brief_fp,
+        )
+
         meta = {
             "schema_version": "runtime-api/v1",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "native_context_authority": "ContextManager.build_context",
+            "creative_planning_authority": "ContextAgent" if creative_brief else "NativeCreativeBriefBuilder",
         }
 
         package = WriterPackage(
@@ -540,6 +723,8 @@ class ChapterRuntime:
             governed_canon=governed_canon,
             constraints=constraints,
             writer_context=writer_context,
+            creative_brief=final_brief,
+            creative_brief_fingerprint=brief_fp,
             meta=meta,
         )
 
@@ -547,6 +732,10 @@ class ChapterRuntime:
         runtime_dir = self._chapter_runtime_dir(chapter)
         (runtime_dir / "writer_package.json").write_text(package.to_json(), encoding="utf-8")
         return package
+
+    def attach_creative_brief(self, chapter: int, creative_brief: str) -> WriterPackage:
+        """Attach a creative brief (e.g. from Context Agent) and seal the Native Writer Package."""
+        return self.get_writer_package(chapter=chapter, creative_brief=creative_brief)
 
     def ingest_draft(
         self,
@@ -578,8 +767,17 @@ class ChapterRuntime:
             )
 
         # Stale package check
-        current_fp = self.compute_package_fingerprint(chapter)
-        if package_fingerprint != current_fp:
+        pkg_file = self._chapter_runtime_dir(chapter) / "writer_package.json"
+        saved_brief_fp = ""
+        if pkg_file.is_file():
+            saved_pkg = read_json_if_exists(pkg_file) or {}
+            saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+
+        current_fp = self.compute_package_fingerprint(
+            chapter,
+            creative_brief_fingerprint=saved_brief_fp,
+        )
+        if package_fingerprint != current_fp and package_fingerprint != self.compute_package_fingerprint(chapter):
             return DraftIngestResult(
                 ok=False,
                 chapter=chapter,
@@ -653,8 +851,12 @@ class ChapterRuntime:
         if has_pkg:
             pkg_data = read_json_if_exists(pkg_file) or {}
             pkg_fp = pkg_data.get("package_fingerprint")
-            current_fp = self.compute_package_fingerprint(chapter)
-            is_stale = (pkg_fp != current_fp)
+            saved_brief_fp = str(pkg_data.get("creative_brief_fingerprint") or "")
+            current_fp = self.compute_package_fingerprint(
+                chapter,
+                creative_brief_fingerprint=saved_brief_fp,
+            )
+            is_stale = (pkg_fp != current_fp and pkg_fp != self.compute_package_fingerprint(chapter))
 
         # Durable commit status
         commit_file = self.paths.commit_json(chapter)
@@ -789,8 +991,16 @@ class ChapterRuntime:
                 )
 
             draft_pkg_fp = draft_data.get("package_fingerprint")
-            current_pkg_fp = self.compute_package_fingerprint(chapter)
-            if draft_pkg_fp != current_pkg_fp:
+            pkg_file = runtime_dir / "writer_package.json"
+            saved_brief_fp = ""
+            if pkg_file.is_file():
+                saved_pkg = read_json_if_exists(pkg_file) or {}
+                saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+            current_pkg_fp = self.compute_package_fingerprint(
+                chapter,
+                creative_brief_fingerprint=saved_brief_fp,
+            )
+            if draft_pkg_fp != current_pkg_fp and draft_pkg_fp != self.compute_package_fingerprint(chapter):
                 return ChapterCommitOutcomeResult(
                     ok=False,
                     chapter=chapter,
@@ -810,8 +1020,16 @@ class ChapterRuntime:
         else:
             resolved_prose = _internal_direct_prose or ""
             if _internal_package_fingerprint:
-                current_fp = self.compute_package_fingerprint(chapter)
-                if _internal_package_fingerprint != current_fp:
+                pkg_file = runtime_dir / "writer_package.json"
+                saved_brief_fp = ""
+                if pkg_file.is_file():
+                    saved_pkg = read_json_if_exists(pkg_file) or {}
+                    saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+                current_fp = self.compute_package_fingerprint(
+                    chapter,
+                    creative_brief_fingerprint=saved_brief_fp,
+                )
+                if _internal_package_fingerprint != current_fp and _internal_package_fingerprint != self.compute_package_fingerprint(chapter):
                     return ChapterCommitOutcomeResult(
                         ok=False,
                         chapter=chapter,
