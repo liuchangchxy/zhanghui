@@ -106,7 +106,12 @@ def _build_chapter_filename(project_root: Path, chapter_num: int, *, use_volume_
     return f"第{padded}章.md"
 
 
-def find_chapter_file(project_root: Path, chapter_num: int) -> Optional[Path]:
+def working_chapter_draft_path(project_root: Path, chapter_num: int) -> Path:
+    """Working draft path before durable commit acceptance."""
+    return project_root / ".webnovel" / "tmp" / f"chapter_{chapter_num:04d}_working.md"
+
+
+def find_chapter_file(project_root: Path, chapter_num: int, *, include_working: bool = False) -> Optional[Path]:
     """
     Find an existing chapter file for chapter_num under project_root/正文.
     Returns the first match (stable sorted order) or None if not found.
@@ -131,6 +136,14 @@ def find_chapter_file(project_root: Path, chapter_num: int) -> Optional[Path]:
     for c in candidates:
         if c.is_file():
             return c
+
+    if include_working:
+        working_draft = working_chapter_draft_path(project_root, chapter_num)
+        if working_draft.is_file():
+            return working_draft
+        runtime_draft = project_root / ".webnovel" / "runtime" / "chapters" / f"{chapter_num:03d}" / "draft.md"
+        if runtime_draft.is_file():
+            return runtime_draft
 
     return None
 

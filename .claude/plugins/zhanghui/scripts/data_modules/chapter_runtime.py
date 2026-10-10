@@ -291,6 +291,7 @@ class ChapterCommitOutcomeResult:
     commit_payload: Optional[dict[str, Any]] = None
     next_required_action: Optional[str] = None
     required_artifacts: Optional[list[str]] = None
+    published_file: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -1006,6 +1007,7 @@ class ChapterRuntime:
         human_response: Optional[dict[str, Any]] = None,
         on_conflict: Optional[str] = None,
         artifacts: Optional[dict[str, Any]] = None,
+        publish_on_accept: bool = False,
         _internal_direct_prose: Optional[str] = None,
         _internal_package_fingerprint: Optional[str] = None,
     ) -> ChapterCommitOutcomeResult:
@@ -1367,6 +1369,13 @@ class ChapterRuntime:
                 "status": "pending_human",
             }
 
+        published_path = None
+        if is_accepted and publish_on_accept:
+            try:
+                published_path = str(self.publish_accepted_draft(chapter=chapter, draft_id=draft_id))
+            except Exception as exc:
+                published_path = None
+
         return ChapterCommitOutcomeResult(
             ok=is_accepted and proj_success,
             chapter=chapter,
@@ -1381,7 +1390,68 @@ class ChapterRuntime:
             human_decision_required=human_req,
             commit_payload=attempt.chapter_outcome.commit_payload if attempt.chapter_outcome else None,
             error=None if is_accepted else f"Commit outcome was {attempt.attempt_status}",
+            published_file=published_path,
         )
+
+    def publish_accepted_draft(
+        self,
+        chapter: int,
+        draft_id: Optional[str] = None,
+    ) -> Path:
+        """
+        Publish the exact accepted staged draft to 正文/第NNNN章[-title].md.
+        Enforces invariant:
+        - Only publishes if durable commit exists with status == 'accepted'.
+        - Fails closed if commit is rejected, missing, or draft fingerprint does not match.
+        """
+        commit_file = self.paths.commit_json(chapter)
+        if not commit_file.is_file():
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: No durable commit exists.")
+
+        commit_data = read_json_if_exists(commit_file) or {}
+        commit_meta = commit_data.get("meta") or {}
+        commit_status = str(commit_meta.get("status") or "")
+        if commit_status != "accepted":
+            raise RuntimeError(
+                f"Cannot publish draft for chapter {chapter}: Durable commit status is '{commit_status}', not 'accepted'."
+            )
+
+        runtime_dir = self._chapter_runtime_dir(chapter)
+        target_draft_id = draft_id
+        if not target_draft_id:
+            active_file = runtime_dir / "draft.json"
+            if active_file.is_file():
+                active_data = read_json_if_exists(active_file) or {}
+                target_draft_id = active_data.get("draft_id")
+
+        if not target_draft_id:
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: Missing draft_id.")
+
+        draft_file = runtime_dir / "drafts" / f"{target_draft_id}.json"
+        if not draft_file.is_file():
+            active_file = runtime_dir / "draft.json"
+            if active_file.is_file():
+                active_data = read_json_if_exists(active_file) or {}
+                if active_data.get("draft_id") == target_draft_id:
+                    draft_file = active_file
+        if not draft_file.is_file():
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: Staged draft '{target_draft_id}' not found.")
+
+        draft_data = read_json_if_exists(draft_file) or {}
+        prose = str(draft_data.get("prose") or "")
+        if not prose.strip():
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: Staged draft prose is empty.")
+
+        expected_fp = draft_data.get("draft_fingerprint")
+        actual_fp = hashlib.sha256(prose.encode("utf-8")).hexdigest()
+        if expected_fp and actual_fp != expected_fp:
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: Draft fingerprint mismatch.")
+
+        from chapter_paths import default_chapter_draft_path
+        target_file = default_chapter_draft_path(self.project_root, chapter)
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        target_file.write_text(prose, encoding="utf-8")
+        return target_file
 
     def retry_projection(self, chapter: int) -> dict[str, Any]:
         """Replay or retry projections from the existing durable commit."""
