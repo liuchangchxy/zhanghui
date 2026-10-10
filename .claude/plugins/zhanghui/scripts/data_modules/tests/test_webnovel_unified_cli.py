@@ -603,7 +603,11 @@ def test_projections_retry_cli_runs(monkeypatch, tmp_path, capsys):
     commit_path.write_text(
         json.dumps(
             {
-                "meta": {"chapter": 1, "status": "rejected"},
+                "meta": {
+                    "schema_version": "story-system/v1",
+                    "chapter": 1,
+                    "status": "rejected",
+                },
                 "review_result": {"blocking_count": 1},
                 "fulfillment_result": {
                     "planned_nodes": [],

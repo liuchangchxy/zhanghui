@@ -1,0 +1,14 @@
+{
+  "chapter": 1,
+  "projection_success": true,
+  "projection_status": {
+    "events": "done",
+    "amend_proposals": "done",
+    "state": "done",
+    "index": "done",
+    "summary": "skipped",
+    "memory": "done",
+    "vector": "done"
+  },
+  "can_retry_projection": true
+}

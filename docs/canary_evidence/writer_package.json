@@ -1,0 +1,110 @@
+{
+  "chapter": 1,
+  "package_fingerprint": "1ff08845844100f8a7d63c9051c73d45d51648af803f917056cee6b290c22e65",
+  "source_fingerprints": {
+    "outline": "90300a5721d2211108f677719ea73f5c8210de4c045c6a73f856da99b3a39496",
+    "contracts": "3c4d401415171bc45b52217a622f7924206445e138013724e0f26fad4e766c1f",
+    "state": "687cc7f2c735b8e16c99bb11a3130cc6db734f5aa327d672fa4f0fbe0608ec60",
+    "latest_commit": "none"
+  },
+  "story_identity": {
+    "title": "测试纪元",
+    "genre": "玄幻",
+    "target_readers": "大众",
+    "current_volume": 1,
+    "chapter": 1
+  },
+  "current_intent": {
+    "chapter": 1,
+    "outline": "### 第1章：初入宗门\n- 目标：主角林凡通过灵根测试进入天阳宗\n- 阻力：外门执事李执事的刁难与轻视\n- 代价：暴露残缺玉佩的微弱异动\n- 必须覆盖节点：灵根测试、执事刁难、入宗铭牌\n- 本章禁区：禁止直接突破练气三层、禁止暴露太古神帝记忆\n- 章末问题：玉佩深处的封印因何松动？",
+    "directive": {
+      "goal": "主角林凡通过灵根测试进入天阳宗",
+      "obstacles": "外门执事李执事的刁难与轻视",
+      "cost": "暴露残缺玉佩的微弱异动",
+      "must_cover_nodes": [
+        "灵根测试",
+        "执事刁难",
+        "入宗铭牌"
+      ],
+      "forbidden_zones": [
+        "禁止直接突破练气三层",
+        "禁止暴露太古神帝记忆"
+      ],
+      "chapter_end_open_question": "玉佩深处的封印因何松动？",
+      "source": "chapter_outline"
+    },
+    "plot_structure": {
+      "cbn": "",
+      "cpns": [],
+      "cen": "",
+      "mandatory_nodes": [
+        "灵根测试",
+        "执事刁难",
+        "入宗铭牌"
+      ],
+      "prohibitions": [
+        "禁止直接突破练气三层",
+        "禁止暴露太古神帝记忆",
+        "章末问题：玉佩深处的封印因何松动？"
+      ],
+      "source": "chapter_outline"
+    },
+    "chapter_brief": {
+      "chapter_focus": "主角林凡通过灵根测试进入天阳宗"
+    }
+  },
+  "governed_canon": {
+    "latest_accepted_commit_chapter": null,
+    "accepted_entities": {},
+    "recent_accepted_events": []
+  },
+  "constraints": {
+    "system_constraints": [
+      "先压后爆"
+    ],
+    "prohibitions": [
+      "禁止直接突破练气三层",
+      "禁止暴露太古神帝记忆",
+      "章末问题：玉佩深处的封印因何松动？"
+    ],
+    "mandatory_nodes": [
+      "灵根测试",
+      "执事刁难",
+      "入宗铭牌"
+    ],
+    "anti_patterns": [
+      "打脸不能软收尾",
+      "主角还没兑现就被配角代打",
+      "质疑太弱没有压迫",
+      "证明过长拖掉爽感",
+      "缺最后一拍导致场面发虚",
+      "全书只有一种爽法",
+      "换挡过猛丢掉主卖点",
+      "为了换而换却不服务主线",
+      "刚被嘲讽完立刻无代价开挂秒杀，全程没有铺垫和反转支点",
+      "解说把所有动作都复述一遍，读者比场上观众还先看累。",
+      "战力体系混乱",
+      "升级无代价",
+      "打脸没有补刀"
+    ],
+    "core_tone": "先压后爆",
+    "pacing_strategy": "三章内必须有首次有效反打"
+  },
+  "writer_context": {
+    "volume_goal": {
+      "summary": "第1卷延续 玄幻退婚流 的主冲突"
+    },
+    "selected_tropes": [
+      "玄幻退婚流"
+    ],
+    "must_check_nodes": [
+      "灵根测试",
+      "执事刁难",
+      "入宗铭牌"
+    ]
+  },
+  "meta": {
+    "schema_version": "runtime-api/v1",
+    "created_at": "2026-10-10T08:46:22.450777+00:00"
+  }
+}
