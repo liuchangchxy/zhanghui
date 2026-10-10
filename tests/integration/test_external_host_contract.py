@@ -72,7 +72,14 @@ def test_external_host_contract_orchestration(tmp_path: Path):
     evidence_dir = tmp_path / "evidence"
 
     adapter = ExternalHostAdapter(project_root=project_root, evidence_dir=evidence_dir)
-    res = adapter.run_chapter(chapter=1)
+    agent_brief = (
+        "1. 开篇委托：通过灵根测试进入天阳宗。\n"
+        "2. 这章的故事：李执事刁难，林凡隐忍藏拙，以三色灵光过关。\n"
+        "3. 人物小动作：握紧残缺玉佩。\n"
+        "4. 本章阻力与代价：李执事的冷眼轻视，残缺玉佩微弱发热。\n"
+        "5. 收在哪里：接过天阳青铜令牌，目光坚毅。"
+    )
+    res = adapter.run_chapter(chapter=1, creative_brief=agent_brief)
 
     assert adapter.private_contract_writes == 0
     commit_res = res["commit_res"]
@@ -100,8 +107,13 @@ def test_external_host_contract_orchestration(tmp_path: Path):
 
     pkg = json.loads((evidence_dir / "writer_package.json").read_text(encoding="utf-8"))
     assert pkg["chapter"] == 1
+    assert pkg["is_writer_ready"] is True
+    assert pkg["creative_brief"] == agent_brief
     assert "灵根测试" in str(pkg["current_intent"])
     assert "藏经阁之争" not in str(pkg["current_intent"])
+
+    prompt = (evidence_dir / "final_writer_prompt.txt").read_text(encoding="utf-8")
+    assert "开篇委托：通过灵根测试" in prompt
 
     receipt = json.loads((evidence_dir / "draft_receipt.json").read_text(encoding="utf-8"))
     assert receipt["ok"] is True
@@ -117,3 +129,17 @@ def test_external_host_contract_orchestration(tmp_path: Path):
 
     proj_out = json.loads((evidence_dir / "projection_status.json").read_text(encoding="utf-8"))
     assert proj_out["projection_success"] is True
+
+
+def test_external_host_rejects_missing_creative_brief(tmp_path: Path):
+    """External host orchestration must fail-closed if creative_brief is missing or blank."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+    evidence_dir = tmp_path / "evidence_negative"
+
+    adapter = ExternalHostAdapter(project_root=project_root, evidence_dir=evidence_dir)
+
+    with pytest.raises(ValueError, match="creative_brief is required"):
+        adapter.run_chapter(chapter=1)
+
+    with pytest.raises(ValueError, match="creative_brief is required"):
+        adapter.run_chapter(chapter=1, creative_brief="   ")

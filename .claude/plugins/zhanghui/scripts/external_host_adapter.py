@@ -25,7 +25,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from data_modules.chapter_runtime import ChapterRuntime
 from data_modules.reconciliation import reconcile_changes, split_chapter_and_changes
@@ -42,8 +42,14 @@ class ExternalHostAdapter:
         self.runtime = ChapterRuntime(self.project_root)
         self.private_contract_writes = 0
 
-    def run_chapter(self, chapter: int) -> dict[str, Any]:
+    def run_chapter(self, chapter: int, creative_brief: Optional[str] = None) -> dict[str, Any]:
         """Run 1 chapter through the public runtime and collect evidence."""
+        if not creative_brief or not str(creative_brief).strip():
+            raise ValueError(
+                f"creative_brief is required to orchestrate chapter {chapter}: "
+                "Writer path requires a sealed Native Writer Package."
+            )
+
         # 1. Record host request
         request_payload = {
             "host": "ExternalHostAdapter",
@@ -61,7 +67,8 @@ class ExternalHostAdapter:
         if not prep.ok or not prep.writer_package:
             raise RuntimeError(f"Runtime preparation failed: {prep.error or prep.blockers}")
 
-        writer_pkg = prep.writer_package
+        writer_pkg = self.runtime.attach_creative_brief(chapter=chapter, creative_brief=creative_brief)
+
         (self.evidence_dir / "writer_package.json").write_text(
             writer_pkg.to_json(), encoding="utf-8"
         )
@@ -162,12 +169,15 @@ class ExternalHostAdapter:
         return {
             "chapter": chapter,
             "commit_res": commit_res,
+            "writer_package": writer_pkg,
             "evidence_dir": str(self.evidence_dir),
             "private_contract_writes": self.private_contract_writes,
         }
 
     def _format_writer_prompt(self, pkg: Any) -> str:
-        """Format writer prompt using only public package fields."""
+        """Format writer prompt using the canonical package renderer."""
+        if hasattr(pkg, "to_writer_prompt"):
+            return pkg.to_writer_prompt()
         title = pkg.story_identity.get("title", "")
         genre = pkg.story_identity.get("genre", "")
         intent = pkg.current_intent
@@ -228,10 +238,18 @@ def main() -> None:
     parser.add_argument("--project-root", required=True, help="书项目根目录")
     parser.add_argument("--chapter", type=int, default=1, help="章节号")
     parser.add_argument("--evidence-dir", required=True, help="证据保存目录")
+    parser.add_argument("--creative-brief", default="", help="Context Agent 创作策划任务书")
+    parser.add_argument("--creative-brief-file", default="", help="创作策划任务书文件路径")
     args = parser.parse_args()
 
+    brief = args.creative_brief
+    if not brief and args.creative_brief_file:
+        bf_p = Path(args.creative_brief_file)
+        if bf_p.is_file():
+            brief = bf_p.read_text(encoding="utf-8")
+
     adapter = ExternalHostAdapter(Path(args.project_root), Path(args.evidence_dir))
-    result = adapter.run_chapter(args.chapter)
+    result = adapter.run_chapter(args.chapter, creative_brief=brief)
 
     commit_res = result["commit_res"]
     print(f"STATUS: {'SUCCESS' if commit_res.ok else 'FAILED'}")
