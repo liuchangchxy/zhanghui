@@ -522,6 +522,7 @@ class ChapterRuntime:
             "reader_signal": native_ctx.get("reader_signal") or {},
             "context_diagnostics": native_ctx.get("context_diagnostics") or [],
             "context_contract_version": (native_ctx.get("meta") or {}).get("context_contract_version") or "v3",
+            "voice_target": self.get_voice_target(chapter, genre=story_identity.get("genre")).to_dict(),
         }
 
         meta = {
@@ -990,6 +991,16 @@ class ChapterRuntime:
         """Replay or retry projections from the existing durable commit."""
         return retry_projection(self.project_root, chapter=chapter)
 
+    def get_voice_target(self, chapter: int = 1, genre: Optional[str] = None):
+        """Obtain positive voice target for chapter authoring and editing (Issue #26)."""
+        from .prose_voice_target import build_voice_target
+        return build_voice_target(self.project_root, chapter=chapter, genre=genre)
+
+    def get_prose_pipeline(self):
+        """Obtain ProseQualityPipeline coordinator (Issue #26)."""
+        from .prose_pipeline import ProseQualityPipeline
+        return ProseQualityPipeline(self.project_root)
+
     def _commit_direct_internal(
         self,
         chapter: int,
@@ -1004,3 +1015,4 @@ class ChapterRuntime:
             _internal_package_fingerprint=package_fingerprint,
             **kwargs,
         )
+
