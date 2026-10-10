@@ -135,9 +135,9 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 - 存在 → 提取 ≤ 200 字摘要，作为非权威性（non-authoritative）Craft/Reference input 在 Step 1B 传给 Context Agent 做创作规划；不由 ContextManager / Governed Context 自动加载，严禁直接向 Writer 追加 prompt，不替代题材/大纲/设定硬约束。
 - 不存在 → 跳过，不报错
 
-**写作宪法加载**（best-effort，不阻断；Phase E 重定位）：
+**写作宪法检测**（best-effort，不阻断；Phase E 重定位）：
 - 优先检测 `${PROJECT_ROOT}/.webnovel/writer-profile/写作宪法.md`（由 init 从 `${CLAUDE_PLUGIN_ROOT}/templates/写作宪法.md` 复制）。
-- 存在 → 作为 L1 prompt 注入的一部分（作者风格底线，硬约束）。
+- 存在 → 作为 Craft input 提供给 Step 1B Context Agent（作者风格底线约束）；不由 ContextManager 自动加载，严禁直接向 Writer / Step 2A 注入（严禁作为 L1 prompt 直接注入 Writer）。由 Context Agent 在 Creative Brief 中落实其作者风格底线，最终通过 sealed Native Writer Package 统一进入 Writer。
 - 不存在 → 跳过，不报错（不再回退到 skill 内 templates/）。
 
 **对标参考检测（reference_research）**：
@@ -243,9 +243,10 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 
 输入装配：
 - **受治理上下文**：Stage 1A 的 `runtime governed-context`（Governed Canon、Current Intent、Master Setting/Craft 约束、Writer Context）。
-- **非权威参考输入（Optional Craft / Reference Inputs）**（由主流程收集并作为参考输入传入 Context Agent，不由 ContextManager 自动加载）：
-  1. **个人语料**（若存在 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md`）：提取 ≤ 200 字摘要，作为个人表达指纹参考注入；
-  2. **对标研究（reference_research）**：
+- **非权威参考输入（Optional Craft / Reference Inputs）**（由主流程收集并作为参考/工艺输入传入 Context Agent，不由 ContextManager 自动加载）：
+  1. **写作宪法**（若存在 `${PROJECT_ROOT}/.webnovel/writer-profile/写作宪法.md`）：作为作者风格底线与工艺约束（Craft input）提供给 Context Agent，严禁直接 L1 注入 Writer；由 Context Agent 在 Creative Brief 中落实其作者风格底线；
+  2. **个人语料**（若存在 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md`）：提取 ≤ 200 字摘要，作为个人表达指纹参考注入；
+  3. **对标研究（reference_research）**：
      调用 injector 工具读取对标输入：
      ```bash
      python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step1-summary --project-root "${PROJECT_ROOT}"

@@ -537,13 +537,21 @@ def test_webnovel_write_skill_optional_craft_reference_boundary():
     skill_path = repo_root / ".claude" / "plugins" / "zhanghui" / "skills" / "webnovel-write" / "SKILL.md"
     text = skill_path.read_text(encoding="utf-8")
 
-    # 1. 确认 SKILL.md 不再声称 ContextManager 加载个人语料
+    # 1. 确认 SKILL.md 不再声称 ContextManager 加载个人语料，且写作宪法不再直接 L1 注入 Writer
     assert "个人语料检测" in text
     corpus_idx = text.index("个人语料检测")
     corpus_section = text[corpus_idx : corpus_idx + 500]
     assert "ContextManager / Governed Context 纳入" not in corpus_section
     assert "不由 ContextManager" in corpus_section
     assert "non-authoritative" in corpus_section
+
+    assert "写作宪法" in text
+    constitution_idx = text.index("写作宪法")
+    constitution_section = text[constitution_idx : constitution_idx + 500]
+    assert "L1 prompt 注入" not in constitution_section
+    assert "作为 L1 prompt 注入" not in text
+    assert "不由 ContextManager" in constitution_section
+    assert "严禁直接向 Writer" in constitution_section or "严禁作为 L1 prompt 直接注入" in constitution_section
 
     # 提取 Step 1B 和 Step 2A 章节内容
     assert "#### 1B. Context Agent" in text
@@ -556,12 +564,14 @@ def test_webnovel_write_skill_optional_craft_reference_boundary():
     step2a_end_idx = text.index("### Step 2A 末尾追加：")
     step2a_section = text[step2a_idx:step2a_end_idx]
 
-    # 2. 确认 Step 2A 没有 dead injection / dead call
+    # 2. 确认 Step 2A 没有 dead injection / dead call / 零散注入
     assert "build-step2a-section" not in step2a_section
     assert "reference_research_injector" not in step2a_section
+    assert "写作宪法" not in step2a_section
     assert "Zero Dead Injection" in step2a_section or "严禁死调用" in step2a_section
 
-    # 3. 确认两类 optional input（个人语料与对标研究）均路由到 Step 1B / Context Agent
+    # 3. 确认 optional input（写作宪法、个人语料与对标研究）均路由到 Step 1B / Context Agent
+    assert "写作宪法" in step1b_section
     assert "个人语料" in step1b_section
     assert "reference_research" in step1b_section or "对标研究" in step1b_section
     assert "build-step1-summary" in step1b_section
