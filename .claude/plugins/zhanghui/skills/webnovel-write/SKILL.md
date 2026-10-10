@@ -132,7 +132,7 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 
 **个人语料检测**（best-effort，不阻断；Phase E 重定位）：
 - 检测 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md` 是否存在（Phase E 起基线目录迁到 `${CLAUDE_PLUGIN_ROOT}/templates/`，书项目副本目录改为 `.webnovel/writer-profile/`）。
-- 存在 → 在 Step 1 任务书与 Step 2A 写作执行包中追加一段"个人表达指纹约束"（≤ 200 字摘要），作为可选 L1 prompt 注入；不替代题材/大纲/设定硬约束
+- 存在 → 作为"个人表达指纹约束"（≤ 200 字摘要）由 ContextManager / Governed Context 纳入 constraints 注入 Native Writer Package；不替代题材/大纲/设定硬约束
 - 不存在 → 跳过，不报错
 
 **写作宪法加载**（best-effort，不阻断；Phase E 重定位）：
@@ -220,8 +220,24 @@ if should_take_snapshot(chapter=next_ch, snapshot_every=3):
 
 默认 `snapshot_every=3`（参考 oh-story 模式），可通过 `ChunkedWritePolicy.snapshot_every` 调整；`WEBNOVEL_DISABLE_CHUNKED_SNAPSHOT=1` 可跳过本 checkpoint。
 
-### Step 1：写作任务书（context-agent 生成直写执行包）
+### Step 1：写前准备与 Native Writer Package 封口（Governed Context → Context Agent → Sealed Package）
 
+写前阶段统一采用收敛后的 Native Writer Workflow，杜绝主流程手工重新拼装 Canon/Intent/Craft 或另造第二套 Writer prompt：
+
+#### 1A. Runtime 预检与受治理上下文加载（Runtime prepare & Governed Context）
+进入 Step 1 先跑闸门预检并获取事实治理上下文（Governed Context）：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage prewrite
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime prepare --chapter {chapter_num} --format json
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime governed-context --chapter {chapter_num} --format json
+```
+
+- `write-gate --stage prewrite` 校验大纲存在、章纲可用、占位符扫描通过、伏笔数据可读。任一 fail 立即阻断。
+- `runtime prepare` 统一校验环境、大纲存在、章纲可用、Story System 合同与 prewrite 闸门状态。若有阻断项（blockers），立即停止并报告。
+- `runtime governed-context` 由 `ContextManager.build_context()` 统一组装当前章的事实权威（Governed Canon、Current Intent、Master Setting/Craft 约束、Writer Context），杜绝向后剧透或虚假前情。
+
+#### 1B. Context Agent 认知创作规划（Context Agent Creative Brief）
 使用 Agent 调用 `webnovel-writer:context-agent`，参数：
 - `chapter`
 - `project_root`
@@ -235,27 +251,38 @@ Use the Agent tool to run `webnovel-writer:context-agent`
 
 硬要求：
 - 若 `state` 或大纲不可用，立即阻断并返回缺失项。
-- 输出必须同时包含：
-  - 7 板块任务书（目标/冲突/承接/角色/场景约束/伏笔/追读力）；
-  - 写作任务书全字段（目标/阻力/代价/本章变化/未闭合问题/开头类型/情绪节奏/信息密度/过渡章判定/追读力设计）；
-  - Step 2A 可直接消费的"写作执行包"（章节节拍、不可变事实清单、禁止事项、终检清单）。
-- 合同与任务书出现冲突时，以"大纲与设定约束更严格者"为准。
+- 写章链路隔离约束：本步使用 `webnovel-writer:context-agent`（写作任务书），与下游 `webnovel-writer:reviewer` / `webnovel-writer:data-agent` 通过 Agent 工具显式分隔；不得用主流程口头代替 subagent 输出。
+- **保留 Context Agent 文学认知能力**：Context Agent 消费上述受治理上下文，专注文学层面的创作决策：
+  - 人物核心动机与心理走向；
+  - 本章核心冲突、阻力与代价；
+  - 章节节拍（Beats）与情节推进（CBN/CPNs/CEN）；
+  - 情绪节奏与追读力设计；
+  - 针对性写法与镜头指导。
+- **产物**：返回真实五段写作任务书（Creative Brief）：
+  1. 开篇委托（书名、章号、标题、一句话目标）
+  2. 这章的故事（本章目标/阻力、情节节点、必须覆盖/禁区、跨章约束）
+  3. 人物小动作（动机外化、微反应、心理处境）
+  4. 本章阻力与代价（逆境设计、情绪底色、写法指导）
+  5. 收在哪里（章末钩子、微兑现、定格画面）
+- **硬边界**：Context Agent 专注于认知决策并输出写作任务书，不负责拼装底层系统/模型 Prompt，也不绕过 Native Writer Package 直接驱动起草。
 
-写章链路隔离约束：本步使用 `webnovel-writer:context-agent`（写作任务书），与下游 `webnovel-writer:reviewer` / `webnovel-writer:data-agent` 通过 Agent 工具显式分隔；不得用主流程口头代替 subagent 输出。
-
-输出：
-- 单一"创作执行包"（任务书 + 写作任务书 + 直写提示词），供 Step 2A 直接消费，不再拆分独立 Step 1.5。
-
-### 写前 write-gate prewrite 检查
-
-进入 Step 1 之前先跑一道前置闸门：
+#### 1C. Runtime 封口与唯一 Canonical Writer Prompt 生成（Seal Native Writer Package）
+将 Context Agent 输出的真实写作任务书回传给 Runtime 进行签名封口，生成唯一 Canonical Writer Prompt：
 
 ```bash
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage prewrite
-
+# 将 Context Agent 输出的五段任务书作为参数传给 runtime attach-creative-brief
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
+  --chapter {chapter_num} \
+  --brief "{context_agent_creative_brief}" \
+  --format prompt
 ```
+（亦可将 brief 写入临时文件后使用 `--brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt"`）
 
-闸门校验：大纲存在、章纲可用、占位符扫描通过、伏笔数据可读。任一 fail 立即阻断，不进入 Step 1。
+- **封口保证**：Runtime 计算 `creative_brief_fingerprint` 与 `package_fingerprint`，将任务书与受治理事实永久绑定为 `is_writer_ready=True` 的 Sealed Native Writer Package。
+- **唯一输入渲染**：命令附带 `--format prompt` 将直接调用 `WriterPackage.to_writer_prompt()` 输出完整的 Canonical Writer Prompt。未提供 Brief 时该命令严格 fail-closed。
+
+输出：
+- 唯一已封口的 Canonical Writer Prompt（包含 Story Identity、Current Intent、Governed Canon、Creative Brief、Constraints & Craft、Writer Context 六层治理内容及交付协议），直接作为 Step 2A 正文起草的输入。
 
 ### 一致性检查（写前）
 
@@ -275,14 +302,16 @@ sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 
 在使用旧评估结果作人工裁决、恢复或流程转换前，重新运行检查并比较 `source_input_fingerprint`；若改变，将旧结果保留为过期上下文，只按新结果行动。本阶段不保证跨进程持久化这些响应尝试。
 
-### Step 2A：正文起草
+### Step 2A：正文起草（Writer 消费 Canonical Writer Input）
 
-执行前必须加载：
+#### 唯一输入契约（Zero Redundant Assembly）
+- **唯一输入来源**：Writer 严格且仅消费 Step 1C 封口生成的 Canonical Writer Prompt（`WriterPackage.to_writer_prompt()` 输出）。
+- **禁止事项**：
+  - **严禁重新拼装**：Skill 主流程严禁自己重新拼一份 Canon、Intent 或 Craft 模板；
+  - **严禁双重模板**：严禁在 Skill 内再造第二套与 External Host 差异化的 Writer prompt 模板；
+  - **严禁绕过封口**：严禁绕过 Native Writer Package 直接把 Context Agent 未封口输出喂给 Writer。未获得带有 `package_fingerprint` 的封口包前不得启动起草。
 
-调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step2a-section --project-root "${PROJECT_ROOT}"`，
-若非空 → 把"对标书红黑名单"段（必读，含 do_not_copy / canon_contamination_warnings / borrowable_structures / satisfaction_point）追加到章节起草提示词的"约束"段，作为 L1 注入。
-主流程**不口头重写或简化**该段；原样作为约束素材传下去。
-若返回空串 → 跳过此注入。
+调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step2a-section --project-root "${PROJECT_ROOT}"`（若项目有对标书红黑名单，其结构约束在 Stage 1A 归入 MASTER_SETTING / governed constraints 封入 Native Writer Package，起草时遵守其中借用结构与避坑禁区）。
 
 硬要求：
 - 只输出纯正文到章节正文文件；若详细大纲已有章节名，优先使用 `正文/第{chapter_padded}章-{title_safe}.md`，否则回退为 `正文/第{chapter_padded}章.md`。

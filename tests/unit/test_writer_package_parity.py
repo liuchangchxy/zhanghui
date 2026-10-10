@@ -483,3 +483,43 @@ def test_commit_rejects_draft_bound_to_unsealed_package(test_book_project: Path)
     assert res.error_code == "WRITER_PACKAGE_UNSEALED"
 
 
+def test_prepare_next_required_action_unsealed_vs_sealed(test_book_project: Path):
+    """PR1 correction: prepare() next_required_action is attach_creative_brief when unsealed, ingest_draft when sealed."""
+    runtime = ChapterRuntime(test_book_project)
+
+    # 1. Unsealed package -> next action is attach_creative_brief
+    prep_unsealed = runtime.prepare(chapter=1, with_package=True)
+    assert prep_unsealed.ok is True
+    assert prep_unsealed.writer_package is not None
+    assert prep_unsealed.writer_package.is_writer_ready is False
+    assert prep_unsealed.next_required_action == "attach_creative_brief"
+
+    # 2. Sealed package -> next action is ingest_draft
+    prep_sealed = runtime.prepare(chapter=1, with_package=True, creative_brief="策划任务书：测试。")
+    assert prep_sealed.ok is True
+    assert prep_sealed.writer_package is not None
+    assert prep_sealed.writer_package.is_writer_ready is True
+    assert prep_sealed.next_required_action == "ingest_draft"
+
+
+def test_webnovel_write_skill_adopts_native_writer_package_workflow():
+    """Verify webnovel-write/SKILL.md fully adopts Native Writer Package workflow with zero redundant assembly."""
+    repo_root = Path(__file__).resolve().parents[2]
+    skill_path = repo_root / ".claude" / "plugins" / "zhanghui" / "skills" / "webnovel-write" / "SKILL.md"
+    text = skill_path.read_text(encoding="utf-8")
+
+    # Workflow chain: Governed Context -> Context Agent -> attach-creative-brief -> sealed prompt -> Writer
+    assert "runtime prepare" in text
+    assert "runtime governed-context" in text
+    assert "webnovel-writer:context-agent" in text
+    assert "runtime attach-creative-brief" in text
+    assert "WriterPackage.to_writer_prompt()" in text
+
+    # Canonical writer prompt & zero redundant assembly contract
+    assert "Zero Redundant Assembly" in text
+    assert "严禁重新拼装" in text
+    assert "严禁双重模板" in text
+    assert "严禁绕过封口" in text
+
+
+
