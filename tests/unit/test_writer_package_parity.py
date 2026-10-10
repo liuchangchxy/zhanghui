@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Tests for Native Writer Package Parity and Convergence (Issue #29 - PR1).
+Tests for Native Writer Package Parity and Boundary Convergence (Issue #29 - PR1).
 
-Verifies:
-1. Native Writer Package contains all governed layers (story_identity, current_intent,
-   governed_canon, constraints/craft, writer_context, creative_brief, fingerprints).
-2. Governed context derives from ContextManager as single factual authority.
-3. Creative Brief synthesis produces conforming 5-section cognitive planning brief.
-4. Context Agent brief attachment seals the package with deterministic brief fingerprint.
-5. Canonical writer prompt rendering (to_writer_prompt) delivers input parity across hosts.
-6. Stale package detection respects brief fingerprint changes.
+Verifies Controller-enforced boundary:
+1. ContextManager / Runtime produces Governed Context as single factual authority (no creative planning).
+2. Missing Creative Brief creates unsealed package (is_writer_ready=False, authority='none').
+3. Context Agent attaches authentic Creative Brief to seal Native Writer Package with deterministic fingerprints.
+4. to_writer_prompt() semantically exposes all 6 governed layers (story_identity, current_intent,
+   governed_canon, creative_brief, constraints/craft, writer_context).
+5. Canonical prompt renderer guarantees input parity: an explicit Canon fact, an Intent goal,
+   and an authentic Creative Brief all appear in the rendered Writer input.
+6. External Host uses the exact same canonical renderer as Claude Skill Writer.
+7. Draft ingestion detects stale packages when brief fingerprint changes.
 """
 from __future__ import annotations
 
@@ -22,6 +24,7 @@ from typing import Any, Dict
 import pytest
 
 from data_modules.chapter_runtime import ChapterRuntime, WriterPackage
+from external_host_adapter import ExternalHostAdapter
 
 
 @pytest.fixture
@@ -55,6 +58,11 @@ def test_book_project(tmp_path: Path) -> Path:
 
     for d in (".webnovel/backups", ".webnovel/archive", ".webnovel/summaries", "设定集", "正文", "审查报告"):
         (root / d).mkdir(parents=True, exist_ok=True)
+    for f in ("设定集/世界观.md", "设定集/力量体系.md", "设定集/主角卡.md", "设定集/反派设计.md", "大纲/总纲.md", ".env.example"):
+        fp = root / f
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        if not fp.exists():
+            fp.write_text("# init\n", encoding="utf-8")
 
     # .story-system contracts
     story_sys = root / ".story-system"
@@ -188,63 +196,34 @@ def test_governed_context_assembly(test_book_project: Path):
     assert "避免空洞说教" in constraints.get("anti_patterns", [])
 
 
-def test_synthesize_creative_brief_five_sections(test_book_project: Path):
-    """Synthesized brief must produce the canonical 5 sections."""
-    runtime = ChapterRuntime(test_book_project)
-    brief = runtime.synthesize_creative_brief(chapter=1)
-
-    assert "1. 开篇委托：" in brief
-    assert "2. 这章的故事：" in brief
-    assert "3. 这章的人物：" in brief
-    assert "4. 怎么写更顺：" in brief
-    assert "5. 收在哪里：" in brief
-
-    # Check cognitive planning details embedded
-    assert "天阳纪元" in brief
-    assert "古典仙侠" in brief
-    assert "问心石" in brief
-    assert "青铜令" in brief
-    assert "坚毅热血" in brief
-    assert "青铜令暗藏的微弱裂痕意味着什么" in brief
-
-
-def test_native_writer_package_structure_and_fingerprints(test_book_project: Path):
-    """WriterPackage must contain all fields and deterministic fingerprints."""
+def test_raw_writer_package_without_brief_is_not_writer_ready(test_book_project: Path):
+    """Runtime must NOT synthesize fake brief when brief is absent; package remains unsealed."""
     runtime = ChapterRuntime(test_book_project)
     pkg = runtime.get_writer_package(chapter=1)
 
     assert isinstance(pkg, WriterPackage)
     assert pkg.chapter == 1
-    assert pkg.creative_brief != ""
-    assert pkg.creative_brief_fingerprint != ""
-    assert pkg.package_fingerprint != ""
-
-    # Brief fingerprint is deterministic SHA-256 of brief
-    expected_brief_fp = hashlib.sha256(pkg.creative_brief.encode("utf-8")).hexdigest()
-    assert pkg.creative_brief_fingerprint == expected_brief_fp
-
-    # Serializes to dict and JSON correctly
-    data = pkg.to_dict()
-    assert "story_identity" in data
-    assert "current_intent" in data
-    assert "governed_canon" in data
-    assert "constraints" in data
-    assert "constraints_and_craft" in data
-    assert "writer_context" in data
-    assert "creative_brief" in data
-    assert "creative_brief_fingerprint" in data
-    assert "source_fingerprints" in data
-    assert "package_fingerprint" in data
+    assert pkg.creative_brief == ""
+    assert pkg.creative_brief_fingerprint == ""
+    assert pkg.is_writer_ready is False
+    assert pkg.meta.get("creative_planning_authority") == "none"
+    assert pkg.meta.get("is_writer_ready") is False
 
 
-def test_attach_creative_brief_custom_agent_brief(test_book_project: Path):
-    """Context Agent attaching custom brief must update brief and package fingerprints."""
+def test_attach_creative_brief_boundary_seals_native_writer_package(test_book_project: Path):
+    """Context Agent attaching an authentic brief seals the package with deterministic fingerprints."""
     runtime = ChapterRuntime(test_book_project)
 
-    # Baseline package with synthesized brief
-    base_pkg = runtime.get_writer_package(chapter=1)
+    # 1. Empty or whitespace brief is rejected
+    with pytest.raises(ValueError, match="non-empty string"):
+        runtime.attach_creative_brief(chapter=1, creative_brief="   ")
 
-    custom_brief = (
+    # 2. Raw unsealed package baseline
+    raw_pkg = runtime.get_writer_package(chapter=1)
+    assert raw_pkg.is_writer_ready is False
+
+    # 3. Context Agent provides authentic 5-section brief
+    agent_brief = (
         "1. 开篇委托：本章焦点在林凡初登仙阶的心理重压。\n\n"
         "2. 这章的故事：问心石突发异象，必须展现心志坚定。\n\n"
         "3. 这章的人物：执事冷漠而多疑，林凡藏拙守拙。\n\n"
@@ -252,54 +231,114 @@ def test_attach_creative_brief_custom_agent_brief(test_book_project: Path):
         "5. 收在哪里：青铜令入手沉重，定格在执事意味深长的注视。"
     )
 
-    attached_pkg = runtime.attach_creative_brief(chapter=1, creative_brief=custom_brief)
+    sealed_pkg = runtime.attach_creative_brief(chapter=1, creative_brief=agent_brief)
 
-    assert attached_pkg.creative_brief == custom_brief
-    expected_brief_fp = hashlib.sha256(custom_brief.encode("utf-8")).hexdigest()
-    assert attached_pkg.creative_brief_fingerprint == expected_brief_fp
-    assert attached_pkg.meta.get("creative_planning_authority") == "ContextAgent"
+    assert sealed_pkg.creative_brief == agent_brief
+    expected_brief_fp = hashlib.sha256(agent_brief.encode("utf-8")).hexdigest()
+    assert sealed_pkg.creative_brief_fingerprint == expected_brief_fp
+    assert sealed_pkg.is_writer_ready is True
+    assert sealed_pkg.meta.get("creative_planning_authority") == "ContextAgent"
+    assert sealed_pkg.meta.get("is_writer_ready") is True
 
-    # Package fingerprint changed deterministically due to new brief
-    assert attached_pkg.package_fingerprint != base_pkg.package_fingerprint
+    # Package fingerprint changes deterministically due to brief attachment
+    assert sealed_pkg.package_fingerprint != raw_pkg.package_fingerprint
 
 
-def test_to_writer_prompt_rendering_parity(test_book_project: Path):
-    """to_writer_prompt must render a coherent prompt suitable for all hosts."""
+def test_canonical_writer_input_parity_contains_canon_intent_brief(test_book_project: Path):
+    """
+    to_writer_prompt must semantically contain:
+    - a distinct Canon fact,
+    - an Intent goal,
+    - and the authentic Creative Brief content.
+    """
     runtime = ChapterRuntime(test_book_project)
-    pkg = runtime.get_writer_package(chapter=1)
 
-    prompt = pkg.to_writer_prompt()
+    agent_brief = (
+        "【认知规划】本章着重展现林凡隐忍藏拙的心态与执事威压，"
+        "结尾定格在青铜令入手那一刻的微弱震颤。"
+    )
+    sealed_pkg = runtime.attach_creative_brief(chapter=1, creative_brief=agent_brief)
+    prompt = sealed_pkg.to_writer_prompt()
 
-    assert f"=== 写作任务：第{pkg.chapter}章 ===" in prompt
-    assert "书名：天阳纪元 | 题材：古典仙侠" in prompt
-    assert "## 创作执行任务书 (Creative Brief)" in prompt
-    assert "1. 开篇委托" in prompt
-    assert "必须覆盖节点" in prompt
-    assert "本章禁区" in prompt
-    assert "<chapter_changes>" in prompt
+    # 1. Story Identity layer
+    assert "=== 写作任务：第1章 ===" in prompt
+    assert "书名：天阳纪元" in prompt
+    assert "题材：古典仙侠" in prompt
+
+    # 2. Current Intent layer
+    assert "## 1. 本章写作意图 (Current Intent)" in prompt
+    assert "核心目标：通过问心石测试并拿到外门令" in prompt
+    assert "必须覆盖节点：" in prompt
+    assert "走上测试台" in prompt and "触碰问心石" in prompt and "获得天阳青铜令" in prompt
+    assert "本章绝对禁区：" in prompt
+    assert "严禁直接展示筑基实力" in prompt and "严禁当场与执事冲突" in prompt
+
+    # 3. Governed Canon layer
+    assert "## 2. 治理事实与前情依据 (Governed Canon)" in prompt
+    assert "林凡" in prompt
+    assert "待考核散修" in prompt
+
+    # 4. Creative Brief layer
+    assert "## 3. 创作策划任务书 (Creative Brief)" in prompt
+    assert "【认知规划】本章着重展现林凡隐忍藏拙的心态与执事威压" in prompt
+
+    # 5. Constraints & Craft layer
+    assert "## 4. 调性、文风与避坑约束 (Constraints & Craft)" in prompt
+    assert "核心调性：坚毅热血，道法自然" in prompt
+    assert "叙事节奏：层层递进" in prompt
+    assert "避坑规则 (Anti-patterns)：避免空洞说教" in prompt
+
+    # 6. Handoff Protocol
+    assert "## 6. 正文交付协议 (Handoff Protocol)" in prompt
+    assert "<chapter_changes>...</chapter_changes>" in prompt
+    assert sealed_pkg.package_fingerprint in prompt
+
+
+def test_external_host_adapter_uses_same_canonical_renderer(test_book_project: Path, tmp_path: Path):
+    """ExternalHostAdapter must format writer prompt via pkg.to_writer_prompt(), ensuring input parity."""
+    evidence_dir = tmp_path / "host_evidence"
+    adapter = ExternalHostAdapter(test_book_project, evidence_dir)
+
+    agent_brief = "1. 开篇委托：外部Host驱动章节测试。\n5. 收在哪里：问心石平息。"
+    result = adapter.run_chapter(chapter=1, creative_brief=agent_brief)
+
+    # Prompt written to evidence directory by external host
+    saved_prompt = (evidence_dir / "final_writer_prompt.txt").read_text(encoding="utf-8")
+
+    # Verify External Host formatted prompt using the canonical package renderer
+    expected_prompt = result["writer_package"].to_writer_prompt()
+    assert saved_prompt == expected_prompt
+    assert "核心目标：通过问心石测试并拿到外门令" in saved_prompt
+    assert "外部Host驱动章节测试" in saved_prompt
+    assert "林凡" in saved_prompt
 
 
 def test_stale_package_detection_with_brief_fingerprint(test_book_project: Path):
-    """Ingestion and commit must reject when package fingerprint does not match brief."""
+    """Draft ingestion must reject stale packages when brief is changed/re-sealed."""
     runtime = ChapterRuntime(test_book_project)
-    pkg = runtime.get_writer_package(chapter=1)
 
+    # Seal with brief 1
+    pkg1 = runtime.attach_creative_brief(chapter=1, creative_brief="Brief V1: 初始策划")
     prose = "山门前，灵石泛起微光。林凡缓步上前，接过令牌。\n<chapter_changes>{}</chapter_changes>"
 
     # 1. Matching package fingerprint succeeds
     ingest_res = runtime.ingest_draft(
         chapter=1,
         prose=prose,
-        package_fingerprint=pkg.package_fingerprint,
+        package_fingerprint=pkg1.package_fingerprint,
     )
     assert ingest_res.ok is True
     assert ingest_res.status == "draft_ingested"
 
-    # 2. Tampered or stale package fingerprint fails
+    # 2. Context Agent updates brief to V2 -> re-seals package
+    pkg2 = runtime.attach_creative_brief(chapter=1, creative_brief="Brief V2: 修订后更具张力的策划")
+    assert pkg2.package_fingerprint != pkg1.package_fingerprint
+
+    # 3. Draft created against old pkg1 is now rejected as STALE_WRITER_PACKAGE
     stale_res = runtime.ingest_draft(
         chapter=1,
         prose=prose,
-        package_fingerprint="invalid_old_fingerprint_hash",
+        package_fingerprint=pkg1.package_fingerprint,
     )
     assert stale_res.ok is False
     assert stale_res.error_code == "STALE_WRITER_PACKAGE"

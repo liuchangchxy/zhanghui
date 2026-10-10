@@ -42,7 +42,7 @@ class ExternalHostAdapter:
         self.runtime = ChapterRuntime(self.project_root)
         self.private_contract_writes = 0
 
-    def run_chapter(self, chapter: int) -> dict[str, Any]:
+    def run_chapter(self, chapter: int, creative_brief: Optional[str] = None) -> dict[str, Any]:
         """Run 1 chapter through the public runtime and collect evidence."""
         # 1. Record host request
         request_payload = {
@@ -62,6 +62,9 @@ class ExternalHostAdapter:
             raise RuntimeError(f"Runtime preparation failed: {prep.error or prep.blockers}")
 
         writer_pkg = prep.writer_package
+        if creative_brief:
+            writer_pkg = self.runtime.attach_creative_brief(chapter=chapter, creative_brief=creative_brief)
+
         (self.evidence_dir / "writer_package.json").write_text(
             writer_pkg.to_json(), encoding="utf-8"
         )
@@ -162,6 +165,7 @@ class ExternalHostAdapter:
         return {
             "chapter": chapter,
             "commit_res": commit_res,
+            "writer_package": writer_pkg,
             "evidence_dir": str(self.evidence_dir),
             "private_contract_writes": self.private_contract_writes,
         }
