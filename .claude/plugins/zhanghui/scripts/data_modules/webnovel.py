@@ -290,6 +290,125 @@ def cmd_projections(args: argparse.Namespace) -> int:
     return 0 if report.get("ok") else 1
 
 
+def cmd_runtime(args: argparse.Namespace) -> int:
+    from .chapter_runtime import ChapterRuntime
+    root = _resolve_root(args.project_root)
+    runtime = ChapterRuntime(root)
+
+    action = args.runtime_action
+    if action == "prepare":
+        res = runtime.prepare(chapter=args.chapter, with_package=bool(getattr(args, "with_package", False)))
+        if args.format == "json":
+            print(res.to_json())
+        else:
+            status = "OK" if res.ok else "FAILED"
+            print(f"{status} prepare chapter {args.chapter}: {res.status}")
+            for b in res.blockers:
+                print(f"  BLOCKER: {b}")
+            for a in res.advisories:
+                print(f"  ADVISORY: {a}")
+        return 0 if res.ok else 1
+
+    if action == "package":
+        try:
+            pkg = runtime.get_writer_package(chapter=args.chapter)
+            if args.format == "json":
+                print(pkg.to_json())
+            else:
+                print(f"OK package chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
+            return 0
+        except Exception as exc:
+            if args.format == "json":
+                print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2))
+            else:
+                print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "ingest-draft":
+        prose = getattr(args, "prose", "") or ""
+        draft_file = getattr(args, "draft_file", "") or ""
+        if not prose and draft_file:
+            draft_p = Path(draft_file)
+            prose = draft_p.read_text(encoding="utf-8") if draft_p.is_file() else ""
+        meta_json = getattr(args, "metadata_json", "") or ""
+        meta = json.loads(meta_json) if meta_json else None
+        res = runtime.ingest_draft(
+            chapter=args.chapter,
+            prose=prose,
+            package_fingerprint=args.package_fingerprint,
+            metadata=meta,
+        )
+        if args.format == "json":
+            print(res.to_json())
+        else:
+            status = "OK" if res.ok else "FAILED"
+            print(f"{status} ingest-draft chapter {args.chapter}: {res.status}")
+            if res.error:
+                print(f"  error: {res.error}")
+        return 0 if res.ok else 1
+
+    if action == "status":
+        res = runtime.get_status(chapter=args.chapter)
+        if args.format == "json":
+            print(res.to_json())
+        else:
+            print(f"Chapter {args.chapter} status:")
+            print(f"  draft: {res.draft_status}")
+            print(f"  commit: {res.commit_status}")
+            print(f"  projection: {res.projection_status}")
+        return 0
+
+    if action == "commit":
+        prose = getattr(args, "prose", "") or ""
+        ch_file = getattr(args, "chapter_file", "") or ""
+        if not prose and ch_file:
+            ch_p = Path(ch_file)
+            prose = ch_p.read_text(encoding="utf-8") if ch_p.is_file() else ""
+
+        def _load_json_opt(p: str | None) -> dict | None:
+            if p and Path(p).is_file():
+                return json.loads(Path(p).read_text(encoding="utf-8"))
+            return None
+
+        review_res = _load_json_opt(getattr(args, "review_result", None))
+        fulfillment_res = _load_json_opt(getattr(args, "fulfillment_result", None))
+        disambiguation_res = _load_json_opt(getattr(args, "disambiguation_result", None))
+        extraction_res = _load_json_opt(getattr(args, "extraction_result", None))
+        reconciliation_res = _load_json_opt(getattr(args, "reconciliation_result", None))
+
+        res = runtime.commit(
+            chapter=args.chapter,
+            draft_id=getattr(args, "draft_id", None) or None,
+            prose=prose or None,
+            package_fingerprint=getattr(args, "package_fingerprint", None) or None,
+            review_result=review_res,
+            fulfillment_result=fulfillment_res,
+            disambiguation_result=disambiguation_res,
+            extraction_result=extraction_res,
+            reconciliation_result=reconciliation_res,
+            on_conflict=getattr(args, "on_conflict", None),
+        )
+        if args.format == "json":
+            print(res.to_json())
+        else:
+            status = "OK" if res.ok else "FAILED"
+            print(f"{status} commit chapter {args.chapter}: {res.chapter_outcome}")
+            if res.error:
+                print(f"  error: {res.error}")
+        return 0 if res.ok else 1
+
+    if action == "retry-projection":
+        report = runtime.retry_projection(chapter=args.chapter)
+        if args.format == "json":
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            from .projections import format_projection_report
+            print(format_projection_report(report, args.format))
+        return 0 if report.get("ok") else 1
+
+    return 2
+
+
 def cmd_migration(args: argparse.Namespace) -> int:
     from dataclasses import asdict
     from .project_migration import (
@@ -880,6 +999,54 @@ def main() -> None:
     p_projection_replay.add_argument("--to-chapter", type=int, required=True, help="结束章节号")
     p_projection_replay.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_projection_replay.set_defaults(func=cmd_projections)
+
+    p_runtime = sub.add_parser("runtime", help="Runtime API v1 章节编排公共入口")
+    runtime_sub = p_runtime.add_subparsers(dest="runtime_action", required=True)
+
+    p_rt_prep = runtime_sub.add_parser("prepare", help="准备章节环境与合同")
+    p_rt_prep.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_prep.add_argument("--with-package", action="store_true", help="同时返回 Writer Package")
+    p_rt_prep.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_prep.set_defaults(func=cmd_runtime)
+
+    p_rt_pkg = runtime_sub.add_parser("package", help="获取指定章节的 Writer Package")
+    p_rt_pkg.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_pkg.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_pkg.set_defaults(func=cmd_runtime)
+
+    p_rt_ingest = runtime_sub.add_parser("ingest-draft", help="摄入正文草稿（draft != Canon）")
+    p_rt_ingest.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_ingest.add_argument("--package-fingerprint", required=True, help="Writer Package 指纹")
+    p_rt_ingest.add_argument("--prose", default="", help="正文文本")
+    p_rt_ingest.add_argument("--draft-file", default="", help="正文文件路径")
+    p_rt_ingest.add_argument("--metadata-json", default="", help="执行元数据 JSON")
+    p_rt_ingest.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_ingest.set_defaults(func=cmd_runtime)
+
+    p_rt_status = runtime_sub.add_parser("status", help="查询章节运行时状态")
+    p_rt_status.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_status.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_status.set_defaults(func=cmd_runtime)
+
+    p_rt_commit = runtime_sub.add_parser("commit", help="尝试提交章节至 Canon")
+    p_rt_commit.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_commit.add_argument("--package-fingerprint", default="", help="Writer Package 指纹")
+    p_rt_commit.add_argument("--draft-id", default="", help="草稿 ID")
+    p_rt_commit.add_argument("--prose", default="", help="正文文本")
+    p_rt_commit.add_argument("--chapter-file", default="", help="正文文件路径")
+    p_rt_commit.add_argument("--review-result", default="", help="review_result JSON 路径")
+    p_rt_commit.add_argument("--fulfillment-result", default="", help="fulfillment_result JSON 路径")
+    p_rt_commit.add_argument("--disambiguation-result", default="", help="disambiguation_result JSON 路径")
+    p_rt_commit.add_argument("--extraction-result", default="", help="extraction_result JSON 路径")
+    p_rt_commit.add_argument("--reconciliation-result", default="", help="reconciliation_result JSON 路径")
+    p_rt_commit.add_argument("--on-conflict", choices=["overwrite", "skip"], default=None, help="冲突策略")
+    p_rt_commit.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_commit.set_defaults(func=cmd_runtime)
+
+    p_rt_retry = runtime_sub.add_parser("retry-projection", help="重试或重放指定章节的 projection")
+    p_rt_retry.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_retry.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_retry.set_defaults(func=cmd_runtime)
 
     p_migration = sub.add_parser("phase9-migration", help="Phase 9 migration preflight, dry run, and verified backup")
     migration_sub = p_migration.add_subparsers(dest="migration_action", required=True)

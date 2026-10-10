@@ -1,0 +1,14 @@
+{
+  "chapter": 1,
+  "draft_status": "ingested",
+  "draft_id": "draft-001-310331bb",
+  "draft_fingerprint": "d9757e19b88e981676969005345ec059fe9c9450acbcfa2c8a3bdf00e08e13bf",
+  "has_writer_package": true,
+  "is_writer_package_stale": false,
+  "package_fingerprint": "1ff08845844100f8a7d63c9051c73d45d51648af803f917056cee6b290c22e65",
+  "commit_status": "none",
+  "durable_commit_exists": false,
+  "projection_status": {},
+  "can_retry_projection": false,
+  "human_decision_required": null
+}

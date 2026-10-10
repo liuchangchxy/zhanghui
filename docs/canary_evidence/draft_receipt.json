@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "chapter": 1,
+  "status": "draft_ingested",
+  "draft_id": "draft-001-310331bb",
+  "draft_fingerprint": "d9757e19b88e981676969005345ec059fe9c9450acbcfa2c8a3bdf00e08e13bf",
+  "package_fingerprint": "1ff08845844100f8a7d63c9051c73d45d51648af803f917056cee6b290c22e65",
+  "next_required_action": "review_and_extract",
+  "required_artifacts": [
+    "review_result",
+    "extraction_result",
+    "fulfillment_result",
+    "disambiguation_result",
+    "reconciliation_result"
+  ],
+  "error_code": null,
+  "error": null
+}

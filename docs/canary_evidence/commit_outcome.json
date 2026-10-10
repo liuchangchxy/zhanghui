@@ -1,0 +1,137 @@
+{
+  "ok": true,
+  "chapter": 1,
+  "action": "ALLOW_WITH_ADVISORY",
+  "attempt_id": "runtime-9857b5ce",
+  "chapter_outcome": "accepted",
+  "gate_decision_ref": ".story-system/reviews/gate-decisions/chapter_001/runtime-9857b5ce.json",
+  "durable_commit_persisted": true,
+  "projection_status": {
+    "events": "done",
+    "amend_proposals": "done",
+    "state": "done",
+    "index": "done",
+    "summary": "skipped",
+    "memory": "done",
+    "vector": "done"
+  },
+  "projection_success": true,
+  "can_retry_projection": true,
+  "human_decision_required": null,
+  "error_code": null,
+  "error": null,
+  "commit_payload": {
+    "meta": {
+      "schema_version": "story-system/v1",
+      "chapter": 1,
+      "status": "accepted"
+    },
+    "contract_refs": {
+      "master": "MASTER_SETTING.json",
+      "volume": "volume_001.json",
+      "chapter": "chapter_001.json",
+      "review": "chapter_001.review.json"
+    },
+    "provenance": {
+      "write_fact_role": "chapter_commit",
+      "projection_role": "derived_read_models",
+      "legacy_state_role": "projection_only",
+      "reconciliation_schema": "story-reconciliation/v1",
+      "reconciliation_observed_sha256": "d3d7b96f762d79117ae85ecc52dda0e0dd06b0710b7639c30572587080d125ed",
+      "reconciliation_prose_sha256": "d2a7b19f629965238d0c510d5708f99e2fbdecb671257a623da8295a464ac102",
+      "reconciliation_proposed_sha256": "0587299d7f7d05b5245698ac7afe2aecde2b8e33ab676b8c74d6088a5377b69a",
+      "reconciliation_chapter_sha256": "d9757e19b88e981676969005345ec059fe9c9450acbcfa2c8a3bdf00e08e13bf"
+    },
+    "outline_snapshot": {
+      "planned_nodes": [
+        "灵根测试",
+        "执事刁难",
+        "入宗铭牌"
+      ],
+      "covered_nodes": [
+        "灵根测试",
+        "执事刁难",
+        "入宗铭牌"
+      ],
+      "missed_nodes": [],
+      "extra_nodes": []
+    },
+    "review_result": {
+      "blocking_count": 0,
+      "must_check_results": [
+        {
+          "node": "灵根测试",
+          "passed": true
+        },
+        {
+          "node": "执事刁难",
+          "passed": true
+        },
+        {
+          "node": "入宗铭牌",
+          "passed": true
+        }
+      ],
+      "blocking_rule_results": []
+    },
+    "fulfillment_result": {
+      "planned_nodes": [
+        "灵根测试",
+        "执事刁难",
+        "入宗铭牌"
+      ],
+      "covered_nodes": [
+        "灵根测试",
+        "执事刁难",
+        "入宗铭牌"
+      ],
+      "missed_nodes": [],
+      "extra_nodes": []
+    },
+    "disambiguation_result": {
+      "pending": []
+    },
+    "extraction_result": {
+      "accepted_events": [
+        {
+          "event_id": "evt-ch001-001-dad4fb7ecb",
+          "chapter": 1,
+          "event_type": "character_state_changed",
+          "subject": "林凡",
+          "payload": {
+            "status": "外门弟子"
+          }
+        }
+      ],
+      "state_deltas": [],
+      "entity_deltas": [
+        {
+          "entity_id": "林凡",
+          "current": {
+            "status": "天阳宗外门弟子"
+          }
+        }
+      ],
+      "entities_appeared": [],
+      "scenes": [],
+      "chapter_meta": {},
+      "dominant_strand": "",
+      "summary_text": ""
+    },
+    "gate_decision_binding": {
+      "gate_decision_ref": ".story-system/reviews/gate-decisions/chapter_001/runtime-9857b5ce.json",
+      "input_fingerprint": "8514e7e21ec55f5126eca9e92102b7fa5fa22016983b97aff4b7667846d7fe26",
+      "policy_version": "phase6a-v1",
+      "final_action": "ALLOW_WITH_ADVISORY"
+    },
+    "projection_status": {
+      "events": "done",
+      "amend_proposals": "done",
+      "state": "done",
+      "index": "done",
+      "summary": "skipped",
+      "memory": "done",
+      "vector": "done"
+    }
+  }
+}

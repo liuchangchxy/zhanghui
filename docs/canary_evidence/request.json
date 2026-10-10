@@ -1,0 +1,7 @@
+{
+  "host": "Antigravity",
+  "protocol": "runtime-api/v1",
+  "action": "orchestrate_chapter",
+  "chapter": 1,
+  "project_root": "/private/var/folders/_8/54gkyw_d48z0_s4mmwvbw6bh0000gn/T/pytest-of-chang/pytest-54/test_antigravity_canary_orches0/test_book"
+}
