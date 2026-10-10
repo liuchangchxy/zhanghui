@@ -8,11 +8,16 @@ Verifies:
 3. Critical runtime modules (chapter_runtime, writer_package, reconciliation, prose pipeline)
    and skills reside in canonical tree, guaranteeing no partial whitelist sync.
 4. Historical 6.4.0 directory is marked as read-only snapshot.
+5. Legacy deploy-plugin.sh is permanently deprecated and unconditionally exits non-zero.
+6. setup_dev_env.sh does not touch marketplace/cache and directs to bin/install-plugin.sh.
+7. No secondary sync scripts (sync_dev_to_cache.sh, sync_dev_to_marketplace.sh) exist.
+8. bin/install-plugin.sh exists, is executable, and serves as sole distribution entry.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 import pytest
 
 
@@ -82,3 +87,43 @@ def test_install_plugin_script_exists_and_executable():
     content = install_script.read_text(encoding="utf-8")
     assert ".claude/plugins/zhanghui" in content
     assert "zhanghui@zhanghui" in content
+
+
+def test_deploy_plugin_is_deprecated_stub():
+    """deploy-plugin.sh must be a deprecated stub that unconditionally exits non-zero and advises install-plugin.sh."""
+    deploy_script = CANONICAL_PLUGIN_ROOT / "bin" / "deploy-plugin.sh"
+    assert deploy_script.is_file(), "deploy-plugin.sh stub must exist"
+    content = deploy_script.read_text(encoding="utf-8")
+    assert "RUNTIME_FILES" not in content, "deploy-plugin.sh must not contain legacy whitelist"
+    assert "--force" not in content, "deploy-plugin.sh must not permit --force bypass"
+    assert "bin/install-plugin.sh" in content
+
+    # Running it without or with arguments must unconditionally exit non-zero
+    proc = subprocess.run(["bash", str(deploy_script)], capture_output=True, text=True)
+    assert proc.returncode != 0
+    assert "deprecated" in proc.stderr.lower()
+    assert "install-plugin.sh" in proc.stderr
+
+    proc_force = subprocess.run(["bash", str(deploy_script), "--force"], capture_output=True, text=True)
+    assert proc_force.returncode != 0
+
+
+def test_setup_dev_env_does_not_touch_marketplace_or_cache():
+    """setup_dev_env.sh must not sync to marketplace or touch cache symlinks."""
+    setup_script = CANONICAL_PLUGIN_ROOT / "scripts" / "dev-only" / "setup_dev_env.sh"
+    assert setup_script.is_file(), "setup_dev_env.sh must exist"
+    content = setup_script.read_text(encoding="utf-8")
+    assert "rsync" not in content, "setup_dev_env.sh must not rsync to marketplace"
+    assert "ln -sfn" not in content, "setup_dev_env.sh must not create cache symlinks"
+    assert "webnovel-chang-marketplace" not in content, "setup_dev_env.sh must not reference legacy marketplace"
+    assert "/Users/chang/Desktop/zhanghui" not in content, "setup_dev_env.sh must not have hardcoded paths"
+    assert "bin/install-plugin.sh" in content
+    assert "install_git_hook" in content
+    assert "pre-commit" in content
+
+
+def test_no_secondary_sync_scripts_exist():
+    """Legacy sync scripts to marketplace or cache must not exist in canonical tree."""
+    dev_only = CANONICAL_PLUGIN_ROOT / "scripts" / "dev-only"
+    assert not (dev_only / "sync_dev_to_cache.sh").exists(), "sync_dev_to_cache.sh must be removed"
+    assert not (dev_only / "sync_dev_to_marketplace.sh").exists(), "sync_dev_to_marketplace.sh must be removed"

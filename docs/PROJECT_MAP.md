@@ -1,46 +1,35 @@
 # Project Map — 参考 vs 开发
 
-> 最近更新：2026-08-15（plugin self-contained 重构后）
+> 最近更新：2026-10-11（Phase 5 Distribution Closure）
 
-这个 fork 是基于 upstream `lingfengQAQ/webnovel-writer` 的个人工作区。**我们只开发 plugin 主体本身**，其它都是参考。
+本仓库是 Zhanghui 唯一 authoritative source。**我们只维护 canonical plugin 主体本身**。
 
-## 三层结构
+## 架构结构
 
-### 层 1：dev workspace（你唯一的项目）
-`/Users/chang/Desktop/zhanghui/`
+### 唯一权威源：canonical repo
+`/Users/chang/Desktop/Code/zhanghui/`
 
 | 路径 | 性质 | 说明 |
 |---|---|---|
-| `.claude/plugins/zhanghui/` | **开发** | plugin 源码（self-contained） |
-| `.claude/settings.json` | **开发** | dev 配置（瘦身后只剩 enabledPlugins + 必要权限） |
-| `.claude/.webnovel-current-project` | **开发** | dev 指针，仅 dev workspace 内部用 |
-| `.claude/references/` | 参考 | 文档参考 |
-| `.claude/sources/webnovel-writer-upstream/` | 参考 | upstream fork 源快照 |
-| `.claude/worktrees/` | — | git worktree 目录 |
+| `.claude/plugins/zhanghui/` | **开发** | canonical plugin 源码（唯一权威源） |
+| `bin/install-plugin.sh` | **分发** | 唯一标准安装/检查/更新入口 |
+| `.claude-plugin/marketplace.json` | **分发** | 指向本地 canonical plugin 源码 |
 | `docs/` | **开发** | 实施计划、复盘报告 |
-| `README.md` | **开发** | fork 开发指南 |
+| `README.md` | **开发** | fork 开发与安装指南 |
 
-### 层 2：marketplace（plugin 发布仓库）
-`~/.claude/plugins/marketplaces/webnovel-chang-marketplace/`
+### 分发关系闭环
 
-| 路径 | 性质 | 说明 |
-|---|---|---|
-| `.claude-plugin/marketplace.json` | **开发** | marketplace manifest |
-| `zhanghui/` | **开发** | plugin 副本（与 dev workspace 同步） |
+```text
+canonical repo (.claude/plugins/zhanghui/)
+→ bin/install-plugin.sh
+→ Claude Code 直接加载 canonical plugin
+```
 
-### 层 3：cache（Claude Code 实际加载位置）
-`~/.claude/plugins/cache/webnovel-chang-marketplace/zhanghui/`
-
-dev 模式下 symlink 到 dev workspace 的 `plugins/zhanghui/`，修改立即生效。
-
-## 修改规则
-
-- **改 plugin 代码**：在 `.claude/plugins/zhanghui/` 里改，cache 通过 symlink 自动 reload
-- **改 plugin metadata**：plugin.json / hooks.json 在 plugin 目录里改
-- **改 marketplace manifest**：直接改 `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/.claude-plugin/marketplace.json`
-- **同步 dev → marketplace**：跑 `scripts/dev-only/sync_dev_to_marketplace.sh`
+历史上的旧分发层（`webnovel-chang-marketplace` 独立副本、cache symlink、`deploy-plugin.sh` 白名单同步）已彻底废弃。
+修改 plugin 代码后，Claude Code 直接读取最新源码，无需再做任何中间副本同步。
 
 ## 参考区（不要改）
 
 - `.claude/sources/webnovel-writer-upstream/`：upstream fork 源快照，要对比时看这里
 - `.claude/references/`：历史参考文档
+- `references/`：外部参考库快照（只读，遵循 AGENTS.md 规则）

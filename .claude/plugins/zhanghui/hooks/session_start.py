@@ -41,10 +41,10 @@ def verify_cache_symlink(plugin_root: Path) -> None:
     # Cache exists but is NOT a symlink — broken state
     target = CACHE_SYMLINK_PATH
     print(
-        f"WARNING: plugin cache is not a symlink: {target}\n"
-        f"  Dev code changes will NOT be picked up by Claude Code.\n"
-        f"  Fix: rm -rf {target} && ln -sfn {plugin_root} {target}\n"
-        f"  Or run scripts/dev-only/setup_dev_env.sh",
+        f"WARNING: legacy marketplace plugin cache found: {target}\n"
+        f"  Claude Code now loads Zhanghui directly from the canonical repository.\n"
+        f"  Fix: rm -rf {target}\n"
+        f"  And run bin/install-plugin.sh to ensure canonical registration.",
         file=sys.stderr,
         flush=True,
     )

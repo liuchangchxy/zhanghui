@@ -37,10 +37,12 @@ echo "  ✓ $BOOK_PATH created"
 
 # 2. 跑 webnovel init 建 .webnovel/ 骨架
 echo "[2/4] Running webnovel init..."
-WEBNOVEL_PY="/Users/chang/Desktop/zhanghui/.claude/plugins/zhanghui/scripts/webnovel.py"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WEBNOVEL_PY="$PLUGIN_ROOT/scripts/webnovel.py"
 if [ ! -f "$WEBNOVEL_PY" ]; then
     echo "  ERROR: webnovel.py 不存在：$WEBNOVEL_PY"
-    echo "  请先跑 ./setup_dev_env.sh"
+    echo "  请先跑 bin/install-plugin.sh"
     exit 1
 fi
 python3 -X utf8 "$WEBNOVEL_PY" --project-root "$BOOK_PATH" init "$BOOK_PATH" "$TITLE" "$GENRE" 2>&1 | tail -10
