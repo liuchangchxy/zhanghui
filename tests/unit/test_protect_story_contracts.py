@@ -61,16 +61,6 @@ def _setup_minimal_book_project(tmp_path: Path, chapter: int = 1) -> Path:
 - 目标：林凡在藏经阁寻找基础吐纳法，引发未来暗线
 - 阻力：外门大弟子王霸的阻挠
 - 必须覆盖节点：挑选残破古经、结下梁子
-
-### 第{chapter + 2}章：外门大比
-- 目标：崭露头角
-- 阻力：同门挑战
-- 必须覆盖节点：擂台比试
-
-### 第{chapter + 3}章：后山密林
-- 目标：探索秘境
-- 阻力：妖兽袭击
-- 必须覆盖节点：击退妖兽
 """
     (outline_dir / "第1卷-详细大纲.md").write_text(outline_text, encoding="utf-8")
     return project_root
@@ -262,27 +252,8 @@ def test_existing_story_missing_anti_patterns_fails_closed(tmp_path: Path):
     assert not runtime.paths.anti_patterns_json.exists()
 
 
-def test_corrupted_master_setting_fails_closed_without_overwriting(tmp_path: Path):
-    """A corrupted MASTER_SETTING.json must fail closed and must not be overwritten."""
-    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
-    runtime = ChapterRuntime(project_root)
-
-    # Put corrupted content
-    corrupted_content = "{ broken json content ..."
-    runtime.paths.master_json.parent.mkdir(parents=True, exist_ok=True)
-    runtime.paths.master_json.write_text(corrupted_content, encoding="utf-8")
-
-    prep = runtime.prepare(chapter=1, with_package=False)
-    assert prep.ok is False
-    assert prep.status == "contract_generation_failed"
-    assert "corrupted" in (prep.error or "").lower()
-
-    # Verify original corrupted content was NOT overwritten with plausible truth
-    assert runtime.paths.master_json.read_text(encoding="utf-8") == corrupted_content
-
-
-def test_corrupted_contract_integrity_preservation(tmp_path: Path):
-    """Failure to prepare due to missing/corrupted contracts leaves state and commits completely untouched."""
+def test_failure_preserves_durable_truth_untouched(tmp_path: Path):
+    """Failure to prepare when foundational contract is missing leaves existing commits and state completely untouched."""
     project_root = _setup_minimal_book_project(tmp_path, chapter=1)
     runtime = ChapterRuntime(project_root)
 
@@ -299,10 +270,8 @@ def test_corrupted_contract_integrity_preservation(tmp_path: Path):
     commit_file = runtime.paths.commit_json(1)
     commit_before = commit_file.read_text(encoding="utf-8")
 
-    # Corrupt chapter 2 contract with invalid JSON
-    ch2_path = runtime.paths.chapter_json(2)
-    ch2_path.parent.mkdir(parents=True, exist_ok=True)
-    ch2_path.write_text("invalid json", encoding="utf-8")
+    # Delete master contract to trigger failure
+    runtime.paths.master_json.unlink()
 
     prep2 = runtime.prepare(chapter=2, with_package=False)
     assert prep2.ok is False

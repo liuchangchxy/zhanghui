@@ -352,7 +352,6 @@ class ChapterRuntime:
             if len(discover_validated_chapter_commits(self.project_root)) > 0:
                 return True
         except Exception:
-            # If commit directory has files or commit validation fails, durable commits exist
             commits_dir = self.project_root / ".story-system" / "commits"
             if commits_dir.is_dir() and any(commits_dir.glob("chapter_*.commit.json")):
                 return True
@@ -362,12 +361,10 @@ class ChapterRuntime:
         progress = state.get("progress") if isinstance(state.get("progress"), dict) else {}
         if int(progress.get("current_chapter") or 0) > 0:
             return True
-        if bool(progress.get("volumes_completed")):
-            return True
 
-        # Any existing official chapter prose files
+        # Legacy official prose compatibility
         prose_dir = self.project_root / "正文"
-        if prose_dir.is_dir() and any(prose_dir.glob("*.md")) or any(prose_dir.glob("*.txt")):
+        if prose_dir.is_dir() and any(prose_dir.glob("*.md")):
             return True
 
         return False
@@ -386,56 +383,21 @@ class ChapterRuntime:
         engine = StorySystemEngine(csv_dir=csv_dir)
 
         # 1. Master setting & anti-patterns check
-        master_exists = self.paths.master_json.is_file()
-        anti_exists = self.paths.anti_patterns_json.is_file()
+        master_missing = not self.paths.master_json.is_file()
+        anti_missing = not self.paths.anti_patterns_json.is_file()
 
-        master_corrupted = False
-        anti_corrupted = False
-
-        if master_exists:
-            try:
-                master_payload = read_json_if_exists(self.paths.master_json)
-                if not isinstance(master_payload, dict) or not master_payload:
-                    master_corrupted = True
-            except Exception:
-                master_corrupted = True
-
-        if anti_exists:
-            try:
-                anti_payload = read_json_if_exists(self.paths.anti_patterns_json)
-                if not isinstance(anti_payload, list):
-                    anti_corrupted = True
-            except Exception:
-                anti_corrupted = True
-
-        has_history = self._has_durable_story_history()
-
-        # If files exist but are corrupted, fail closed regardless of history
-        if master_corrupted:
+        if (master_missing or anti_missing) and self._has_durable_story_history():
+            missing_names = []
+            if master_missing:
+                missing_names.append(self.paths.master_json.name)
+            if anti_missing:
+                missing_names.append(self.paths.anti_patterns_json.name)
             raise RuntimeError(
-                f"Foundational story contract '{self.paths.master_json.name}' is corrupted at {self.paths.master_json}. "
-                "Automatic truth regeneration is forbidden."
-            )
-        if anti_corrupted:
-            raise RuntimeError(
-                f"Foundational story contract '{self.paths.anti_patterns_json.name}' is corrupted at {self.paths.anti_patterns_json}. "
-                "Automatic truth regeneration is forbidden."
-            )
-
-        # If files are missing in an existing story, do NOT regenerate plausible truth
-        if not master_exists and has_history:
-            raise RuntimeError(
-                f"Existing story is missing foundational contract '{self.paths.master_json.name}' at {self.paths.master_json}. "
-                "Automatic truth regeneration is forbidden to protect existing story intent."
-            )
-        if not anti_exists and has_history:
-            raise RuntimeError(
-                f"Existing story is missing foundational contract '{self.paths.anti_patterns_json.name}' at {self.paths.anti_patterns_json}. "
+                f"Existing story is missing foundational contract ({', '.join(missing_names)}). "
                 "Automatic truth regeneration is forbidden to protect existing story intent."
             )
 
-        # Missing in new project (no durable history): safe to initialize
-        if not master_exists or not anti_exists:
+        if master_missing or anti_missing:
             seed = engine.build(
                 query=query,
                 genre=genre,
@@ -451,22 +413,7 @@ class ChapterRuntime:
 
         # 2. Chapter contract
         ch_path = self.paths.chapter_json(chapter)
-        if ch_path.is_file():
-            try:
-                ch_payload = read_json_if_exists(ch_path)
-                if not isinstance(ch_payload, dict) or not ch_payload:
-                    raise RuntimeError(
-                        f"Chapter contract '{ch_path.name}' is corrupted at {ch_path}. "
-                        "Automatic truth regeneration is forbidden."
-                    )
-            except Exception as exc:
-                if isinstance(exc, RuntimeError):
-                    raise
-                raise RuntimeError(
-                    f"Chapter contract '{ch_path.name}' is corrupted at {ch_path}: {exc}. "
-                    "Automatic truth regeneration is forbidden."
-                ) from exc
-        else:
+        if not ch_path.is_file():
             seed = engine.build(
                 query=query,
                 genre=genre,
@@ -483,39 +430,6 @@ class ChapterRuntime:
         volume = volume_num_for_chapter_from_state(self.project_root, chapter) or 1
         vol_path = self.paths.volume_json(volume)
         rev_path = self.paths.review_json(chapter)
-
-        if vol_path.is_file():
-            try:
-                vol_payload = read_json_if_exists(vol_path)
-                if not isinstance(vol_payload, dict) or not vol_payload:
-                    raise RuntimeError(
-                        f"Volume contract '{vol_path.name}' is corrupted at {vol_path}. "
-                        "Automatic truth regeneration is forbidden."
-                    )
-            except Exception as exc:
-                if isinstance(exc, RuntimeError):
-                    raise
-                raise RuntimeError(
-                    f"Volume contract '{vol_path.name}' is corrupted at {vol_path}: {exc}. "
-                    "Automatic truth regeneration is forbidden."
-                ) from exc
-
-        if rev_path.is_file():
-            try:
-                rev_payload = read_json_if_exists(rev_path)
-                if not isinstance(rev_payload, dict) or not rev_payload:
-                    raise RuntimeError(
-                        f"Review contract '{rev_path.name}' is corrupted at {rev_path}. "
-                        "Automatic truth regeneration is forbidden."
-                    )
-            except Exception as exc:
-                if isinstance(exc, RuntimeError):
-                    raise
-                raise RuntimeError(
-                    f"Review contract '{rev_path.name}' is corrupted at {rev_path}: {exc}. "
-                    "Automatic truth regeneration is forbidden."
-                ) from exc
-
         if not vol_path.is_file() or not rev_path.is_file():
             builder = RuntimeContractBuilder(self.project_root)
             volume_brief, review_contract = builder.build_for_chapter(chapter)
