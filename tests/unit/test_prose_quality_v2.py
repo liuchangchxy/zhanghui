@@ -480,3 +480,97 @@ def test_webnovel_cli_prose_subcommands(tmp_path: Path, capsys, monkeypatch):
     assert "status" in res
     assert res["status"] in ("ACCEPTED", "ROLLEDBACK")
     assert "semantic_outcome" in res
+
+
+# ----------------------------------------------------------------------
+# 8. Generalized Fact Diff Counterexample Tests (Blocker 1 & 2)
+# ----------------------------------------------------------------------
+
+def test_generic_ownership_drift():
+    """Generic fact diff: 钥匙由林越保管 -> 钥匙由韩策保管."""
+    before = "工坊里的账目与钥匙由林越保管，未经允许任何人不得擅动。"
+    after = "工坊里的账目与钥匙由韩策保管，未经允许任何人不得擅动。"
+
+    diff_res = compare_semantic_facts(before, after)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("ownership" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_generic_world_rule_drift():
+    """Generic fact diff: 纸档案不能被城市网络自动改写 -> 纸档案可以被城市网络自动改写."""
+    before = "守则第二条写得清清楚楚：离线纸档案不能被城市网络自动改写，这是最后的物理凭证。"
+    after = "守则第二条写得清清楚楚：离线纸档案可以被城市网络自动改写，这是最后的物理凭证。"
+
+    diff_res = compare_semantic_facts(before, after)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("world_rule" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_generic_relationship_drift():
+    """Generic fact diff: 乔宁只是合作伙伴 -> 乔宁已经是林越的恋人."""
+    before = "在这场危机面前，乔宁只是合作伙伴，彼此保留着最理性的防备。"
+    after = "在这场危机面前，乔宁已经是林越的恋人，彼此早已互许终身。"
+
+    diff_res = compare_semantic_facts(before, after)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("relationship" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_generic_character_state_drift():
+    """Generic fact diff: 林越左手只是轻伤 -> 林越左手已经骨折."""
+    before = "从断墙跌落之后，林越左手只是轻伤，擦掉血迹依然能稳稳握住短刃。"
+    after = "从断墙跌落之后，林越左手已经骨折，剧痛让他几乎握不住短刃。"
+
+    diff_res = compare_semantic_facts(before, after)
+    assert diff_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+    assert any("character_state" in item.dimension for item in diff_res.drift_items)
+
+    gate = evaluate_prose_quality_and_decide(before, after, diff_res)
+    assert not gate.accepted
+    assert gate.status == "ROLLEDBACK"
+    assert gate.final_text == before
+
+
+def test_step2b_candidate_rollback_flow(tmp_path: Path):
+    """Step 2B candidate validation rejects factual mutation and keeps Step 2A draft."""
+    project_root = _setup_test_book(tmp_path)
+    pipeline = ProseQualityPipeline(project_root)
+
+    step2a_draft = "林越握紧牛骨起子，左手只是轻伤。卷宗上的钥匙由林越保管。"
+    # Candidate secretly changes ownership in Step 2B:
+    step2b_candidate = "林越握紧牛骨起子，左手只是轻伤。卷宗上的钥匙由韩策保管。"
+
+    res = pipeline.process_and_validate(step2a_draft, step2b_candidate, chapter=1)
+    assert not res.ok
+    assert res.status == "ROLLEDBACK"
+    assert res.final_prose == step2a_draft  # Rollback retains Step 2A draft!
+
+
+def test_voice_target_prompt_surfaces_author_identity_and_rules(tmp_path: Path):
+    """Voice Target prompt block actually surfaces author identity and core rules."""
+    project_root = _setup_test_book(tmp_path)
+    target = build_voice_target(project_root, genre="悬疑奇幻")
+    prompt_block = target.format_prompt_block()
+
+    # Must contain author identity & rules in prompt text
+    assert "冷峻克制" in prompt_block
+    assert "严禁解释性说明腔" in prompt_block
+    # Generic mechanical numerical fallback 18-28 must NOT be in default rhythm
+    assert "18-28" not in prompt_block
+    assert "句长随场景自然起伏" in prompt_block
+

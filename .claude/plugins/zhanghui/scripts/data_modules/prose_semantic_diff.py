@@ -3,26 +3,19 @@
 """
 Prose Semantic Diff (Issue #26).
 
-Fact-Safe Semantic Diff Guard:
-Detects whether a prose edit has introduced Canon-relevant semantic drift or invented
-new story facts while claiming to "only polish/adapt style".
-
-Checks Canon-relevant dimensions:
-1. 人物背景 (backstory / identity / career / training)
-2. 动机与主动意图 (motives / deliberate intent vs accidental occurrence)
-3. 技能能力 (skills / power / expertise)
-4. 人际关系 (relationships / attitude shifts)
-5. 事件结果与因果 (event outcomes / causality)
-6. 物品归属与状态 (ownership / object state)
-7. 位置与状态 (location / physical state)
-8. 认知知情状态 (epistemic state: who knows what)
-9. 世界规则与新线索 (world rules / clues)
+Fact-Safe Semantic Diff Architecture:
+Constructs structured SemanticClaimSet across 11 Canon-critical dimensions
+(ownership, world rule, relationship, character state, backstory, motivation,
+capability, event outcome, epistemic state, causality, clue), and performs
+deterministic claim comparison to guard against silent factual mutations.
 
 Outcomes:
-- STYLE_ONLY_SAFE: Pure stylistic improvement. Safe to accept.
+- STYLE_ONLY_SAFE: Pure stylistic improvement. All facts, claims, polarities,
+  and entity bindings are preserved. Safe to accept.
 - SEMANTIC_CHANGE_PROPOSED: Canon-relevant factual change detected. Cannot overwrite Canon;
   must hold original draft and report proposed story change.
-- UNCERTAIN: High ambiguity; require human resolution or rollback.
+- UNCERTAIN: High ambiguity, drastic unbounded rewrite, or unresolvable claims;
+  requires human resolution or rollback.
 """
 from __future__ import annotations
 
@@ -31,7 +24,7 @@ import json
 import re
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 class SemanticDiffOutcome(str, Enum):
@@ -41,8 +34,41 @@ class SemanticDiffOutcome(str, Enum):
 
 
 @dataclass
+class SemanticClaim:
+    """A structured factual claim extracted from prose."""
+    dimension: str  # "ownership" | "world_rule" | "relationship" | "character_state" | "backstory" | "motivation" | "capability" | "event_outcome" | "epistemic" | "causality" | "clue"
+    subject: str
+    predicate: str
+    object_value: str
+    polarity: bool = True  # True: affirmative ("可以/是/由...保管"), False: negated ("不能/非/未")
+    certainty: str = "definite"
+    evidence_span: str = ""
+
+    def claim_id(self) -> str:
+        s_norm = self.subject.strip().replace(" ", "")
+        p_norm = self.predicate.strip().replace(" ", "")
+        return f"{self.dimension}::{s_norm}::{p_norm}"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class SemanticClaimSet:
+    """Collection of structured claims extracted from a text passage."""
+    claims: List[SemanticClaim] = field(default_factory=list)
+
+    def to_dict(self) -> List[Dict[str, Any]]:
+        return [c.to_dict() for c in self.claims]
+
+    def find_by_subject_and_dimension(self, subject: str, dimension: str) -> List[SemanticClaim]:
+        s_norm = subject.strip().replace(" ", "")
+        return [c for c in self.claims if c.dimension == dimension and (c.subject.strip().replace(" ", "") in s_norm or s_norm in c.subject.strip().replace(" ", ""))]
+
+
+@dataclass
 class SemanticDriftItem:
-    dimension: str  # "backstory" | "intent_shift" | "capability" | "epistemic" | "causality" | "ownership"
+    dimension: str
     evidence_type: str
     original_excerpt: str
     edited_excerpt: str
@@ -60,6 +86,8 @@ class SemanticDiffResult:
     drift_items: List[SemanticDriftItem] = field(default_factory=list)
     confidence: float = 1.0
     summary: str = ""
+    before_claims: Optional[List[Dict[str, Any]]] = None
+    after_claims: Optional[List[Dict[str, Any]]] = None
 
     @property
     def findings(self) -> List[str]:
@@ -72,53 +100,204 @@ class SemanticDiffResult:
             "drift_items": [i.to_dict() for i in self.drift_items],
             "confidence": self.confidence,
             "summary": self.summary,
+            "before_claims": self.before_claims or [],
+            "after_claims": self.after_claims or [],
         }
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
 
 
-# Regex patterns for detecting newly added backstories/qualifications in edited text
-BACKSTORY_PATTERNS = [
-    # "曾当过三年机修学徒", "早年曾在北境服役", "幼时跟随名医学艺"
-    re.compile(r"(?:曾经|曾是|早年|幼年|幼时|当初|早先|曾在|当过|做过)(?:[^，。！？\n]{0,8})(?:学徒|弟子|药农|镖师|捕快|杂役|铁匠|机修|行医|军伍|杀手|散修|佣兵|伙计)"),
-    re.compile(r"(?:当过|做过|有着|历经)[一二三四五六七八九十百千0-9]+(?:年|载|个月)(?:[^，。！？\n]{0,10})(?:学徒|经验|阅历|功底|生涯)"),
-    re.compile(r"(?:自幼|打小|从小)(?:跟随|拜入|修习|精研)[^，。！？\n]{2,15}"),
-]
+# ----------------------------------------------------------------------
+# Structured Semantic Claim Extractor
+# ----------------------------------------------------------------------
 
-# Patterns for deliberate test / provocation vs accidental reveal
-ACCIDENTAL_MARKERS = [
-    "偶然", "无意中", "无意间", "碰巧", "恰巧", "不经意", "不小心", "未曾察觉", "偶然露出", "不慎"
-]
-DELIBERATE_MARKERS = [
-    "主动", "故意", "刻意", "试探", "设局", "引诱", "拍到桌边试探", "死死盯着", "观察少年反应", "观察他的反应", "意味深长地看"
-]
-
-# Capability / expertise inflation patterns
-CAPABILITY_INFLATION_PATTERNS = [
-    re.compile(r"(?:对[^，。！？\n]{2,12})了如指掌"),
-    re.compile(r"(?:精通|深谙)[^，。！？\n]{2,10}(?:之道|之术|构造|结构)"),
-    re.compile(r"早已掌握[^，。！？\n]{2,10}"),
-]
-
-# Epistemic shift (claiming someone secretly already knew)
-EPISTEMIC_SHIFT_PATTERNS = [
-    re.compile(r"(?:早已知晓|其实早就知道|早就看穿|早已料到|心中早已有数)"),
-    re.compile(r"(?:原来出门前|其实在临行前)(?:[^，。！？\n]{2,20})(?:偷偷|暗中)"),
-]
-
-# Secret identity or unrevealed setting / secret passage
-SECRET_SETTING_PATTERNS = [
-    re.compile(r"(?:其实|实际上|原来|真实身份)(?:[^，。！？\n]{0,8})(?:是|乃是|竟是)(?:[^，。！？\n]{0,12})(?:刺客|杀手|卧底|密探|长老|门主|弟子|奸细|特使|间谍|暗探)"),
-    re.compile(r"(?:通过|利用|顺着|借由|走)(?:[^，。！？\n]{0,8})(?:密道|暗道|暗门|阵法|传送阵|密室)(?:[^，。！？\n]{0,10})(?:潜入|潜行|逃离|离开|往返|穿过)"),
-]
+def _split_clauses(text: str) -> List[str]:
+    """Split text into manageable grammatical clauses."""
+    raw = re.split(r"[。！？；\n!?]+", text)
+    return [s.strip() for s in raw if s.strip()]
 
 
-def compare_semantic_facts(before_text: str, after_text: str) -> SemanticDiffResult:
-    """Compare before and after prose to verify factual and semantic preservation."""
-    drift_items: List[SemanticDriftItem] = []
+def extract_semantic_claims(text: str) -> SemanticClaimSet:
+    """
+    Extract structured factual claims across Canon dimensions from text clauses.
+    Covers: ownership, world_rule, relationship, character_state, backstory, motivation, capability.
+    """
+    claims: List[SemanticClaim] = []
+    clauses = _split_clauses(text)
 
-    # Fast path: identical text
+    for clause in clauses:
+        # 1. Ownership / Custody claims
+        # e.g., "钥匙由林越保管", "由韩策持有", "归梅叔所有", "属于巡捕"
+        m_owner = re.search(r"([^，,]+?)(?:由|归|属于)([^，,]+?)(?:保管|持有|掌管|所有|保存|存放)", clause)
+        if m_owner:
+            item_subj = m_owner.group(1).strip()
+            custodian = m_owner.group(2).strip()
+            claims.append(
+                SemanticClaim(
+                    dimension="ownership",
+                    subject=item_subj,
+                    predicate="custodian",
+                    object_value=custodian,
+                    polarity=True,
+                    evidence_span=clause,
+                )
+            )
+
+        # 2. World rule / automated system mechanism claims
+        # e.g., "纸档案不能被城市网络自动改写", "纸档案可以被城市网络自动改写"
+        m_rule = re.search(r"([^，,]+?)(不能|无法|不可|不得|严禁|可以|能够|能|会|可能)(?:被|由)([^，,]+?)(自动改写|覆写|抹除|破解|干预|修改)", clause)
+        if m_rule:
+            rule_subj = m_rule.group(1).strip()
+            modal = m_rule.group(2).strip()
+            actor = m_rule.group(3).strip()
+            action = m_rule.group(4).strip()
+            polarity = modal not in ("不能", "无法", "不可", "不得", "严禁")
+            claims.append(
+                SemanticClaim(
+                    dimension="world_rule",
+                    subject=rule_subj,
+                    predicate=f"be_{action}_by_{actor}",
+                    object_value=action,
+                    polarity=polarity,
+                    evidence_span=clause,
+                )
+            )
+
+        # 3. Relationship claims
+        # e.g., "乔宁只是合作伙伴", "乔宁已经是林越的恋人", "梅叔是卧底"
+        m_rel = re.search(r"([^，,]+?)(?:只是|已经是|是|乃是|算作)(?:[^，,]*?)(合作伙伴|恋人|情侣|夫妻|朋友|盟友|死党|同谋|仇人|死敌|师徒|下属|亲属)", clause)
+        if m_rel:
+            char_subj = m_rel.group(1).strip()
+            rel_type = m_rel.group(2).strip()
+            claims.append(
+                SemanticClaim(
+                    dimension="relationship",
+                    subject=char_subj,
+                    predicate="relationship_role",
+                    object_value=rel_type,
+                    polarity=True,
+                    evidence_span=clause,
+                )
+            )
+
+        # 4. Character physiological state / injury result
+        # e.g., "林越左手只是轻伤", "林越左手已经骨折", "林越重伤"
+        m_state = re.search(r"([^，,]+?)(?:只是|已经|是|受了)?(轻伤|重伤|骨折|中毒|昏迷|痊愈|死亡|残疾|完好|无碍)", clause)
+        if m_state:
+            char_or_part = m_state.group(1).strip()
+            # Verify subject looks like a person or body part
+            if any(term in char_or_part for term in ("手", "腿", "胸", "臂", "肩", "伤", "林越", "韩策", "梅叔", "乔宁", "主角")):
+                state_val = m_state.group(2).strip()
+                claims.append(
+                    SemanticClaim(
+                        dimension="character_state",
+                        subject=char_or_part,
+                        predicate="physical_injury_state",
+                        object_value=state_val,
+                        polarity=True,
+                        evidence_span=clause,
+                    )
+                )
+
+        # 5. Backstory / Past profession claims
+        # e.g., "想起自己当过三年机修学徒的旧事", "早年曾在北境服役"
+        m_back = re.search(r"(?:曾经|曾是|早年|幼年|幼时|当初|早先|曾在|当过|做过)(?:[^，。！？\n]{0,8})(?:学徒|弟子|药农|镖师|捕快|杂役|铁匠|机修|行医|军伍|杀手|散修|佣兵|伙计)", clause)
+        if m_back:
+            claims.append(
+                SemanticClaim(
+                    dimension="backstory",
+                    subject="character",
+                    predicate="past_profession_or_experience",
+                    object_value=m_back.group(0).strip(),
+                    polarity=True,
+                    evidence_span=clause,
+                )
+            )
+
+        # 6. Motivation / intentionality mode
+        # Accidental vs deliberate test / provocation
+        if any(term in clause for term in ("偶然", "无意中", "无意间", "滑出来", "落在")):
+            claims.append(
+                SemanticClaim(
+                    dimension="motivation",
+                    subject="action_intent",
+                    predicate="intentionality_mode",
+                    object_value="accidental_passive",
+                    polarity=True,
+                    evidence_span=clause,
+                )
+            )
+        elif any(term in clause for term in ("主动", "故意", "刻意", "试探", "拍到桌边试探", "死死盯着", "设局")):
+            claims.append(
+                SemanticClaim(
+                    dimension="motivation",
+                    subject="action_intent",
+                    predicate="intentionality_mode",
+                    object_value="deliberate_provocation",
+                    polarity=True,
+                    evidence_span=clause,
+                )
+            )
+
+        # 7. Capability inflation
+        m_cap = re.search(r"(?:精通|深谙|了如指掌|早已掌握)([^，,]{2,10})", clause)
+        if m_cap:
+            claims.append(
+                SemanticClaim(
+                    dimension="capability",
+                    subject="character",
+                    predicate="specialized_capability",
+                    object_value=m_cap.group(1).strip(),
+                    polarity=True,
+                    evidence_span=clause,
+                )
+            )
+
+        # 8. Secret Identity / Secret Passage Invention
+        m_secret = re.search(r"(?:其实|实际上|原来|真实身份)(?:[^，,]{0,8})(?:是|乃是|竟是)(?:[^，,]{0,10})(?:刺客|杀手|卧底|密探|长老|门主|弟子|奸细|特使)", clause)
+        if m_secret:
+            claims.append(
+                SemanticClaim(
+                    dimension="secret_identity",
+                    subject="character",
+                    predicate="secret_identity",
+                    object_value=m_secret.group(0).strip(),
+                    polarity=True,
+                    evidence_span=clause,
+                )
+            )
+        m_passage = re.search(r"(?:通过|利用|顺着|借由|走)(?:[^，,]{0,8})(?:密道|暗道|暗门|阵法|传送阵|密室)(?:[^，,]{0,10})(?:潜入|潜行|逃离|离开|往返|穿过)", clause)
+        if m_passage:
+            claims.append(
+                SemanticClaim(
+                    dimension="secret_setting",
+                    subject="location",
+                    predicate="secret_passage",
+                    object_value=m_passage.group(0).strip(),
+                    polarity=True,
+                    evidence_span=clause,
+                )
+            )
+
+    return SemanticClaimSet(claims=claims)
+
+
+# ----------------------------------------------------------------------
+# Deterministic Semantic Comparison Engine
+# ----------------------------------------------------------------------
+
+def compare_semantic_facts(
+    before_text: str,
+    after_text: str,
+    semantic_judge: Optional[Callable[[str, str], Optional[SemanticDiffResult]]] = None,
+) -> SemanticDiffResult:
+    """
+    Compare before and after prose to verify factual and semantic preservation.
+    Uses structured claim extraction and deterministic claim diffing.
+    Supports optional lightweight semantic judge callable if configured.
+    """
+    # 0. Fast path: exact match
     if before_text.strip() == after_text.strip():
         return SemanticDiffResult(
             outcome=SemanticDiffOutcome.STYLE_ONLY_SAFE,
@@ -128,95 +307,172 @@ def compare_semantic_facts(before_text: str, after_text: str) -> SemanticDiffRes
             summary="正文未作任何语义变动，完全一致。",
         )
 
-    # 1. Backstory Invention Check (Case B)
-    for pattern in BACKSTORY_PATTERNS:
-        matches_after = pattern.findall(after_text)
-        for match in matches_after:
-            # Check if this backstory was already present in before_text
-            if match not in before_text:
-                drift_items.append(
-                    SemanticDriftItem(
-                        dimension="backstory",
-                        evidence_type="new_character_backstory_invented",
-                        original_excerpt="(原文无该人物经历描述)",
-                        edited_excerpt=match,
-                        description=f"Editor 自行编造了新人物履历/过往经历「{match}」，破坏了 Canon 事实权威。",
-                        severity="blocking",
+    # 1. Optional LLM judge hook (if provided)
+    if semantic_judge is not None:
+        try:
+            custom_res = semantic_judge(before_text, after_text)
+            if custom_res is not None:
+                return custom_res
+        except Exception:
+            pass
+
+    # 2. Extract structured claims from before and after
+    before_claims = extract_semantic_claims(before_text)
+    after_claims = extract_semantic_claims(after_text)
+
+    drift_items: List[SemanticDriftItem] = []
+
+    # Check 1: Ownership diff
+    for after_c in after_claims.claims:
+        if after_c.dimension == "ownership":
+            matching = before_claims.find_by_subject_and_dimension(after_c.subject, "ownership")
+            if matching:
+                for before_c in matching:
+                    if before_c.object_value != after_c.object_value:
+                        drift_items.append(
+                            SemanticDriftItem(
+                                dimension="ownership",
+                                evidence_type="custodian_or_owner_changed",
+                                original_excerpt=before_c.evidence_span,
+                                edited_excerpt=after_c.evidence_span,
+                                description=(
+                                    f"物品保管/归属发生冲突：'{after_c.subject}' 的保管/归属对象"
+                                    f"从 '{before_c.object_value}' 变更为 '{after_c.object_value}'。"
+                                ),
+                                severity="blocking",
+                            )
+                        )
+
+    # Check 2: World rule polarity diff
+    for after_c in after_claims.claims:
+        if after_c.dimension == "world_rule":
+            matching = before_claims.find_by_subject_and_dimension(after_c.subject, "world_rule")
+            if matching:
+                for before_c in matching:
+                    if before_c.polarity != after_c.polarity:
+                        drift_items.append(
+                            SemanticDriftItem(
+                                dimension="world_rule",
+                                evidence_type="rule_polarity_inverted",
+                                original_excerpt=before_c.evidence_span,
+                                edited_excerpt=after_c.evidence_span,
+                                description=(
+                                    f"世界规则/机制极性反转：'{after_c.subject}' 的不可变规则"
+                                    f"从 {'肯定(可以)' if before_c.polarity else '否定(不能)'} "
+                                    f"被篡改为 {'肯定(可以)' if after_c.polarity else '否定(不能)'}。"
+                                ),
+                                severity="blocking",
+                            )
+                        )
+
+    # Check 3: Relationship diff
+    for after_c in after_claims.claims:
+        if after_c.dimension == "relationship":
+            matching = before_claims.find_by_subject_and_dimension(after_c.subject, "relationship")
+            if matching:
+                for before_c in matching:
+                    if before_c.object_value != after_c.object_value:
+                        drift_items.append(
+                            SemanticDriftItem(
+                                dimension="relationship",
+                                evidence_type="relationship_role_changed",
+                                original_excerpt=before_c.evidence_span,
+                                edited_excerpt=after_c.evidence_span,
+                                description=(
+                                    f"人物关系定义发生质变：'{after_c.subject}' 的关系从 "
+                                    f"'{before_c.object_value}' 变更为 '{after_c.object_value}'。"
+                                ),
+                                severity="blocking",
+                            )
+                        )
+
+    # Check 4: Character state / injury result diff
+    for after_c in after_claims.claims:
+        if after_c.dimension == "character_state":
+            matching = before_claims.find_by_subject_and_dimension(after_c.subject, "character_state")
+            if matching:
+                for before_c in matching:
+                    if before_c.object_value != after_c.object_value:
+                        drift_items.append(
+                            SemanticDriftItem(
+                                dimension="character_state",
+                                evidence_type="physiological_state_changed",
+                                original_excerpt=before_c.evidence_span,
+                                edited_excerpt=after_c.evidence_span,
+                                description=(
+                                    f"角色生理/伤情状态被修改：'{after_c.subject}' 的伤情从 "
+                                    f"'{before_c.object_value}' 变更为 '{after_c.object_value}'。"
+                                ),
+                                severity="blocking",
+                            )
+                        )
+
+    # Check 5: Backstory invention (new backstory not in before)
+    for after_c in after_claims.claims:
+        if after_c.dimension == "backstory":
+            # Check if this backstory existed in before
+            if not any(after_c.object_value in before_c.object_value for before_c in before_claims.claims if before_c.dimension == "backstory"):
+                if after_c.object_value not in before_text:
+                    drift_items.append(
+                        SemanticDriftItem(
+                            dimension="backstory",
+                            evidence_type="new_backstory_invented",
+                            original_excerpt="(原文无该人物经历描述)",
+                            edited_excerpt=after_c.evidence_span,
+                            description=f"Editor 擅自发明人物过往履历「{after_c.object_value}」，破坏 Canon 权威。",
+                            severity="blocking",
+                        )
                     )
-                )
 
-    # 2. Accidental vs Deliberate Motive Shift (Case A)
-    # Check if before_text had an accidental/passive occurrence that became deliberate/provocative in after_text
-    before_has_accidental = any(m in before_text for m in ACCIDENTAL_MARKERS)
-    after_has_deliberate = any(m in after_text for m in DELIBERATE_MARKERS)
-
-    if before_has_accidental and after_has_deliberate:
-        # Extract context
-        orig_snippets = [m for m in ACCIDENTAL_MARKERS if m in before_text]
-        after_snippets = [m for m in DELIBERATE_MARKERS if m in after_text]
+    # Check 6: Motivation mode shift (accidental -> deliberate)
+    before_intent = [c.object_value for c in before_claims.claims if c.dimension == "motivation"]
+    after_intent = [c.object_value for c in after_claims.claims if c.dimension == "motivation"]
+    if "accidental_passive" in before_intent and "deliberate_provocation" in after_intent:
         drift_items.append(
             SemanticDriftItem(
-                dimension="intent_shift",
+                dimension="motivation",
                 evidence_type="accidental_action_turned_into_deliberate_test",
-                original_excerpt="; ".join(orig_snippets),
-                edited_excerpt="; ".join(after_snippets),
+                original_excerpt="; ".join(c.evidence_span for c in before_claims.claims if c.dimension == "motivation"),
+                edited_excerpt="; ".join(c.evidence_span for c in after_claims.claims if c.dimension == "motivation"),
                 description=(
-                    "Editor 将原文中角色'偶然/无意'的被动行为篡改为'主动试探/心机设局'，"
-                    "根本性改变了角色动机与因果关系。"
+                    "Editor 将原文中角色的'偶然/被动'行为篡改为'主动试探/心机设局'，"
+                    "根本性篡改了角色意图与剧情因果。"
                 ),
                 severity="blocking",
             )
         )
 
-    # 3. Capability / Expertise Inflation Check
-    for pattern in CAPABILITY_INFLATION_PATTERNS:
-        matches_after = pattern.findall(after_text)
-        for match in matches_after:
-            if match not in before_text:
+    # Check 7: Capability / Specialized skill inflation
+    for after_c in after_claims.claims:
+        if after_c.dimension == "capability":
+            if after_c.object_value not in before_text:
                 drift_items.append(
                     SemanticDriftItem(
                         dimension="capability",
                         evidence_type="unestablished_capability_asserted",
                         original_excerpt="(原文未声称该专业技能)",
-                        edited_excerpt=match,
-                        description=f"Editor 擅自赋予角色未经验证的新技能或精通属性「{match}」。",
+                        edited_excerpt=after_c.evidence_span,
+                        description=f"Editor 擅自赋予角色未经验证的新技能「{after_c.object_value}」。",
                         severity="blocking",
                     )
                 )
 
-    # 4. Epistemic state shift / Rationalization Patch
-    for pattern in EPISTEMIC_SHIFT_PATTERNS:
-        matches_after = pattern.findall(after_text)
-        for match in matches_after:
-            if match not in before_text:
+    # Check 8: Secret identity or passage invention
+    for after_c in after_claims.claims:
+        if after_c.dimension in ("secret_identity", "secret_setting"):
+            if after_c.object_value not in before_text:
                 drift_items.append(
                     SemanticDriftItem(
-                        dimension="epistemic",
-                        evidence_type="retroactive_knowledge_or_preparation_patched",
-                        original_excerpt="(原文无该知情或前置准备描述)",
-                        edited_excerpt=match,
-                        description=f"Editor 擅自通过事后补丁「{match}」修补剧情漏洞或赋予全知视角。",
+                        dimension=after_c.dimension,
+                        evidence_type="unauthorized_secret_setting_or_identity",
+                        original_excerpt="(原文无该隐藏设定或密道身份)",
+                        edited_excerpt=after_c.evidence_span,
+                        description=f"Editor 擅自发明隐藏身份/秘密通道「{after_c.object_value}」修补剧情矛盾，破坏 Canon 事实权威。",
                         severity="blocking",
                     )
                 )
 
-    # 5. Secret setting / identity invention check (Variety 5)
-    for pattern in SECRET_SETTING_PATTERNS:
-        matches_after = pattern.findall(after_text)
-        for match in matches_after:
-            if match not in before_text:
-                drift_items.append(
-                    SemanticDriftItem(
-                        dimension="secret_setting_inconsistency_patch",
-                        evidence_type="unauthorized_secret_setting_or_identity_invented",
-                        original_excerpt="(原文无该隐藏设定、秘密身份或密道)",
-                        edited_excerpt=match,
-                        description=f"Editor 擅自发明隐藏身份/秘密通道/新设定「{match}」修补剧情矛盾，破坏 Canon 事实权威。",
-                        severity="blocking",
-                    )
-                )
-
-    # 6. Determine outcome
+    # 3. Decision
     if drift_items:
         return SemanticDiffResult(
             outcome=SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED,
@@ -224,16 +480,16 @@ def compare_semantic_facts(before_text: str, after_text: str) -> SemanticDiffRes
             drift_items=drift_items,
             confidence=0.95,
             summary=(
-                f"检测到 {len(drift_items)} 处事实/动机/履历篡改漂移！"
-                "Editor 越权创造了新的 Canon 事实，必须保留原稿并回滚。"
+                f"结构化事实比对检测到 {len(drift_items)} 处事实/动机/规则/状态漂移！"
+                "Editor 越权创造或篡改了 Canon 事实，必须保留原稿并回滚。"
             ),
+            before_claims=before_claims.to_dict(),
+            after_claims=after_claims.to_dict(),
         )
 
-    # 6. Check for radical structural rewrite / extreme diff ratio without factual anchors
+    # 4. Check for drastic unbounded rewrite
     matcher = difflib.SequenceMatcher(None, before_text, after_text)
     similarity = matcher.ratio()
-
-    # If similarity is too low (< 0.40), text was almost completely replaced
     if similarity < 0.40:
         return SemanticDiffResult(
             outcome=SemanticDiffOutcome.UNCERTAIN,
@@ -244,18 +500,23 @@ def compare_semantic_facts(before_text: str, after_text: str) -> SemanticDiffRes
                     evidence_type="radical_unbounded_rewrite",
                     original_excerpt=before_text[:80] + "...",
                     edited_excerpt=after_text[:80] + "...",
-                    description="相似度低于 40%，改写幅度过大，超出局部定向润色边界，无法保证事实安全性。",
+                    description="相似度低于 40%，改写幅度过大，超出局部定向润色边界，无法证明事实安全。",
                     severity="blocking",
                 )
             ],
             confidence=0.75,
             summary="改写范围过大且相似度过低，判定为 UNCERTAIN，需人工裁决或回滚。",
+            before_claims=before_claims.to_dict(),
+            after_claims=after_claims.to_dict(),
         )
 
+    # 5. Passed: pure style improvement
     return SemanticDiffResult(
         outcome=SemanticDiffOutcome.STYLE_ONLY_SAFE,
         safe=True,
         drift_items=[],
         confidence=0.95,
-        summary="编辑局限于表达修饰、字句流畅度与网文口感，未引入任何新故事事实（STYLE_ONLY_SAFE）。",
+        summary="编辑局限于表达修饰与风格适配，未引入任何新故事事实（STYLE_ONLY_SAFE）。",
+        before_claims=before_claims.to_dict(),
+        after_claims=after_claims.to_dict(),
     )

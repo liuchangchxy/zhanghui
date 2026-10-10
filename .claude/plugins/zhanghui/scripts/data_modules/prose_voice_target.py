@@ -30,8 +30,8 @@ class VoiceTarget:
     author_identity: str = ""
     core_rules: List[str] = field(default_factory=list)
     sentence_rhythm: Dict[str, Any] = field(default_factory=lambda: {
-        "preferred_lengths": "长短句交错，平均句长 18-28 字",
-        "breathing_room": "允许自然过渡段与非功能性景物/氛围烘托",
+        "preferred_lengths": "句长随场景自然起伏：动作段紧凑明快，沉浸与过渡段允许中长句抒发",
+        "breathing_room": "保持叙事呼吸感与场景氛围沉浸，避免通篇同一机械节奏",
         "staccato_warning": "严禁通篇单句成段或极短句碎切（电报体倾向）",
     })
     dialogue_policy: Dict[str, Any] = field(default_factory=lambda: {
@@ -67,17 +67,32 @@ class VoiceTarget:
         """Format a concise positive voice guide for insertion into prompts."""
         lines = [
             f"=== 正向文风锚 (Voice Target: {self.genre}) ===",
+        ]
+        if self.author_identity:
+            clean_identity = [
+                line.strip().lstrip("#-*\t ")
+                for line in self.author_identity.splitlines()
+                if line.strip() and not line.strip().startswith("#") and _clean_template_val(line)
+            ]
+            if clean_identity:
+                lines.append(f"- 作者核心语调与风格: {'；'.join(clean_identity[:3])}")
+        lines.extend([
             f"- 视角与调性: {self.narrative_pov}",
             f"- 句式与呼吸感: {self.sentence_rhythm.get('preferred_lengths', '')}；{self.sentence_rhythm.get('breathing_room', '')}",
-            "- 正向写作准则:",
-        ]
-        for item in self.positive_guidance:
-            lines.append(f"  * {item}")
+        ])
+        if self.core_rules:
+            lines.append("- 最高优先级写作原则 (宪法):")
+            for r in self.core_rules[:4]:
+                lines.append(f"  * {r.lstrip('#-*\t ').strip()}")
+        elif self.positive_guidance:
+            lines.append("- 正向写作准则:")
+            for item in self.positive_guidance[:4]:
+                lines.append(f"  * {item}")
         lines.append("- 文本保留要求:")
-        for item in self.preservation_notes:
+        for item in self.preservation_notes[:3]:
             lines.append(f"  * {item}")
         lines.append("- 严守事实边界 (Editor 禁区):")
-        for item in self.forbidden_inventions:
+        for item in self.forbidden_inventions[:4]:
             lines.append(f"  * {item}")
         return "\n".join(lines)
 

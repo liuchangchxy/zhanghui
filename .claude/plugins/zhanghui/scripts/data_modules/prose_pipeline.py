@@ -106,6 +106,8 @@ class ProseQualityPipeline:
         ])
         return "\n".join(prompt_lines)
 
+    build_editor_prompt = format_targeted_editor_prompt
+
     def process_and_validate(
         self,
         before_text: str,
