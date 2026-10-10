@@ -32,31 +32,21 @@ zhanghui/
 └── 小说写作/                 工作目录（不在 git 里）
 ```
 
-## 安装（已经是项目级 skill，本仓库不能直接复用）
+## 安装与启用
 
-要把这个工具用到你自己的项目，需要：
-
-1. 新建一个项目文件夹，比如 `~/novel-test-1/`
-2. 在那个文件夹里建软链：
-   ```bash
-   ln -sfn ~/zhanghui/.claude ./.claude
-   ```
-3. 启动 `claude`（新会话）
-4. 项目级 skill 会被自动加载，无需修改
-
-测试环境未自带（请按上面第 1-2 步手动建一个）。
-
-## 部署到 marketplace（每次 merge 到 main 后必跑）
-
-Claude Code 从 `~/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui/` 加载技能，不是从这个 source 目录。**改完代码必须跑 deploy 才能让 AI 看到新功能**：
+本目录是 Zhanghui 插件的唯一权威源码树。
+在仓库根目录运行标准安装脚本，直接为 Claude Code 注册并加载本体：
 
 ```bash
-bin/deploy-plugin.sh                # 真正同步
-bin/deploy-plugin.sh --dry-run      # 看会同步哪些文件，不动 marketplace
-bin/deploy-plugin.sh --skip-tests   # 不同步测试文件（默认会同步）
+bin/install-plugin.sh
 ```
 
-Source plugin 和 marketplace 是两份独立副本，**不是 symlink**。`sync_plugin_version.py` 只同步版本号字段，不同步文件；`bin/deploy-plugin.sh` 是新的 wrapper，负责文件同步 + 调用 version sync。
+- 该命令会自动配置 Claude Code 从本地 canonical 源码加载 `zhanghui@zhanghui`。
+- 修改代码后直接在 Claude Code 生效，无需任何手动 whitelist 同步。
+- 检查当前安装源：
+  ```bash
+  bin/install-plugin.sh --check
+  ```
 
 ## 文档
 

@@ -1,50 +1,23 @@
-#!/usr/bin/env bash
-# Sync runtime files from this source plugin to the marketplace install.
-# Claude Code loads skills from the marketplace copy, not from this source.
-# Without this script, changes made here are invisible to AI in novel-writing dirs.
+# [DEPRECATED] deploy-plugin.sh
+# 历史遗留脚本：原先用于将部分 whitelist 文件手工同步到旧全局 Marketplace 副本。
+# 由于容易导致“新 Skill + 旧 Runtime”混装，现已废弃。
+# 请使用仓库根目录的 canonical 安装/更新路径：
+#   bin/install-plugin.sh
 #
-# Usage:
-#   bin/deploy-plugin.sh                 # sync with defaults
-#   bin/deploy-plugin.sh --dry-run       # show what would be synced
-#   bin/deploy-plugin.sh --skip-tests    # skip test file sync
-#
-# Idempotent — safe to run multiple times.
-# Run this after any merge into main.
+# 该脚本会自动将 Claude Code 注册到当前 canonical 仓库 (.claude/plugins/zhanghui/)，
+# 直接读取完整最新的 Skill 与 Runtime，杜绝任何中间副本与 whitelist 遗漏。
 
-set -euo pipefail
+echo "========================================================================" >&2
+echo "NOTICE: bin/deploy-plugin.sh is DEPRECATED." >&2
+echo "Claude Code now loads Zhanghui directly from the canonical repository." >&2
+echo "Please run 'bin/install-plugin.sh' from the repository root instead." >&2
+echo "========================================================================" >&2
 
-# Resolve source (this script's repo) and marketplace (where Claude Code loads from)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Script lives at <plugin_root>/bin/deploy-plugin.sh, so plugin root is one level up
-PLUGIN_SRC="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-# Marketplace default location; override via MARKETPLACE_ROOT env var
-DEFAULT_MARKETPLACE="${HOME}/.claude/plugins/marketplaces/webnovel-chang-marketplace/zhanghui"
-MARKETPLACE_ROOT="${MARKETPLACE_ROOT:-${DEFAULT_MARKETPLACE}}"
-
-DRY_RUN=0
-SKIP_TESTS=0
-
-for arg in "$@"; do
-    case "$arg" in
-        --dry-run) DRY_RUN=1 ;;
-        --skip-tests) SKIP_TESTS=1 ;;
-        -h|--help)
-            sed -n '2,12p' "$0"
-            exit 0
-            ;;
-        *)
-            echo "Unknown arg: $arg" >&2
-            exit 1
-            ;;
-    esac
-done
-
-if [ ! -d "$MARKETPLACE_ROOT" ]; then
-    echo "ERROR: marketplace plugin not found at $MARKETPLACE_ROOT" >&2
-    echo "Set MARKETPLACE_ROOT or pass a custom path." >&2
+if [ "${1:-}" != "--force" ]; then
+    echo "To run this legacy script anyway, pass --force." >&2
     exit 1
 fi
+shift
 
 # Files to sync (relative to PLUGIN_SRC)
 # Tests are excluded by default — they live in source only.

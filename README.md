@@ -47,7 +47,7 @@
 
 `update_master_outline` / `chapter_commit` / `snapshot_manager` 默认「目标已存在就报错」，调用者必须显式传 `--on-conflict=overwrite|append|skip|ask`。杜绝脚本静默覆盖已有产物。实现见 `scripts/_shared/safe_overwrite.py`。
 
-## 安装
+## 安装与启用
 
 ### 方式 A：从 GitHub 安装
 
@@ -58,16 +58,21 @@ claude plugin install zhanghui@zhanghui
 
 装完在任意书项目目录下直接可用，**书项目侧不需要 `.claude/` 配置**。
 
-### 方式 B：本仓库作为开发工作区（作者本机流程）
+### 方式 B：本地源码安装与更新（唯一 Authoritative 路径）
 
-本仓库是一个**开发工作区**，插件本体在 `.claude/plugins/zhanghui/`。
-本机安装靠 marketplace + cache 软链：
+本仓库根目录是**唯一权威源码开发库**，插件本体位于 `.claude/plugins/zhanghui/`。
+运行安装脚本即可直接将本地仓库注册并连接到 Claude Code，直接读取完整最新的 Skill 与 Runtime：
 
 ```bash
-bash .claude/plugins/zhanghui/scripts/dev-only/setup_dev_env.sh
+bin/install-plugin.sh
 ```
 
-这个脚本幂等，会校验插件完整性、同步到 marketplace、**把 cache 建为指向 dev workspace 的软链**（改代码立即生效，无需重启），并跑 smoke test。
+- 该命令会自动配置 Claude Code 直接从本地仓库加载 `zhanghui@zhanghui`。
+- 修改代码后直接生效（无需手动执行 whitelist 复制）。
+- 检查当前安装源：
+  ```bash
+  bin/install-plugin.sh --check
+  ```
 
 First run 时插件会在后台自动安装 Python 依赖到 `~/.cache/webnovel-writer-chang/venvs/`；`chart-scan` 的番茄 adapter 需要 chromium，会弹一次 y/N。PyPI 不可达时自动切清华/阿里镜像。清理：`rm -rf ~/.cache/webnovel-writer-chang/`。
 
@@ -88,16 +93,14 @@ claude
 /webnovel-doctor    # 诊断
 ```
 
-## 开发
+## 开发与验证
 
-改代码 → 跑 `bin/deploy-plugin.sh` 同步到 marketplace：
+本地修改代码后，直接由 `bin/install-plugin.sh` 保证一致加载，无需任何手工 whitelist 文件复制。
 
+临时调试单次会话也可直接使用：
 ```bash
-bash .claude/plugins/zhanghui/bin/deploy-plugin.sh --dry-run   # 预览
-bash .claude/plugins/zhanghui/bin/deploy-plugin.sh             # 真同步
+claude --plugin-dir .claude/plugins/zhanghui
 ```
-
-**不要**手动 cp 到 cache，也**不要**直接改 cache 里的文件。
 
 ### 测试
 
