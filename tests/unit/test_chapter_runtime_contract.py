@@ -13,6 +13,7 @@ from data_modules.config import DataModulesConfig
 from data_modules.context_manager import ContextManager
 from data_modules.chapter_runtime import ChapterRuntime
 from data_modules.reconciliation import reconcile_changes, split_chapter_and_changes
+from data_modules.write_gates import run_write_gate
 from changes_gate import run_changes_gate
 
 
@@ -44,6 +45,15 @@ def _setup_minimal_book_project(tmp_path: Path, chapter: int = 1) -> Path:
         "entity_state": {},
     }
     (webnovel_dir / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # Initialized scaffold dirs & files for a valid book project
+    for d in (".webnovel/backups", ".webnovel/archive", ".webnovel/summaries", "设定集", "正文", "审查报告"):
+        (project_root / d).mkdir(parents=True, exist_ok=True)
+    for f in ("设定集/世界观.md", "设定集/力量体系.md", "设定集/主角卡.md", "设定集/反派设计.md", "大纲/总纲.md", ".env.example"):
+        fp = project_root / f
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        if not fp.exists():
+            fp.write_text("# init\n", encoding="utf-8")
 
     # 2. Outline with current chapter and future chapter
     outline_text = f"""# 第一卷 觉醒
@@ -641,3 +651,54 @@ def test_runtime_cli_flow(tmp_path: Path, monkeypatch, capsys):
     captured = capsys.readouterr()
     retry_data = json.loads(captured.out)
     assert retry_data["ok"] is True
+
+
+def test_negative_prewrite_gate_blocks_prepare_when_native_gate_fails(tmp_path: Path):
+    """Verify prepare() fails closed with status='blocked' when native write-gate returns ok=False."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+
+    # Inject a legal scenario causing native prewrite gate to block:
+    # high-priority disambiguation_pending triggers PrewriteValidator blocking
+    state_path = project_root / ".webnovel" / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["disambiguation_pending"] = [
+        {"entity_id": "unresolved_sword", "reason": "high-priority ambiguity pending resolution"}
+    ]
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    runtime = ChapterRuntime(project_root)
+    prep = runtime.prepare(1, with_package=True)
+
+    # Native write-gate evaluated on this prepared project must legitimately return ok=False
+    native_gate = run_write_gate(project_root, chapter=1, stage="prewrite")
+    assert native_gate["ok"] is False
+    assert len(native_gate["errors"]) > 0
+
+    # Runtime prepare() must report blocked without generating a writer package
+    assert prep.ok is False
+    assert prep.status == "blocked"
+    assert prep.writer_package is None
+    # Blockers and advisories must directly match native gate schema
+    assert prep.blockers == native_gate["errors"]
+    assert prep.advisories == native_gate.get("warnings", [])
+    assert any(b.get("code") == "prewrite_validator_blocking" for b in prep.blockers)
+
+
+def test_negative_prewrite_gate_exception_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Verify prepare() fails closed if native write-gate execution raises an unhandled exception."""
+    project_root = _setup_minimal_book_project(tmp_path, chapter=1)
+
+    def _broken_gate(*args, **kwargs):
+        raise RuntimeError("Simulated gate infrastructure crash")
+
+    monkeypatch.setattr("data_modules.chapter_runtime.run_write_gate", _broken_gate)
+
+    runtime = ChapterRuntime(project_root)
+    prep = runtime.prepare(1, with_package=True)
+
+    assert prep.ok is False
+    assert prep.status != "ready"
+    assert prep.status == "prewrite_gate_failed"
+    assert prep.writer_package is None
+    assert any("Simulated gate infrastructure crash" in b.get("message", "") for b in prep.blockers)
+

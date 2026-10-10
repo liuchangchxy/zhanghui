@@ -286,28 +286,42 @@ class ChapterRuntime:
             )
 
         # 3. Prewrite gate validation
-        blockers: list[dict[str, Any]] = []
         advisories: list[dict[str, Any]] = []
         try:
             gate_res = run_write_gate(self.project_root, chapter=chapter, stage="prewrite")
-            for item in gate_res.get("issues", []):
-                msg = str(item)
-                if "BLOCKER" in msg.upper() or "ERROR" in msg.upper():
-                    blockers.append({"gate": "prewrite", "message": msg})
-                else:
-                    advisories.append({"gate": "prewrite", "message": msg})
         except Exception as exc:
-            advisories.append({"gate": "prewrite", "message": f"Prewrite gate diagnostic: {exc}"})
+            return ChapterPrepareResult(
+                ok=False,
+                chapter=chapter,
+                status="prewrite_gate_failed",
+                writer_package=None,
+                blockers=[{
+                    "rule": "prewrite_gate_execution",
+                    "code": "prewrite_gate_exception",
+                    "message": f"Prewrite gate execution failed: {exc}",
+                }],
+                advisories=[],
+                next_required_action="fix_gate_infrastructure",
+                error=f"Prewrite gate execution failed: {exc}",
+            )
 
-        if blockers:
+        gate_ok = bool(gate_res.get("ok", False))
+        gate_errors = list(gate_res.get("errors") or [])
+        gate_warnings = list(gate_res.get("warnings") or [])
+
+        if not gate_ok:
             return ChapterPrepareResult(
                 ok=False,
                 chapter=chapter,
                 status="blocked",
-                blockers=blockers,
-                advisories=advisories,
+                writer_package=None,
+                blockers=gate_errors,
+                advisories=gate_warnings,
+                next_required_action="resolve_prewrite_blockers",
                 error="Prewrite validation detected blockers",
             )
+
+        advisories.extend(gate_warnings)
 
         # 4. Writer package preparation
         writer_package = None

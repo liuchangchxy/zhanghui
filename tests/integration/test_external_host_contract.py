@@ -38,6 +38,15 @@ def _setup_minimal_book_project(tmp_path: Path, chapter: int = 1) -> Path:
     }
     (webnovel_dir / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    # Initialized scaffold dirs & files for a valid book project
+    for d in (".webnovel/backups", ".webnovel/archive", ".webnovel/summaries", "设定集", "正文", "审查报告"):
+        (project_root / d).mkdir(parents=True, exist_ok=True)
+    for f in ("设定集/世界观.md", "设定集/力量体系.md", "设定集/主角卡.md", "设定集/反派设计.md", "大纲/总纲.md", ".env.example"):
+        fp = project_root / f
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        if not fp.exists():
+            fp.write_text("# init\n", encoding="utf-8")
+
     outline_text = f"""# 第一卷 觉醒
 
 ### 第{chapter}章：初入宗门
