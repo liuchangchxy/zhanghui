@@ -132,7 +132,7 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 
 **个人语料检测**（best-effort，不阻断；Phase E 重定位）：
 - 检测 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md` 是否存在（Phase E 起基线目录迁到 `${CLAUDE_PLUGIN_ROOT}/templates/`，书项目副本目录改为 `.webnovel/writer-profile/`）。
-- 存在 → 作为"个人表达指纹约束"（≤ 200 字摘要）由 ContextManager / Governed Context 纳入 constraints 注入 Native Writer Package；不替代题材/大纲/设定硬约束
+- 存在 → 提取 ≤ 200 字摘要，作为非权威性（non-authoritative）Craft/Reference input 在 Step 1B 传给 Context Agent 做创作规划；不由 ContextManager / Governed Context 自动加载，严禁直接向 Writer 追加 prompt，不替代题材/大纲/设定硬约束。
 - 不存在 → 跳过，不报错
 
 **写作宪法加载**（best-effort，不阻断；Phase E 重定位）：
@@ -141,9 +141,11 @@ export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-ro
 - 不存在 → 跳过，不报错（不再回退到 skill 内 templates/）。
 
 **对标参考检测（reference_research）**：
-- 调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step1-summary --project-root "${PROJECT_ROOT}"`，得到 ≤ 800 chars (~1200 CJK tokens) 摘要字符串
-- 若返回空串 → 跳过（无 `reference_research/` 树，不报错）
-- 若非空 → 摘要拼接到 context-agent 任务书的"对标参考"段
+- 在 Step 1B（Context Agent 认知创作规划）统一读取：
+  - 调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step1-summary --project-root "${PROJECT_ROOT}"` 获取对标总览摘要；
+  - 调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step2a-section --project-root "${PROJECT_ROOT}"` 获取详细约束（包含 `do_not_copy` 红线禁区、`canon_contamination_warnings` 设定污染警告、`borrowable_structures` 可借用结构、`satisfaction_point` 爽点落点）。
+- 若返回空串 → 跳过（无 `reference_research/` 树，不报错）。
+- 若非空 → 作为参考输入在 Step 1B 注入 Context Agent 任务书，由 Context Agent 在产出 Creative Brief 时消化这些约束；不由 Stage 1A / ContextManager 自动加载。
 
 **占位符扫描（prewrite）**：
 - 写前必须跑一次 placeholder-scan，确认大纲/设定/章纲无 `[待...]` / `暂名` / `{占位}` 残留：
@@ -238,6 +240,24 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 - `runtime governed-context` 由 `ContextManager.build_context()` 统一组装当前章的事实权威（Governed Canon、Current Intent、Master Setting/Craft 约束、Writer Context），杜绝向后剧透或虚假前情。
 
 #### 1B. Context Agent 认知创作规划（Context Agent Creative Brief）
+
+输入装配：
+- **受治理上下文**：Stage 1A 的 `runtime governed-context`（Governed Canon、Current Intent、Master Setting/Craft 约束、Writer Context）。
+- **非权威参考输入（Optional Craft / Reference Inputs）**（由主流程收集并作为参考输入传入 Context Agent，不由 ContextManager 自动加载）：
+  1. **个人语料**（若存在 `${PROJECT_ROOT}/.webnovel/writer-profile/个人语料.md`）：提取 ≤ 200 字摘要，作为个人表达指纹参考注入；
+  2. **对标研究（reference_research）**：
+     调用 injector 工具读取对标输入：
+     ```bash
+     python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step1-summary --project-root "${PROJECT_ROOT}"
+     python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step2a-section --project-root "${PROJECT_ROOT}"
+     ```
+     在注入 Context Agent 任务书时明确保留关键字段：
+     - `do_not_copy`（红线禁区）
+     - `canon_contamination_warnings`（设定污染警告）
+     - `borrowable_structures`（可借用结构）
+     - `satisfaction_point`（爽点落点）
+     由 Context Agent 在产出 Creative Brief 时深度消化并落实为本章创作禁区与结构借鉴。
+
 使用 Agent 调用 `webnovel-writer:context-agent`，参数：
 - `chapter`
 - `project_root`
@@ -252,7 +272,7 @@ Use the Agent tool to run `webnovel-writer:context-agent`
 硬要求：
 - 若 `state` 或大纲不可用，立即阻断并返回缺失项。
 - 写章链路隔离约束：本步使用 `webnovel-writer:context-agent`（写作任务书），与下游 `webnovel-writer:reviewer` / `webnovel-writer:data-agent` 通过 Agent 工具显式分隔；不得用主流程口头代替 subagent 输出。
-- **保留 Context Agent 文学认知能力**：Context Agent 消费上述受治理上下文，专注文学层面的创作决策：
+- **保留 Context Agent 文学认知能力**：Context Agent 消费上述受治理上下文及参考输入，专注文学层面的创作决策：
   - 人物核心动机与心理走向；
   - 本章核心冲突、阻力与代价；
   - 章节节拍（Beats）与情节推进（CBN/CPNs/CEN）；
@@ -309,9 +329,8 @@ sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 - **禁止事项**：
   - **严禁重新拼装**：Skill 主流程严禁自己重新拼一份 Canon、Intent 或 Craft 模板；
   - **严禁双重模板**：严禁在 Skill 内再造第二套与 External Host 差异化的 Writer prompt 模板；
-  - **严禁绕过封口**：严禁绕过 Native Writer Package 直接把 Context Agent 未封口输出喂给 Writer。未获得带有 `package_fingerprint` 的封口包前不得启动起草。
-
-调用 `python3 ${SCRIPTS_DIR}/data_modules/reference_research_injector.py build-step2a-section --project-root "${PROJECT_ROOT}"`（若项目有对标书红黑名单，其结构约束在 Stage 1A 归入 MASTER_SETTING / governed constraints 封入 Native Writer Package，起草时遵守其中借用结构与避坑禁区）。
+  - **严禁绕过封口**：严禁绕过 Native Writer Package 直接把 Context Agent 未封口输出喂给 Writer。未获得带有 `package_fingerprint` 的封口包前不得启动起草；
+  - **严禁死调用与私自追加（Zero Dead Injection）**：禁止在 Step 2A 进行任何 dead call / dead injection（严禁调用任何外部 injector 或提示词注入脚本；严禁向 Writer 重新追加任何零散 prompt 段）。个人语料与对标研究已在 Step 1B 经 Context Agent 消化进 Creative Brief 并密封于 Native Writer Package。
 
 硬要求：
 - 只输出纯正文到章节正文文件；若详细大纲已有章节名，优先使用 `正文/第{chapter_padded}章-{title_safe}.md`，否则回退为 `正文/第{chapter_padded}章.md`。

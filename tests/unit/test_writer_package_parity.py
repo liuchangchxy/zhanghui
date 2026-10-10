@@ -522,4 +522,63 @@ def test_webnovel_write_skill_adopts_native_writer_package_workflow():
     assert "严禁绕过封口" in text
 
 
+def test_webnovel_write_skill_optional_craft_reference_boundary():
+    """Verify optional craft/reference routing and unified writer boundary contracts in SKILL.md.
+
+    Enforces Phase 3 / PR2 Controller boundaries:
+    1. SKILL.md does not claim ContextManager loads personal corpus (个人语料).
+    2. Step 2A has zero dead injection / dead call (e.g. no build-step2a-section call in Step 2A).
+    3. Both optional inputs (个人语料 and 对标研究 reference_research) route to Step 1B / Context Agent.
+    4. Reference research key fields (do_not_copy, canon_contamination_warnings, borrowable_structures,
+       satisfaction_point) are explicitly preserved in Step 1B.
+    5. Writer strictly consumes WriterPackage.to_writer_prompt() with zero redundant assembly.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    skill_path = repo_root / ".claude" / "plugins" / "zhanghui" / "skills" / "webnovel-write" / "SKILL.md"
+    text = skill_path.read_text(encoding="utf-8")
+
+    # 1. 确认 SKILL.md 不再声称 ContextManager 加载个人语料
+    assert "个人语料检测" in text
+    corpus_idx = text.index("个人语料检测")
+    corpus_section = text[corpus_idx : corpus_idx + 500]
+    assert "ContextManager / Governed Context 纳入" not in corpus_section
+    assert "不由 ContextManager" in corpus_section
+    assert "non-authoritative" in corpus_section
+
+    # 提取 Step 1B 和 Step 2A 章节内容
+    assert "#### 1B. Context Agent" in text
+    assert "### Step 2A：" in text
+    step1b_idx = text.index("#### 1B. Context Agent")
+    step1c_idx = text.index("#### 1C. Runtime 封口")
+    step1b_section = text[step1b_idx:step1c_idx]
+
+    step2a_idx = text.index("### Step 2A：")
+    step2a_end_idx = text.index("### Step 2A 末尾追加：")
+    step2a_section = text[step2a_idx:step2a_end_idx]
+
+    # 2. 确认 Step 2A 没有 dead injection / dead call
+    assert "build-step2a-section" not in step2a_section
+    assert "reference_research_injector" not in step2a_section
+    assert "Zero Dead Injection" in step2a_section or "严禁死调用" in step2a_section
+
+    # 3. 确认两类 optional input（个人语料与对标研究）均路由到 Step 1B / Context Agent
+    assert "个人语料" in step1b_section
+    assert "reference_research" in step1b_section or "对标研究" in step1b_section
+    assert "build-step1-summary" in step1b_section
+    assert "build-step2a-section" in step1b_section
+
+    # 4. 确认对标研究关键字段在 Step 1B 明确保留
+    assert "do_not_copy" in step1b_section
+    assert "canon_contamination_warnings" in step1b_section
+    assert "borrowable_structures" in step1b_section
+    assert "satisfaction_point" in step1b_section
+
+    # 5. 确认 Writer 依然严格消费 WriterPackage.to_writer_prompt()
+    assert "WriterPackage.to_writer_prompt()" in step2a_section
+    assert "唯一输入来源" in step2a_section
+    assert "严禁重新拼装" in step2a_section
+    assert "严禁双重模板" in step2a_section
+
+
+
 
