@@ -629,54 +629,14 @@ def _load_entity_lookup(
                     aliases.add(str(row[0]).strip())
                 if row[1]:
                     ids.add(str(row[1]).strip())
-            try:
-                for row in conn.execute("SELECT DISTINCT location FROM scenes WHERE location IS NOT NULL AND location != ''"):
-                    if row[0]:
-                        aliases.add(str(row[0]).strip())
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                pass
-            try:
-                for row in conn.execute("SELECT subject, payload_json FROM story_events"):
-                    if row[0]:
-                        aliases.add(str(row[0]).strip())
-                    if row[1]:
-                        try:
-                            p_data = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-                            if isinstance(p_data, dict):
-                                for k in ("scope", "source", "location", "place", "artifact_name", "item", "name"):
-                                    v = p_data.get(k)
-                                    if isinstance(v, str) and v.strip():
-                                        aliases.add(v.strip())
-                        except Exception:
-                            pass
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                try:
-                    for row in conn.execute("SELECT subject, payload FROM story_events"):
-                        if row[0]:
-                            aliases.add(str(row[0]).strip())
-                        if row[1]:
-                            try:
-                                p_data = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-                                if isinstance(p_data, dict):
-                                    for k in ("scope", "source", "location", "place", "artifact_name", "item", "name"):
-                                        v = p_data.get(k)
-                                        if isinstance(v, str) and v.strip():
-                                            aliases.add(v.strip())
-                            except Exception:
-                                pass
-                except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                    pass
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            # 表/列缺失、文件不是数据库等 —— 一律降级为"不可用"，不崩溃。
-            # 注意 DatabaseError 是 OperationalError 的**父类**，必须显式捕获，
-            # 否则 `file is not a database` 会穿透（对抗式审查 A2.2）。
             tables_ok = False
             ids.clear()
             aliases.clear()
     finally:
         conn.close()
 
-    # Load canonical entities from state.json if available (Canonical authority > derived projection)
+    # Load canonical entities from structured state.json if available (Canonical authority > derived projection)
     proj_root: Path | None = None
     if state_path:
         sp = Path(state_path)
@@ -707,34 +667,8 @@ def _load_entity_lookup(
     elif db_path:
         proj_root = Path(db_path).parent.parent
 
-    # Load canonical entities from 设定集 if present (Canonical authority > derived projection)
+    # Load canonical settings from structured MASTER_SETTING.json if available
     if proj_root and proj_root.is_dir():
-        settings_dir = proj_root / "设定集"
-        if settings_dir.is_dir():
-            for md_file in settings_dir.glob("*.md"):
-                try:
-                    for line in md_file.read_text(encoding="utf-8").splitlines():
-                        line_s = line.strip()
-                        m = re.match(r"^##\s+(.+)$", line_s)
-                        if m:
-                            heading = m.group(1).strip()
-                            clean_name = re.sub(r"[（(].*?[）)]", "", heading).strip()
-                            if clean_name:
-                                aliases.add(clean_name)
-                                ids.add(clean_name)
-                            if heading:
-                                aliases.add(heading)
-                                ids.add(heading)
-                        elif "主要地点：" in line_s or "地点：" in line_s:
-                            loc_part = line_s.split("：", 1)[1]
-                            for loc in re.split(r"[、，,;|]", loc_part):
-                                loc = loc.strip()
-                                if loc:
-                                    aliases.add(loc)
-                except Exception:
-                    pass
-
-        # Load canonical settings from MASTER_SETTING.json if available
         master_path = proj_root / ".story-system" / "MASTER_SETTING.json"
         if master_path.is_file():
             try:
@@ -744,13 +678,14 @@ def _load_entity_lookup(
                         n = ent.get("name") or ent.get("id") or ent.get("canonical_name")
                         if isinstance(n, str) and n.strip():
                             aliases.add(n.strip())
-                for loc in m_data.get("locations", []) or []:
-                    if isinstance(loc, str) and loc.strip():
-                        aliases.add(loc.strip())
-                    elif isinstance(loc, dict):
-                        n = loc.get("name") or loc.get("id")
-                        if isinstance(n, str) and n.strip():
-                            aliases.add(n.strip())
+                for category in ("locations", "items", "objects", "factions"):
+                    for item in m_data.get(category, []) or []:
+                        if isinstance(item, str) and item.strip():
+                            aliases.add(item.strip())
+                        elif isinstance(item, dict):
+                            n = item.get("name") or item.get("id")
+                            if isinstance(n, str) and n.strip():
+                                aliases.add(n.strip())
             except Exception:
                 pass
 
@@ -787,44 +722,9 @@ def check_r03_entities(
             location=location,
         ))
 
-    def check_loc_ref(ref: Any, location: str, ev: dict[str, Any]) -> None:
-        if not isinstance(ref, str):
-            return
-        if ref in all_known:
-            return
-        # Explicit create / introduction semantics
-        action = str(ev.get("action") or ev.get("change_type") or "").strip().lower()
-        if action in {"create", "new", "init", "introduce", "add"} or ev.get("is_new") is True:
-            all_known.add(ref)
-            return
-        # Hierarchical / constituent location grounded in known canonical locations
-        for known in all_known:
-            if not isinstance(known, str) or len(known) < 3:
-                continue
-            if known in ref or ref in known:
-                all_known.add(ref)
-                return
-            for i in range(len(known) - 2):
-                sub = known[i : i + 3]
-                if sub in ref:
-                    all_known.add(ref)
-                    return
-        failures.append(Failure(
-            rule_id="R3",
-            severity="blocking",
-            message=f"{location}: 引用 '{ref}' 不在账本",
-            location=location,
-        ))
-
     for i, ev in _iter_array_field(changes, "character_state_changes"):
         if isinstance(ev, dict):
-            action = str(ev.get("action") or ev.get("change_type") or "").strip().lower()
-            if action in {"create", "new", "init", "introduce", "add"} or ev.get("is_new") is True:
-                c_id = ev.get("character_id")
-                if isinstance(c_id, str) and c_id.strip():
-                    all_known.add(c_id.strip())
-            else:
-                check_ref(ev.get("character_id"), f"character_state_changes[{i}].character_id")
+            check_ref(ev.get("character_id"), f"character_state_changes[{i}].character_id")
 
     for i, ev in _iter_array_field(changes, "new_plot_points"):
         if isinstance(ev, dict):
@@ -833,17 +733,11 @@ def check_r03_entities(
 
     for i, ev in _iter_array_field(changes, "location_state_changes"):
         if isinstance(ev, dict):
-            check_loc_ref(ev.get("location_id"), f"location_state_changes[{i}].location_id", ev)
+            check_ref(ev.get("location_id"), f"location_state_changes[{i}].location_id")
 
     for i, ev in _iter_array_field(changes, "faction_state_changes"):
         if isinstance(ev, dict):
-            action = str(ev.get("action") or ev.get("change_type") or "").strip().lower()
-            if action in {"create", "new", "init", "introduce", "add"} or ev.get("is_new") is True:
-                f_id = ev.get("faction_id")
-                if isinstance(f_id, str) and f_id.strip():
-                    all_known.add(f_id.strip())
-            else:
-                check_ref(ev.get("faction_id"), f"faction_state_changes[{i}].faction_id")
+            check_ref(ev.get("faction_id"), f"faction_state_changes[{i}].faction_id")
 
     # Bug 10: R3 也检查 item_transfers 中的 item_id
     for i, ev in _iter_array_field(changes, "item_transfers"):
