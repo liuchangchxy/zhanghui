@@ -70,37 +70,11 @@ def validate_proposed_changes(proposed: Any) -> dict[str, Any]:
         value = proposed[name]
         if name == "time_progression":
             if value is not None and not isinstance(value, dict):
-                if isinstance(value, str):
-                    proposed[name] = {"time_period": value, "importance": "normal"}
-                else:
-                    raise ValueError("CHANGES.time_progression must be an object or null")
+                raise ValueError("CHANGES.time_progression must be an object or null")
         elif not isinstance(value, list):
             raise ValueError(f"CHANGES.{name} must be a list")
-        else:
-            normalized_list = []
-            for item in value:
-                if isinstance(item, dict):
-                    normalized_list.append(item)
-                elif isinstance(item, str):
-                    if name == "new_plot_points":
-                        normalized_list.append({"context": item, "importance": "normal"})
-                    elif name == "foreshadowing_actions":
-                        normalized_list.append({"foreshadow_id": "F-pending", "action": "setup", "description": item})
-                    elif name == "unresolved_questions":
-                        normalized_list.append({"question": item})
-                    elif name == "character_state_changes":
-                        normalized_list.append({"character_id": item, "new_state": item, "importance": "normal"})
-                    elif name == "location_state_changes":
-                        normalized_list.append({"location_id": item, "new_status": item, "importance": "normal"})
-                    elif name == "faction_state_changes":
-                        normalized_list.append({"faction_id": item, "new_status": item, "importance": "normal"})
-                    elif name == "item_transfers":
-                        normalized_list.append({"item_id": item, "new_status": "active"})
-                    else:
-                        normalized_list.append({"description": item})
-                else:
-                    raise ValueError(f"CHANGES.{name} items must be objects")
-            proposed[name] = normalized_list
+        elif any(not isinstance(item, dict) for item in value):
+            raise ValueError(f"CHANGES.{name} items must be objects")
     return proposed
 
 
