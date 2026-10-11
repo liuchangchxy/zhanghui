@@ -677,8 +677,10 @@ def _load_entity_lookup(
         conn.close()
 
     # Load canonical entities from state.json if available (Canonical authority > derived projection)
+    proj_root: Path | None = None
     if state_path:
         sp = Path(state_path)
+        proj_root = sp.parent.parent
         if sp.is_file() and sp.stat().st_size <= MAX_STATE_BYTES:
             try:
                 s_data = json.loads(sp.read_text(encoding="utf-8"))
@@ -700,6 +702,55 @@ def _load_entity_lookup(
                                         n = item.get("name") or item.get("id") or item.get("title")
                                         if isinstance(n, str) and n.strip():
                                             aliases.add(n.strip())
+            except Exception:
+                pass
+    elif db_path:
+        proj_root = Path(db_path).parent.parent
+
+    # Load canonical entities from 设定集 if present (Canonical authority > derived projection)
+    if proj_root and proj_root.is_dir():
+        settings_dir = proj_root / "设定集"
+        if settings_dir.is_dir():
+            for md_file in settings_dir.glob("*.md"):
+                try:
+                    for line in md_file.read_text(encoding="utf-8").splitlines():
+                        line_s = line.strip()
+                        m = re.match(r"^##\s+(.+)$", line_s)
+                        if m:
+                            heading = m.group(1).strip()
+                            clean_name = re.sub(r"[（(].*?[）)]", "", heading).strip()
+                            if clean_name:
+                                aliases.add(clean_name)
+                                ids.add(clean_name)
+                            if heading:
+                                aliases.add(heading)
+                                ids.add(heading)
+                        elif "主要地点：" in line_s or "地点：" in line_s:
+                            loc_part = line_s.split("：", 1)[1]
+                            for loc in re.split(r"[、，,;|]", loc_part):
+                                loc = loc.strip()
+                                if loc:
+                                    aliases.add(loc)
+                except Exception:
+                    pass
+
+        # Load canonical settings from MASTER_SETTING.json if available
+        master_path = proj_root / ".story-system" / "MASTER_SETTING.json"
+        if master_path.is_file():
+            try:
+                m_data = json.loads(master_path.read_text(encoding="utf-8"))
+                for ent in m_data.get("entities", []) or []:
+                    if isinstance(ent, dict):
+                        n = ent.get("name") or ent.get("id") or ent.get("canonical_name")
+                        if isinstance(n, str) and n.strip():
+                            aliases.add(n.strip())
+                for loc in m_data.get("locations", []) or []:
+                    if isinstance(loc, str) and loc.strip():
+                        aliases.add(loc.strip())
+                    elif isinstance(loc, dict):
+                        n = loc.get("name") or loc.get("id")
+                        if isinstance(n, str) and n.strip():
+                            aliases.add(n.strip())
             except Exception:
                 pass
 
