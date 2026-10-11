@@ -401,3 +401,171 @@ def test_replay_run005_chapter_2_ungrounded_location_fails_closed():
     msgs = [f.message for f in r3_failures]
     assert any("咸水巷地下七号防汛杂档库" in m for m in msgs)
     assert result.passed is False
+
+
+def test_writer_prompt_contract_distinguishes_new_entity_from_state_change():
+    """A: WriterPackage.to_writer_prompt explicitly distinguishes new entities from state changes."""
+    from data_modules.chapter_runtime import WriterPackage
+    pkg = WriterPackage(
+        chapter=2,
+        package_fingerprint="fp123",
+        source_fingerprints={},
+        story_identity={"title": "测试小说"},
+        current_intent={"chapter": 2, "outline": "大纲"},
+        governed_canon={"canon_items": [], "appearing_characters": []},
+        constraints={"core_tone": "压抑"},
+        writer_context={},
+        creative_brief="第2章创作策划任务书：林越前往旧档案室调查。",
+        creative_brief_fingerprint="brief_fp_123",
+    )
+    prompt = pkg.to_writer_prompt()
+    # Contract must explicitly instruct that new entities != state changes
+    assert "不属于 state change" in prompt
+    assert "严禁仅为了“登记新实体”而把它写入" in prompt or "不属于 state change" in prompt
+    assert "location_state_changes" in prompt
+    assert "地下档案修复室" in prompt or "首次出现" in prompt
+
+
+def test_r03_strictly_fails_on_unknown_location_state_change(tmp_path: Path):
+    """B: R3 remains strict: unknown location claimed as state change must FAIL."""
+    db_path = tmp_path / ".webnovel" / "index.db"
+    _create_empty_test_db(db_path)
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.write_text(json.dumps({
+        "world_settings": {"locations": ["临汐城", "咸水巷"]}
+    }, ensure_ascii=False), encoding="utf-8")
+
+    # Known location state change passes
+    good = {"location_state_changes": [{"location_id": "临汐城", "new_state": "封锁"}]}
+    assert check_r03_entities(good, db_path, state_path) == []
+
+    # Newly invented unknown location in state changes must strictly fail closed
+    bad = {"location_state_changes": [{"location_id": "全新未知防汛暗室", "new_state": "封锁"}]}
+    bad_failures = check_r03_entities(bad, db_path, state_path)
+    assert len(bad_failures) == 1
+    assert "全新未知防汛暗室" in bad_failures[0].message
+    assert "不在账本" in bad_failures[0].message
+
+
+def test_new_entity_in_extraction_enters_index_projection(tmp_path: Path):
+    """C: New entity in extraction_result.entity_deltas formally enters index.db projection."""
+    from data_modules.story_system_mode import canonical_projection_write_scope
+
+    webnovel_dir = tmp_path / ".webnovel"
+    webnovel_dir.mkdir(parents=True)
+    state_file = webnovel_dir / "state.json"
+    state_file.write_text(json.dumps({
+        "progress": {"current_chapter": 2},
+        "world_settings": {"locations": ["临汐城"]},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    story_sys = tmp_path / ".story-system"
+    story_sys.mkdir(parents=True)
+
+    commit_payload = {
+        "meta": {"schema_version": "story-system/v1", "chapter": 2, "status": "accepted"},
+        "extraction_result": {
+            "chapter_meta": {"chapter": 2, "title": "第2章"},
+            "accepted_events": [],
+            "state_deltas": [],
+            "entity_deltas": [
+                {
+                    "entity_name": "新设立观测哨",
+                    "entity_type": "location",
+                    "description": "林越在撤离路线中首次发现的离线观测哨",
+                    "chapter": 2,
+                }
+            ],
+        },
+    }
+
+    writer = IndexProjectionWriter(tmp_path)
+    with canonical_projection_write_scope(tmp_path):
+        res = writer._apply_accepted_commit(commit_payload)
+    assert res["applied"] is True
+
+    # Verify that the new entity is now in index.db entities
+    manager = IndexManager(DataModulesConfig(project_root=tmp_path))
+    ent = manager.get_entity("新设立观测哨")
+    assert ent is not None
+    assert ent["canonical_name"] == "新设立观测哨"
+    assert ent["type"] == "地点"
+
+
+def test_canary_new_entity_flow_from_prose_to_projection(tmp_path: Path):
+    """End-to-end Canary:
+    1. Writer produces prose with a new location, but location_state_changes is [] (per new contract).
+    2. changes_gate PASSES.
+    3. Data Agent extraction observes new entity in entity_deltas.
+    4. Accepted commit projects it into index.db.
+    5. Next chapter R3 recognizes the new location as a known entity!
+    """
+    from data_modules.story_system_mode import canonical_projection_write_scope
+
+    webnovel_dir = tmp_path / ".webnovel"
+    webnovel_dir.mkdir(parents=True)
+    state_file = webnovel_dir / "state.json"
+    state_file.write_text(json.dumps({
+        "progress": {"current_chapter": 1},
+        "entity_state": {"林越": {"身份": "主角"}},
+        "world_settings": {"locations": ["临汐城", "咸水巷"]},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    db_path = webnovel_dir / "index.db"
+    _create_empty_test_db(db_path)
+
+    # Step 1 & 2: Prose introduces "地下暗渠节点", changes proposal does NOT claim it as state change
+    chapter_prose = """
+林越穿过咸水巷，独自进入了地下暗渠节点。这是他第一次踏足这个隐秘区域。
+
+<chapter_changes>
+{
+  "character_state_changes": [
+    {"character_id": "林越", "new_state": "进入暗渠", "importance": "normal"}
+  ],
+  "new_plot_points": [],
+  "foreshadowing_actions": [],
+  "location_state_changes": [],
+  "faction_state_changes": [],
+  "time_progression": null,
+  "item_transfers": [],
+  "unresolved_questions": []
+}
+</chapter_changes>
+"""
+    gate_res = run_changes_gate(chapter_text=chapter_prose, db_path=db_path, state_path=state_file, chapter=1)
+    assert gate_res.passed is True
+
+    # Step 3 & 4: Data Agent observed "地下暗渠节点" in entity_deltas, commit accepted and projected
+    commit_payload = {
+        "meta": {"schema_version": "story-system/v1", "chapter": 1, "status": "accepted"},
+        "extraction_result": {
+            "chapter_meta": {"chapter": 1, "title": "第1章"},
+            "accepted_events": [],
+            "state_deltas": [],
+            "entity_deltas": [
+                {
+                    "entity_name": "地下暗渠节点",
+                    "entity_type": "location",
+                    "description": "咸水巷地下的未标记暗渠枢纽",
+                    "chapter": 1,
+                }
+            ],
+        },
+    }
+
+    story_sys = tmp_path / ".story-system"
+    story_sys.mkdir(parents=True)
+    writer = IndexProjectionWriter(tmp_path)
+    with canonical_projection_write_scope(tmp_path):
+        writer._apply_accepted_commit(commit_payload)
+
+    # Step 5: In Chapter 2, "地下暗渠节点" is now in index.db ledger!
+    # Therefore, a subsequent chapter state change on "地下暗渠节点" passes R3!
+    ch2_changes = {
+        "location_state_changes": [
+            {"location_id": "地下暗渠节点", "new_state": "水位暴涨封锁", "importance": "normal"}
+        ]
+    }
+    failures = check_r03_entities(ch2_changes, db_path, state_file)
+    assert failures == []
