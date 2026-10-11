@@ -202,3 +202,130 @@ def test_replay_chapter_2_artifact_passes_gate():
     r3_failures = [f for f in result.failures if f.rule_id == "R3"]
     assert r3_failures == [], f"Unexpected R3 failures: {[f.message for f in r3_failures]}"
     assert result.passed is True
+
+
+def test_r03_items_from_setting_bible_passes(tmp_path: Path):
+    """Items defined in 设定集/物品设定.md pass R3 even without explicit DB entry."""
+    db_path = tmp_path / ".webnovel" / "index.db"
+    db_path.parent.mkdir(parents=True)
+    conn = sqlite3.connect(db_path)
+    conn.executescript("""
+        CREATE TABLE entities (id TEXT PRIMARY KEY, type TEXT NOT NULL, canonical_name TEXT NOT NULL, is_archived INTEGER DEFAULT 0);
+        CREATE TABLE aliases (alias TEXT, entity_id TEXT, entity_type TEXT, PRIMARY KEY (alias, entity_id, entity_type));
+    """)
+    conn.commit()
+    conn.close()
+
+    settings_dir = tmp_path / "设定集"
+    settings_dir.mkdir(parents=True)
+    (settings_dir / "角色设定.md").write_text("# 角色设定\n\n## 林越（主角）\n\n## 梅叔（退休档案员）\n", encoding="utf-8")
+    (settings_dir / "物品设定.md").write_text("# 物品设定\n\n## 黄铜钥匙\n- 初始所有者：梅叔\n\n## 白塔纸质残页\n- 初始所有者：梅叔\n", encoding="utf-8")
+    (settings_dir / "世界观.md").write_text("# 世界观\n- 主要地点：地下档案库、临汐城\n", encoding="utf-8")
+
+    state_path = tmp_path / ".webnovel" / "state.json"
+    state_path.write_text(json.dumps({"world_settings": {"locations": ["临汐城", "地下档案库"]}}, ensure_ascii=False), encoding="utf-8")
+
+    # Legitimate item transfer of brass key + grounded location should pass
+    changes = {
+        "location_state_changes": [
+            {"location_id": "地下三层旧纸质档案库", "new_state": "高危管控区", "importance": "normal"}
+        ],
+        "item_transfers": [
+            {"item_id": "黄铜钥匙", "from_holder": "梅叔", "to_holder": "林越"}
+        ]
+    }
+    failures = check_r03_entities(changes, db_path, state_path)
+    assert failures == []
+
+    # Ungrounded hallucinated item must strictly FAIL CLOSED
+    bad_changes = {
+        "item_transfers": [
+            {"item_id": "外星核聚变魔方999", "from_holder": "梅叔", "to_holder": "林越"}
+        ]
+    }
+    bad_failures = check_r03_entities(bad_changes, db_path, state_path)
+    assert len(bad_failures) == 1
+    assert "外星核聚变魔方999" in bad_failures[0].message
+
+
+def test_rejected_chapter_allows_prewrite_rework(tmp_path: Path):
+    """A chapter with status 'rejected' remains ready for prewrite/rework, not blocked by chapter_committed."""
+    from data_modules.project_phase import (
+        INIT_REQUIRED_DIRS,
+        INIT_REQUIRED_FILES,
+        resolve_project_phase,
+        PHASE_CHAPTER_CONTRACT_READY,
+    )
+
+    for rel in INIT_REQUIRED_DIRS:
+        (tmp_path / rel).mkdir(parents=True, exist_ok=True)
+    for rel in INIT_REQUIRED_FILES:
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if rel.endswith(".json"):
+            p.write_text(json.dumps({"project_info": {"title": "测试", "genre": "悬疑"}, "progress": {"current_chapter": 1}}, ensure_ascii=False), encoding="utf-8")
+        else:
+            p.write_text("placeholder\n", encoding="utf-8")
+
+    story_system = tmp_path / ".story-system"
+    (story_system / "commits").mkdir(parents=True, exist_ok=True)
+    (story_system / "chapters").mkdir(parents=True, exist_ok=True)
+    (story_system / "reviews").mkdir(parents=True, exist_ok=True)
+
+    # Chapter 1 accepted
+    (story_system / "commits" / "chapter_001.commit.json").write_text(json.dumps({
+        "meta": {"chapter": 1, "status": "accepted"}
+    }), encoding="utf-8")
+
+    # Chapter 2 rejected
+    (story_system / "commits" / "chapter_002.commit.json").write_text(json.dumps({
+        "meta": {"chapter": 2, "status": "rejected"}
+    }), encoding="utf-8")
+
+    # Chapter 2 contracts present
+    (story_system / "volumes").mkdir(parents=True, exist_ok=True)
+    (story_system / "volumes" / "volume_001.json").write_text(json.dumps({"meta": {"volume": 1}}), encoding="utf-8")
+    (story_system / "MASTER_SETTING.json").write_text(json.dumps({"meta": {}}), encoding="utf-8")
+    (story_system / "chapters" / "chapter_002.json").write_text(json.dumps({"meta": {}}), encoding="utf-8")
+    (story_system / "reviews" / "chapter_002.review.json").write_text(json.dumps({"meta": {}}), encoding="utf-8")
+
+    snapshot = resolve_project_phase(tmp_path, chapter=2)
+    assert snapshot.phase == PHASE_CHAPTER_CONTRACT_READY
+
+
+def test_replay_run006_chapter_2_artifact_passes_gate(tmp_path: Path):
+    """Exact replay of Chapter 2 writer output from run-006 passes changes_gate when canonical locations/items are loaded."""
+    draft_path = Path("/Users/chang/Desktop/Code/zhanghui-benchmark/runs/pilot-tide-archive-001/run-006-final-clean/zhanghui/.webnovel/runtime/chapter_002/draft.json")
+    db_path = Path("/Users/chang/Desktop/Code/zhanghui-benchmark/runs/pilot-tide-archive-001/run-006-final-clean/zhanghui/.webnovel/index.db")
+
+    if not draft_path.is_file() or not db_path.is_file():
+        pytest.skip("Run-006 artifacts not found on local path")
+
+    # Setup project with canonical setting bible locations and items
+    webnovel = tmp_path / ".webnovel"
+    webnovel.mkdir(parents=True)
+    state_file = webnovel / "state.json"
+    state_file.write_text(json.dumps({
+        "world_settings": {
+            "locations": ["临汐城", "咸水巷", "潮汐能源站", "白塔", "旧档案室", "地下档案库"],
+            "items": ["黄铜钥匙", "白塔纸质残页"],
+        }
+    }, ensure_ascii=False), encoding="utf-8")
+
+    settings_dir = tmp_path / "设定集"
+    settings_dir.mkdir(parents=True)
+    (settings_dir / "物品设定.md").write_text("# 物品设定\n\n## 黄铜钥匙\n- 初始所有者：mei_shu\n\n## 白塔纸质残页\n- 初始所有者：mei_shu\n", encoding="utf-8")
+    (settings_dir / "角色设定.md").write_text("# 角色设定\n\n## 林越（主角）\n\n## 梅叔（退休档案员）\n", encoding="utf-8")
+    (settings_dir / "世界观.md").write_text("# 世界观与硬规则\n核心背景：临海城市临汐城依靠潮汐能源维持防潮穹顶。档案修复员林越在一次旧站事故后，开始调查十年前被封存的‘白塔事故’记录。\n主要地点：临汐城、旧城区、咸水巷、潮汐能源站、白塔、旧档案室、地下档案库、旧维护区\n", encoding="utf-8")
+
+    draft = json.loads(draft_path.read_text(encoding="utf-8"))
+    result = run_changes_gate(
+        chapter_text=draft["prose"],
+        db_path=db_path,
+        state_path=state_file,
+        chapter=2,
+    )
+    r3_failures = [f for f in result.failures if f.rule_id == "R3"]
+    assert r3_failures == [], f"Unexpected R3 failures: {[f.message for f in r3_failures]}"
+    assert result.passed is True
+

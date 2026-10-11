@@ -314,7 +314,7 @@ def missing_init_files(project_root: Path) -> tuple[str, ...]:
 
 
 def has_projection_blocker(commit: ChapterCommitInfo | None) -> bool:
-    if commit is None:
+    if commit is None or commit.status != "accepted":
         return False
     return any(
         str(value).startswith("failed:") or str(value) == "pending"
@@ -376,7 +376,7 @@ def resolve_project_phase(project_root: str | Path | None, chapter: int | None =
         phase = PHASE_INIT_SCAFFOLDED
         blocking.extend([f"missing_init_dir:{rel}" for rel in init_dirs_missing])
         blocking.extend([f"missing_init_file:{rel}" for rel in init_files_missing])
-    elif latest_commit and latest_commit.chapter >= target and latest_commit.status in {"accepted", "rejected"}:
+    elif latest_commit and latest_commit.chapter >= target and latest_commit.status == "accepted":
         phase = PHASE_CHAPTER_COMMITTED
     elif draft_file and not artifacts_missing:
         phase = PHASE_READY_TO_COMMIT
