@@ -99,27 +99,42 @@ class IndexProjectionWriter:
                     ))
                     synced += 1
 
-        # Synchronize static entities from 设定集 if available
-        settings_dir = self.project_root / "设定集"
-        if settings_dir.is_dir():
-            import re
-            for md_file in settings_dir.glob("*.md"):
-                etype = "物品" if "物品" in md_file.name else ("角色" if "角色" in md_file.name else "地点")
-                try:
-                    for line in md_file.read_text(encoding="utf-8").splitlines():
-                        m = re.match(r"^##\s+(.+)$", line.strip())
-                        if m:
-                            heading = m.group(1).strip()
-                            clean_name = re.sub(r"[（(].*?[）)]", "", heading).strip()
-                            if clean_name and not manager.get_entity(clean_name):
-                                from .index_manager import EntityMeta
-                                manager.upsert_entity(EntityMeta(
-                                    id=clean_name, type=etype, canonical_name=clean_name,
-                                    tier="装饰", desc="", current={}, first_appearance=0, last_appearance=0, is_protagonist=False
-                                ))
-                                synced += 1
-                except Exception:
-                    pass
+        # Synchronize static entities from structured MASTER_SETTING.json if available
+        master_path = self.project_root / ".story-system" / "MASTER_SETTING.json"
+        if master_path.is_file():
+            try:
+                m_data = json.loads(master_path.read_text(encoding="utf-8"))
+                for ent in m_data.get("entities", []) or []:
+                    if isinstance(ent, dict):
+                        n = str(ent.get("name") or ent.get("id") or ent.get("canonical_name") or "").strip()
+                        etype = str(ent.get("type") or "角色").strip() or "角色"
+                        if n and not manager.get_entity(n):
+                            from .index_manager import EntityMeta
+                            manager.upsert_entity(EntityMeta(
+                                id=n, type=etype, canonical_name=n,
+                                tier="装饰", desc="", current={}, first_appearance=0, last_appearance=0, is_protagonist=False
+                            ))
+                            synced += 1
+                for loc in m_data.get("locations", []) or []:
+                    loc_name = loc if isinstance(loc, str) else (loc.get("name") if isinstance(loc, dict) else "")
+                    if loc_name and isinstance(loc_name, str) and not manager.get_entity(loc_name.strip()):
+                        from .index_manager import EntityMeta
+                        manager.upsert_entity(EntityMeta(
+                            id=loc_name.strip(), type="地点", canonical_name=loc_name.strip(),
+                            tier="装饰", desc="", current={}, first_appearance=0, last_appearance=0, is_protagonist=False
+                        ))
+                        synced += 1
+                for item in (m_data.get("items", []) or []) + (m_data.get("objects", []) or []):
+                    item_name = item if isinstance(item, str) else (item.get("name") if isinstance(item, dict) else "")
+                    if item_name and isinstance(item_name, str) and not manager.get_entity(item_name.strip()):
+                        from .index_manager import EntityMeta
+                        manager.upsert_entity(EntityMeta(
+                            id=item_name.strip(), type="物品", canonical_name=item_name.strip(),
+                            tier="装饰", desc="", current={}, first_appearance=0, last_appearance=0, is_protagonist=False
+                        ))
+                        synced += 1
+            except Exception:
+                pass
 
         return synced
 
