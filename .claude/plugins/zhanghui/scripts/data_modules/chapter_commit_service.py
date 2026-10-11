@@ -391,11 +391,31 @@ class ChapterCommitService:
         target = self.project_root / ".story-system" / "commits"
         target.mkdir(parents=True, exist_ok=True)
         path = target / f"chapter_{int(payload['meta']['chapter']):03d}.commit.json"
-        if path.exists() and on_conflict == "overwrite":
-            raise ChapterCommitError(
-                f"Conflict policy rejected: overwrite is forbidden for canonical chapter commits: {path}"
-            )
-        if not path.exists():
+        existing_status = None
+        if path.exists():
+            try:
+                existing_payload = read_commit_file(path)
+                existing_status = (existing_payload.get("meta") or {}).get("status")
+            except Exception:
+                existing_status = None
+
+        if path.exists() and existing_status == "accepted":
+            if on_conflict == "overwrite":
+                raise ChapterCommitError(
+                    f"Conflict policy rejected: overwrite is forbidden for canonical chapter commits: {path}"
+                )
+            # 守卫：chapter commit 是不可变的 point-in-time snapshot，不支持 append/ask
+            try:
+                resolve_conflict(exists=True, path=path, mode=on_conflict)
+            except (FileExistsError, ValueError, RuntimeError) as exc:
+                # default 模式 (FileExistsError) + append (ValueError) + ask (RuntimeError)
+                # 统一转 ChapterCommitError
+                raise ChapterCommitError(f"Conflict policy rejected: {exc}") from exc
+            # SKIP 短路守卫（per Lesson 1）：resolve_conflict 只打印 SKIP，必须显式返回
+            if on_conflict == "skip":
+                return path
+
+        if not path.exists() or existing_status != "accepted":
             from .projection_generation import ProjectionGeneration
             if ProjectionGeneration(self.project_root).enrollment_path.exists():
                 from .effective_history import EffectiveHistoryStore
@@ -425,16 +445,7 @@ class ChapterCommitService:
                     f"Chapter commits must follow projected state in increasing order; "
                     f"chapter {chapter} < projected chapter {projected}"
                 )
-        # 守卫：chapter commit 是不可变的 point-in-time snapshot，不支持 append/ask
-        try:
-            resolve_conflict(exists=path.exists(), path=path, mode=on_conflict)
-        except (FileExistsError, ValueError, RuntimeError) as exc:
-            # default 模式 (FileExistsError) + append (ValueError) + ask (RuntimeError)
-            # 统一转 ChapterCommitError
-            raise ChapterCommitError(f"Conflict policy rejected: {exc}") from exc
-        # SKIP 短路守卫（per Lesson 1）：resolve_conflict 只打印 SKIP，必须显式返回
-        if on_conflict == "skip" and path.exists():
-            return path
+
         write_json(path, payload)
         return path
 
