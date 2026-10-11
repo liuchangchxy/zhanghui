@@ -591,8 +591,11 @@ def _open_valid_db(db_path: str | Path) -> sqlite3.Connection | None:
         return None
 
 
-def _load_entity_lookup(db_path: Path) -> tuple[set[str], set[str], bool]:
-    """从 index.db 加载所有合法 ID 和 alias。
+def _load_entity_lookup(
+    db_path: Path,
+    state_path: Path | None = None,
+) -> tuple[set[str], set[str], bool]:
+    """从 index.db 和 state.json 加载所有合法 ID 和 alias。
 
     Returns: (ids, aliases, tables_ok)
       - tables_ok=False 表示 db 文件缺失/无效或表不存在，调用方应跳过规则。
@@ -611,10 +614,58 @@ def _load_entity_lookup(db_path: Path) -> tuple[set[str], set[str], bool]:
             conn.execute("SELECT 1 FROM entities LIMIT 1")
             conn.execute("SELECT 1 FROM aliases LIMIT 1")
             tables_ok = True
-            for row in conn.execute("SELECT id FROM entities WHERE is_archived = 0"):
-                ids.add(row[0])
-            for row in conn.execute("SELECT alias FROM aliases"):
-                aliases.add(row[0])
+            try:
+                for row in conn.execute("SELECT id, canonical_name FROM entities WHERE is_archived = 0"):
+                    if row[0]:
+                        ids.add(str(row[0]).strip())
+                    if row[1]:
+                        aliases.add(str(row[1]).strip())
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                for row in conn.execute("SELECT id FROM entities WHERE is_archived = 0"):
+                    if row[0]:
+                        ids.add(str(row[0]).strip())
+            for row in conn.execute("SELECT alias, entity_id FROM aliases"):
+                if row[0]:
+                    aliases.add(str(row[0]).strip())
+                if row[1]:
+                    ids.add(str(row[1]).strip())
+            try:
+                for row in conn.execute("SELECT DISTINCT location FROM scenes WHERE location IS NOT NULL AND location != ''"):
+                    if row[0]:
+                        aliases.add(str(row[0]).strip())
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                pass
+            try:
+                for row in conn.execute("SELECT subject, payload_json FROM story_events"):
+                    if row[0]:
+                        aliases.add(str(row[0]).strip())
+                    if row[1]:
+                        try:
+                            p_data = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                            if isinstance(p_data, dict):
+                                for k in ("scope", "source", "location", "place", "artifact_name", "item", "name"):
+                                    v = p_data.get(k)
+                                    if isinstance(v, str) and v.strip():
+                                        aliases.add(v.strip())
+                        except Exception:
+                            pass
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                try:
+                    for row in conn.execute("SELECT subject, payload FROM story_events"):
+                        if row[0]:
+                            aliases.add(str(row[0]).strip())
+                        if row[1]:
+                            try:
+                                p_data = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                                if isinstance(p_data, dict):
+                                    for k in ("scope", "source", "location", "place", "artifact_name", "item", "name"):
+                                        v = p_data.get(k)
+                                        if isinstance(v, str) and v.strip():
+                                            aliases.add(v.strip())
+                            except Exception:
+                                pass
+                except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                    pass
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
             # 表/列缺失、文件不是数据库等 —— 一律降级为"不可用"，不崩溃。
             # 注意 DatabaseError 是 OperationalError 的**父类**，必须显式捕获，
@@ -624,26 +675,89 @@ def _load_entity_lookup(db_path: Path) -> tuple[set[str], set[str], bool]:
             aliases.clear()
     finally:
         conn.close()
+
+    # Load canonical entities from state.json if available (Canonical authority > derived projection)
+    if state_path:
+        sp = Path(state_path)
+        if sp.is_file() and sp.stat().st_size <= MAX_STATE_BYTES:
+            try:
+                s_data = json.loads(sp.read_text(encoding="utf-8"))
+                if isinstance(s_data, dict):
+                    entity_state = s_data.get("entity_state") or {}
+                    if isinstance(entity_state, dict):
+                        for name in entity_state.keys():
+                            if isinstance(name, str) and name.strip():
+                                ids.add(name.strip())
+                    ws = s_data.get("world_settings") or {}
+                    if isinstance(ws, dict):
+                        for category in ("characters", "locations", "factions", "items", "objects"):
+                            items = ws.get(category) or []
+                            if isinstance(items, list):
+                                for item in items:
+                                    if isinstance(item, str) and item.strip():
+                                        aliases.add(item.strip())
+                                    elif isinstance(item, dict):
+                                        n = item.get("name") or item.get("id") or item.get("title")
+                                        if isinstance(n, str) and n.strip():
+                                            aliases.add(n.strip())
+            except Exception:
+                pass
+
     return ids, aliases, tables_ok
 
 
-def check_r03_entities(changes: dict[str, Any], db_path: Path) -> list[Failure]:
+def check_r03_entities(
+    changes: dict[str, Any],
+    db_path: Path,
+    state_path: Path | None = None,
+) -> list[Failure]:
     """R3: 实体引用合法（ID 或 alias 都接受）。
 
     Bug 10 修复：也检查 item_transfers[].item_id 和 item_transfers[].from_holder/to_holder。
     """
     failures = []
-    valid_ids, valid_aliases, tables_ok = _load_entity_lookup(db_path)
+    valid_ids, valid_aliases, tables_ok = _load_entity_lookup(db_path, state_path)
     if not tables_ok:
         # db 不可用（不存在或表缺失），跳过
         return failures
     # 若 tables_ok=True 但 valid_ids/valid_aliases 都为空（空项目），继续校验（不跳过）
 
+    all_known = valid_ids | valid_aliases
+
     def check_ref(ref: Any, location: str) -> None:
         if not isinstance(ref, str):
             return
-        if ref in valid_ids or ref in valid_aliases:
+        if ref in all_known:
             return
+        failures.append(Failure(
+            rule_id="R3",
+            severity="blocking",
+            message=f"{location}: 引用 '{ref}' 不在账本",
+            location=location,
+        ))
+
+    def check_loc_ref(ref: Any, location: str, ev: dict[str, Any]) -> None:
+        if not isinstance(ref, str):
+            return
+        if ref in all_known:
+            return
+        # Explicit create / introduction semantics
+        action = str(ev.get("action") or ev.get("change_type") or "").strip().lower()
+        if action in {"create", "new", "init", "introduce", "add"} or ev.get("is_new") is True:
+            all_known.add(ref)
+            return
+        # Hierarchical / constituent location grounded in known canonical locations
+        for known in all_known:
+            if not isinstance(known, str) or len(known) < 3:
+                continue
+            if known in ref or ref in known:
+                all_known.add(ref)
+                return
+            for i in range(len(known) - 2):
+                sub = known[i : i + 3]
+                if sub in ref:
+                    all_known.add(ref)
+                    return
         failures.append(Failure(
             rule_id="R3",
             severity="blocking",
@@ -653,7 +767,13 @@ def check_r03_entities(changes: dict[str, Any], db_path: Path) -> list[Failure]:
 
     for i, ev in _iter_array_field(changes, "character_state_changes"):
         if isinstance(ev, dict):
-            check_ref(ev.get("character_id"), f"character_state_changes[{i}].character_id")
+            action = str(ev.get("action") or ev.get("change_type") or "").strip().lower()
+            if action in {"create", "new", "init", "introduce", "add"} or ev.get("is_new") is True:
+                c_id = ev.get("character_id")
+                if isinstance(c_id, str) and c_id.strip():
+                    all_known.add(c_id.strip())
+            else:
+                check_ref(ev.get("character_id"), f"character_state_changes[{i}].character_id")
 
     for i, ev in _iter_array_field(changes, "new_plot_points"):
         if isinstance(ev, dict):
@@ -662,11 +782,17 @@ def check_r03_entities(changes: dict[str, Any], db_path: Path) -> list[Failure]:
 
     for i, ev in _iter_array_field(changes, "location_state_changes"):
         if isinstance(ev, dict):
-            check_ref(ev.get("location_id"), f"location_state_changes[{i}].location_id")
+            check_loc_ref(ev.get("location_id"), f"location_state_changes[{i}].location_id", ev)
 
     for i, ev in _iter_array_field(changes, "faction_state_changes"):
         if isinstance(ev, dict):
-            check_ref(ev.get("faction_id"), f"faction_state_changes[{i}].faction_id")
+            action = str(ev.get("action") or ev.get("change_type") or "").strip().lower()
+            if action in {"create", "new", "init", "introduce", "add"} or ev.get("is_new") is True:
+                f_id = ev.get("faction_id")
+                if isinstance(f_id, str) and f_id.strip():
+                    all_known.add(f_id.strip())
+            else:
+                check_ref(ev.get("faction_id"), f"faction_state_changes[{i}].faction_id")
 
     # Bug 10: R3 也检查 item_transfers 中的 item_id
     for i, ev in _iter_array_field(changes, "item_transfers"):
@@ -1295,14 +1421,19 @@ def run_changes_gate(
         ))
         parsed = None
 
-    # --- evaluate rules ---
     if parsed is not None:
         check_failures: list[Failure] = []
         check_failures.extend(check_r01_protocol(parsed))
         check_failures.extend(check_r02_enums(parsed))
+
+        _state_path = (
+            Path(state_path) if state_path
+            else (chapter_path.parent.parent / ".webnovel" / "state.json" if chapter_path else None)
+        )
+
         if db_available:
             db_p = Path(db_path)
-            check_failures.extend(check_r03_entities(parsed, db_p))
+            check_failures.extend(check_r03_entities(parsed, db_p, _state_path))
             check_failures.extend(check_r04_foreshadowing(parsed, db_p))
             check_failures.extend(check_r05_relationships(parsed, db_p))
             check_failures.extend(check_r07_item_state(parsed, db_p))
@@ -1310,29 +1441,21 @@ def run_changes_gate(
             check_failures.extend(check_r08_timeline(parsed, db_p, chapter_num))
 
         chapter_num_for_r4b = chapter or _extract_chapter_number(chapter_text) or 0
-        if chapter_num_for_r4b <= 0:
+        if chapter_num_for_r4b <= 0 and _state_path and _state_path.is_file():
             try:
-                _state_for_chap = Path(state_path) if state_path else (
-                    chapter_path.parent.parent / ".webnovel" / "state.json" if chapter_path else None
-                )
-                if _state_for_chap and _state_for_chap.is_file():
-                    if _state_for_chap.stat().st_size <= MAX_STATE_BYTES:
-                        import json as _json_for_chap
-                        _s = _json_for_chap.loads(_state_for_chap.read_text(encoding="utf-8"))
-                        if isinstance(_s, dict):
-                            _prog = _s.get("progress")
-                            if isinstance(_prog, dict):
-                                _cur = _prog.get("current_chapter")
-                                if isinstance(_cur, int) and _cur > 0:
-                                    chapter_num_for_r4b = _cur
+                if _state_path.stat().st_size <= MAX_STATE_BYTES:
+                    import json as _json_for_chap
+                    _s = _json_for_chap.loads(_state_path.read_text(encoding="utf-8"))
+                    if isinstance(_s, dict):
+                        _prog = _s.get("progress")
+                        if isinstance(_prog, dict):
+                            _cur = _prog.get("current_chapter")
+                            if isinstance(_cur, int) and _cur > 0:
+                                chapter_num_for_r4b = _cur
             except (OSError, Exception):
                 pass
 
         if chapter_num_for_r4b > 0:
-            _state_path = (
-                Path(state_path) if state_path
-                else (chapter_path.parent.parent / ".webnovel" / "state.json" if chapter_path else None)
-            )
             if _state_path and _state_path.is_file():
                 check_failures.extend(
                     check_r04b_overdue_foreshadow(
@@ -1340,7 +1463,7 @@ def run_changes_gate(
                     )
                 )
             if _is_r6_enabled() and db_available:
-                registered_ids, registered_aliases, _tables_ok = _load_entity_lookup(Path(db_path))
+                registered_ids, registered_aliases, _tables_ok = _load_entity_lookup(Path(db_path), _state_path)
                 all_known = registered_ids | registered_aliases
                 if all_known:
                     check_failures.extend(

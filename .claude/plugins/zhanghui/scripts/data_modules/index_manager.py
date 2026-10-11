@@ -724,7 +724,13 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
             )
             return True
 
-        entity_id = str(delta.get("entity_id") or delta.get("id") or "").strip()
+        entity_id = str(
+            delta.get("entity_id")
+            or delta.get("id")
+            or delta.get("entity_name")
+            or delta.get("name")
+            or ""
+        ).strip()
         if not entity_id:
             return False
 
@@ -744,6 +750,7 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
         payload = delta.get("payload") or {}
         canonical_name = str(
             delta.get("canonical_name")
+            or delta.get("entity_name")
             or delta.get("name")
             or payload.get("name")
             or entity_id
@@ -759,11 +766,21 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
             if existing:
                 is_protagonist = bool(existing.get("is_protagonist"))
 
-        entity_type = str(
+        raw_type = str(
             delta.get("type")
             or delta.get("entity_type")
             or "角色"
-        ).strip() or "角色"
+        ).strip()
+        type_mapping = {
+            "character": "角色",
+            "location": "地点",
+            "artifact": "物品",
+            "item": "物品",
+            "faction": "势力",
+            "skill": "招式",
+            "move": "招式",
+        }
+        entity_type = type_mapping.get(raw_type.lower(), raw_type) or "角色"
 
         entity = EntityMeta(
             id=entity_id,

@@ -31,9 +31,61 @@ class IndexProjectionWriter:
         with canonical_projection_write_scope(self.project_root):
             return self._apply_accepted_commit(commit_payload)
 
+    def _sync_canonical_state_entities(self, manager: IndexManager) -> int:
+        state_path = self.project_root / ".webnovel" / "state.json"
+        if not state_path.is_file():
+            return 0
+        try:
+            state_data = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception:
+            return 0
+        if not isinstance(state_data, dict):
+            return 0
+        entity_state = state_data.get("entity_state") or {}
+        if not isinstance(entity_state, dict):
+            return 0
+        synced = 0
+        for name, info in entity_state.items():
+            if not isinstance(name, str) or not name.strip():
+                continue
+            name = name.strip()
+            existing = manager.get_entity(name)
+            if not existing:
+                desc = ""
+                tier = "装饰"
+                is_protagonist = False
+                current = {}
+                if isinstance(info, dict):
+                    desc = str(info.get("身份") or info.get("description") or info.get("desc") or "").strip()
+                    if info.get("身份") == "主角" or info.get("is_protagonist"):
+                        is_protagonist = True
+                        tier = "主角"
+                    current = {k: v for k, v in info.items() if k not in ("身份", "description", "desc")}
+                from .index_manager import EntityMeta
+                manager.upsert_entity(
+                    EntityMeta(
+                        id=name,
+                        type="角色",
+                        canonical_name=name,
+                        tier=tier,
+                        desc=desc,
+                        current=current,
+                        first_appearance=0,
+                        last_appearance=0,
+                        is_protagonist=is_protagonist,
+                    )
+                )
+                synced += 1
+        return synced
+
     def _apply_accepted_commit(self, commit_payload: dict) -> dict:
         manager = IndexManager(DataModulesConfig.from_project_root(self.project_root))
         applied_count = 0
+
+        # Synchronize canonical state entities from state.json (Canonical authority > derived projection)
+        synced_canon = self._sync_canonical_state_entities(manager)
+        applied_count += synced_canon
+
         chapter_applied = self._upsert_chapter(manager, commit_payload)
         if chapter_applied:
             applied_count += 1
@@ -368,14 +420,22 @@ class IndexProjectionWriter:
                     payload.get("artifact_id")
                     or payload.get("entity_id")
                     or payload.get("id")
-                    or event.get("subject")
+                    or payload.get("artifact_name")
+                    or payload.get("item")
+                    or payload.get("name")
                     or ""
                 ).strip()
                 if not entity_id:
                     continue
                 current = {}
-                owner = str(payload.get("owner") or payload.get("holder") or "").strip()
-                location = str(payload.get("location") or "").strip()
+                owner = str(
+                    payload.get("owner")
+                    or payload.get("holder")
+                    or payload.get("to")
+                    or event.get("subject")
+                    or ""
+                ).strip()
+                location = str(payload.get("location") or payload.get("source") or "").strip()
                 if owner:
                     current["holder"] = owner
                 if location:
@@ -383,7 +443,13 @@ class IndexProjectionWriter:
                 deltas.append(
                     {
                         "entity_id": entity_id,
-                        "canonical_name": str(payload.get("name") or event.get("subject") or entity_id).strip(),
+                        "canonical_name": str(
+                            payload.get("canonical_name")
+                            or payload.get("artifact_name")
+                            or payload.get("item")
+                            or payload.get("name")
+                            or entity_id
+                        ).strip(),
                         "type": str(payload.get("type") or "物品").strip() or "物品",
                         "current": current,
                         "desc": str(payload.get("description") or "").strip(),
