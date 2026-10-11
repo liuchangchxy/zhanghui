@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class VectorProjectionWriter:
     def __init__(self, project_root: Path):
         self.project_root = Path(project_root)
+        self._last_degraded_reason: str | None = None
 
     def apply(self, commit_payload: dict) -> dict:
         require_durable_commit_match(self.project_root, commit_payload)
@@ -32,6 +33,14 @@ class VectorProjectionWriter:
         try:
             stored = self._store_chunks(chunks)
             if stored <= 0:
+                degraded_reason = getattr(self, "_last_degraded_reason", None)
+                if degraded_reason:
+                    return {
+                        "applied": False,
+                        "writer": "vector",
+                        "stored": 0,
+                        "reason": f"degraded:{degraded_reason}",
+                    }
                 return {
                     "applied": False,
                     "writer": "vector",
@@ -239,10 +248,20 @@ class VectorProjectionWriter:
         from .config import DataModulesConfig
         from .rag_adapter import RAGAdapter
 
+        self._last_degraded_reason = None
         config = DataModulesConfig.from_project_root(self.project_root)
         adapter = RAGAdapter(config)
         try:
-            return self._run_store_coro(adapter.store_chunks(chunks))
+            stored = self._run_store_coro(adapter.store_chunks(chunks))
+            if stored <= 0:
+                adapter._update_degraded_mode()
+                if adapter.degraded_mode_reason:
+                    self._last_degraded_reason = adapter.degraded_mode_reason
+                elif getattr(adapter.api_client, "_embed_client", None):
+                    ec = adapter.api_client._embed_client
+                    if ec.last_error_status or ec.last_error_message or not config.embed_api_key:
+                        self._last_degraded_reason = "embedding_unavailable"
+            return stored
         except Exception as exc:
             logger.warning("vector_store_failed: %s", exc)
             return 0
