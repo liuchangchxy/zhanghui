@@ -329,3 +329,52 @@ def test_replay_run006_chapter_2_artifact_passes_gate(tmp_path: Path):
     assert r3_failures == [], f"Unexpected R3 failures: {[f.message for f in r3_failures]}"
     assert result.passed is True
 
+
+def test_rejected_commit_can_be_superseded_by_retry_and_accepted_is_immutable(tmp_path: Path):
+    """A rejected commit (failed attempt) does not block native rework retry; accepted commits remain strictly immutable."""
+    from data_modules.chapter_commit_service import ChapterCommitService, ChapterCommitError
+
+    service = ChapterCommitService(tmp_path)
+    commits_dir = tmp_path / ".story-system" / "commits"
+    commits_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Simulate Attempt 1 failing and writing a rejected commit
+    rejected_payload = {
+        "meta": {"schema_version": "story-system/v1", "chapter": 1, "status": "rejected"},
+        "contract_refs": {"master": "MASTER_SETTING.json", "volume": "volume_001.json", "chapter": "chapter_001.json", "review": "chapter_001.review.json"},
+        "provenance": {"write_fact_role": "chapter_commit", "projection_role": "derived_read_models", "legacy_state_role": "projection_only"},
+        "review_result": {"blocking_count": 1, "overall_score": 50},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
+        "extraction_result": {"accepted_events": [], "state_deltas": [], "entity_deltas": []},
+    }
+    p1 = service.persist_commit(rejected_payload)
+    assert p1.is_file()
+    saved_1 = json.loads(p1.read_text(encoding="utf-8"))
+    assert saved_1["meta"]["status"] == "rejected"
+
+    # 2. Simulate Attempt 2 retry succeeding without passing on_conflict
+    accepted_payload = {
+        "meta": {"schema_version": "story-system/v1", "chapter": 1, "status": "accepted"},
+        "contract_refs": {"master": "MASTER_SETTING.json", "volume": "volume_001.json", "chapter": "chapter_001.json", "review": "chapter_001.review.json"},
+        "provenance": {"write_fact_role": "chapter_commit", "projection_role": "derived_read_models", "legacy_state_role": "projection_only"},
+        "review_result": {"blocking_count": 0, "overall_score": 90},
+        "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        "disambiguation_result": {"pending": []},
+        "extraction_result": {"accepted_events": [], "state_deltas": [], "entity_deltas": []},
+    }
+    # This must NOT raise Conflict policy rejected
+    p2 = service.persist_commit(accepted_payload)
+    assert p2.is_file()
+    saved_2 = json.loads(p2.read_text(encoding="utf-8"))
+    assert saved_2["meta"]["status"] == "accepted"
+    assert saved_2["review_result"]["overall_score"] == 90
+
+    # 3. Once ACCEPTED, attempting to overwrite or write without skip MUST fail closed
+    with pytest.raises(ChapterCommitError, match="Conflict policy rejected"):
+        service.persist_commit(accepted_payload)
+
+    with pytest.raises(ChapterCommitError, match="overwrite is forbidden for canonical chapter commits"):
+        service.persist_commit(accepted_payload, on_conflict="overwrite")
+
+
