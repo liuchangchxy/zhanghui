@@ -88,8 +88,8 @@ def resolve_reference_file(project_root: Path | str, filename: str) -> Optional[
         p4 = Path(__file__).resolve().parents[2] / "references" / filename
         if p4.is_file():
             return p4
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("failed to resolve bundled reference for %s: %s", filename, exc)
     return None
 
 
@@ -380,8 +380,8 @@ class ContextManager:
             loops = adapter.get_open_loops()
             if loops:
                 return [l.to_dict() if hasattr(l, "to_dict") else dict(l) for l in loops[:3]]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("failed to load open_loops from MemoryContractAdapter: %s", exc)
         raw = state.get("open_loops") or (state.get("plot_threads") or {}).get("foreshadowing") or []
         if isinstance(raw, list):
             return [dict(x) if isinstance(x, dict) else {"content": str(x)} for x in raw[:3]]
@@ -883,8 +883,8 @@ class ContextManager:
                         if isinstance(data, dict):
                             text = str(data.get("summary") or data.get("content") or "")
                             break
-                    except Exception:
-                        pass
+                    except (OSError, json.JSONDecodeError) as exc:
+                        logger.warning("failed to parse summary json at %s: %s", j_path, exc)
         if not text:
             return None
         if snippet_chars:

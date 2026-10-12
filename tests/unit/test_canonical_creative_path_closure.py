@@ -25,6 +25,7 @@ import pytest
 from data_modules.chapter_runtime import ChapterRuntime, WriterPackage
 from data_modules.context_manager import resolve_reference_file
 from external_host_adapter import ExternalHostAdapter
+from review_pipeline import run_craft_checks
 
 
 @pytest.fixture
@@ -377,3 +378,143 @@ def test_external_host_adapter_receives_closed_creative_pipeline(creative_projec
     assert "前情摘要：" in rendered_prompt
     assert "紧急伏笔待收：" in rendered_prompt
     assert "青铜指环" in rendered_prompt
+
+
+def test_story_craft_semantic_constraints_reach_writer_prompt_without_raw_dump(creative_project: Path):
+    """Verify chapter-scoped Story Craft constraints render semantically without dumping raw JSON."""
+    state_file = creative_project / ".webnovel" / "state.json"
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    state["story_craft"] = {
+        "rhythm_curve": {
+            "chapters_since_peak": 4,
+            "warning_threshold": 3,
+            "block_threshold": 5,
+            "history": [{"chapter": 1, "tension": 5}],
+        },
+        "timed_locks": [
+            {
+                "id": "TL-01",
+                "description": "百草阁三日内需交齐灵砂",
+                "deadline_chapter": 2,
+                "status": "active",
+            },
+            {
+                "id": "TL-99",
+                "description": "远期封印期限",
+                "deadline_chapter": 10,
+                "status": "active",
+            },
+        ],
+        "character_arc": {
+            "name": "林凡",
+            "starting_state": "卑微杂役",
+            "ending_state": "内门瞩目",
+            "transformation": "自卑忍让到敢作敢当",
+        },
+        "thematic_echoes": [
+            {
+                "premise": "仙凡有别，唯道心可越",
+                "echoes": [
+                    {"chapter": 2, "manifestation": "杂役老者临终赠言"},
+                    {"chapter": 5, "manifestation": "执事殿问对"},
+                ],
+            }
+        ],
+        "foreshadow_chain": [
+            {
+                "id": "FS-01",
+                "type": "物品伏笔",
+                "content": "暗中发烫的青铜指环",
+                "expected_payoff_chapter": 2,
+                "payoff_method": "在后山废墟引发共鸣",
+                "status": "active",
+            },
+            {
+                "id": "FS-02",
+                "type": "人物伏笔",
+                "content": "执法堂暗探",
+                "expected_payoff_chapter": 8,
+                "payoff_method": "宗门大比揭晓",
+                "status": "active",
+            },
+        ],
+        "pacing_notes": "第二章展开宗门底层生存法则",
+        "recommended_scenes": ["杂役院领物资", "后山探查废墟"],
+    }
+    state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    runtime = ChapterRuntime(creative_project)
+    pkg = runtime.attach_creative_brief(
+        chapter=2,
+        creative_brief="本章进入杂役院落生存冲突。",
+    )
+
+    prompt = pkg.to_writer_prompt()
+
+    # 1. Semantic rendering checks in Story Craft section
+    assert "【故事工艺约束 (Story Craft Constraints)】" in prompt
+    sc_section = prompt.split("【故事工艺约束 (Story Craft Constraints)】")[1].split("## 5.")[0]
+    assert "情绪节奏张力：距上次高潮已过 4 章（警示阈值: 3，阻断阈值: 5）" in sc_section
+    assert "剧情限时锁：[TL-01] 百草阁三日内需交齐灵砂（截止第2章）" in sc_section
+    assert "人物弧光指引（林凡）：从【卑微杂役】向【内门瞩目】转变" in sc_section
+    assert "主题呼应设计：命题【仙凡有别，唯道心可越】—— 本章呈现：杂役老者临终赠言" in sc_section
+    assert "预定伏笔回收：[FS-01/物品伏笔] 暗中发烫的青铜指环（回收方式：在后山废墟引发共鸣）" in sc_section
+    assert "剧情节奏备忘：第二章展开宗门底层生存法则" in sc_section
+    assert "推荐场景构想：杂役院领物资、后山探查废墟" in sc_section
+
+    # 2. Distant or non-chapter items should NOT be in the Story Craft prompt section
+    assert "TL-99" not in sc_section
+    assert "FS-02" not in sc_section
+    assert "执法堂暗探" not in sc_section
+    assert "执事殿问对" not in sc_section
+
+    # 3. Raw JSON structure / history array is NOT dumped
+    assert '"history":' not in sc_section
+    assert '"rhythm_curve":' not in sc_section
+    assert '"timed_locks":' not in sc_section
+
+
+def test_reviewer_receives_closed_creative_pipeline(creative_project: Path):
+    """Verify Reviewer receives creative intent, craft constraints, and chapter planning."""
+    runtime = ChapterRuntime(creative_project)
+    rev_ctx = runtime.get_reviewer_context(chapter=2)
+
+    assert rev_ctx["chapter"] == 2
+
+    # 1. 创作意图 (creative_intent)
+    intent = rev_ctx["creative_intent"]
+    assert intent["goal"] == "进入外门分配杂役院落"
+    assert "入驻杂役院" in intent["must_cover_nodes"]
+    assert "严禁暴打同门" in intent["forbidden_zones"]
+    assert intent["core_event"] == "分配杂役院落遭遇老弟子刁难"
+    assert "破旧院落后山藏有微弱灵脉波动" in intent["hook"]
+    assert intent["hook_type"] == "利益发现"
+
+    # 2. 工艺约束 (craft_constraints)
+    craft = rev_ctx["craft_constraints"]
+    assert "坚毅热血" in craft["core_tone"]
+    assert any("空洞说教" in str(ap) for ap in craft["anti_patterns"])
+    assert "story_craft" in craft
+
+    # 3. 本章规划信息 (chapter_planning)
+    plan = rev_ctx["chapter_planning"]
+    assert plan["chapter_meta"]["chapter"] == 2
+    assert plan["chapter_meta"]["hook_type"] == "利益发现"
+
+
+def test_reviewer_craft_checks_consume_chapter_meta_and_story_craft(creative_project: Path):
+    """Verify Reviewer craft checks properly evaluate zero-padded chapter_meta and story_craft."""
+    state_file = creative_project / ".webnovel" / "state.json"
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+
+    # Chapter 2's chapter_meta has key "0002" with hook_type="利益发现"
+    # Verify run_craft_checks consumes "0002" via get_chapter_meta_entry and does NOT emit missing hook_type warning
+    issues = run_craft_checks(state, chapter=2)
+
+    # Missing hook_type should NOT be emitted because "0002" was resolved
+    hook_type_warnings = [
+        iss for iss in issues.get("warnings", [])
+        if "hook_type 未声明" in str(iss)
+    ]
+    assert len(hook_type_warnings) == 0, f"Expected no hook_type warning, got: {hook_type_warnings}"
+

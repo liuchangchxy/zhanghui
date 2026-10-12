@@ -324,6 +324,21 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                 print(f"ERROR: {exc}", file=sys.stderr)
             return 1
 
+    if action == "reviewer-context":
+        try:
+            ctx = runtime.get_reviewer_context(chapter=args.chapter)
+            if args.format == "json":
+                print(json.dumps(ctx, ensure_ascii=False, indent=2))
+            else:
+                print(f"OK reviewer-context chapter {args.chapter}")
+            return 0
+        except Exception as exc:
+            if args.format == "json":
+                print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2))
+            else:
+                print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
     if action == "package":
         try:
             brief = getattr(args, "brief", None)
@@ -1184,6 +1199,11 @@ def main() -> None:
     p_rt_gov.add_argument("--chapter", type=int, required=True, help="章节号")
     p_rt_gov.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_gov.set_defaults(func=cmd_runtime)
+
+    p_rt_rev = runtime_sub.add_parser("reviewer-context", help="获取 Reviewer 审查所需的受治理意图与 Craft 约束")
+    p_rt_rev.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_rev.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_rev.set_defaults(func=cmd_runtime)
 
     p_rt_pkg = runtime_sub.add_parser("package", help="获取指定章节的 Writer Package")
     p_rt_pkg.add_argument("--chapter", type=int, required=True, help="章节号")
