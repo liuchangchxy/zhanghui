@@ -287,8 +287,9 @@ class MemoryContractAdapter:
                     or ""
                 ).strip()
             if genre:
-                profile_path = self.config.project_root / ".claude" / "references" / "genre-profiles.md"
-                if profile_path.exists():
+                from .context_manager import resolve_reference_file
+                profile_path = resolve_reference_file(self.config.project_root, "genre-profiles.md")
+                if profile_path and profile_path.exists():
                     profile_text = profile_path.read_text(encoding="utf-8")
                     excerpt = extract_genre_section(profile_text, genre)
                     if excerpt:

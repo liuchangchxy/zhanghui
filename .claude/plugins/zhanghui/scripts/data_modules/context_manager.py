@@ -55,7 +55,42 @@ from .writing_guidance_builder import (
 )
 
 
+import os
 logger = logging.getLogger(__name__)
+
+
+def resolve_reference_file(project_root: Path | str, filename: str) -> Optional[Path]:
+    """
+    Resolve reference file with project-level override taking priority:
+    1. <project_root>/.claude/references/<filename> (project-level explicit override)
+    2. <project_root>/references/<filename> (project-level standard override)
+    3. Plugin-bundled canonical reference:
+       - If CLAUDE_PLUGIN_ROOT is set: <CLAUDE_PLUGIN_ROOT>/references/<filename>
+       - Package-relative location: <plugin_root>/references/<filename>
+    """
+    p_root = Path(project_root)
+    # 1. Project override .claude/references
+    p1 = p_root / ".claude" / "references" / filename
+    if p1.is_file():
+        return p1
+    # 2. Project override references/
+    p2 = p_root / "references" / filename
+    if p2.is_file():
+        return p2
+    # 3. Environment variable CLAUDE_PLUGIN_ROOT
+    plugin_env = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if plugin_env:
+        p3 = Path(plugin_env) / "references" / filename
+        if p3.is_file():
+            return p3
+    # 4. Canonical bundled in plugin package (parents[2] from data_modules)
+    try:
+        p4 = Path(__file__).resolve().parents[2] / "references" / filename
+        if p4.is_file():
+            return p4
+    except Exception:
+        pass
+    return None
 
 
 class ContextManager:
@@ -81,6 +116,7 @@ class ContextManager:
         "craft",
         "reference",
         "context_diagnostics",
+        "urgent_loops",
     }
     SECTION_ORDER = [
         "core",
@@ -99,6 +135,7 @@ class ContextManager:
         "genre_profile",
         "writing_guidance",
         "plot_structure",
+        "urgent_loops",
         "story_skeleton",
         "memory",
         "long_term_memory",
@@ -181,6 +218,7 @@ class ContextManager:
                 "memory": pack.get("memory"),
                 "scene": pack.get("scene"),
                 "plot_structure": pack.get("plot_structure"),
+                "urgent_loops": pack.get("urgent_loops"),
             },
             owned_view=getattr(self, "_operation_owned_view", None),
         )
@@ -305,6 +343,8 @@ class ContextManager:
             story_contract=story_contract,
         )
 
+        urgent_loops = self._load_urgent_loops(state)
+
         return {
             "meta": {"chapter": chapter},
             "core": core,
@@ -318,6 +358,7 @@ class ContextManager:
             "genre_profile": genre_profile,
             "writing_guidance": writing_guidance,
             "plot_structure": plot_structure,
+            "urgent_loops": urgent_loops,
             "story_skeleton": story_skeleton,
             "preferences": preferences,
             "memory": memory,
@@ -331,6 +372,20 @@ class ContextManager:
                 ),
             },
         }
+
+    def _load_urgent_loops(self, state: Dict[str, Any]) -> List[Dict[str, Any]]:
+        try:
+            from .memory_contract_adapter import MemoryContractAdapter
+            adapter = MemoryContractAdapter(self.config)
+            loops = adapter.get_open_loops()
+            if loops:
+                return [l.to_dict() if hasattr(l, "to_dict") else dict(l) for l in loops[:3]]
+        except Exception:
+            pass
+        raw = state.get("open_loops") or (state.get("plot_threads") or {}).get("foreshadowing") or []
+        if isinstance(raw, list):
+            return [dict(x) if isinstance(x, dict) else {"content": str(x)} for x in raw[:3]]
+        return []
 
     def _load_reader_signal(self, chapter: int) -> Dict[str, Any]:
         if not getattr(self.config, "context_reader_signal_enabled", True):
@@ -398,11 +453,11 @@ class ContextManager:
         primary_genre = genres[0]
         secondary_genres = genres[1:]
         composite = len(genres) > 1
-        profile_path = self.config.project_root / ".claude" / "references" / "genre-profiles.md"
-        taxonomy_path = self.config.project_root / ".claude" / "references" / "reading-power-taxonomy.md"
+        profile_path = resolve_reference_file(self.config.project_root, "genre-profiles.md")
+        taxonomy_path = resolve_reference_file(self.config.project_root, "reading-power-taxonomy.md")
 
-        profile_text = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
-        taxonomy_text = taxonomy_path.read_text(encoding="utf-8") if taxonomy_path.exists() else ""
+        profile_text = profile_path.read_text(encoding="utf-8") if (profile_path and profile_path.exists()) else ""
+        taxonomy_text = taxonomy_path.read_text(encoding="utf-8") if (taxonomy_path and taxonomy_path.exists()) else ""
 
         profile_excerpt = self._extract_genre_section(profile_text, primary_genre)
         taxonomy_excerpt = self._extract_genre_section(taxonomy_text, primary_genre)
@@ -805,10 +860,33 @@ class ContextManager:
                 return None
             summary_text = self._extract_summary_excerpt(text, snippet_chars) if snippet_chars else text
             return {"chapter": chapter, "summary": summary_text}
-        summary_path = self.config.webnovel_dir / "summaries" / f"ch{chapter:04d}.md"
-        if not summary_path.exists():
+        summary_dir = self.config.webnovel_dir / "summaries"
+        text: Optional[str] = None
+        for c_path in (
+            summary_dir / f"ch{chapter:04d}.md",
+            summary_dir / f"ch_{chapter:04d}.md",
+            summary_dir / f"{chapter:04d}.md",
+            summary_dir / f"ch{chapter}.md",
+        ):
+            if c_path.exists():
+                text = c_path.read_text(encoding="utf-8")
+                break
+        if text is None:
+            for j_path in (
+                summary_dir / f"ch{chapter:04d}.json",
+                summary_dir / f"ch_{chapter:04d}.json",
+                summary_dir / f"{chapter:04d}.json",
+            ):
+                if j_path.exists():
+                    try:
+                        data = json.loads(j_path.read_text(encoding="utf-8"))
+                        if isinstance(data, dict):
+                            text = str(data.get("summary") or data.get("content") or "")
+                            break
+                    except Exception:
+                        pass
+        if not text:
             return None
-        text = summary_path.read_text(encoding="utf-8")
         if snippet_chars:
             summary_text = self._extract_summary_excerpt(text, snippet_chars)
         else:

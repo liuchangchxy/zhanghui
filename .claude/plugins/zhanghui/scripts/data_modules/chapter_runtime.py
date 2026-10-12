@@ -43,6 +43,7 @@ from .gate_finding_adapters import adapt_changes_gate_result, adapt_legacy_artif
 from .projections import retry_projection
 from .reconciliation import reconcile_changes, split_chapter_and_changes
 from .runtime_contract_builder import RuntimeContractBuilder
+from .state_validator import get_chapter_meta_entry
 from .story_contracts import (
     StoryContractPaths,
     persist_runtime_contracts,
@@ -138,12 +139,26 @@ class WriterPackage:
         ]
         if goal:
             lines.append(f"- 核心目标：{goal}")
+        ch_meta = intent.get("chapter_meta") or {}
+        core_event = ch_meta.get("core_event")
+        if core_event and core_event != goal:
+            lines.append(f"- 计划核心事件：{core_event}")
+        elif core_event and not goal:
+            lines.append(f"- 核心事件：{core_event}")
         if conflict:
             lines.append(f"- 主要阻力：{conflict}")
         if cost:
             lines.append(f"- 付出代价：{cost}")
+        hook = ch_meta.get("hook")
+        hook_type = ch_meta.get("hook_type")
         if ending_q:
             lines.append(f"- 章末钩子/未决问题：{ending_q}")
+            if hook and hook != ending_q:
+                lines.append(f"- 预设钩子设计：{hook}（类型：{hook_type or '未指定'}）")
+        elif hook:
+            lines.append(f"- 章末预设钩子：{hook}（类型：{hook_type or '未指定'}）")
+        elif hook_type:
+            lines.append(f"- 章末钩子倾向：{hook_type}")
         if must_nodes:
             lines.append(f"- 必须覆盖节点：{', '.join(must_nodes)}")
         if prohibitions:
@@ -209,19 +224,88 @@ class WriterPackage:
         if anti_patterns:
             lines.append(f"- 避坑规则 (Anti-patterns)：{'; '.join(anti_patterns[:5])}")
 
+        genre_prof = constraints.get("genre_profile") or {}
+        profile_excerpt = str(genre_prof.get("profile_excerpt") or "").strip()
+        if profile_excerpt:
+            lines.append(f"【题材创作指引 ({genre_prof.get('genre', genre)})】：\n{profile_excerpt}")
+
+        guidance = constraints.get("writing_guidance") or {}
+        g_items = guidance.get("items") or []
+        if g_items:
+            lines.append("【写作指导 (Writing Guidance)】")
+            for item in g_items[:5]:
+                txt = item.get("text") or item.get("rule") or str(item) if isinstance(item, dict) else str(item)
+                lines.append(f"- {txt}")
+        strategy_card = guidance.get("strategy_card") or {}
+        if isinstance(strategy_card, dict) and (strategy_card.get("pressure_source") or strategy_card.get("release_target")):
+            p_src = strategy_card.get("pressure_source", "")
+            r_tgt = strategy_card.get("release_target", "")
+            lines.append(f"- 叙事策略：施压点【{p_src}】 -> 释放点【{r_tgt}】")
+
+        craft_items = constraints.get("craft_items") or []
+        rendered_craft = []
+        for item in craft_items:
+            if isinstance(item, dict):
+                if item.get("source_role") in ("CONFIG",) and item.get("source_ref") in (
+                    "writing_guidance", "genre_profile", "genre_profile_excerpt", "preferences"
+                ):
+                    continue
+                c = item.get("content")
+                if isinstance(c, str) and c.strip():
+                    rendered_craft.append(c.strip())
+                elif isinstance(c, dict) and "text" in c:
+                    rendered_craft.append(str(c["text"]).strip())
+                elif isinstance(c, dict) and "rule" in c:
+                    rendered_craft.append(str(c["rule"]).strip())
+                elif isinstance(c, dict) and "content" in c:
+                    rendered_craft.append(str(c["content"]).strip())
+            elif isinstance(item, str) and item.strip():
+                rendered_craft.append(item.strip())
+        if rendered_craft:
+            lines.append("【工艺建议 (Craft Recommendations)】")
+            for c_text in rendered_craft[:5]:
+                lines.append(f"- {c_text}")
+
         recent_sums = writer_ctx.get("recent_summaries") or []
         urgent_loops = writer_ctx.get("urgent_loops") or []
-        if recent_sums or urgent_loops:
+        ref_items = writer_ctx.get("reference") or []
+        if recent_sums or urgent_loops or ref_items:
             lines.extend([
                 "",
                 "## 5. 关联前情线索 (Writer Context)",
             ])
             for s in recent_sums[:3]:
                 s_text = s.get("summary") if isinstance(s, dict) else str(s)
-                lines.append(f"- 前情摘要：{s_text}")
+                ch_prefix = f"第{s.get('chapter')}章：" if isinstance(s, dict) and s.get("chapter") else ""
+                lines.append(f"- 前情摘要：{ch_prefix}{s_text}")
             for loop in urgent_loops[:3]:
-                l_text = loop.get("hook_text") or loop.get("description") if isinstance(loop, dict) else str(loop)
+                l_text = (
+                    loop.get("hook_text")
+                    or loop.get("description")
+                    or loop.get("content")
+                    or loop.get("expected_payoff")
+                    if isinstance(loop, dict)
+                    else str(loop)
+                )
                 lines.append(f"- 紧急伏笔待收：{l_text}")
+            if ref_items:
+                rendered_refs = []
+                for r in ref_items:
+                    if isinstance(r, dict):
+                        c = r.get("content") or r.get("summary") or r.get("text") or ""
+                        if isinstance(c, dict):
+                            if "path" in c and "value" in c:
+                                c = f"{c['path']}: {c['value']}"
+                            else:
+                                c = json.dumps(c, ensure_ascii=False)
+                        if str(c).strip():
+                            rendered_refs.append(str(c).strip())
+                    elif isinstance(r, str) and r.strip():
+                        rendered_refs.append(r.strip())
+                if rendered_refs:
+                    lines.append("【参考依据 (Reference)】")
+                    for r_text in rendered_refs[:3]:
+                        lines.append(f"- {r_text}")
 
         lines.extend([
             "",
@@ -704,12 +788,14 @@ class ChapterRuntime:
                 continue
             intent_items.append(item_d)
 
+        chapter_meta = get_chapter_meta_entry(state, chapter)
         current_intent = {
             "chapter": chapter,
             "outline": core.get("chapter_outline") or load_chapter_outline(self.project_root, chapter, max_chars=None),
             "directive": merged_directive,
             "plot_structure": plot_structure,
             "chapter_brief": chapter_contract.get("override_allowed") or {},
+            "chapter_meta": chapter_meta,
             "intent_items": intent_items,
         }
 
@@ -779,6 +865,8 @@ class ChapterRuntime:
             "mandatory_nodes": list(plot_structure.get("mandatory_nodes") or []),
             "anti_patterns": anti_patterns_list,
             "writing_guidance": native_ctx.get("writing_guidance") or {},
+            "genre_profile": native_ctx.get("genre_profile") or {},
+            "story_craft": state.get("story_craft") or {},
         }
 
         raw_ref = native_ctx.get("reference") or []
@@ -786,8 +874,23 @@ class ChapterRuntime:
             item.to_dict() if hasattr(item, "to_dict") else (dict(item) if isinstance(item, dict) else {"content": str(item)})
             for item in raw_ref
         ]
+        urgent_loops: list[dict[str, Any]] = []
+        try:
+            from .memory_contract_adapter import MemoryContractAdapter
+            mem_adapter = MemoryContractAdapter(cfg)
+            urgent_loops = [l.to_dict() if hasattr(l, "to_dict") else dict(l) for l in mem_adapter.get_open_loops()[:3]]
+        except Exception:
+            pass
+        if not urgent_loops:
+            raw_loops = native_ctx.get("urgent_loops") or state.get("open_loops") or (state.get("plot_threads") or {}).get("foreshadowing") or []
+            if isinstance(raw_loops, list):
+                urgent_loops = [dict(x) if isinstance(x, dict) else {"content": str(x)} for x in raw_loops[:3]]
+
         writer_context = {
             "reference": ref_items,
+            "recent_summaries": core.get("recent_summaries") or [],
+            "recent_meta": core.get("recent_meta") or [],
+            "urgent_loops": urgent_loops,
             "volume_goal": volume_contract.get("volume_goal") or {},
             "selected_tropes": volume_contract.get("selected_tropes") or [],
             "must_check_nodes": review_contract.get("must_check") or [],
