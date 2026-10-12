@@ -20,30 +20,47 @@ color: yellow
 
 ## 2. 可用工具与脚本
 
-- `Read`：读取正文、设定集、记忆数据
+- `Read`：读取正文、设定集、记忆数据与审查上下文文件
 - `Grep`：在正文中搜索关键词
-- `Bash`：调用记忆模块查询
+- `Bash`：调用记忆模块与受治理上下文查询
 
 ```bash
+# 查询受治理审查上下文（含事实权威、创作意图、Craft 约束与章节规划）
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime reviewer-context --chapter {chapter} --format json
+
 # 查询角色当前状态
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" state get-entity --id "{entity_id}"
 
 # 查询最近状态变更
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" index get-state-changes --limit 20
-
 ```
 
 ## 3. 输入
 
 - `chapter`：章节号
 - `chapter_file`：正文文件路径
+- `reviewer_context_file`：受治理 Reviewer 上下文文件路径（包含 `canon_authority`、`creative_intent`、`craft_constraints`、`chapter_planning`、`hard_constraints`、`advisory_constraints`）
 - `project_root`：项目根目录
 - `scripts_dir`：脚本目录
+- `draft_id`（可选）：当前草稿标识
+- `draft_fingerprint`（可选）：当前草稿指纹
 
 ## 4. 执行流程（按顺序执行）
 
+审查开始前，通过 `Read` 读取 `reviewer_context_file`（若文件未提供或无法读取，通过 `Bash` 执行 `runtime reviewer-context` 动态获取）。
+受治理审查上下文划分四个权威层级：
+1. **事实权威 (`canon_authority`)**：已锁定的实体状态、世界观与人物履历，为事实真理基准；
+2. **创作意图 (`creative_intent`)**：本章目标（`goal`）、计划核心事件（`core_event`）、章末钩子（`hook` 与 `hook_type`）；
+3. **本章规划 (`chapter_planning`)**：`chapter_meta`（含 Scene-Sequel 元数据）、情节结构；
+4. **故事工艺与建议 (`craft_constraints` / `advisory_constraints`)**：Story Craft（节奏曲线张力、限时锁到期、人物弧光）及写作指引；
+5. **硬性门禁 (`hard_constraints`)**：明确禁止的禁区（`forbidden_zones`）与阻断规则（`blocking_rules`）。
+
+**裁决铁律**：
+- 仅 `canon_authority` 事实矛盾或 `hard_constraints` 违背可出具 critical/high 事实问题；
+- `craft_constraints` / `advisory_constraints`（包括节拍 Scene-Sequel、伏笔逾期、节奏曲线超阈值、缺少 hook_type）**严格作为 Craft advisory finding 处理**。可以报告问题描述和原文依据，但**严禁标记 `blocking=true`，严禁使用 `severity=critical`，严禁升级为 hard gate**。
+
 ### 1. 设定一致性（category: setting）
-- 角色能力是否与当前境界匹配
+- 对照 `canon_authority` 检查角色能力是否与当前境界匹配
 - 地点描述是否与世界观一致
 - 物品/货币使用是否符合已建立规则
 
@@ -62,7 +79,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
   - 钩子是否避免了"将/会/即将/未来"等未来时态词汇
 
 ### 4. 角色一致性（category: character）
-- 对话风格是否符合角色特征
+- 对照 `canon_authority` 检查对话风格是否符合角色特征
 - 行为是否与已建立的性格/动机一致
 - 角色知识边界——角色是否使用了不应知道的信息
 
@@ -70,12 +87,14 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 - 因果关系是否成立
 - 角色决策是否有合理动机
 - 战斗/冲突结果是否符合已建立的力量对比
+- 对照 `hard_constraints` 检查是否触碰本章禁区（`forbidden_zones`）
 - **Ω级 代价守恒定律**（来自 `core-constraints.md`）：
   - 本章是否有"白拿"事件——重大增益（实力突破/重大发现/关系升级/资源暴增/关键道具）1-5 章内无代价叙事？
   - 跨章回溯：最近 5 章内是否有未付代价的增益事件？
 - 描述置信度：高 / 中；不要用 severity 代替 gate authority。
 
 ### 6. 节拍合规性（category: beat_compliance）
+- 对照 `creative_intent.goal` 与 `chapter_planning.chapter_meta` 审查本章节拍推进
 - Midpoint 是否已到达且反转/假胜利/假失败明确？
 - All Is Lost 是否已到达且为卷末最低点？
 - Final Image 是否与下卷 Opening Image 呼应？
@@ -86,12 +105,12 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 这些节拍与 Scene-Sequel 观察都属于 Craft advisory。可以报告高/中优先级 finding 和证据，不得作为 blocker。
 
 ### 7. 草蛇灰线合规性（category: foreshadow_compliance）
+- 对照 `chapter_planning.chapter_meta` 审查章末 `hook_type` 与 `hook` 是否声明且符合 6 种之一
+- 对照 `craft_constraints.story_craft` 审查节奏曲线（chapters_since_peak 是否超过阈值）与限时锁
 - 本章 foreshadow_buried 是否合理埋设（5 字段全填）？
 - 本章 foreshadow_paid_off 是否合理回收？
 - 任何 expected_payoff_chapter 已过但仍 active 的伏笔 → advisory finding
 - 任何 active 伏笔 ≥10 章未推进 → WARNING
-- 节奏曲线：chapters_since_peak 是否超过阈值？
-- 章末 hook_type 是否声明 + 是否符合 6 种之一？
 
 伏笔逾期、节奏阈值与缺少 hook_type 都属于 Craft advisory。可以报告 finding 和证据，不得设置 `blocking=true` 或使用 `critical`。
 

@@ -379,6 +379,13 @@ def test_external_host_adapter_receives_closed_creative_pipeline(creative_projec
     assert "紧急伏笔待收：" in rendered_prompt
     assert "青铜指环" in rendered_prompt
 
+    # 4. Reviewer Context evidence collected
+    assert (evidence_dir / "reviewer_context.json").exists()
+    rev_data = json.loads((evidence_dir / "reviewer_context.json").read_text(encoding="utf-8"))
+    assert rev_data["chapter"] == 2
+    assert rev_data["creative_intent"]["hook_type"] == "利益发现"
+    assert "story_craft" in rev_data["advisory_constraints"]
+
 
 def test_story_craft_semantic_constraints_reach_writer_prompt_without_raw_dump(creative_project: Path):
     """Verify chapter-scoped Story Craft constraints render semantically without dumping raw JSON."""
@@ -475,13 +482,18 @@ def test_story_craft_semantic_constraints_reach_writer_prompt_without_raw_dump(c
 
 
 def test_reviewer_receives_closed_creative_pipeline(creative_project: Path):
-    """Verify Reviewer receives creative intent, craft constraints, and chapter planning."""
+    """Verify Reviewer receives creative intent, craft constraints, canon facts, and authority tiers."""
     runtime = ChapterRuntime(creative_project)
     rev_ctx = runtime.get_reviewer_context(chapter=2)
 
     assert rev_ctx["chapter"] == 2
 
-    # 1. 创作意图 (creative_intent)
+    # 1. 事实权威 (canon_authority)
+    canon = rev_ctx["canon_authority"]
+    assert isinstance(canon, dict)
+    assert "林凡" in str(canon)
+
+    # 2. 创作意图 (creative_intent)
     intent = rev_ctx["creative_intent"]
     assert intent["goal"] == "进入外门分配杂役院落"
     assert "入驻杂役院" in intent["must_cover_nodes"]
@@ -490,13 +502,20 @@ def test_reviewer_receives_closed_creative_pipeline(creative_project: Path):
     assert "破旧院落后山藏有微弱灵脉波动" in intent["hook"]
     assert intent["hook_type"] == "利益发现"
 
-    # 2. 工艺约束 (craft_constraints)
+    # 3. 工艺约束 (craft_constraints)
     craft = rev_ctx["craft_constraints"]
     assert "坚毅热血" in craft["core_tone"]
     assert any("空洞说教" in str(ap) for ap in craft["anti_patterns"])
     assert "story_craft" in craft
 
-    # 3. 本章规划信息 (chapter_planning)
+    # 4. 门禁与建议区分 (hard_constraints vs advisory_constraints)
+    hard = rev_ctx["hard_constraints"]
+    assert "严禁暴打同门" in hard
+    advisory = rev_ctx["advisory_constraints"]
+    assert "story_craft" in advisory
+    assert "ADVISORY_ONLY" in advisory.get("policy", "")
+
+    # 5. 本章规划信息 (chapter_planning)
     plan = rev_ctx["chapter_planning"]
     assert plan["chapter_meta"]["chapter"] == 2
     assert plan["chapter_meta"]["hook_type"] == "利益发现"
@@ -517,4 +536,62 @@ def test_reviewer_craft_checks_consume_chapter_meta_and_story_craft(creative_pro
         if "hook_type 未声明" in str(iss)
     ]
     assert len(hook_type_warnings) == 0, f"Expected no hook_type warning, got: {hook_type_warnings}"
+
+
+def test_webnovel_write_step3_wires_reviewer_context_specification():
+    """Verify webnovel-write/SKILL.md Step 3 explicitly wires runtime reviewer-context to reviewer agent."""
+    skill_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / ".claude"
+        / "plugins"
+        / "zhanghui"
+        / "skills"
+        / "webnovel-write"
+        / "SKILL.md"
+    )
+    skill_text = skill_path.read_text(encoding="utf-8")
+
+    # 1. Step 3 generates reviewer context via runtime CLI
+    assert "runtime reviewer-context" in skill_text
+    assert "reviewer_context_{chapter_padded}.json" in skill_text
+
+    # 2. Step 3 passes reviewer_context_file to webnovel-writer:reviewer
+    assert "webnovel-writer:reviewer" in skill_text
+    assert "reviewer_context_file" in skill_text
+
+    # 3. Explicit authority tier definitions and advisory non-blocking rule
+    assert "canon_authority" in skill_text
+    assert "creative_intent" in skill_text
+    assert "advisory_constraints" in skill_text or "craft_constraints" in skill_text
+    assert "严格作为 advisory finding 处理，不得输出 `blocking=true`" in skill_text or "不得输出 `blocking=true`" in skill_text
+
+
+def test_reviewer_agent_spec_wires_reviewer_context_consumption():
+    """Verify agents/reviewer.md consumes reviewer_context_file and enforces craft advisory boundary."""
+    agent_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / ".claude"
+        / "plugins"
+        / "zhanghui"
+        / "agents"
+        / "reviewer.md"
+    )
+    agent_text = agent_path.read_text(encoding="utf-8")
+
+    # 1. Available tools & bash commands
+    assert "runtime reviewer-context" in agent_text
+
+    # 2. Inputs include reviewer_context_file
+    assert "reviewer_context_file" in agent_text
+
+    # 3. Execution flow uses context tiers
+    assert "canon_authority" in agent_text
+    assert "creative_intent" in agent_text
+    assert "chapter_planning" in agent_text
+    assert "craft_constraints" in agent_text
+
+    # 4. Strict advisory non-blocking boundary for craft
+    assert "严禁标记 `blocking=true`" in agent_text
+    assert "严禁升级为 hard gate" in agent_text
+
 

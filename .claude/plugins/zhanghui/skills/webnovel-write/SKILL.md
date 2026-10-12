@@ -401,12 +401,33 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 
 ### Step 3：审查（auto 路由，必须由 Agent 子代理执行）
 
+受治理审查上下文准备（Reviewer Context Pre-fetch）：
+- 调用审查 subagent 前，必须先获取并落盘受治理审查上下文：
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime reviewer-context \
+  --chapter {chapter_num} \
+  --format json > "${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"
+```
+
 调用约束：
 - 必须用 `Agent` 工具按注册名 `webnovel-writer:reviewer` 调用审查 subagent：
   ```
   Use the Agent tool to run `webnovel-writer:reviewer`
   ```
+  输入参数：
+  - `chapter`: `{chapter_num}`
+  - `chapter_file`: `"${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"`
+  - `reviewer_context_file`: `"${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"`
+  - `project_root`: `"${PROJECT_ROOT}"`
+  - `scripts_dir`: `"${SCRIPTS_DIR}"`
+  - `draft_id`: `"{draft_id}"`
+  - `draft_fingerprint`: `"{draft_fingerprint}"`
 - 审查对象为当前工作草稿 `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`，审查结果严格绑定当前的 `draft_id` 与 `draft_fingerprint`。
+- 权威分级与审查依据约束：
+  1. **Canon 事实权威 (`canon_authority`)**：已确认的世界观、角色状态与账本事实。正文与其直接冲突为事实矛盾，可评定为 critical/high；
+  2. **创作意图 (`creative_intent`)**：本章核心目标（goal）、计划核心事件（core_event）、章末钩子（hook 与 hook_type），审查是否回应意图；
+  3. **工艺与写作指引 (`craft_constraints` / `advisory_constraints`)**：Story Craft（节奏曲线张力、限时锁、Scene-Sequel、人物弧光）及 writing_guidance。**这些属于启发式工艺指引，严格作为 advisory finding 处理，不得输出 `blocking=true`，不得升级为 blocking hard gate**；
+  4. **硬性审查约束 (`hard_constraints`)**：本章明确禁止的禁区（forbidden_zones）与阻断规则（blocking_rules）。
 - 禁止主流程伪造审查结论。
 - 可并行发起审查，统一汇总 `issues/severity/overall_score`。
 - 默认使用 `auto` 路由：根据"本章执行合同 + 正文信号 + 大纲标签"动态选择审查器。
@@ -495,7 +516,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
         ```
         获取全新的 `draft_id` 与 `draft_fingerprint`；
      4. **旧草稿的审查结果彻底失效**：严禁沿用旧 `draft_id` 对应的 review_results；
-     5. 重新调用 `webnovel-writer:reviewer` 对新草稿进行完整审查，产出与新 `draft_id` 绑定的全新 `review_results.json`，并调用 `review-pipeline --save-metrics` 刷新 metrics；
+     5. 重新调用 `webnovel-writer:reviewer` 对新草稿进行完整审查（继续传入 `reviewer_context_{chapter_padded}.json` 作为审查依据），产出与新 `draft_id` 绑定的全新 `review_results.json`，并调用 `review-pipeline --save-metrics` 刷新 metrics；
      6. 只有完成新草稿审查并绑定新 `draft_id` 后，方可进入 Step 4.5。
 
 输出：

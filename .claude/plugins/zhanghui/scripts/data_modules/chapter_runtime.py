@@ -1038,9 +1038,11 @@ class ChapterRuntime:
         """
         Assemble and return governed context specifically needed for chapter review.
         Delivers:
-        1. 创作意图 (creative_intent): goal, must_cover_nodes, forbidden_zones, core_event, hook, hook_type
-        2. 工艺约束 (craft_constraints): core_tone, prohibitions, mandatory_nodes, anti_patterns, story_craft, writing_guidance
-        3. 本章规划信息 (chapter_planning): chapter_meta, plot_structure, review_contract
+        1. 事实权威 (canon_authority): governed_canon items
+        2. 创作意图 (creative_intent): goal, must_cover_nodes, forbidden_zones, core_event, hook, hook_type
+        3. 工艺约束 (craft_constraints): core_tone, prohibitions, mandatory_nodes, anti_patterns, story_craft, writing_guidance
+        4. 审查分级 (hard_constraints vs advisory_constraints): 区分硬性门禁与启发式建议（advisory 不得作为阻断）
+        5. 本章规划信息 (chapter_planning): chapter_meta, plot_structure, review_contract
         """
         gov = self.get_governed_context(chapter)
         contracts = load_runtime_sources(self.project_root, chapter).contracts
@@ -1049,13 +1051,26 @@ class ChapterRuntime:
         intent = gov["current_intent"]
         constraints = gov["constraints"]
         ch_meta = intent.get("chapter_meta") or {}
+        governed_canon = gov.get("governed_canon") or {}
+
+        forbidden_zones = list(intent.get("directive", {}).get("forbidden_zones", []))
+        blocking_rules = list(review_contract.get("blocking_rules", []))
+        hard_constraints = forbidden_zones + blocking_rules
+
+        advisory_constraints = {
+            "story_craft": constraints.get("story_craft", {}),
+            "writing_guidance": constraints.get("writing_guidance", {}),
+            "anti_patterns": list(constraints.get("anti_patterns", [])),
+            "policy": "ADVISORY_ONLY: Craft and methodology heuristics must not be treated as blocking gates.",
+        }
 
         return {
             "chapter": chapter,
+            "canon_authority": governed_canon,
             "creative_intent": {
                 "goal": intent.get("directive", {}).get("goal", ""),
                 "must_cover_nodes": list(intent.get("directive", {}).get("must_cover_nodes", [])),
-                "forbidden_zones": list(intent.get("directive", {}).get("forbidden_zones", [])),
+                "forbidden_zones": forbidden_zones,
                 "core_event": ch_meta.get("core_event", ""),
                 "hook": ch_meta.get("hook", ""),
                 "hook_type": ch_meta.get("hook_type", ""),
@@ -1068,11 +1083,13 @@ class ChapterRuntime:
                 "story_craft": constraints.get("story_craft", {}),
                 "writing_guidance": constraints.get("writing_guidance", {}),
             },
+            "hard_constraints": hard_constraints,
+            "advisory_constraints": advisory_constraints,
             "chapter_planning": {
                 "chapter_meta": ch_meta,
                 "plot_structure": intent.get("plot_structure", {}),
                 "must_check_nodes": list(review_contract.get("must_check", [])),
-                "blocking_rules": list(review_contract.get("blocking_rules", [])),
+                "blocking_rules": blocking_rules,
             },
             "review_contract": review_contract,
         }
