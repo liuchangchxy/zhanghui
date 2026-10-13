@@ -221,7 +221,7 @@ from data_modules.chunked_write import should_take_snapshot
 
 if should_take_snapshot(chapter=next_ch, snapshot_every=3):
     print(f"Snapshot checkpoint at chapter {next_ch}")
-    # 强制写 CHANGES + 状态校验（由 Step 4.5 + Step 5.4/5.6 联合覆盖）
+    # 强制写 CHANGES + 状态校验（由 Step 4.5 + Step 5.4/5.5/5.6 联合覆盖）
 ```
 
 默认 `snapshot_every=3`（参考 oh-story 模式），可通过 `ChunkedWritePolicy.snapshot_every` 调整；`WEBNOVEL_DISABLE_CHUNKED_SNAPSHOT=1` 可跳过本 checkpoint。
@@ -234,11 +234,17 @@ if should_take_snapshot(chapter=next_ch, snapshot_every=3):
 进入 Step 1 先跑闸门预检并获取事实治理上下文（Governed Context）：
 
 ```bash
+GENRE="$(python3 -X utf8 -c "import json; s=json.load(open('${PROJECT_ROOT}/.webnovel/state.json',encoding='utf-8')); pi=s.get('project_info',{}); print(pi.get('genre') or s.get('project',{}).get('genre',''))")"
+
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" story-system "${CHAPTER_GOAL}" \
+  --genre "${GENRE}" --chapter {chapter_num} --persist --emit-runtime-contracts --format both
+
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage prewrite
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime prepare --chapter {chapter_num} --format json
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime governed-context --chapter {chapter_num} --format json
 ```
 
+- `story-system ... --persist --emit-runtime-contracts` 在封口前将真实 `CHAPTER_GOAL` 写入 `.story-system/` 合同树，作为后续封口与写作主链输入。query 实参必须是 `${CHAPTER_GOAL}` 变量，**禁止**把 `{章纲目标}` / `第N章章纲目标` 这类占位文本作为 positional 实参。
 - `write-gate --stage prewrite` 校验大纲存在、章纲可用、占位符扫描通过、伏笔数据可读。任一 fail 立即阻断。
 - `runtime prepare` 统一校验环境、大纲存在、章纲可用、Story System 合同与 prewrite 闸门状态。若有阻断项（blockers），立即停止并报告。
 - `runtime governed-context` 由 `ContextManager.build_context()` 统一组装当前章的事实权威（Governed Canon、Current Intent、Master Setting/Craft 约束、Writer Context），杜绝向后剧透或虚假前情。
@@ -379,6 +385,13 @@ CHANGES 是 Writer 对变化的提案，不是已发生事实或 Canon。Step 2A
 示例见 `.claude/references/changes-examples.md`。
 
 8 个顶级字段必须全部显式存在（即使无变化也要写 `[]` 或 `null`）。
+
+**状态变化 vs 首次登场核心契约**：
+- 新角色可以正常出现在正文；
+- 新角色由 Data Agent 提取并在 Commit 后正式入库；
+- 提交前，不要把尚未入库的新角色写入 `character_state_changes`（若无已有角色状态变化，填 `[]`）；
+- `new_plot_points.involved_characters` 当前受 R3 门禁约束，只填写 Canon 已存在角色；
+- 新角色参与的事件仍完整记录在 `new_plot_points` 的情节描述（`context` / `description`）中。
 
 ### Step 2B：文风适配与候选门禁（Voice Candidate & Fact-Safe Validation；`--fast` / `--minimal` 跳过）
 
@@ -713,20 +726,23 @@ Step 5 失败隔离规则：
 - `data_agent_timing.jsonl`：Data Agent 内部各子步骤耗时。
 - 当外层总耗时远大于内层 timing 之和时，默认先归因为 agent 启动与环境探测开销，不误判为正文或数据处理慢。
 
-#### Step 5.4：story-system 章级运行时合同刷新（commit 之前执行）
+#### Step 5.4：提交前必需产物完整性校验（Pre-Commit Artifact Integrity Gate）
 
-`runtime commit` / `chapter-commit` 提交前必须用真实 `CHAPTER_GOAL` 刷新 `.story-system/` 运行时合同；query 实参必须是 `${CHAPTER_GOAL}` 变量，**禁止**把 `{章纲目标}` / `第N章章纲目标` 这类占位文本作为 story-system 命令的 positional 实参：
+在调用 `runtime commit` 前，必须检查 5 份必需产物完整存在且非空；缺少任一份产物严禁调用 commit：
 
 ```bash
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" story-system "${CHAPTER_GOAL}" \
-  --genre "${GENRE}" --chapter {chapter_num} --persist --emit-runtime-contracts --format both
-
+for art in review_results.json fulfillment_result.json disambiguation_result.json extraction_result.json reconciliation_result.json; do
+  if [ ! -s "${PROJECT_ROOT}/.webnovel/tmp/${art}" ]; then
+    echo "ERROR: 缺少提交必需产物: ${art}，严禁执行 runtime commit！" >&2
+    exit 1
+  fi
+done
 ```
 
 约束：
-- `--persist` + `--emit-runtime-contracts` + `--chapter` 三项开关必须同时存在；缺一即视为章级合同未刷新。
-- 占位 query 禁止文本：`{章纲目标}` / `第N章章纲目标` 仅作"禁用示例"出现，不得作为命令实参。
-- 失败兜底：retry 一次；仍失败则停止本次提交调用并报告提交失败，之后由 `ChapterCommitService` 按其既有契约处理。
+- 5 份产物文件（`review_results.json`、`fulfillment_result.json`、`disambiguation_result.json`、`extraction_result.json`、`reconciliation_result.json`）必须全部存在且大于 0 字节。
+- 严禁在 WriterPackage 封口后、commit 执行前调用修改 `.story-system/` 合同的写命令（合同刷新已统一在 Step 1A 执行，并在 commit accepted 时由 `ChapterCommitService` 自动原子更新），确保 `contracts_fp` 指纹严格有效、无合同漂移。
+- 任何产物缺失或空文件立即阻断提交，排查对应上游 Agent 产物生成，不强行发起 commit。
 
 #### Step 5.5：runtime commit 事实提交与 publish-draft 正文发布（本章主链真源）
 
