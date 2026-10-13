@@ -590,3 +590,26 @@ def test_reconcile_changes_deterministic_across_hash_seeds():
     assert r1 == r2
     assert json.dumps(r1, sort_keys=False) == json.dumps(r2, sort_keys=False)
 
+
+def test_b1_writer_prompt_contract_involved_characters_canon_only():
+    """Verify WriterPackage prompt explicitly constrains involved_characters to Canon entities and separates new entities from state changes."""
+    from data_modules.chapter_runtime import WriterPackage
+    pkg = WriterPackage(
+        chapter=1,
+        package_fingerprint="fp123",
+        source_fingerprints={},
+        story_identity={"title": "测试小说"},
+        current_intent={"chapter": 1, "outline": "大纲"},
+        governed_canon={"canon_items": [], "appearing_characters": []},
+        constraints={"core_tone": "高压"},
+        writer_context={},
+        creative_brief="第1章创作策划任务书：林越在三号矿道偶遇巡查队长赵崇。",
+        creative_brief_fingerprint="brief_fp_123",
+    )
+    prompt = pkg.to_writer_prompt()
+    assert "新角色/新地点/新物品可以正常出现在正文中" in prompt
+    assert "首次出现的新实体不属于 state change" in prompt
+    assert "严禁把尚未入库的新角色/新实体写入 character_state_changes" in prompt
+    assert "new_plot_points.involved_characters 当前受 R3 门禁约束，只填写 Canon/context 中【已经存在】的角色" in prompt
+    assert "新角色参与的事件仍完整记录在 new_plot_points 的情节描述" in prompt
+

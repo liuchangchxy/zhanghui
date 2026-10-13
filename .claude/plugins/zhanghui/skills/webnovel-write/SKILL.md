@@ -386,6 +386,13 @@ CHANGES 是 Writer 对变化的提案，不是已发生事实或 Canon。Step 2A
 
 8 个顶级字段必须全部显式存在（即使无变化也要写 `[]` 或 `null`）。
 
+**状态变化 vs 首次登场核心契约**：
+- 新角色可以正常出现在正文；
+- 新角色由 Data Agent 提取并在 Commit 后正式入库；
+- 提交前，不要把尚未入库的新角色写入 `character_state_changes`（若无已有角色状态变化，填 `[]`）；
+- `new_plot_points.involved_characters` 当前受 R3 门禁约束，只填写 Canon 已存在角色；
+- 新角色参与的事件仍完整记录在 `new_plot_points` 的情节描述（`context` / `description`）中。
+
 ### Step 2B：文风适配与候选门禁（Voice Candidate & Fact-Safe Validation；`--fast` / `--minimal` 跳过）
 
 执行前加载：
