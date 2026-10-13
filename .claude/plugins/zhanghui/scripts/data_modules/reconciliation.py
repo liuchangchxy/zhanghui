@@ -9,11 +9,11 @@ from typing import Any
 
 from .chapter_commit_schema import ExtractionResult
 
-REQUIRED_CHANGE_FIELDS = {
+REQUIRED_CHANGE_FIELDS = (
     "character_state_changes", "new_plot_points", "foreshadowing_actions",
     "location_state_changes", "faction_state_changes", "time_progression",
     "item_transfers", "unresolved_questions",
-}
+)
 FIELD_ALIASES = {"修为": "realm", "境界": "realm", "realm": "realm"}
 VALUE_ALIASES = {
     "foundation establishment": "筑基", "foundation_establishment": "筑基",
@@ -63,7 +63,7 @@ def _changes_document(chapter_text: str):
 def validate_proposed_changes(proposed: Any) -> dict[str, Any]:
     if not isinstance(proposed, dict):
         raise ValueError("CHANGES must be a JSON object")
-    missing = REQUIRED_CHANGE_FIELDS - proposed.keys()
+    missing = set(REQUIRED_CHANGE_FIELDS) - proposed.keys()
     if missing:
         raise ValueError("CHANGES missing required fields: " + ", ".join(sorted(missing)))
     for name in REQUIRED_CHANGE_FIELDS:
@@ -163,19 +163,19 @@ def reconcile_changes(proposed_changes: Any, observed_changes: Any, *, chapter_t
         proposals_by_key[(fact["entity"], fact["field"])].append(fact)
 
     conflicts: list[dict[str, Any]] = []
-    for key, evidence in observed_by_key.items():
+    for key, evidence in sorted(observed_by_key.items(), key=lambda x: x[0]):
         values = sorted({item["value"] for item in evidence})
         if len(values) > 1:
             conflicts.append({"type": "observed_internal_conflict", "entity": key[0], "field": key[1],
                               "values": values, "evidence": evidence})
-    for key, evidence in proposals_by_key.items():
+    for key, evidence in sorted(proposals_by_key.items(), key=lambda x: x[0]):
         values = sorted({item["value"] for item in evidence})
         if len(values) > 1:
             conflicts.append({"type": "proposal_internal_conflict", "entity": key[0], "field": key[1],
                               "values": values, "evidence": evidence})
 
     matched, proposed_not_observed, unproposed_observed = [], [], []
-    for key, declarations_for_key in proposals_by_key.items():
+    for key, declarations_for_key in sorted(proposals_by_key.items(), key=lambda x: x[0]):
         evidence = observed_by_key.get(key, [])
         proposal_values = {item["value"] for item in declarations_for_key}
         observed_values = {item["value"] for item in evidence}
@@ -205,7 +205,10 @@ def reconcile_changes(proposed_changes: Any, observed_changes: Any, *, chapter_t
             if field != "character_state_changes" or (field, index) not in normalized_proposal_sources:
                 proposed_not_observed.append({"proposed": {"source": field, "index": index},
                                               "reason": "no deterministic proposal fact mapping" if field == "character_state_changes" else "no deterministic observed mapping"})
-    deterministic_sources = {(fact["source_type"], fact["source_index"]) for fact in facts}
+    deterministic_sources = sorted(
+        {(fact["source_type"], fact["source_index"]) for fact in facts},
+        key=lambda x: (x[0], x[1]),
+    )
     for source, index in deterministic_sources:
         if not any(entry.get("observed") and any(ref == {"source": source, "index": index}
                                                    for ref in (entry["observed"] if isinstance(entry["observed"], list) else [entry["observed"]]))

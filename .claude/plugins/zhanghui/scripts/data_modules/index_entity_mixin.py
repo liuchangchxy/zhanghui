@@ -55,6 +55,20 @@ class IndexEntityMixin:
             aliases.append(compact_id)
         if canonical_name:
             aliases.append(canonical_name)
+        try:
+            from pypinyin import lazy_pinyin
+            target = canonical_name or entity.id
+            if target:
+                tokens = lazy_pinyin(target)
+                if tokens and any(t != target for t in tokens):
+                    slug = "_".join(tokens).strip()
+                    compact = "".join(tokens).strip()
+                    if slug and slug != entity.id:
+                        aliases.append(slug)
+                    if compact and compact != entity.id:
+                        aliases.append(compact)
+        except Exception:
+            pass
         return list(dict.fromkeys(alias for alias in aliases if alias and alias != entity.id))
 
     def upsert_entity(self, entity: EntityMeta, update_metadata: bool = False) -> bool:

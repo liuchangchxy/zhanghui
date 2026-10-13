@@ -41,41 +41,64 @@ class IndexProjectionWriter:
             return 0
         if not isinstance(state_data, dict):
             return 0
-        entity_state = state_data.get("entity_state") or {}
-        if not isinstance(entity_state, dict):
-            return 0
         synced = 0
-        for name, info in entity_state.items():
-            if not isinstance(name, str) or not name.strip():
-                continue
-            name = name.strip()
-            existing = manager.get_entity(name)
-            if not existing:
-                desc = ""
-                tier = "装饰"
-                is_protagonist = False
-                current = {}
-                if isinstance(info, dict):
-                    desc = str(info.get("身份") or info.get("description") or info.get("desc") or "").strip()
-                    if info.get("身份") == "主角" or info.get("is_protagonist"):
-                        is_protagonist = True
-                        tier = "主角"
-                    current = {k: v for k, v in info.items() if k not in ("身份", "description", "desc")}
-                from .index_manager import EntityMeta
-                manager.upsert_entity(
-                    EntityMeta(
-                        id=name,
-                        type="角色",
-                        canonical_name=name,
-                        tier=tier,
-                        desc=desc,
-                        current=current,
-                        first_appearance=0,
-                        last_appearance=0,
-                        is_protagonist=is_protagonist,
+
+        # Synchronize protagonist from protagonist_state if present
+        protagonist_state = state_data.get("protagonist_state") or {}
+        if isinstance(protagonist_state, dict):
+            p_name = protagonist_state.get("name")
+            if isinstance(p_name, str) and p_name.strip():
+                p_name = p_name.strip()
+                if not manager.get_entity(p_name):
+                    from .index_manager import EntityMeta
+                    manager.upsert_entity(
+                        EntityMeta(
+                            id=p_name,
+                            type="角色",
+                            canonical_name=p_name,
+                            tier="主角",
+                            desc=str(protagonist_state.get("current_realm") or "").strip(),
+                            current=protagonist_state,
+                            first_appearance=0,
+                            last_appearance=0,
+                            is_protagonist=True,
+                        )
                     )
-                )
-                synced += 1
+                    synced += 1
+
+        entity_state = state_data.get("entity_state") or {}
+        if isinstance(entity_state, dict):
+            for name, info in entity_state.items():
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                name = name.strip()
+                existing = manager.get_entity(name)
+                if not existing:
+                    desc = ""
+                    tier = "装饰"
+                    is_protagonist = False
+                    current = {}
+                    if isinstance(info, dict):
+                        desc = str(info.get("身份") or info.get("description") or info.get("desc") or "").strip()
+                        if info.get("身份") == "主角" or info.get("is_protagonist"):
+                            is_protagonist = True
+                            tier = "主角"
+                        current = {k: v for k, v in info.items() if k not in ("身份", "description", "desc")}
+                    from .index_manager import EntityMeta
+                    manager.upsert_entity(
+                        EntityMeta(
+                            id=name,
+                            type="角色",
+                            canonical_name=name,
+                            tier=tier,
+                            desc=desc,
+                            current=current,
+                            first_appearance=0,
+                            last_appearance=0,
+                            is_protagonist=is_protagonist,
+                        )
+                    )
+                    synced += 1
 
         # Synchronize locations and items from world_settings
         world_settings = state_data.get("world_settings") or {}

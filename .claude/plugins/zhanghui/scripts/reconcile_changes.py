@@ -25,9 +25,20 @@ def main() -> int:
     output.unlink(missing_ok=True)
     chapter_text = chapter_path.read_text(encoding="utf-8")
     gate = subprocess.run(
-        [sys.executable, str(Path(__file__).with_name("changes_gate.py")),
-         "--chapter-file", str(chapter_path), "--db", args.db, "--json"],
-        capture_output=True, text=True, check=False,
+        [
+            sys.executable,
+            str(Path(__file__).with_name("changes_gate.py")),
+            "--chapter-file",
+            str(chapter_path),
+            "--db",
+            args.db,
+            "--extraction-result",
+            args.extraction_result,
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     try:
         gate_result = json.loads(gate.stdout)

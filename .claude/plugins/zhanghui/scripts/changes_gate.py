@@ -591,9 +591,94 @@ def _open_valid_db(db_path: str | Path) -> sqlite3.Connection | None:
         return None
 
 
+def _register_entity_name(
+    name: Any,
+    ids: set[str],
+    aliases: set[str],
+) -> None:
+    if not isinstance(name, str):
+        return
+    clean = name.strip()
+    if not clean:
+        return
+    ids.add(clean)
+    aliases.add(clean)
+    try:
+        from pypinyin import lazy_pinyin
+        tokens = lazy_pinyin(clean)
+        if tokens and any(t != clean for t in tokens):
+            slug = "_".join(tokens).strip()
+            compact = "".join(tokens).strip()
+            if slug:
+                ids.add(slug)
+                aliases.add(slug)
+            if compact:
+                ids.add(compact)
+                aliases.add(compact)
+    except Exception:
+        pass
+
+
+def _resolve_project_root(
+    state_path: Path | None = None,
+    db_path: Path | None = None,
+    chapter_path: Path | None = None,
+) -> Path | None:
+    for candidate in (state_path, db_path, chapter_path):
+        if not candidate:
+            continue
+        p = candidate.resolve()
+        cur = p if p.is_dir() else p.parent
+        for _ in range(6):
+            if (cur / ".webnovel").is_dir() or (cur / ".story-system").is_dir() or (cur / "设定集").is_dir():
+                return cur
+            if cur.parent == cur:
+                break
+            cur = cur.parent
+    if state_path:
+        p = Path(state_path).resolve()
+        return p.parent.parent if p.name == "state.json" and p.parent.name == ".webnovel" else p.parent
+    if db_path:
+        p = Path(db_path).resolve()
+        return p.parent.parent if p.name == "index.db" and p.parent.name == ".webnovel" else p.parent
+    if chapter_path:
+        p = Path(chapter_path).resolve()
+        return p.parent.parent if p.parent.name == "tmp" else p.parent
+    return None
+
+
+def _resolve_state_path(
+    state_path: str | Path | None,
+    chapter_path: Path | None,
+    db_path: str | Path | None,
+) -> Path | None:
+    if state_path:
+        p = Path(state_path)
+        if p.is_file():
+            return p
+    if db_path:
+        candidate = Path(db_path).parent / "state.json"
+        if candidate.is_file():
+            return candidate
+    if chapter_path:
+        cur = chapter_path.resolve()
+        if cur.is_file():
+            cur = cur.parent
+        for _ in range(5):
+            candidate = cur / "state.json" if cur.name == ".webnovel" else cur / ".webnovel" / "state.json"
+            if candidate.is_file():
+                return candidate
+            if cur.parent == cur:
+                break
+            cur = cur.parent
+    return None
+
+
 def _load_entity_lookup(
     db_path: Path,
     state_path: Path | None = None,
+    extraction_path: Path | None = None,
+    proj_root: Path | None = None,
 ) -> tuple[set[str], set[str], bool]:
     """从 index.db 和 state.json 加载所有合法 ID 和 alias。
 
@@ -617,18 +702,18 @@ def _load_entity_lookup(
             try:
                 for row in conn.execute("SELECT id, canonical_name FROM entities WHERE is_archived = 0"):
                     if row[0]:
-                        ids.add(str(row[0]).strip())
+                        _register_entity_name(str(row[0]).strip(), ids, aliases)
                     if row[1]:
-                        aliases.add(str(row[1]).strip())
+                        _register_entity_name(str(row[1]).strip(), ids, aliases)
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 for row in conn.execute("SELECT id FROM entities WHERE is_archived = 0"):
                     if row[0]:
-                        ids.add(str(row[0]).strip())
+                        _register_entity_name(str(row[0]).strip(), ids, aliases)
             for row in conn.execute("SELECT alias, entity_id FROM aliases"):
                 if row[0]:
-                    aliases.add(str(row[0]).strip())
+                    _register_entity_name(str(row[0]).strip(), ids, aliases)
                 if row[1]:
-                    ids.add(str(row[1]).strip())
+                    _register_entity_name(str(row[1]).strip(), ids, aliases)
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
             tables_ok = False
             ids.clear()
@@ -636,58 +721,110 @@ def _load_entity_lookup(
     finally:
         conn.close()
 
+    # Resolve project root
+    resolved_proj_root = proj_root or _resolve_project_root(state_path, db_path)
+
     # Load canonical entities from structured state.json if available (Canonical authority > derived projection)
-    proj_root: Path | None = None
     if state_path:
         sp = Path(state_path)
-        proj_root = sp.parent.parent
         if sp.is_file() and sp.stat().st_size <= MAX_STATE_BYTES:
             try:
                 s_data = json.loads(sp.read_text(encoding="utf-8"))
                 if isinstance(s_data, dict):
+                    # 1) Protagonist and Golden Finger from state.json
+                    protagonist = s_data.get("protagonist_state") or {}
+                    if isinstance(protagonist, dict):
+                        _register_entity_name(protagonist.get("name"), ids, aliases)
+                    golden_finger = s_data.get("golden_finger") or {}
+                    if isinstance(golden_finger, dict):
+                        _register_entity_name(golden_finger.get("name"), ids, aliases)
+                    p_info = s_data.get("project_info") or {}
+                    if isinstance(p_info, dict):
+                        _register_entity_name(p_info.get("golden_finger_name"), ids, aliases)
+                        for h in p_info.get("heroine_names") or []:
+                            _register_entity_name(h, ids, aliases)
+                        for c in p_info.get("co_protagonists") or []:
+                            _register_entity_name(c, ids, aliases)
+                    # 2) Entity state
                     entity_state = s_data.get("entity_state") or {}
                     if isinstance(entity_state, dict):
-                        for name in entity_state.keys():
-                            if isinstance(name, str) and name.strip():
-                                ids.add(name.strip())
+                        for name, info in entity_state.items():
+                            _register_entity_name(name, ids, aliases)
+                            if isinstance(info, dict):
+                                _register_entity_name(info.get("name"), ids, aliases)
+                    # 3) World settings
                     ws = s_data.get("world_settings") or {}
                     if isinstance(ws, dict):
                         for category in ("characters", "locations", "factions", "items", "objects"):
                             items = ws.get(category) or []
                             if isinstance(items, list):
                                 for item in items:
-                                    if isinstance(item, str) and item.strip():
-                                        aliases.add(item.strip())
+                                    if isinstance(item, str):
+                                        _register_entity_name(item, ids, aliases)
                                     elif isinstance(item, dict):
                                         n = item.get("name") or item.get("id") or item.get("title")
-                                        if isinstance(n, str) and n.strip():
-                                            aliases.add(n.strip())
+                                        _register_entity_name(n, ids, aliases)
             except Exception:
                 pass
-    elif db_path:
-        proj_root = Path(db_path).parent.parent
 
     # Load canonical settings from structured MASTER_SETTING.json if available
-    if proj_root and proj_root.is_dir():
-        master_path = proj_root / ".story-system" / "MASTER_SETTING.json"
+    if resolved_proj_root and resolved_proj_root.is_dir():
+        master_path = resolved_proj_root / ".story-system" / "MASTER_SETTING.json"
         if master_path.is_file():
             try:
                 m_data = json.loads(master_path.read_text(encoding="utf-8"))
                 for ent in m_data.get("entities", []) or []:
                     if isinstance(ent, dict):
                         n = ent.get("name") or ent.get("id") or ent.get("canonical_name")
-                        if isinstance(n, str) and n.strip():
-                            aliases.add(n.strip())
+                        _register_entity_name(n, ids, aliases)
                 for category in ("locations", "items", "objects", "factions"):
                     for item in m_data.get(category, []) or []:
-                        if isinstance(item, str) and item.strip():
-                            aliases.add(item.strip())
+                        if isinstance(item, str):
+                            _register_entity_name(item, ids, aliases)
                         elif isinstance(item, dict):
                             n = item.get("name") or item.get("id")
-                            if isinstance(n, str) and n.strip():
-                                aliases.add(n.strip())
+                            _register_entity_name(n, ids, aliases)
             except Exception:
                 pass
+
+        # Check chapter creative briefs in .webnovel/tmp (WriterPackage Context Agent output)
+        tmp_dir = resolved_proj_root / ".webnovel" / "tmp"
+        if tmp_dir.is_dir():
+            for brief_file in tmp_dir.glob("creative_brief_*.txt"):
+                try:
+                    content = brief_file.read_text(encoding="utf-8")
+                    for m in re.finditer(r"\*\*([^\*\(\)（）\s]{2,10})\*\*", content):
+                        candidate_name = m.group(1).strip()
+                        if candidate_name not in ("写作宪法", "核心冲突", "出场人物", "人物小动作", "场景切片", "必须发生", "禁止事项"):
+                            _register_entity_name(candidate_name, ids, aliases)
+                except Exception:
+                    pass
+
+    # Load observed entities from extraction_result.json if provided or found in tmp
+    ext_path: Path | None = None
+    if extraction_path:
+        ext_path = Path(extraction_path)
+    elif resolved_proj_root and (resolved_proj_root / ".webnovel" / "tmp" / "extraction_result.json").is_file():
+        ext_path = resolved_proj_root / ".webnovel" / "tmp" / "extraction_result.json"
+
+    if ext_path and ext_path.is_file() and ext_path.stat().st_size <= MAX_STATE_BYTES:
+        try:
+            ext_data = json.loads(ext_path.read_text(encoding="utf-8"))
+            if isinstance(ext_data, dict):
+                for delta in ext_data.get("entity_deltas", []) or []:
+                    if isinstance(delta, dict):
+                        _register_entity_name(delta.get("entity_id"), ids, aliases)
+                        payload = delta.get("payload") or {}
+                        if isinstance(payload, dict):
+                            _register_entity_name(payload.get("name"), ids, aliases)
+                            for a in payload.get("aliases", []) or []:
+                                _register_entity_name(a, ids, aliases)
+                for ent in ext_data.get("entities_appeared", []) or []:
+                    if isinstance(ent, dict):
+                        _register_entity_name(ent.get("entity_id"), ids, aliases)
+                        _register_entity_name(ent.get("name"), ids, aliases)
+        except Exception:
+            pass
 
     return ids, aliases, tables_ok
 
@@ -696,13 +833,17 @@ def check_r03_entities(
     changes: dict[str, Any],
     db_path: Path,
     state_path: Path | None = None,
+    extraction_path: Path | None = None,
+    proj_root: Path | None = None,
 ) -> list[Failure]:
     """R3: 实体引用合法（ID 或 alias 都接受）。
 
     Bug 10 修复：也检查 item_transfers[].item_id 和 item_transfers[].from_holder/to_holder。
     """
     failures = []
-    valid_ids, valid_aliases, tables_ok = _load_entity_lookup(db_path, state_path)
+    valid_ids, valid_aliases, tables_ok = _load_entity_lookup(
+        db_path, state_path, extraction_path, proj_root
+    )
     if not tables_ok:
         # db 不可用（不存在或表缺失），跳过
         return failures
@@ -1263,6 +1404,7 @@ def run_changes_gate(
     chapter_text: str | None = None,
     db_path: str | Path | None = None,
     state_path: str | Path | None = None,
+    extraction_path: str | Path | None = None,
     chapter: int | None = None,
     rule: str | set[str] | None = None,
     strict: bool = False,
@@ -1371,14 +1513,13 @@ def run_changes_gate(
         check_failures.extend(check_r01_protocol(parsed))
         check_failures.extend(check_r02_enums(parsed))
 
-        _state_path = (
-            Path(state_path) if state_path
-            else (chapter_path.parent.parent / ".webnovel" / "state.json" if chapter_path else None)
-        )
+        _state_path = _resolve_state_path(state_path, chapter_path, db_path)
+        _proj_root = _resolve_project_root(_state_path, Path(db_path) if db_path else None, chapter_path)
+        _extraction_path = Path(extraction_path) if extraction_path else None
 
         if db_available:
             db_p = Path(db_path)
-            check_failures.extend(check_r03_entities(parsed, db_p, _state_path))
+            check_failures.extend(check_r03_entities(parsed, db_p, _state_path, _extraction_path, _proj_root))
             check_failures.extend(check_r04_foreshadowing(parsed, db_p))
             check_failures.extend(check_r05_relationships(parsed, db_p))
             check_failures.extend(check_r07_item_state(parsed, db_p))
@@ -1408,7 +1549,9 @@ def run_changes_gate(
                     )
                 )
             if _is_r6_enabled() and db_available:
-                registered_ids, registered_aliases, _tables_ok = _load_entity_lookup(Path(db_path), _state_path)
+                registered_ids, registered_aliases, _tables_ok = _load_entity_lookup(
+                    Path(db_path), _state_path, _extraction_path, _proj_root
+                )
                 all_known = registered_ids | registered_aliases
                 if all_known:
                     check_failures.extend(
@@ -1435,6 +1578,7 @@ def main() -> int:
     parser.add_argument("--chapter-file", required=True, help="章节文件路径")
     parser.add_argument("--db", default="", help="webnovel-writer index.db 路径（可选，未初始化项目可省略）")
     parser.add_argument("--state-path", default="", help="webnovel-writer state.json 路径（可选；R4b 依赖；缺省从 chapter-file 推导 .webnovel/state.json）")
+    parser.add_argument("--extraction-result", default="", help="Data Agent extraction_result.json 路径（可选）")
     parser.add_argument("--json", action="store_true", help="输出 JSON 格式")
     parser.add_argument("--rule", default="", help="只跑指定规则（如 R1），多个用逗号分隔")
     parser.add_argument("--strict", action="store_true", help="advisory 也算 blocking")
@@ -1444,6 +1588,7 @@ def main() -> int:
         chapter_file=args.chapter_file,
         db_path=args.db or None,
         state_path=args.state_path or None,
+        extraction_path=args.extraction_result or None,
         rule=args.rule or None,
         strict=args.strict,
     )
