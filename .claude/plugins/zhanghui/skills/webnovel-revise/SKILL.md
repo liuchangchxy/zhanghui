@@ -1,71 +1,169 @@
 ---
 name: webnovel-revise
-description: 根据 reviewer 的结构化反馈局部重写章节。只改 contract 标出的段，其他原样保留。比整章重写省 60-80% token。Use when reviewer has run and produced structured JSON with blocking issues.
-allowed-tools: Read Write Edit Grep Bash
+description: 根据 reviewer 的结构化反馈局部修订在编章节工作草稿。通过 Runtime 草稿登记、重审、ChapterCommit 与正式发布门禁。严禁直接覆盖正式正文；已 accepted 章节受状态机保护禁止常规覆写。Use when reviewer has produced structured JSON with blocking issues for an in-flight chapter.
+allowed-tools: Read Write Edit Grep Bash Agent
 ---
 
-# Local Chapter Revision (Structured Rejection Contract)
+# Local Chapter Revision (In-Flight Draft Re-ingestion & Protected Convergence)
 
 ## 目标
 
-拿到 reviewer 的 JSON 后，**只重写标出的段**，不重写整章。
+根据 reviewer 的结构化反馈，**针对在编工作草稿局部重写标出的段落**，并重新接入受治理的 Runtime、Reviewer、ChapterCommit 与 Publication 流程：
+- 只改 contract 标出的段落，其他段落原样保留；
+- **草稿隔离与发布保护**：严禁直接修改或覆盖正式 `正文/` 目录；
+- **重新受控验收**：修订完成后刷新 `<chapter_changes>`、通过 `runtime ingest-draft` 重新登记草稿、重跑审查并落库指标；
+- **唯一发布路径**：经 `runtime commit` 提交 accepted 后，唯一通过 `runtime publish-draft` 发布纯正文。
 
-## 适用场景
+## 状态机边界与适用范围（核心契约）
 
-- reviewer 跑完，输出 blocking issues
-- 你想改但不想花一整章的 token
-- 想保持未受影响段落的原文（避免 AI 改稿时的"漂移"）
+### 1. 不可变提交权威守护（Immutable Commit Contract）
+依据 `ChapterCommitService` 的状态机语义，已被 Durable Commit 接受（`commit_status == "accepted"`）的章节属于不可变 point-in-time snapshot，**禁止常规覆盖提交（overwrite is strictly forbidden）**。
 
-## 不适用场景
+因此，`webnovel-revise` **严格限定于在编草稿（In-Flight Working Draft）**：
+- 适用：正在编写中、Step 3 审查发现 blocking issues、Step 4.5/4.7 闸门拦截、或 Step 5.5 commit 被拒收（`chapter-outcome == "rejected"`）的章节草稿。
+- 禁界：**若本章已被正式接受（`status == "accepted"`），严禁使用常规 revise 流程覆盖！** 对已入账历史事实的修正属于 Phase 8/9 Canon Correction / Migration 范畴，常规修订入口严格 fail-closed。
 
-- reviewer 没跑过（先 `/webnovel-review` 或 `/webnovel-write`）
-- 大返工（>50% 段落要改）—— 直接用 `/webnovel-write` 整章重写更划算
-- 想改大纲或设定（PR 1 snapshot 范畴）
+### 2. 适用与不适用场景
+- **适用**：
+  - 在编草稿的 reviewer 审查输出 blocking issues
+  - 局部段落修改（比整章重写节省 60-80% token）
+  - 保持未受影响段落的原文，避免 AI 改稿漂移
+- **不适用**：
+  - 本章已被 commit accepted 并已正式发布（不可变，阻断）
+  - reviewer 尚未运行（先跑 `/webnovel-review` 或 `/webnovel-write` Step 3）
+  - 大面积返工（>50% 段落需改）—— 建议重新起草工作草稿
 
 ## 执行流程
 
-按顺序执行：
+### Step 0：状态机与前置检查
 
-1. **拿 reviewer 输出**：从 `.webnovel/review/ch{NNNN}.json` 读取（如不存在，告诉用户先跑 reviewer）。
-2. **构造 contract**：
+1. 环境与项目解析：
    ```bash
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
-       --chapter-file "正文/第${NNNN}章-${title}.md" \
-       --contract .webnovel/review/ch${NNNN}.json \
-       --dry-run
+   export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT:-${PWD}}"
+   export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
+   export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
    ```
-   确认 `target_sections` 列表合理。
-3. **构造治理后的共享上下文**：
+2. 查询本章状态：
    ```bash
-   mkdir -p .webnovel/tmp
-   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/memory_cli.py \
-       --project-root . load-context --chapter {NNNN} \
-       > .webnovel/tmp/ch{NNNN}-revise-context.json
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime status --chapter {chapter_num} --format json
    ```
-   修订器只会把 `canon`、`intent`、`craft`、`reference` 和 `context_snapshot` 传给 Writer；diagnostics 不进入 Writer 请求。
-4. **真实重写**：
+   **硬阻断规则**：
+   - 若 `commit_status == "accepted"`：本章事实已锁定入账，**立即阻断**。严禁覆写已接受章节或其正文文件；向用户明确说明已接受章节不可变，需走历史订正流程。
+   - 若 `draft_status != "ingested"` 且未找到 `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`：缺少在编工作草稿，提示用户先起草。
+
+### Step 1：读取审查反馈与受治理上下文
+
+1. 确认审查报告：从 `${PROJECT_ROOT}/.webnovel/tmp/review_results.json`（或 `.webnovel/review/ch{chapter_padded}.json`）读取 blocking issues。若不存在，提示用户先执行审查。
+2. 构造共享受治理上下文：
    ```bash
-   python3 .../revise_chapter.py \
-       --chapter-file "正文/第${NNNN}章-${title}.md" \
-       --contract .webnovel/review/ch${NNNN}.json \
-       --context-file .webnovel/tmp/ch${NNNN}-revise-context.json \
-       --output "正文/第${NNNN}章-${title}.revised.md"
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime governed-context \
+     --chapter {chapter_num} --format json > "${PROJECT_ROOT}/.webnovel/tmp/ch{chapter_padded}-revise-context.json"
    ```
-5. **人工 diff**：用 Read 或 diff 工具对比原版和 .revised.md。
-6. **覆盖**：用户确认后，把 .revised.md 改名为原文件名（删 .revised 后缀）。
-7. **CHANGES 重新校验**：
+
+### Step 2：局部重写工作草稿（Working Draft Local Revision）
+
+针对工作草稿执行 dry-run 验证与真实重写：
+```bash
+# 1. dry-run 确认目标段落
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
+    --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+    --contract "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+    --context-file "${PROJECT_ROOT}/.webnovel/tmp/ch{chapter_padded}-revise-context.json" \
+    --dry-run
+
+# 2. 真实重写并写回工作草稿
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
+    --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+    --contract "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+    --context-file "${PROJECT_ROOT}/.webnovel/tmp/ch{chapter_padded}-revise-context.json" \
+    --output "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"
+```
+
+**绝对禁令**：**严禁直接修改或覆盖 `正文/第{chapter_padded}章*.md`**！所有修订输出严格保存在工作草稿。
+
+### Step 3：刷新 ProposedChanges 与重新登记草稿（Re-Ingestion）
+
+1. **刷新 CHANGES**：依据修订后的工作草稿全文重新生成末尾的 `<chapter_changes>...</chapter_changes>` 提案块。
+2. **重新登记草稿**：
    ```bash
-   python3 .../changes_gate.py --chapter-file "正文/第${NNNN}章-${title}.md" --db index.db --json
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime ingest-draft \
+     --package-fingerprint {package_fingerprint} \
+     --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --format json
    ```
-8. **回写 data-agent**（可选）：先用 `prepare_data_agent_input.py` 从修订后的章节生成 prose-only 临时文件与独立 ProposedChanges JSON；调用 `webnovel-writer:data-agent` 时 `chapter_file` 只传 prose-only 文件，不能传含 `<chapter_changes>` 的原文件。
+   **草稿失效规则**：获取全新的 `draft_id` 与 `draft_fingerprint`；上一版本的草稿标识与历史审查结果彻底作废。
 
-## 退出条件
+### Step 4：重新审查与门禁校验
 
-- reviewer 没有输出 contract → 提示先跑 review
-- target_sections 为空 → contract 没有 blocking issue，无需 revise
-- LLM 输出不含 `## §N` 标题 → revise_chapter.py 会兜底追加，warning 但不阻断
+1. 获取最新审查受治理上下文：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime reviewer-context \
+     --chapter {chapter_num} \
+     --format json > "${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"
+   ```
+2. 使用 `Agent` 工具调用 `webnovel-writer:reviewer`：
+   ```
+   Use the Agent tool to run `webnovel-writer:reviewer`
+   ```
+   传入参数：
+   - `chapter`: `{chapter_num}`
+   - `chapter_file`: `"${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"`
+   - `reviewer_context_file`: `"${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"`
+   - `draft_id`: `"{new_draft_id}"`
+   - `draft_fingerprint`: `"{new_draft_fingerprint}"`
+3. 落盘并更新审查指标：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline --save-metrics \
+     --results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json"
+   ```
+4. 校验 CHANGES 协议：
+   ```bash
+   python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py \
+     --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --db "${PROJECT_ROOT}/.webnovel/index.db" \
+     --json
+   ```
 
-## 失败处理
+### Step 5：提取、对账与事实提交
 
-- LLM 调用失败（ANTHROPIC_API_KEY 未设置 / 超时）→ exit code 非 0，向用户报告
-- 重写后 CHANGES 校验失败 → 把原版恢复（不覆盖），告诉用户"修订版破坏了设定契约，建议人工处理"
+1. 拆分并提取数据：
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/prepare_data_agent_input.py" \
+     --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --prose-output "${PROJECT_ROOT}/.webnovel/tmp/data_agent_prose.md" \
+     --changes-output "${PROJECT_ROOT}/.webnovel/tmp/proposed_changes.json"
+   ```
+   使用 Agent 调用 `webnovel-writer:data-agent`（只传 prose 文件）。
+2. 执行语义对账：
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/reconcile_changes.py" \
+     --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --extraction-result "${PROJECT_ROOT}/.webnovel/tmp/extraction_result.json" \
+     --db "${PROJECT_ROOT}/.webnovel/index.db" \
+     --output "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json"
+   ```
+3. 事实提交（Runtime Commit）：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime commit \
+     --chapter {chapter_num} \
+     --draft-id {new_draft_id} \
+     --review-result "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+     --fulfillment-result "${PROJECT_ROOT}/.webnovel/tmp/fulfillment_result.json" \
+     --disambiguation-result "${PROJECT_ROOT}/.webnovel/tmp/disambiguation_result.json" \
+     --extraction-result "${PROJECT_ROOT}/.webnovel/tmp/extraction_result.json" \
+     --reconciliation-result "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json" \
+     --format json
+   ```
+
+### Step 6：正文发布门禁（Publication Gate）
+
+**仅当 Step 5 提交成功且 `chapter_outcome == "accepted"` 时**，调用正式发布：
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime publish-draft \
+  --chapter {chapter_num} \
+  --draft-id {new_draft_id} \
+  --format json
+```
+- 精确校验 draft SHA-256 与 accepted commit 一致；
+- 剥离内部 `<chapter_changes>` 提案块，发布 100% 纯正文到 `正文/第{chapter_padded}章[-title].md`。
+- 若提交未被 accepted，严禁向 `正文/` 写文件。

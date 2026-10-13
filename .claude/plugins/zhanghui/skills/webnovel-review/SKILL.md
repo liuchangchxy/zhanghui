@@ -111,20 +111,41 @@ sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 
 ## Step 3: 调用统一 reviewer（unified pipeline）
 
+**受治理审查上下文准备（Reviewer Context Pre-fetch）**:
+- 审查前必须先通过公共 Runtime 入口获取受治理审查上下文并落盘（提供事实权威、创作意图与 Craft 约束），严禁自造第二套 Context Builder：
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime reviewer-context \
+  --chapter {end} \
+  --format json > "${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_$(printf "%04d" {end}).json"
+```
+
+**目标章节文件定位**:
+- 若审查在编工作草稿：优先指向 `${PROJECT_ROOT}/.webnovel/tmp/chapter_$(printf "%04d" {end})_working.md`，并从草稿元数据中提取 `draft_id` 与 `draft_fingerprint`；
+- 若审查已发布正文：指向 `正文/第$(printf "%04d" {end})章-{title_safe}.md`（无标题时回退 `正文/第$(printf "%04d" {end})章.md`）。
+
 **调用约束**:
-- 必须通过 Agent 工具调用 `webnovel-writer:reviewer`，由 reviewer 自身统揽 6 个维度（爽点/设定/节奏/人物/连贯/追读）。禁止主流程直接内联审查结论：
+- 必须通过 Agent 工具调用 `webnovel-writer:reviewer`，由 reviewer 自身统揽设定一致性、时间线、叙事连贯、角色一致性等客观事实维度。禁止主流程直接内联审查结论：
   ```
   Use the Agent tool to run `webnovel-writer:reviewer`
   ```
+  输入参数：
+  - `chapter`: `{end}`
+  - `chapter_file`: `"${CHAPTER_FILE}"`
+  - `reviewer_context_file`: `"${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_$(printf "%04d" {end}).json"`
+  - `project_root`: `"${PROJECT_ROOT}"`
+  - `scripts_dir`: `"${SCRIPTS_DIR}"`
+  - `draft_id`: `"{draft_id}"`（审查在编草稿时传入）
+  - `draft_fingerprint`: `"{draft_fingerprint}"`（审查在编草稿时传入）
 - reviewer 输出结构化 JSON，由主流程保存到 `.webnovel/tmp/review_results.json`。
 - 维度覆盖：
   - **Core (default)**：爽点密度 / 设定一致性 / 节奏控制 / 人物塑造 / 连贯性 / 追读力
   - **Full (关键章 / 用户要求)**：Core + do_not_copy_violation 维度 + 对标书禁抄合规性
 - 落库走 `review-pipeline --save-metrics`（详见 `../../agents/reviewer.md` 的 SubagentRun 契约）。
+- 权威边界：Craft 启发式问题严格作为 advisory finding，不得输出 blocking=true，不得阻断流程。最终 Gate Action 由 shared policy 与 ChapterCommitService 独占裁决。
 
-**do_not_copy 检查（reviewer 任务之前执行）**：
+**do_not_copy 检查（reviewer 任务之前执行）**:
 
-1. 定位本章正文文件 `CHAPTER_FILE`：优先 `正文/第{NNNN}章-{title_safe}.md`，无标题时回退 `正文/第{NNNN}章.md`。
+1. 定位审查正文文件 `CHAPTER_FILE`。
 2. 调用 `reference_research_injector.build_do_not_copy_check_data()`，用本章正文全文扫描 `do_not_copy` 条目：
 
    ```bash

@@ -229,17 +229,23 @@ def call_llm_for_revision(
 
 
 def load_governed_context(path: Path) -> dict[str, Any]:
-    """Load only Writer-safe sections from the existing memory-contract response."""
+    """Load only Writer-safe sections from memory-contract or runtime governed-context response."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"上下文文件读取失败: {exc}") from exc
+    # 1. memory-contract format
     sections = raw.get("sections") if isinstance(raw.get("sections"), dict) else raw
     keys = ("canon", "intent", "craft", "reference", "context_snapshot")
     selected = {key: sections[key] for key in keys if key in sections}
-    if not any(key in selected for key in ("canon", "intent", "craft", "reference")):
-        raise ValueError("上下文文件缺少 governed canon/intent/craft/reference sections")
-    return selected
+    if any(key in selected for key in ("canon", "intent", "craft", "reference")):
+        return selected
+    # 2. runtime governed-context format
+    rt_keys = ("governed_canon", "current_intent", "constraints", "writer_context")
+    rt_selected = {key: raw[key] for key in rt_keys if key in raw}
+    if any(key in rt_selected for key in rt_keys):
+        return rt_selected
+    raise ValueError("上下文文件缺少 governed canon/intent/craft/reference sections")
 
 
 # === CLI ===
