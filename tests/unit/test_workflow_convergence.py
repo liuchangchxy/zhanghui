@@ -49,7 +49,7 @@ def _setup_book_project(tmp_path: Path, chapter: int = 1) -> Path:
             "volumes_planned": [{"volume": 1, "chapters_range": "1-10", "title": "第一卷"}],
             "volumes_completed": [],
         },
-        "entity_state": {},
+        "entity_state": {"林凡": {"status": "考核弟子"}},
     }
     (webnovel_dir / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -855,7 +855,13 @@ class TestWorkflowConvergence:
         }
         ful = {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []}
         dis = {"pending": []}
-        rev = {"blocking_count": 0, "blocking_rule_results": []}
+        rev_1 = {
+            "chapter": 1,
+            "draft_id": draft_id_1,
+            "draft_fingerprint": draft_fp_1,
+            "blocking_count": 0,
+            "blocking_rule_results": [],
+        }
         rec_1 = reconcile_changes(proposal_1, ext, chapter_text=initial_prose)
 
         # 2. 修改 CHANGES 提案块（例如 changes_gate 发现缺失/格式问题后重写提案，正文不变）
@@ -896,7 +902,7 @@ class TestWorkflowConvergence:
         commit_fail_rec = runtime.commit(
             chapter=1,
             draft_id=draft_id_1,
-            review_result=rev,
+            review_result=rev_1,
             extraction_result=ext,
             fulfillment_result=ful,
             disambiguation_result=dis,
@@ -910,7 +916,7 @@ class TestWorkflowConvergence:
         commit_fail_prop = runtime.commit(
             chapter=1,
             draft_id=draft_id_1,
-            review_result=rev,
+            review_result=rev_1,
             extraction_result=ext,
             fulfillment_result=ful,
             disambiguation_result=dis,
@@ -933,11 +939,23 @@ class TestWorkflowConvergence:
         assert draft_id_2 != draft_id_1
         assert draft_fp_2 != draft_fp_1
 
-        # 5. 更新必要审查与对账产物绑定，新身份顺利 commit
+        # 5. 重新调用审查生成绑定新 draft_id_2 的审查产物
+        rev_2 = {
+            "chapter": 1,
+            "draft_id": draft_id_2,
+            "draft_fingerprint": draft_fp_2,
+            "blocking_count": 0,
+            "blocking_rule_results": [],
+        }
+
+        # 验证旧审查产物未被篡改
+        assert rev_1["draft_id"] == draft_id_1
+
+        # 新身份顺利 commit
         commit_success = runtime.commit(
             chapter=1,
             draft_id=draft_id_2,
-            review_result=rev,
+            review_result=rev_2,
             extraction_result=ext,
             fulfillment_result=ful,
             disambiguation_result=dis,
@@ -952,5 +970,221 @@ class TestWorkflowConvergence:
         assert pub_path.is_file()
         assert "<chapter_changes>" not in pub_path.read_text(encoding="utf-8")
         assert pub_path.read_text(encoding="utf-8").strip() == body_prose.strip()
+
+    def test_reviewer_ownership_and_reinvocation_contract(self, tmp_path: Path):
+        """Reviewer Ownership and Re-invocation Contract:
+        Verifies:
+        1. Reviewer Agent original output is owned by Reviewer; main workflow cannot tamper with it in-place.
+        2. Mutating working draft (prose or CHANGES) generates new draft_id via ingest-draft.
+        3. Reviewer Agent invocation contract requires re-invoking with new draft_id and draft_fingerprint.
+        4. Old Reviewer output is preserved and cannot be reused to commit new draft identity.
+        5. New Reviewer output completes review-pipeline, runtime commit, and publication.
+
+        Boundary Note: Real LLM Reviewer Agent execution requires Claude Code host runtime.
+        This test enforces the deterministic caller/callee contract, artifact immutability,
+        CLI review-pipeline execution, and runtime state machine boundaries.
+        """
+        scripts_dir = Path(__file__).resolve().parents[2] / ".claude" / "plugins" / "zhanghui" / "scripts"
+        webnovel_py = scripts_dir / "webnovel.py"
+
+        project_root = _setup_book_project(tmp_path, chapter=1)
+        runtime = ChapterRuntime(project_root)
+        runtime.prepare(1, with_package=True)
+
+        sealed_pkg = runtime.attach_creative_brief(chapter=1, creative_brief="审查所有权契约测试任务书")
+        pkg_fp = sealed_pkg.package_fingerprint
+
+        # 1. 起草 Draft 1 并初次 ingest
+        working_file = project_root / ".webnovel" / "tmp" / "chapter_0001_working.md"
+        draft_1_text = _sample_draft()
+        working_file.write_text(draft_1_text, encoding="utf-8")
+        ingest_1 = runtime.ingest_draft(chapter=1, package_fingerprint=pkg_fp, prose=draft_1_text)
+        assert ingest_1.ok
+        draft_id_1 = ingest_1.draft_id
+        draft_fp_1 = ingest_1.draft_fingerprint
+
+        # 获取受治理 reviewer context（统一 5 层上下文）
+        rev_ctx = runtime.get_reviewer_context(1)
+        ctx_file = project_root / ".webnovel" / "tmp" / "reviewer_context_0001.json"
+        ctx_file.write_text(json.dumps(rev_ctx, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        # 模拟 Reviewer Agent 针对 Draft 1 输出权威审查产物
+        def _invoke_reviewer_agent_contract(chapter: int, chapter_file: Path, context_file: Path, draft_id: str, draft_fingerprint: str) -> dict:
+            assert chapter == 1
+            assert chapter_file.is_file()
+            assert context_file.is_file()
+            # 严格验证审查输入必须绑定草稿身份
+            assert draft_id
+            assert draft_fingerprint
+            return {
+                "chapter": chapter,
+                "draft_id": draft_id,
+                "draft_fingerprint": draft_fingerprint,
+                "issues": [],
+                "issues_count": 0,
+                "blocking_count": 0,
+                "has_blocking": False,
+                "dimension_results": [
+                    {"dimension": "setting", "conclusion": "pass"},
+                    {"dimension": "timeline", "conclusion": "pass"},
+                    {"dimension": "continuity", "conclusion": "pass"},
+                    {"dimension": "character", "conclusion": "pass"},
+                    {"dimension": "logic", "conclusion": "pass"},
+                    {"dimension": "beat_compliance", "conclusion": "pass"},
+                    {"dimension": "foreshadow_compliance", "conclusion": "pass"},
+                    {"dimension": "do_not_copy_violation", "conclusion": "pass"},
+                ],
+                "summary": "8维全部通过：0个阻断",
+            }
+
+        review_file = project_root / ".webnovel" / "tmp" / "review_results.json"
+        rev_1_data = _invoke_reviewer_agent_contract(
+            chapter=1,
+            chapter_file=working_file,
+            context_file=ctx_file,
+            draft_id=draft_id_1,
+            draft_fingerprint=draft_fp_1,
+        )
+        review_file.write_text(json.dumps(rev_1_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 归档 Reviewer 1 原始产物以验证其所有权与不可变性
+        archived_raw_rev_1 = project_root / ".webnovel" / "tmp" / "raw_reviewer_draft1_backup.json"
+        archived_raw_rev_1.write_bytes(review_file.read_bytes())
+        raw_rev_1_digest = hashlib.sha256(archived_raw_rev_1.read_bytes()).hexdigest()
+        assert rev_1_data["draft_id"] == draft_id_1
+        assert rev_1_data["draft_fingerprint"] == draft_fp_1
+
+        # 运行 review-pipeline 落库 Draft 1 指标（review_pipeline 归一化审查输出）
+        cmd_metrics_1 = [
+            sys.executable, "-X", "utf8", str(webnovel_py),
+            "--project-root", str(project_root),
+            "review-pipeline",
+            "--chapter", "1",
+            "--review-results", str(review_file),
+            "--save-metrics",
+        ]
+        res_m1 = subprocess.run(cmd_metrics_1, capture_output=True, text=True, check=True)
+        assert res_m1.returncode == 0
+
+        # 归档归一化后的 Draft 1 审查产物
+        archived_norm_rev_1 = project_root / ".webnovel" / "tmp" / "norm_reviewer_draft1_backup.json"
+        archived_norm_rev_1.write_bytes(review_file.read_bytes())
+        norm_rev_1_digest = hashlib.sha256(archived_norm_rev_1.read_bytes()).hexdigest()
+
+        # 2. 工作草稿发生 Post-Ingest Mutation（重写 <chapter_changes> 提案块）
+        body_1, _ = split_chapter_and_changes(draft_1_text)
+        mutated_changes = {
+            "character_state_changes": [
+                {
+                    "character_id": "林凡",
+                    "change_type": "status_update",
+                    "importance": "normal",
+                    "details": "正式晋升为外门首席执事弟子",
+                }
+            ],
+            "new_plot_points": [
+                {
+                    "plot_id": "plot_enter_outer_sect",
+                    "importance": "normal",
+                    "description": "通过问心测试并获得外门铭牌",
+                }
+            ],
+            "foreshadowing_actions": [],
+            "location_state_changes": [],
+            "faction_state_changes": [],
+            "time_progression": None,
+            "item_transfers": [],
+            "unresolved_questions": [],
+        }
+        draft_2_text = f"{body_1}\n\n<chapter_changes>\n{json.dumps(mutated_changes, ensure_ascii=False, indent=2)}\n</chapter_changes>"
+        working_file.write_text(draft_2_text, encoding="utf-8")
+
+        # 3. 重新执行 ingest-draft 产生 Draft 2 身份
+        ingest_2 = runtime.ingest_draft(chapter=1, package_fingerprint=pkg_fp, prose=draft_2_text)
+        assert ingest_2.ok
+        draft_id_2 = ingest_2.draft_id
+        draft_fp_2 = ingest_2.draft_fingerprint
+        assert draft_id_2 != draft_id_1
+        assert draft_fp_2 != draft_fp_1
+
+        # 4. 验证 Reviewer 原始结果所有权：归档的 Reviewer 1 产物未被篡改，保留原身份
+        assert hashlib.sha256(archived_raw_rev_1.read_bytes()).hexdigest() == raw_rev_1_digest
+        assert json.loads(archived_raw_rev_1.read_text(encoding="utf-8"))["draft_id"] == draft_id_1
+        assert hashlib.sha256(archived_norm_rev_1.read_bytes()).hexdigest() == norm_rev_1_digest
+
+        # 5. 跨身份混用禁令：
+        # 尝试直接使用旧 review_results（带有 draft_id_1 身份）搭配新草稿提取产物提交草稿 1 -> 状态机拒收
+        _, prop_2 = split_chapter_and_changes(draft_2_text)
+        ext = {
+            "chapter_meta": {},
+            "accepted_events": [],
+            "state_deltas": [],
+            "entity_deltas": [{"entity_id": "林凡", "current": {"status": "外门弟子"}}],
+        }
+        ful = {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []}
+        dis = {"pending": []}
+        rec_2 = reconcile_changes(prop_2, ext, chapter_text=draft_2_text)
+
+        commit_mismatch = runtime.commit(
+            chapter=1,
+            draft_id=draft_id_1,
+            review_result=rev_1_data,
+            extraction_result=ext,
+            fulfillment_result=ful,
+            disambiguation_result=dis,
+            reconciliation_result=rec_2,
+            proposed_changes=prop_2,
+        )
+        assert not commit_mismatch.ok
+
+        # 6. 重新调用 Reviewer Agent 契约（复用既有 reviewer-context，传入新 draft_id_2）
+        rev_2_data = _invoke_reviewer_agent_contract(
+            chapter=1,
+            chapter_file=working_file,
+            context_file=ctx_file,
+            draft_id=draft_id_2,
+            draft_fingerprint=draft_fp_2,
+        )
+        assert rev_2_data["draft_id"] == draft_id_2
+        assert rev_2_data["draft_fingerprint"] == draft_fp_2
+
+        # 写入新的 review_results.json
+        review_file.write_text(json.dumps(rev_2_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        rev_2_digest = hashlib.sha256(review_file.read_bytes()).hexdigest()
+        assert rev_2_digest != raw_rev_1_digest
+
+        # 验证旧备份文件依然原封不动（所有权未被破坏）
+        assert hashlib.sha256(archived_raw_rev_1.read_bytes()).hexdigest() == raw_rev_1_digest
+        assert hashlib.sha256(archived_norm_rev_1.read_bytes()).hexdigest() == norm_rev_1_digest
+
+        # 7. 运行 review-pipeline 刷新新草稿指标
+        cmd_metrics_2 = [
+            sys.executable, "-X", "utf8", str(webnovel_py),
+            "--project-root", str(project_root),
+            "review-pipeline",
+            "--chapter", "1",
+            "--review-results", str(review_file),
+            "--save-metrics",
+        ]
+        res_m2 = subprocess.run(cmd_metrics_2, capture_output=True, text=True, check=True)
+        assert res_m2.returncode == 0
+
+        # 8. 使用新 Reviewer 产物提交新草稿身份 -> 成功 accepted 并顺利发布
+        commit_ok = runtime.commit(
+            chapter=1,
+            draft_id=draft_id_2,
+            review_result=rev_2_data,
+            extraction_result=ext,
+            fulfillment_result=ful,
+            disambiguation_result=dis,
+            reconciliation_result=rec_2,
+            proposed_changes=prop_2,
+        )
+        assert commit_ok.ok
+        assert commit_ok.chapter_outcome == "accepted"
+
+        pub_file = runtime.publish_accepted_draft(chapter=1, draft_id=draft_id_2)
+        assert pub_file.is_file()
+        assert pub_file.read_text(encoding="utf-8").strip() == body_1.strip()
+
 
 

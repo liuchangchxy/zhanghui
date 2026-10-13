@@ -177,9 +177,26 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
      --format json
    ```
    获取全新的 `{new_draft_id}` 与 `{new_draft_fingerprint}`。
-2. **刷新审查产物绑定（Review Artifacts Rebinding）**：
-   - 若改动涉及正文（prose）：重新执行 Step 3 快车道核心检查，生成绑定新 `draft_id` 的 `review_results.json` 并刷新指标；
-   - 若仅修改 `<chapter_changes>` 提案块（正文未变）：Reviewer 的正文一致性审查结论依然有效，但必须将 `review_results.json` 中的 `draft_id` / `draft_fingerprint` 刷新为新身份并重新执行 `review-pipeline --save-metrics`，确保审查指标与当前草稿严格一致。
+2. **Reviewer 原始结果所有权与重新审查（Reviewer Re-invocation & Ownership Protection）**：
+   - **所有权绝对禁令**：Reviewer Agent 独占拥有 `review_results.json` 的生成权威；**严禁主流程直接手工修改或就地替换 Reviewer Agent 原始审查产物中的 `draft_id` / `draft_fingerprint`**。
+   - **权威重审**：新 `draft_id` 产生后，必须复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder），使用 `Agent` 工具重新调用 `webnovel-writer:reviewer`：
+     ```
+     Use the Agent tool to run `webnovel-writer:reviewer`
+     ```
+     输入参数传入新草稿身份：
+     - `chapter`: `{chapter_num}`
+     - `chapter_file`: `"${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"`
+     - `reviewer_context_file`: `"${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"`
+     - `draft_id`: `"{new_draft_id}"`
+     - `draft_fingerprint`: `"{new_draft_fingerprint}"`
+     由 Reviewer Agent 重新生成与新草稿严格绑定的全新 `review_results.json`。
+   - **指标入库**：使用全新的审查结果重新执行 `review-pipeline`：
+     ```bash
+     python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline \
+       --chapter {chapter_num} \
+       --review-results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+       --save-metrics
+     ```
 3. **重新执行提取与对账（Re-Extraction & Reconciliation）**：
    在 Step 5 清理旧临时文件，重新从当前工作草稿拆分正文与 proposal，重新执行 Data Agent 提取与 `reconcile_changes.py`，产出与新草稿严格同源的 `reconciliation_result.json`。
 4. **提交最终草稿（Final Commit）**：

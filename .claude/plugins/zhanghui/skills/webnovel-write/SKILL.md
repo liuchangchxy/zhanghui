@@ -554,7 +554,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py \
 **判定逻辑**：
 - `passed=true`：进入 Step 5（data-agent）。
 - `passed=false`：读取 `failures` 列表，把每条规则的报错反馈给主流程 LLM，要求**只重写 `<chapter_changes>` 块**（不改正文）。最多 2 次。
-- **重写后身份同步规则**：若重写了 `<chapter_changes>` 块导致工作草稿发生变更，必须重新调用 `runtime ingest-draft` 登记草稿以获得最新 `draft_id`，并刷新审查记录的 `draft_id` 绑定，确保后续 Step 5 提取、对账产物及最终 `runtime commit` 严格基于同一有效草稿身份。若未修改则沿用现有 `draft_id`，不得无意义重复登记。
+- **重写后身份同步规则**：若重写了 `<chapter_changes>` 块导致工作草稿发生变更，旧草稿身份与其审查产物彻底失效。严禁主流程手工篡改 `review_results.json` 中的草稿身份。必须重新调用 `runtime ingest-draft` 登记草稿以获得最新 `draft_id`，复用既有 `reviewer_context` 重新调用 `webnovel-writer:reviewer` 产出与新草稿绑定的全新审查结果并刷新 metrics，确保后续 Step 5 提取、对账产物及最终 `runtime commit` 严格基于同一有效草稿身份。若未修改则沿用现有 `draft_id`，不得无意义重复登记或重审。
 - 2 次仍未通过：记录到 `.webnovel/tmp/changes_gate_failures.jsonl`，人工介入后由 ledger 续跑接管。
 
 **调 changes_gate.py R4b**（advisory 子规则，不阻塞）：
