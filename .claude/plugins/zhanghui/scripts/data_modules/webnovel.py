@@ -1144,7 +1144,7 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
     return 2
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="webnovel unified CLI")
     parser.add_argument("--project-root", help="书项目根目录或工作区根目录（可选，默认自动检测）")
 
@@ -1473,6 +1473,11 @@ def main() -> None:
     qr_parser = knowledge_sub.add_parser("query-relationships", help="查询实体在指定章节的关系")
     qr_parser.add_argument("--entity", required=True, help="实体 ID")
     qr_parser.add_argument("--at-chapter", type=int, required=True, help="目标章节号")
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
 
     # 兼容：允许 `--project-root` 出现在任意位置（减少 agents/skills 拼命令的出错率）
     from .cli_args import normalize_global_project_root
