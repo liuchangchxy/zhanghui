@@ -144,6 +144,13 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
      --db "${PROJECT_ROOT}/.webnovel/index.db" \
      --json
    ```
+5. **草稿变更后的身份同步规则（Post-Ingest Mutation & Identity Sync）**：
+   若 `changes_gate` 校验未通过并对 `<chapter_changes>` 进行了重写或修改，导致工作草稿发生任何内容变化：
+   - 必须重新调用 `runtime ingest-draft` 登记，获取更新后的 `{new_draft_id}` 与 `{new_draft_fingerprint}`；
+   - 刷新审查记录绑定（更新 `review_results.json` 中的 `draft_id` / `draft_fingerprint` 并重新执行 `review-pipeline --save-metrics`）；
+   - Step 5 依据最新工作草稿重新拆分正文与 proposal，重新执行 Data Agent 提取与 `reconcile_changes.py`；
+   - `runtime commit` 必须且仅能传入最终的 `{new_draft_id}`；
+   - 若草稿未变更，则沿用 Step 3 登记的草稿身份与既有审查产物，不得无意义重复登记。
 
 ### Step 5：提取、对账与事实提交
 

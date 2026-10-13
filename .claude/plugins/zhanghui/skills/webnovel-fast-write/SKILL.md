@@ -162,6 +162,31 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
 ```
 扫描命中默认作为 advisory 呈现，不单独阻断提交。
 
+### 草稿变更后的身份同步规则（Post-Ingest Mutation & Identity Sync）
+
+**核心契约**：
+草稿一旦在 Step 2A 通过 `runtime ingest-draft` 登记，其内容与 `draft_fingerprint` 即完成绑定。若在 Step 4.5 因 `changes_gate` 修复重写了 `<chapter_changes>` 块，或在 Step 4.6 针对 anti-slop 执行了文本清理，导致工作草稿文件发生**任何内容或协议变更**：
+
+1. **重新登记草稿（Re-Ingestion）**：
+   工作草稿变化后，旧 `draft_id` 与已登记草稿立即失效。必须重新调用 `runtime ingest-draft`：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime ingest-draft \
+     --chapter {chapter_num} \
+     --package-fingerprint "${PACKAGE_FINGERPRINT}" \
+     --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --format json
+   ```
+   获取全新的 `{new_draft_id}` 与 `{new_draft_fingerprint}`。
+2. **刷新审查产物绑定（Review Artifacts Rebinding）**：
+   - 若改动涉及正文（prose）：重新执行 Step 3 快车道核心检查，生成绑定新 `draft_id` 的 `review_results.json` 并刷新指标；
+   - 若仅修改 `<chapter_changes>` 提案块（正文未变）：Reviewer 的正文一致性审查结论依然有效，但必须将 `review_results.json` 中的 `draft_id` / `draft_fingerprint` 刷新为新身份并重新执行 `review-pipeline --save-metrics`，确保审查指标与当前草稿严格一致。
+3. **重新执行提取与对账（Re-Extraction & Reconciliation）**：
+   在 Step 5 清理旧临时文件，重新从当前工作草稿拆分正文与 proposal，重新执行 Data Agent 提取与 `reconcile_changes.py`，产出与新草稿严格同源的 `reconciliation_result.json`。
+4. **提交最终草稿（Final Commit）**：
+   `runtime commit` 必须且仅能传入最终的 `{new_draft_id}`。严禁使用旧 `draft_id` 提交（否则状态机因草稿内容或对账哈希不一致强阻断）。
+5. **未变更直通（No-Op Invariant）**：
+   若工作草稿（正文及 `<chapter_changes>`）自初次 ingest 后未发生任何改变，严格沿用 Step 2A 登记的 `draft_id` 与 Step 3 审查产物，不得无意义重复登记或重审。
+
 ### Step 5：Data Agent 提取、对账与提交必需产物校验
 
 1. **清理历史残留产物（防止跨章或旧草稿污染）**：

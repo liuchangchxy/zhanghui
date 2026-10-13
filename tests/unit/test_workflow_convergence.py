@@ -823,3 +823,134 @@ class TestWorkflowConvergence:
         with pytest.raises(ChapterCommitError, match="overwrite is forbidden"):
             service.persist_commit({"meta": {"chapter": 1, "status": "accepted"}}, on_conflict="overwrite")
 
+    def test_post_ingest_changes_mutation_requires_reingest_and_reconciliation(self, tmp_path: Path):
+        """Post-Ingest Mutation Contract:
+        Initial ingest -> mutate <chapter_changes> block -> old draft_id cannot commit
+        -> re-ingest to obtain new draft_id -> refresh reconciliation -> new draft_id commits successfully.
+        """
+        project_root = _setup_book_project(tmp_path, chapter=1)
+        runtime = ChapterRuntime(project_root)
+        runtime.prepare(1, with_package=True)
+
+        sealed_pkg = runtime.attach_creative_brief(chapter=1, creative_brief="策划任务书")
+        pkg_fp = sealed_pkg.package_fingerprint
+
+        # 1. 初次 ingest
+        working_file = project_root / ".webnovel" / "tmp" / "chapter_0001_working.md"
+        initial_prose = _sample_draft()
+        working_file.write_text(initial_prose, encoding="utf-8")
+
+        ingest_1 = runtime.ingest_draft(chapter=1, package_fingerprint=pkg_fp, prose=initial_prose)
+        assert ingest_1.ok
+        draft_id_1 = ingest_1.draft_id
+        draft_fp_1 = ingest_1.draft_fingerprint
+
+        # 准备初始草稿产物
+        _, proposal_1 = split_chapter_and_changes(initial_prose)
+        ext = {
+            "chapter_meta": {},
+            "accepted_events": [],
+            "state_deltas": [],
+            "entity_deltas": [{"entity_id": "林凡", "current": {"status": "外门弟子"}}],
+        }
+        ful = {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []}
+        dis = {"pending": []}
+        rev = {"blocking_count": 0, "blocking_rule_results": []}
+        rec_1 = reconcile_changes(proposal_1, ext, chapter_text=initial_prose)
+
+        # 2. 修改 CHANGES 提案块（例如 changes_gate 发现缺失/格式问题后重写提案，正文不变）
+        body_prose, _ = split_chapter_and_changes(initial_prose)
+        mutated_changes = {
+            "character_state_changes": [
+                {
+                    "character_id": "林凡",
+                    "change_type": "status_update",
+                    "importance": "normal",
+                    "details": "正式晋升为外门首席执事弟子",
+                }
+            ],
+            "new_plot_points": [
+                {
+                    "plot_id": "plot_enter_outer_sect",
+                    "importance": "normal",
+                    "description": "通过问心测试并获得外门铭牌",
+                }
+            ],
+            "foreshadowing_actions": [],
+            "location_state_changes": [],
+            "faction_state_changes": [],
+            "time_progression": None,
+            "item_transfers": [],
+            "unresolved_questions": [],
+        }
+        mutated_prose = f"{body_prose}\n\n<chapter_changes>\n{json.dumps(mutated_changes, ensure_ascii=False, indent=2)}\n</chapter_changes>"
+        working_file.write_text(mutated_prose, encoding="utf-8")
+
+        # 针对修改后的工作草稿生成新对账产物
+        _, proposal_2 = split_chapter_and_changes(mutated_prose)
+        assert proposal_2 != proposal_1
+        rec_2 = reconcile_changes(proposal_2, ext, chapter_text=mutated_prose)
+
+        # 3. 验证旧身份不能提交（无论搭配新对账产物还是搭配新 proposed_changes）
+        # 尝试 A：使用旧 draft_id_1 搭配新对账产物 rec_2 -> 状态机拒收
+        commit_fail_rec = runtime.commit(
+            chapter=1,
+            draft_id=draft_id_1,
+            review_result=rev,
+            extraction_result=ext,
+            fulfillment_result=ful,
+            disambiguation_result=dis,
+            reconciliation_result=rec_2,
+        )
+        assert not commit_fail_rec.ok
+        assert commit_fail_rec.chapter_outcome == "rejected"
+        assert "reconciliation audit artifact is stale or does not match" in commit_fail_rec.error
+
+        # 尝试 B：使用旧 draft_id_1 显式传入新 proposal_2 -> 提案与暂存正文不匹配拒收
+        commit_fail_prop = runtime.commit(
+            chapter=1,
+            draft_id=draft_id_1,
+            review_result=rev,
+            extraction_result=ext,
+            fulfillment_result=ful,
+            disambiguation_result=dis,
+            reconciliation_result=rec_1,
+            proposed_changes=proposal_2,
+        )
+        assert not commit_fail_prop.ok
+        assert commit_fail_prop.chapter_outcome == "rejected"
+        assert "proposed_changes do not match CHANGES parsed from final chapter" in commit_fail_prop.error
+
+        # 4. 重新 ingest 获取全新 draft_id 与 fingerprint
+        ingest_2 = runtime.ingest_draft(
+            chapter=1,
+            package_fingerprint=pkg_fp,
+            prose=mutated_prose,
+        )
+        assert ingest_2.ok
+        draft_id_2 = ingest_2.draft_id
+        draft_fp_2 = ingest_2.draft_fingerprint
+        assert draft_id_2 != draft_id_1
+        assert draft_fp_2 != draft_fp_1
+
+        # 5. 更新必要审查与对账产物绑定，新身份顺利 commit
+        commit_success = runtime.commit(
+            chapter=1,
+            draft_id=draft_id_2,
+            review_result=rev,
+            extraction_result=ext,
+            fulfillment_result=ful,
+            disambiguation_result=dis,
+            reconciliation_result=rec_2,
+            proposed_changes=proposal_2,
+        )
+        assert commit_success.ok
+        assert commit_success.chapter_outcome == "accepted"
+
+        # 6. 正式发布：正文无 CHANGES 泄露，状态机正常锁闭
+        pub_path = runtime.publish_accepted_draft(chapter=1, draft_id=draft_id_2)
+        assert pub_path.is_file()
+        assert "<chapter_changes>" not in pub_path.read_text(encoding="utf-8")
+        assert pub_path.read_text(encoding="utf-8").strip() == body_prose.strip()
+
+
