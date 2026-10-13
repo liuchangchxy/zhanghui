@@ -43,6 +43,7 @@ from .gate_finding_adapters import adapt_changes_gate_result, adapt_legacy_artif
 from .projections import retry_projection
 from .reconciliation import reconcile_changes, split_chapter_and_changes
 from .runtime_contract_builder import RuntimeContractBuilder
+from .state_validator import get_chapter_meta_entry
 from .story_contracts import (
     StoryContractPaths,
     persist_runtime_contracts,
@@ -136,14 +137,28 @@ class WriterPackage:
             "",
             "## 1. 本章写作意图 (Current Intent)",
         ]
+        ch_meta = intent.get("chapter_meta") or {}
+        core_event = ch_meta.get("core_event")
         if goal:
             lines.append(f"- 核心目标：{goal}")
+            if core_event and core_event != goal:
+                lines.append(f"- 计划核心事件：{core_event}")
+        elif core_event:
+            lines.append(f"- 核心事件：{core_event}")
         if conflict:
             lines.append(f"- 主要阻力：{conflict}")
         if cost:
             lines.append(f"- 付出代价：{cost}")
+        hook = ch_meta.get("hook")
+        hook_type = ch_meta.get("hook_type")
         if ending_q:
             lines.append(f"- 章末钩子/未决问题：{ending_q}")
+            if hook and hook != ending_q:
+                lines.append(f"- 预设钩子设计：{hook}（类型：{hook_type or '未指定'}）")
+        elif hook:
+            lines.append(f"- 章末预设钩子：{hook}（类型：{hook_type or '未指定'}）")
+        elif hook_type:
+            lines.append(f"- 章末钩子倾向：{hook_type}")
         if must_nodes:
             lines.append(f"- 必须覆盖节点：{', '.join(must_nodes)}")
         if prohibitions:
@@ -209,19 +224,153 @@ class WriterPackage:
         if anti_patterns:
             lines.append(f"- 避坑规则 (Anti-patterns)：{'; '.join(anti_patterns[:5])}")
 
+        genre_prof = constraints.get("genre_profile") or {}
+        profile_excerpt = str(genre_prof.get("profile_excerpt") or "").strip()
+        if profile_excerpt:
+            lines.append(f"【题材创作指引 ({genre_prof.get('genre', genre)})】：\n{profile_excerpt}")
+
+        guidance = constraints.get("writing_guidance") or {}
+        g_items = guidance.get("items") or []
+        if g_items:
+            lines.append("【写作指导 (Writing Guidance)】")
+            for item in g_items[:5]:
+                txt = item.get("text") or item.get("rule") or str(item) if isinstance(item, dict) else str(item)
+                lines.append(f"- {txt}")
+        strategy_card = guidance.get("strategy_card") or {}
+        if isinstance(strategy_card, dict) and (strategy_card.get("pressure_source") or strategy_card.get("release_target")):
+            p_src = strategy_card.get("pressure_source", "")
+            r_tgt = strategy_card.get("release_target", "")
+            lines.append(f"- 叙事策略：施压点【{p_src}】 -> 释放点【{r_tgt}】")
+
+        craft_items = constraints.get("craft_items") or []
+        rendered_craft = []
+        for item in craft_items:
+            if isinstance(item, dict):
+                if item.get("source_role") in ("CONFIG",) and item.get("source_ref") in (
+                    "writing_guidance", "genre_profile", "genre_profile_excerpt", "preferences"
+                ):
+                    continue
+                c = item.get("content")
+                if isinstance(c, str) and c.strip():
+                    rendered_craft.append(c.strip())
+                elif isinstance(c, dict) and "text" in c:
+                    rendered_craft.append(str(c["text"]).strip())
+                elif isinstance(c, dict) and "rule" in c:
+                    rendered_craft.append(str(c["rule"]).strip())
+                elif isinstance(c, dict) and "content" in c:
+                    rendered_craft.append(str(c["content"]).strip())
+            elif isinstance(item, str) and item.strip():
+                rendered_craft.append(item.strip())
+        if rendered_craft:
+            lines.append("【工艺建议 (Craft Recommendations)】")
+            for c_text in rendered_craft[:5]:
+                lines.append(f"- {c_text}")
+
+        # Story Craft: extract chapter-scoped narrative constraints
+        story_craft = constraints.get("story_craft") or {}
+        sc_lines = []
+        if isinstance(story_craft, dict):
+            rhythm = story_craft.get("rhythm_curve") or {}
+            if isinstance(rhythm, dict):
+                n_since_peak = rhythm.get("chapters_since_peak", 0)
+                warn_thresh = rhythm.get("warning_threshold", 3)
+                block_thresh = rhythm.get("block_threshold", 5)
+                if isinstance(n_since_peak, int) and isinstance(warn_thresh, int) and n_since_peak >= warn_thresh:
+                    sc_lines.append(
+                        f"- 情绪节奏张力：距上次高潮已过 {n_since_peak} 章（警示阈值: {warn_thresh}，阻断阈值: {block_thresh}），本章应推进情绪释放或高潮铺垫。"
+                    )
+
+            timed_locks = story_craft.get("timed_locks") or []
+            if isinstance(timed_locks, list):
+                for lock in timed_locks:
+                    if isinstance(lock, dict) and lock.get("status") == "active":
+                        dl = lock.get("deadline_chapter")
+                        desc = lock.get("description", "")
+                        lid = lock.get("id", "TL")
+                        if isinstance(dl, int) and dl <= self.chapter + 1:
+                            sc_lines.append(f"- 剧情限时锁：[{lid}] {desc}（截止第{dl}章）")
+
+            arc = story_craft.get("character_arc")
+            if isinstance(arc, dict) and arc.get("name"):
+                arc_name = arc.get("name")
+                start_st = arc.get("starting_state", "")
+                end_st = arc.get("ending_state", "")
+                trans = arc.get("transformation", "")
+                sc_lines.append(
+                    f"- 人物弧光指引（{arc_name}）：从【{start_st}】向【{end_st}】转变（核心转变：{trans}）"
+                )
+
+            echoes = story_craft.get("thematic_echoes") or []
+            if isinstance(echoes, list):
+                for item in echoes:
+                    if isinstance(item, dict):
+                        premise = item.get("premise", "")
+                        for echo in item.get("echoes", []):
+                            if isinstance(echo, dict) and echo.get("chapter") == self.chapter:
+                                sc_lines.append(f"- 主题呼应设计：命题【{premise}】—— 本章呈现：{echo.get('manifestation')}")
+
+            foreshadow_chain = story_craft.get("foreshadow_chain") or []
+            if isinstance(foreshadow_chain, list):
+                for fs in foreshadow_chain:
+                    if isinstance(fs, dict) and fs.get("status") == "active" and fs.get("expected_payoff_chapter") == self.chapter:
+                        fs_id = fs.get("id", "FS")
+                        fs_type = fs.get("type", "伏笔")
+                        fs_content = fs.get("content", "")
+                        payoff_m = fs.get("payoff_method", "")
+                        sc_lines.append(f"- 预定伏笔回收：[{fs_id}/{fs_type}] {fs_content}（回收方式：{payoff_m}）")
+
+            p_notes = story_craft.get("pacing_notes")
+            if isinstance(p_notes, str) and p_notes.strip():
+                sc_lines.append(f"- 剧情节奏备忘：{p_notes.strip()}")
+            rec_scenes = story_craft.get("recommended_scenes")
+            if isinstance(rec_scenes, list) and rec_scenes:
+                scenes_str = "、".join(str(s) for s in rec_scenes)
+                sc_lines.append(f"- 推荐场景构想：{scenes_str}")
+
+        if sc_lines:
+            lines.append("【故事工艺约束 (Story Craft Constraints)】")
+            lines.extend(sc_lines)
+
         recent_sums = writer_ctx.get("recent_summaries") or []
         urgent_loops = writer_ctx.get("urgent_loops") or []
-        if recent_sums or urgent_loops:
+        ref_items = writer_ctx.get("reference") or []
+        if recent_sums or urgent_loops or ref_items:
             lines.extend([
                 "",
                 "## 5. 关联前情线索 (Writer Context)",
             ])
             for s in recent_sums[:3]:
                 s_text = s.get("summary") if isinstance(s, dict) else str(s)
-                lines.append(f"- 前情摘要：{s_text}")
+                ch_prefix = f"第{s.get('chapter')}章：" if isinstance(s, dict) and s.get("chapter") else ""
+                lines.append(f"- 前情摘要：{ch_prefix}{s_text}")
             for loop in urgent_loops[:3]:
-                l_text = loop.get("hook_text") or loop.get("description") if isinstance(loop, dict) else str(loop)
+                l_text = (
+                    loop.get("hook_text")
+                    or loop.get("description")
+                    or loop.get("content")
+                    or loop.get("expected_payoff")
+                    if isinstance(loop, dict)
+                    else str(loop)
+                )
                 lines.append(f"- 紧急伏笔待收：{l_text}")
+            if ref_items:
+                rendered_refs = []
+                for r in ref_items:
+                    if isinstance(r, dict):
+                        c = r.get("content") or r.get("summary") or r.get("text") or ""
+                        if isinstance(c, dict):
+                            if "path" in c and "value" in c:
+                                c = f"{c['path']}: {c['value']}"
+                            else:
+                                c = json.dumps(c, ensure_ascii=False)
+                        if str(c).strip():
+                            rendered_refs.append(str(c).strip())
+                    elif isinstance(r, str) and r.strip():
+                        rendered_refs.append(r.strip())
+                if rendered_refs:
+                    lines.append("【参考依据 (Reference)】")
+                    for r_text in rendered_refs[:3]:
+                        lines.append(f"- {r_text}")
 
         lines.extend([
             "",
@@ -704,12 +853,14 @@ class ChapterRuntime:
                 continue
             intent_items.append(item_d)
 
+        chapter_meta = get_chapter_meta_entry(state, chapter)
         current_intent = {
             "chapter": chapter,
             "outline": core.get("chapter_outline") or load_chapter_outline(self.project_root, chapter, max_chars=None),
             "directive": merged_directive,
             "plot_structure": plot_structure,
             "chapter_brief": chapter_contract.get("override_allowed") or {},
+            "chapter_meta": chapter_meta,
             "intent_items": intent_items,
         }
 
@@ -779,6 +930,8 @@ class ChapterRuntime:
             "mandatory_nodes": list(plot_structure.get("mandatory_nodes") or []),
             "anti_patterns": anti_patterns_list,
             "writing_guidance": native_ctx.get("writing_guidance") or {},
+            "genre_profile": native_ctx.get("genre_profile") or {},
+            "story_craft": state.get("story_craft") or {},
         }
 
         raw_ref = native_ctx.get("reference") or []
@@ -786,8 +939,13 @@ class ChapterRuntime:
             item.to_dict() if hasattr(item, "to_dict") else (dict(item) if isinstance(item, dict) else {"content": str(item)})
             for item in raw_ref
         ]
+        urgent_loops = list(native_ctx.get("urgent_loops") or [])
+
         writer_context = {
             "reference": ref_items,
+            "recent_summaries": core.get("recent_summaries") or [],
+            "recent_meta": core.get("recent_meta") or [],
+            "urgent_loops": urgent_loops,
             "volume_goal": volume_contract.get("volume_goal") or {},
             "selected_tropes": volume_contract.get("selected_tropes") or [],
             "must_check_nodes": review_contract.get("must_check") or [],
@@ -875,6 +1033,65 @@ class ChapterRuntime:
         if not creative_brief or not str(creative_brief).strip():
             raise ValueError("creative_brief must be a non-empty string to seal writer package")
         return self.get_writer_package(chapter=chapter, creative_brief=str(creative_brief).strip())
+
+    def get_reviewer_context(self, chapter: int) -> dict[str, Any]:
+        """
+        Assemble and return governed context specifically needed for chapter review.
+        Delivers:
+        1. 事实权威 (canon_authority): 用于事实一致性检查的受治理事实与状态账本
+        2. 创作意图 (creative_intent): goal, must_cover_nodes, forbidden_zones, core_event, hook, hook_type
+        3. 工艺建议 (craft_constraints / advisory_constraints): 启发式故事工艺与写作指引（advisory-only，不得作为阻断门禁）
+        4. 本章规划信息 (chapter_planning): chapter_meta, plot_structure, forbidden_zones, must_check_nodes, blocking_rules（审查意图偏差与规划执行，不作为预授权硬门禁）
+        5. 审查合同 (review_contract): 原始章级审查合同
+        """
+        gov = self.get_governed_context(chapter)
+        contracts = load_runtime_sources(self.project_root, chapter).contracts
+        review_contract = contracts.get("review") or read_json_if_exists(self.paths.review_json(chapter)) or {}
+
+        intent = gov["current_intent"]
+        constraints = gov["constraints"]
+        ch_meta = intent.get("chapter_meta") or {}
+        governed_canon = gov.get("governed_canon") or {}
+
+        forbidden_zones = list(intent.get("directive", {}).get("forbidden_zones", []))
+        blocking_rules = list(review_contract.get("blocking_rules", []))
+
+        advisory_constraints = {
+            "story_craft": constraints.get("story_craft", {}),
+            "writing_guidance": constraints.get("writing_guidance", {}),
+            "anti_patterns": list(constraints.get("anti_patterns", [])),
+            "policy": "ADVISORY_ONLY: Craft and methodology heuristics must not be treated as blocking gates.",
+        }
+
+        return {
+            "chapter": chapter,
+            "canon_authority": governed_canon,
+            "creative_intent": {
+                "goal": intent.get("directive", {}).get("goal", ""),
+                "must_cover_nodes": list(intent.get("directive", {}).get("must_cover_nodes", [])),
+                "forbidden_zones": forbidden_zones,
+                "core_event": ch_meta.get("core_event", ""),
+                "hook": ch_meta.get("hook", ""),
+                "hook_type": ch_meta.get("hook_type", ""),
+            },
+            "craft_constraints": {
+                "core_tone": constraints.get("core_tone", ""),
+                "prohibitions": list(constraints.get("prohibitions", [])),
+                "mandatory_nodes": list(constraints.get("mandatory_nodes", [])),
+                "anti_patterns": list(constraints.get("anti_patterns", [])),
+                "story_craft": constraints.get("story_craft", {}),
+                "writing_guidance": constraints.get("writing_guidance", {}),
+            },
+            "advisory_constraints": advisory_constraints,
+            "chapter_planning": {
+                "chapter_meta": ch_meta,
+                "plot_structure": intent.get("plot_structure", {}),
+                "forbidden_zones": forbidden_zones,
+                "must_check_nodes": list(review_contract.get("must_check", [])),
+                "blocking_rules": blocking_rules,
+            },
+            "review_contract": review_contract,
+        }
 
     def ingest_draft(
         self,

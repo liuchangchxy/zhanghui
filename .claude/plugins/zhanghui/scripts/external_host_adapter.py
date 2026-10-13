@@ -100,6 +100,12 @@ class ExternalHostAdapter:
             status_res.to_json(), encoding="utf-8"
         )
 
+        # 6b. Collect reviewer context via public runtime
+        reviewer_ctx = self.runtime.get_reviewer_context(chapter=chapter)
+        (self.evidence_dir / "reviewer_context.json").write_text(
+            json.dumps(reviewer_ctx, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
         # 7. Commit attempt via public runtime
         # Host provides all 5 required semantic artifacts
         _, proposal = split_chapter_and_changes(prose)

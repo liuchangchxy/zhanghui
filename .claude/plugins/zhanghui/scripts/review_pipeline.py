@@ -335,13 +335,8 @@ def run_craft_checks(state: dict, chapter: int) -> dict:
                    {"lock_id": lock["id"], "deadline_chapter": lock["deadline_chapter"], "observed_chapter": chapter})
 
     # Scene-Sequel
-    cm_raw = state.get("chapter_meta")
-    if not isinstance(cm_raw, dict):
-        cm_raw = {}
-    cm_entry = cm_raw.get(str(chapter))
-    if not isinstance(cm_entry, dict):
-        cm_entry = {}
-    cm = cm_entry
+    from data_modules.state_validator import get_chapter_meta_entry
+    cm = get_chapter_meta_entry(state, chapter)
     if cm:
         ss_issues = check_scene_sequel(cm)
         for index, issue in enumerate(ss_issues):
