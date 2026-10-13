@@ -108,12 +108,16 @@ allowed-tools: Read Write Edit Grep Bash Agent
 
 环境设置（bash 命令执行前）：
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT:-${PWD}}"
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 export SKILL_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is required}/skills/webnovel-write"
 
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" preflight
 export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+if [ -z "${PROJECT_ROOT}" ] || [ ! -f "${PROJECT_ROOT}/.webnovel/state.json" ]; then
+  echo "ERROR: 未找到有效书项目根目录（缺少 .webnovel/state.json）: ${PROJECT_ROOT}" >&2
+  exit 1
+fi
 
 ```
 
@@ -455,8 +459,10 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 落库走 `review-pipeline --save-metrics`（与 webnovel-review 共用同一落库命令）：
 
 ```bash
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline --save-metrics \
-  --results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json"
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline \
+  --chapter {chapter_num} \
+  --review-results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+  --save-metrics
 
 ```
 
@@ -553,7 +559,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py \
 并行执行两个扫描器：
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/text_humanizer.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py \
     detect --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"
 
 node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \

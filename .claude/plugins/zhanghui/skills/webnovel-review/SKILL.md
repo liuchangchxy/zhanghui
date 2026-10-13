@@ -13,7 +13,7 @@ allowed-tools: Read Grep Write Edit Bash AskUserQuestion
 
 环境设置（bash 命令执行前）：
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT:-${PWD}}"
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
 
 if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/skills/webnovel-review" ]; then
   echo "ERROR: 未设置 CLAUDE_PLUGIN_ROOT 或缺少目录: ${CLAUDE_PLUGIN_ROOT}/skills/webnovel-review" >&2
@@ -27,7 +27,11 @@ if [ -z "${CLAUDE_PLUGIN_ROOT}" ] || [ ! -d "${CLAUDE_PLUGIN_ROOT}/scripts" ]; t
 fi
 export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
 
-export PROJECT_ROOT="$(python "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+if [ -z "${PROJECT_ROOT}" ] || [ ! -f "${PROJECT_ROOT}/.webnovel/state.json" ]; then
+  echo "ERROR: 未找到有效书项目根目录（缺少 .webnovel/state.json）: ${PROJECT_ROOT}" >&2
+  exit 1
+fi
 
 ```
 
@@ -237,8 +241,10 @@ EXISTS → **必须用 AskUserQuestion 三态询问用户**（覆盖 / 改名追
 reviewer 输出的 `.webnovel/tmp/review_results.json` 必须经 `review-pipeline --save-metrics` 落库到 `index.db.review_metrics`：
 
 ```bash
-python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline --save-metrics \
-  --results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json"
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline \
+  --chapter {end} \
+  --review-results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+  --save-metrics
 
 ```
 

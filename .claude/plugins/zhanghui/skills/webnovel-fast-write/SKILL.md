@@ -31,17 +31,21 @@ allowed-tools: Read Write Edit Grep Bash Agent
 ### Step 0：预检与环境设置
 
 ```bash
-export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT:-${PWD}}"
-export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
-export SKILL_ROOT="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is required}/skills/webnovel-fast-write"
+export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
+export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is required}/scripts"
+export SKILL_ROOT="${CLAUDE_PLUGIN_ROOT}/skills/webnovel-fast-write"
 
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" preflight
 export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+if [ -z "${PROJECT_ROOT}" ] || [ ! -f "${PROJECT_ROOT}/.webnovel/state.json" ]; then
+  echo "ERROR: 未找到有效书项目根目录（缺少 .webnovel/state.json）: ${PROJECT_ROOT}" >&2
+  exit 1
+fi
 
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" placeholder-scan --format text
 ```
 
-`preflight` 校验环境与项目根，`placeholder-scan` 确保大纲/设定无未补齐占位。任一失败立即阻断。
+`preflight` 校验环境与项目根，`where` 解析有效小说项目根目录并经 Project Root Guard 强校验（严禁静默回退插件目录），`placeholder-scan` 确保大纲/设定无未补齐占位。任一失败立即阻断。
 
 ### Step 1：写前准备与 Native Writer Package 封口
 
@@ -73,6 +77,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
    生成工作草稿后，立即调用 `runtime ingest-draft`：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime ingest-draft \
+     --chapter {chapter_num} \
      --package-fingerprint {package_fingerprint} \
      --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --format json
@@ -113,10 +118,12 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
    - `draft_id`: `"{draft_id}"`
    - `draft_fingerprint`: `"{draft_fingerprint}"`
 3. 审查结果落盘到 `${PROJECT_ROOT}/.webnovel/tmp/review_results.json`。
-4. 审查指标落库：
+4. 审查指标落库（参数必须严格遵守 CLI 契约：`--chapter` + `--review-results` + `--save-metrics`）：
    ```bash
-   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline --save-metrics \
-     --results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json"
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline \
+     --chapter {chapter_num} \
+     --review-results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+     --save-metrics
    ```
 5. Craft advisory 约束：所有 raw findings 保持 `blocking=false`，Craft 建议不阻断提交。
 
@@ -130,7 +137,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 ```bash
 python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py \
     --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
-    --db .webnovel/index.db \
+    --db "${PROJECT_ROOT}/.webnovel/index.db" \
     --json
 ```
 若不通过，要求仅重写 `<chapter_changes>` 块，最多重试 2 次。
@@ -138,7 +145,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py \
 ### Step 4.6：anti-slop 扫描（启发式建议，不阻断）
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/text_humanizer.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/_shared/text_humanizer.py \
     detect --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"
 
 node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
@@ -147,23 +154,51 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
 ```
 扫描命中默认作为 advisory 呈现，不单独阻断提交。
 
-### Step 5：Data Agent 提取与对账（Reconciliation）
+### Step 5：Data Agent 提取、对账与提交必需产物校验
 
-1. 拆分正文与 proposal：
+1. **清理历史残留产物（防止跨章或旧草稿污染）**：
+   在提取前必须删除旧临时文件，确保所有 commit 产物均来自当前 draft：
+   ```bash
+   rm -f "${PROJECT_ROOT}/.webnovel/tmp/extraction_result.json" \
+         "${PROJECT_ROOT}/.webnovel/tmp/fulfillment_result.json" \
+         "${PROJECT_ROOT}/.webnovel/tmp/disambiguation_result.json" \
+         "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json"
+   ```
+
+2. **拆分正文与 proposal**：
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/prepare_data_agent_input.py" \
      --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --prose-output "${PROJECT_ROOT}/.webnovel/tmp/data_agent_prose.md" \
      --changes-output "${PROJECT_ROOT}/.webnovel/tmp/proposed_changes.json"
    ```
-2. 调用 `webnovel-writer:data-agent`（只传 `.webnovel/tmp/data_agent_prose.md`）。
-3. 执行语义对账：
+
+3. **调用 Data Agent 提取事实与元数据**：
+   使用 Agent 工具调用 `webnovel-writer:data-agent`（只传入 `.webnovel/tmp/data_agent_prose.md`，严禁传入包含 CHANGES 的文件）。
+   Data Agent 依据唯一 schema 规范产出 3 份 canonical commit 必需产物到 `${PROJECT_ROOT}/.webnovel/tmp/`：
+   - `extraction_result.json`（实体/状态变更、事件、摘要与场景）
+   - `fulfillment_result.json`（大纲目标履约结果：planned_nodes, covered_nodes, missed_nodes, extra_nodes）
+   - `disambiguation_result.json`（实体消歧 pending 队列）
+   严禁主流程跳过 Data Agent 或伪造 fulfillment 结果。
+
+4. **执行语义对账（Reconciliation）**：
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/reconcile_changes.py" \
      --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --extraction-result "${PROJECT_ROOT}/.webnovel/tmp/extraction_result.json" \
      --db "${PROJECT_ROOT}/.webnovel/index.db" \
      --output "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json"
+   ```
+
+5. **提交前产物完整性校验（Fail-Closed Gate）**：
+   在调用 `runtime commit` 前，必须检查 5 份必需产物完整存在且非空；缺少任一份产物严禁调用 commit：
+   ```bash
+   for art in review_results.json extraction_result.json fulfillment_result.json disambiguation_result.json reconciliation_result.json; do
+     if [ ! -s "${PROJECT_ROOT}/.webnovel/tmp/${art}" ]; then
+       echo "ERROR: 缺少提交必需产物: ${art}，严禁执行 runtime commit！" >&2
+       exit 1
+     fi
+   done
    ```
 
 ### Step 5.5A：事实提交（Runtime Commit）

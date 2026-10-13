@@ -51,7 +51,7 @@ def _setup_book_project(tmp_path: Path, chapter: int = 1) -> Path:
     }
     (webnovel_dir / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    for d in (".webnovel/backups", ".webnovel/archive", ".webnovel/summaries", "设定集", "正文", "审查报告"):
+    for d in (".webnovel/backups", ".webnovel/archive", ".webnovel/summaries", ".webnovel/tmp", "设定集", "正文", "审查报告"):
         (project_root / d).mkdir(parents=True, exist_ok=True)
     for f in ("设定集/世界观.md", "设定集/力量体系.md", "设定集/主角卡.md", "设定集/反派设计.md", "大纲/总纲.md", ".env.example"):
         fp = project_root / f
@@ -414,3 +414,287 @@ class TestWorkflowConvergence:
         published = adapter.publish_accepted_draft(chapter=1, draft_id=draft_id)
         assert published.is_file()
         assert "<chapter_changes>" not in published.read_text(encoding="utf-8")
+
+    def test_review_pipeline_cli_argument_contract(self, tmp_path: Path):
+        """CLI Argument Contract: review-pipeline requires --chapter and --review-results, rejects legacy --results."""
+        from data_modules.webnovel import build_parser
+
+        parser = build_parser()
+        review_file = tmp_path / "review.json"
+        review_file.write_text("{}", encoding="utf-8")
+
+        # 1. 成功解析标准规范调用
+        args = parser.parse_args([
+            "review-pipeline",
+            "--chapter", "1",
+            "--review-results", str(review_file),
+            "--save-metrics",
+        ])
+        assert args.tool == "review-pipeline"
+        assert args.chapter == 1
+        assert args.review_results == str(review_file)
+        assert args.save_metrics is True
+
+        # 2. 传入错误旧参数 --results 触发解析错误
+        with pytest.raises(SystemExit):
+            parser.parse_args([
+                "review-pipeline",
+                "--results", str(review_file),
+                "--save-metrics",
+            ])
+
+        # 3. 缺少必需参数 --chapter 触发解析错误
+        with pytest.raises(SystemExit):
+            parser.parse_args([
+                "review-pipeline",
+                "--review-results", str(review_file),
+            ])
+
+    def test_runtime_ingest_draft_cli_argument_contract(self, tmp_path: Path):
+        """CLI Argument Contract: runtime ingest-draft requires --chapter and --package-fingerprint."""
+        from data_modules.webnovel import build_parser
+
+        parser = build_parser()
+        draft_file = tmp_path / "draft.md"
+        draft_file.write_text("正文内容", encoding="utf-8")
+
+        # 1. 成功解析标准调用
+        args = parser.parse_args([
+            "runtime",
+            "ingest-draft",
+            "--chapter", "1",
+            "--package-fingerprint", "fp-123456",
+            "--draft-file", str(draft_file),
+            "--format", "json",
+        ])
+        assert args.tool == "runtime"
+        assert args.runtime_action == "ingest-draft"
+        assert args.chapter == 1
+        assert args.package_fingerprint == "fp-123456"
+        assert args.draft_file == str(draft_file)
+
+        # 2. 缺少 --chapter 触发解析错误
+        with pytest.raises(SystemExit):
+            parser.parse_args([
+                "runtime",
+                "ingest-draft",
+                "--package-fingerprint", "fp-123456",
+                "--draft-file", str(draft_file),
+            ])
+
+    def test_project_root_location_and_guard_contract(self, tmp_path: Path):
+        """Project Root Guard Contract: locates valid book root and fails closed on invalid/plugin directory."""
+        from project_locator import resolve_project_root
+
+        # 1. 有效项目根（包含 .webnovel/state.json）解析成功
+        book_dir = _setup_book_project(tmp_path, chapter=1)
+        resolved = resolve_project_root(str(book_dir))
+        assert resolved == book_dir
+        assert (resolved / ".webnovel" / "state.json").is_file()
+
+        # 2. 无效目录（空目录或未初始化目录）fail closed 抛出 FileNotFoundError
+        empty_dir = tmp_path / "empty_workspace"
+        empty_dir.mkdir(parents=True, exist_ok=True)
+        with pytest.raises(FileNotFoundError):
+            resolve_project_root(str(empty_dir))
+
+    def test_mandatory_commit_artifacts_producer_and_stale_prevention(self, tmp_path: Path):
+        """Artifact Lifecycle Contract: Data Agent produces 3 artifacts, reconcile produces 1, commit rejects missing/stale."""
+        project_root = _setup_book_project(tmp_path, chapter=1)
+        runtime = ChapterRuntime(project_root)
+        runtime.prepare(1, with_package=True)
+
+        working_draft_file = project_root / ".webnovel" / "tmp" / "chapter_0001_working.md"
+        prose = _sample_draft()
+        working_draft_file.write_text(prose, encoding="utf-8")
+
+        sealed_pkg = runtime.attach_creative_brief(chapter=1, creative_brief="策划任务书")
+        ingest_res = runtime.ingest_draft(
+            chapter=1,
+            package_fingerprint=sealed_pkg.package_fingerprint,
+            prose=working_draft_file.read_text(encoding="utf-8"),
+        )
+        assert ingest_res.ok
+        draft_id = ingest_res.draft_id
+
+        # 1. prepare_data_agent_input 拆分纯正文与 proposal
+        from prepare_data_agent_input import split_chapter_and_changes
+        raw_text = working_draft_file.read_text(encoding="utf-8")
+        prose_only, parsed_proposal = split_chapter_and_changes(raw_text)
+        assert "<chapter_changes>" not in prose_only
+        assert "character_state_changes" in parsed_proposal
+
+        # 2. 模拟 Data Agent 产出的三份 canonical artifacts
+        extraction_result = {
+            "chapter_meta": {},
+            "accepted_events": [],
+            "state_deltas": [],
+            "entity_deltas": [],
+        }
+        fulfillment_result = {
+            "planned_nodes": [],
+            "covered_nodes": [],
+            "missed_nodes": [],
+            "extra_nodes": [],
+        }
+        disambiguation_result = {"pending": []}
+
+        # 3. reconcile_changes.py 产出 reconciliation_result
+        reconciliation_result = reconcile_changes(parsed_proposal, extraction_result, chapter_text=prose_only)
+        assert reconciliation_result["status"] in ("passed", "clean", "unproposed_observed", "proposed_not_observed")
+
+        # 4. 任意必需产物缺失均被 ChapterCommitService 强阻断
+        review_result = {"blocking_count": 0, "blocking_rule_results": []}
+
+        # 缺失 fulfillment_result
+        res_missing_ful = runtime.commit(
+            chapter=1,
+            draft_id=draft_id,
+            review_result=review_result,
+            extraction_result=extraction_result,
+            fulfillment_result=None,
+            disambiguation_result=disambiguation_result,
+            reconciliation_result=reconciliation_result,
+        )
+        assert not res_missing_ful.ok
+        assert res_missing_ful.error_code == "REQUIRED_ARTIFACTS_MISSING"
+
+        # 缺失 disambiguation_result
+        res_missing_dis = runtime.commit(
+            chapter=1,
+            draft_id=draft_id,
+            review_result=review_result,
+            extraction_result=extraction_result,
+            fulfillment_result=fulfillment_result,
+            disambiguation_result=None,
+            reconciliation_result=reconciliation_result,
+        )
+        assert not res_missing_dis.ok
+        assert res_missing_dis.error_code == "REQUIRED_ARTIFACTS_MISSING"
+
+        # 5. 草稿更新与旧草稿身份失效（Stale artifact prevention）
+        revised_text = _sample_draft(prose_body="修改后的正文段落。")
+        working_draft_file.write_text(revised_text, encoding="utf-8")
+        reingest_res = runtime.ingest_draft(
+            chapter=1,
+            package_fingerprint=sealed_pkg.package_fingerprint,
+            prose=working_draft_file.read_text(encoding="utf-8"),
+        )
+        assert reingest_res.ok
+        new_draft_id = reingest_res.draft_id
+        assert new_draft_id != draft_id
+
+        # 用旧 draft_id 提交会被状态机拒收
+        res_old_draft = runtime.commit(
+            chapter=1,
+            draft_id=draft_id,
+            review_result=review_result,
+            extraction_result=extraction_result,
+            fulfillment_result=fulfillment_result,
+            disambiguation_result=disambiguation_result,
+            reconciliation_result=reconciliation_result,
+        )
+        assert not res_old_draft.ok
+
+        # 尝试用旧草稿生成的 reconciliation_result 提交新草稿 -> 触发 STALE 检测拒收
+        res_stale_rec = runtime.commit(
+            chapter=1,
+            draft_id=new_draft_id,
+            review_result=review_result,
+            extraction_result=extraction_result,
+            fulfillment_result=fulfillment_result,
+            disambiguation_result=disambiguation_result,
+            reconciliation_result=reconciliation_result,  # 旧草稿生成的 reconciliation
+        )
+        assert not res_stale_rec.ok
+        assert "stale or does not match" in res_stale_rec.error
+
+        # 为新草稿重新生成对账产物
+        _, new_proposal = split_chapter_and_changes(revised_text)
+        new_reconciliation = reconcile_changes(new_proposal, extraction_result, chapter_text=revised_text)
+
+        # 刷新对账后提交新草稿顺利 accepted
+        res_new_commit = runtime.commit(
+            chapter=1,
+            draft_id=new_draft_id,
+            review_result=review_result,
+            extraction_result=extraction_result,
+            fulfillment_result=fulfillment_result,
+            disambiguation_result=disambiguation_result,
+            reconciliation_result=new_reconciliation,
+        )
+        assert res_new_commit.ok
+        assert res_new_commit.chapter_outcome == "accepted"
+
+    def test_fast_write_and_revise_execution_order_contract(self, tmp_path: Path):
+        """Workflow Order Contract: strict staging for fast-write and revise without direct writes to 正文/."""
+        project_root = _setup_book_project(tmp_path, chapter=1)
+        runtime = ChapterRuntime(project_root)
+
+        # 验证 fast-write 流程：
+        # Step 0: prepare
+        prep_res = runtime.prepare(1, with_package=True)
+        assert prep_res.chapter == 1
+        # Step 1: attach brief
+        sealed = runtime.attach_creative_brief(1, creative_brief="快车道创作任务书")
+        # Step 2: ingest draft into tmp
+        working_file = project_root / ".webnovel" / "tmp" / "chapter_0001_working.md"
+        prose = _sample_draft()
+        working_file.write_text(prose, encoding="utf-8")
+        ingest = runtime.ingest_draft(1, package_fingerprint=sealed.package_fingerprint, prose=prose)
+        assert ingest.ok
+
+        # 此时 正文/ 目录下绝对没有任何文件
+        published_files = list((project_root / "正文").glob("*.md"))
+        assert len(published_files) == 0
+
+        # Step 3: reviewer context
+        rev_ctx = runtime.get_reviewer_context(1)
+        assert isinstance(rev_ctx, dict)
+
+        # Step 5: commit (5 artifacts)
+        _, proposal = split_chapter_and_changes(prose)
+        ext = {"chapter_meta": {}, "accepted_events": [], "state_deltas": [], "entity_deltas": []}
+        ful = {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []}
+        dis = {"pending": []}
+        rec = reconcile_changes(proposal, ext, chapter_text=prose)
+        rev = {"blocking_count": 0, "blocking_rule_results": []}
+
+        commit_res = runtime.commit(
+            chapter=1,
+            draft_id=ingest.draft_id,
+            review_result=rev,
+            extraction_result=ext,
+            fulfillment_result=ful,
+            disambiguation_result=dis,
+            reconciliation_result=rec,
+        )
+        assert commit_res.ok
+        assert commit_res.chapter_outcome == "accepted"
+
+        # 提交完成后才能 publish
+        pub_path = runtime.publish_accepted_draft(chapter=1, draft_id=ingest.draft_id)
+        assert pub_path.is_file()
+        assert pub_path.parent == (project_root / "正文")
+
+        # 验证 revise 流程对已 accepted 章节的强阻断保护：
+        # 已 accepted 章节尝试常规修订/覆写必须 fail closed
+        ch_status = runtime.get_status(1)
+        assert ch_status.commit_status == "accepted"
+
+        second_commit = runtime.commit(
+            chapter=1,
+            draft_id=ingest.draft_id,
+            review_result=rev,
+            extraction_result=ext,
+            fulfillment_result=ful,
+            disambiguation_result=dis,
+            reconciliation_result=rec,
+        )
+        assert not second_commit.ok
+        assert second_commit.chapter_outcome == "rejected"
+
+        service = ChapterCommitService(project_root)
+        with pytest.raises(ChapterCommitError, match="overwrite is forbidden"):
+            service.persist_commit({"meta": {"chapter": 1, "status": "accepted"}}, on_conflict="overwrite")
+

@@ -39,9 +39,16 @@ allowed-tools: Read Write Edit Grep Bash Agent
 
 1. 环境与项目解析：
    ```bash
-   export WORKSPACE_ROOT="${CLAUDE_PLUGIN_ROOT:-${PWD}}"
-   export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT}/scripts"
+   export WORKSPACE_ROOT="${CLAUDE_PROJECT_DIR:-${PWD}}"
+   export SCRIPTS_DIR="${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is required}/scripts"
+   export SKILL_ROOT="${CLAUDE_PLUGIN_ROOT}/skills/webnovel-revise"
+
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" preflight
    export PROJECT_ROOT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${WORKSPACE_ROOT}" where)"
+   if [ -z "${PROJECT_ROOT}" ] || [ ! -f "${PROJECT_ROOT}/.webnovel/state.json" ]; then
+     echo "ERROR: 未找到有效书项目根目录（缺少 .webnovel/state.json）: ${PROJECT_ROOT}" >&2
+     exit 1
+   fi
    ```
 2. 查询本章状态：
    ```bash
@@ -83,15 +90,24 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
 
 ### Step 3：刷新 ProposedChanges 与重新登记草稿（Re-Ingestion）
 
-1. **刷新 CHANGES**：依据修订后的工作草稿全文重新生成末尾的 `<chapter_changes>...</chapter_changes>` 提案块。
-2. **重新登记草稿**：
+1. **刷新 CHANGES**：依据修订后的工作草稿全文重新生成末尾的 `<chapter_changes>...</chapter_changes>` 提案块。局部重写必须保持完整的 8 个顶级标准字段，确保协议块不被破坏。
+2. **清理历史与上一轮草稿残留产物（防止脏数据与跨版本混用）**：
+   ```bash
+   rm -f "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+         "${PROJECT_ROOT}/.webnovel/tmp/extraction_result.json" \
+         "${PROJECT_ROOT}/.webnovel/tmp/fulfillment_result.json" \
+         "${PROJECT_ROOT}/.webnovel/tmp/disambiguation_result.json" \
+         "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json"
+   ```
+3. **重新登记草稿（获取全新 Draft Identity）**：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime ingest-draft \
+     --chapter {chapter_num} \
      --package-fingerprint {package_fingerprint} \
      --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --format json
    ```
-   **草稿失效规则**：获取全新的 `draft_id` 与 `draft_fingerprint`；上一版本的草稿标识与历史审查结果彻底作废。
+   **草稿身份封口契约**：调用返回全新的 `draft_id` 与 `draft_fingerprint`。旧草稿身份与其关联的审查、对账结果立即失效；后续审查、提取、对账和提交必须严格绑定此 `{new_draft_id}`。
 
 ### Step 4：重新审查与门禁校验
 
@@ -111,10 +127,12 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
    - `reviewer_context_file`: `"${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"`
    - `draft_id`: `"{new_draft_id}"`
    - `draft_fingerprint`: `"{new_draft_fingerprint}"`
-3. 落盘并更新审查指标：
+3. 落盘并更新审查指标（严格遵守 CLI 参数契约：`--chapter` + `--review-results` + `--save-metrics`）：
    ```bash
-   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline --save-metrics \
-     --results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json"
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline \
+     --chapter {chapter_num} \
+     --review-results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+     --save-metrics
    ```
 4. 校验 CHANGES 协议：
    ```bash
@@ -126,15 +144,21 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
 
 ### Step 5：提取、对账与事实提交
 
-1. 拆分并提取数据：
+1. **拆分正文与 proposal**：
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/prepare_data_agent_input.py" \
      --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --prose-output "${PROJECT_ROOT}/.webnovel/tmp/data_agent_prose.md" \
      --changes-output "${PROJECT_ROOT}/.webnovel/tmp/proposed_changes.json"
    ```
-   使用 Agent 调用 `webnovel-writer:data-agent`（只传 prose 文件）。
-2. 执行语义对账：
+2. **调用 Data Agent 重新提取事实**：
+   使用 Agent 工具调用 `webnovel-writer:data-agent`（只传入 `.webnovel/tmp/data_agent_prose.md`，严禁传入带有 CHANGES 的文件）。
+   Data Agent 依据唯一 schema 规范产出 3 份 canonical commit 必需产物到 `${PROJECT_ROOT}/.webnovel/tmp/`：
+   - `extraction_result.json`（实体/状态变更、事件、摘要与场景）
+   - `fulfillment_result.json`（大纲目标履约结果：planned_nodes, covered_nodes, missed_nodes, extra_nodes）
+   - `disambiguation_result.json`（实体消歧 pending 队列）
+   严禁主流程跳过 Data Agent 或伪造 fulfillment 结果。
+3. **执行语义对账（Reconciliation）**：
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/reconcile_changes.py" \
      --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
@@ -142,7 +166,18 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
      --db "${PROJECT_ROOT}/.webnovel/index.db" \
      --output "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json"
    ```
-3. 事实提交（Runtime Commit）：
+4. **提交前产物完整性校验（Fail-Closed Gate）**：
+   在调用 `runtime commit` 前，核验当前修订 draft 的 5 份必需产物完整存在且非空：
+   ```bash
+   for art in review_results.json extraction_result.json fulfillment_result.json disambiguation_result.json reconciliation_result.json; do
+     if [ ! -s "${PROJECT_ROOT}/.webnovel/tmp/${art}" ]; then
+       echo "ERROR: 缺少提交必需产物: ${art}，严禁执行 runtime commit！" >&2
+       exit 1
+     fi
+   done
+   ```
+   若任一必需产物缺失，严禁调用 `runtime commit`。
+5. **事实提交（Runtime Commit）**：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime commit \
      --chapter {chapter_num} \
