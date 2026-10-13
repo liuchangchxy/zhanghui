@@ -180,6 +180,10 @@ class ExternalHostAdapter:
             "private_contract_writes": self.private_contract_writes,
         }
 
+    def publish_accepted_draft(self, chapter: int, draft_id: str) -> Path:
+        """Publish accepted staged draft to formal prose path via ChapterRuntime."""
+        return self.runtime.publish_accepted_draft(chapter=chapter, draft_id=draft_id)
+
     def _format_writer_prompt(self, pkg: Any) -> str:
         """Format writer prompt using the canonical package renderer."""
         if hasattr(pkg, "to_writer_prompt"):

@@ -753,8 +753,11 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
   --format json
 ```
 
-**发布安全保证（Exact Accepted Draft 绑定）**：
-- **Exact SHA 校验**：`publish_accepted_draft` 强制校验待发布草稿的 SHA-256 与 durable commit 中的 `provenance.reconciliation_chapter_sha256` 完全一致；任何未被该 commit 接受的草稿（例如 commit 后新生成的 draft B）均被严格拒绝（`ACCEPTED_DRAFT_MISMATCH`），杜绝非 accepted 草稿冒充发布到正式 `正文/`。
+**发布安全保证（Exact Accepted Draft 绑定与纯正文发布）**：
+- **正文纯净隔离（Draft / Publication Separation）**：工作草稿可包含正文与结构化变更提案（`<chapter_changes>`），但正式发布到 `正文/` 目录时，`publish_accepted_draft` 严格通过标准 CHANGES parser 剥离所有内部协议块，确保发布的章节文件为 100% 纯正文，绝不包含 `<chapter_changes>` 或任何内部协议内容。
+- **Exact 双重 SHA 校验**：`publish_accepted_draft` 强制进行双重精确身份绑定：
+  1. 完整草稿 SHA-256 必须与 durable commit 中的 `provenance.reconciliation_chapter_sha256` 完全一致；任何未被该 commit 接受的草稿（例如 commit 后新生成的 draft B）均被严格拒绝（`ACCEPTED_DRAFT_MISMATCH`），杜绝非 accepted 草稿冒充发布；
+  2. 发布纯正文 SHA-256 必须与 durable commit 中的 `provenance.reconciliation_prose_sha256` 完全一致；任何不匹配均被严格拒绝（`ACCEPTED_PROSE_MISMATCH`）。
 - **显式草稿 ID**：必须显式传入 `--draft-id {draft_id}`，严禁猜测或退回 active draft。
 - **发布失败隔离**：若 publication 失败，明确报告“Canon 已 accepted，但正式正文尚未发布”并提示重试发布命令；绝不重跑起草（Writer）、审查（Reviewer）或数据提炼（Data Agent）。
 

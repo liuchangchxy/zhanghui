@@ -236,6 +236,8 @@ def test_publish_accepted_draft_requires_accepted_commit(tmp_path: Path):
         runtime.publish_accepted_draft(chapter=1, draft_id=draft_id)
 
     # 4. Commit status is accepted and SHA matches, verify publish succeeds
+    clean_prose, _ = split_chapter_and_changes(prose)
+    clean_prose_sha = hashlib.sha256(clean_prose.encode("utf-8")).hexdigest()
     commit_file.write_text(
         json.dumps({
             "meta": {
@@ -245,6 +247,7 @@ def test_publish_accepted_draft_requires_accepted_commit(tmp_path: Path):
             },
             "provenance": {
                 "reconciliation_chapter_sha256": prose_sha,
+                "reconciliation_prose_sha256": clean_prose_sha,
             },
         }, ensure_ascii=False),
         encoding="utf-8",
@@ -253,7 +256,8 @@ def test_publish_accepted_draft_requires_accepted_commit(tmp_path: Path):
     published_file = runtime.publish_accepted_draft(chapter=1, draft_id=draft_id)
     assert published_file.is_file()
     assert published_file.name == "第0001章-初入宗门.md"
-    assert published_file.read_text(encoding="utf-8") == prose
+    assert published_file.read_text(encoding="utf-8") == clean_prose
+    assert "<chapter_changes>" not in published_file.read_text(encoding="utf-8")
 
 
 def test_non_accepted_draft_strictly_rejected_on_publish(tmp_path: Path):
@@ -315,7 +319,9 @@ def test_non_accepted_draft_strictly_rejected_on_publish(tmp_path: Path):
     # Publishing the genuine accepted Draft A succeeds
     pub_a = runtime.publish_accepted_draft(chapter=1, draft_id=ingest_a.draft_id)
     assert pub_a == formal_path
-    assert formal_path.read_text(encoding="utf-8") == prose_a
+    clean_prose_a, _ = split_chapter_and_changes(prose_a)
+    assert formal_path.read_text(encoding="utf-8") == clean_prose_a
+    assert "<chapter_changes>" not in formal_path.read_text(encoding="utf-8")
 
 
 def test_cli_publish_draft_requires_draft_id(tmp_path: Path, monkeypatch):
@@ -410,8 +416,9 @@ def test_cli_runtime_commit_and_publish_draft_decoupled_flow(tmp_path: Path, mon
     pub_data = json.loads(captured.out)
     assert pub_data["ok"] is True
     assert pub_data["published_file"] == str(formal_file)
-    assert formal_file.is_file()
-    assert formal_file.read_text(encoding="utf-8") == prose
+    clean_prose, _ = split_chapter_and_changes(prose)
+    assert formal_file.read_text(encoding="utf-8") == clean_prose
+    assert "<chapter_changes>" not in formal_file.read_text(encoding="utf-8")
 
 
 def test_polish_invalidation_generates_new_draft_id(tmp_path: Path):
