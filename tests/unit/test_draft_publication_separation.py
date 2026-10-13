@@ -284,7 +284,7 @@ def test_4_publish_rejected_on_tampering(tmp_path: Path):
     commit_data["provenance"]["reconciliation_chapter_sha256"] = corrupt_ingest.draft_fingerprint
     commit_file.write_text(json.dumps(commit_data, ensure_ascii=False), encoding="utf-8")
 
-    with pytest.raises(RuntimeError, match="Invalid CHANGES protocol block"):
+    with pytest.raises(RuntimeError, match="invalid or missing CHANGES container"):
         runtime.publish_accepted_draft(chapter=1, draft_id=corrupt_ingest.draft_id)
 
 
@@ -414,3 +414,63 @@ def test_8_external_host_uses_identical_publication_semantics(tmp_path: Path):
     # External host also fails closed on invalid draft_id
     with pytest.raises(RuntimeError, match="Staged draft 'fake-draft' not found"):
         adapter.publish_accepted_draft(chapter=1, draft_id="fake-draft")
+
+
+def test_9_publish_strictly_rejected_when_commit_missing_prose_sha(tmp_path: Path):
+    """9. accepted commit 缺少 prose SHA → fail-closed 严格拒绝发布。"""
+    project_root = _setup_project(tmp_path, chapter=1)
+    runtime = ChapterRuntime(project_root)
+    runtime.prepare(chapter=1, with_package=True)
+
+    working_draft = _sample_working_draft()
+    sealed = runtime.attach_creative_brief(chapter=1, creative_brief="任务书")
+    ingest = runtime.ingest_draft(chapter=1, package_fingerprint=sealed.package_fingerprint, prose=working_draft)
+
+    # Construct accepted commit omitting reconciliation_prose_sha256
+    commit_file = runtime.paths.commit_json(1)
+    commit_file.parent.mkdir(parents=True, exist_ok=True)
+    commit_file.write_text(
+        json.dumps({
+            "meta": {"schema_version": "story-system/v1", "status": "accepted", "chapter": 1},
+            "provenance": {
+                "reconciliation_chapter_sha256": ingest.draft_fingerprint,
+                # Intentionally missing "reconciliation_prose_sha256"
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="Durable commit missing provenance.reconciliation_prose_sha256"):
+        runtime.publish_accepted_draft(chapter=1, draft_id=ingest.draft_id)
+
+
+def test_10_publish_strictly_rejected_when_draft_missing_changes_container(tmp_path: Path):
+    """10. 无 CHANGES 容器 → 按实际合法契约处理，不允许绕过正文身份校验。"""
+    project_root = _setup_project(tmp_path, chapter=1)
+    runtime = ChapterRuntime(project_root)
+    runtime.prepare(chapter=1, with_package=True)
+
+    # Draft without any CHANGES container (pure novel text)
+    bare_prose = "这是一段纯正文，没有任何 CHANGES 容器。"
+    sealed = runtime.attach_creative_brief(chapter=1, creative_brief="任务书")
+    ingest = runtime.ingest_draft(chapter=1, package_fingerprint=sealed.package_fingerprint, prose=bare_prose)
+
+    prose_sha = hashlib.sha256(bare_prose.encode("utf-8")).hexdigest()
+    # Even if an accepted commit exists with matching SHAs
+    commit_file = runtime.paths.commit_json(1)
+    commit_file.parent.mkdir(parents=True, exist_ok=True)
+    commit_file.write_text(
+        json.dumps({
+            "meta": {"schema_version": "story-system/v1", "status": "accepted", "chapter": 1},
+            "provenance": {
+                "reconciliation_chapter_sha256": prose_sha,
+                "reconciliation_prose_sha256": prose_sha,
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    # Publication MUST fail closed because canonical creative contract requires CHANGES container
+    with pytest.raises(RuntimeError, match="invalid or missing CHANGES container in staged draft"):
+        runtime.publish_accepted_draft(chapter=1, draft_id=ingest.draft_id)
+
