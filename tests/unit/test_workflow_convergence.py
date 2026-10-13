@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 import uuid
 from pathlib import Path
 import pytest
@@ -481,6 +483,129 @@ class TestWorkflowConvergence:
                 "--package-fingerprint", "fp-123456",
                 "--draft-file", str(draft_file),
             ])
+
+    def test_attach_creative_brief_to_ingest_draft_cli_contract(self, tmp_path: Path):
+        """CLI End-to-End Contract:
+        attach-creative-brief (--format prompt) -> runtime status (--format json) -> ingest-draft (--package-fingerprint).
+        Verifies:
+        1. attach-creative-brief seals WriterPackage and outputs Canonical Writer Prompt.
+        2. runtime status reliably returns the sealed package_fingerprint (with is_writer_package_stale=False).
+        3. ingest-draft succeeds when given the matching package_fingerprint.
+        4. ingest-draft fails closed when given a mismatched/faked package_fingerprint.
+        5. revise flow successfully queries and reuses existing package_fingerprint from runtime status.
+        """
+        scripts_dir = Path(__file__).resolve().parents[2] / ".claude" / "plugins" / "zhanghui" / "scripts"
+        webnovel_py = scripts_dir / "webnovel.py"
+        assert webnovel_py.is_file()
+
+        project_root = _setup_book_project(tmp_path, chapter=1)
+
+        # 1. 执行 attach-creative-brief --format prompt，获取 Canonical Writer Prompt
+        brief_text = "文学策划任务书：初入山门，考核试炼"
+        cmd_brief = [
+            sys.executable,
+            "-X", "utf8",
+            str(webnovel_py),
+            "--project-root", str(project_root),
+            "runtime", "attach-creative-brief",
+            "--chapter", "1",
+            "--brief", brief_text,
+            "--format", "prompt",
+        ]
+        res_brief = subprocess.run(cmd_brief, capture_output=True, text=True, check=True)
+        canonical_prompt = res_brief.stdout
+        assert "问道青云" in canonical_prompt
+        assert brief_text in canonical_prompt
+
+        # 验证物理封口产物存在
+        pkg_file = project_root / ".webnovel" / "runtime" / "chapter_001" / "writer_package.json"
+        assert pkg_file.is_file()
+        pkg_data = json.loads(pkg_file.read_text(encoding="utf-8"))
+        assert pkg_data["chapter"] == 1
+        expected_fp = pkg_data["package_fingerprint"]
+        assert expected_fp
+
+        # 2. 从 runtime status --chapter 1 --format json 提取同一份封口包的 package_fingerprint
+        cmd_status = [
+            sys.executable,
+            "-X", "utf8",
+            str(webnovel_py),
+            "--project-root", str(project_root),
+            "runtime", "status",
+            "--chapter", "1",
+            "--format", "json",
+        ]
+        res_status = subprocess.run(cmd_status, capture_output=True, text=True, check=True)
+        status_data = json.loads(res_status.stdout)
+        assert status_data["has_writer_package"] is True
+        assert status_data["is_writer_package_stale"] is False
+        obtained_fp = status_data["package_fingerprint"]
+        assert obtained_fp == expected_fp
+
+        # 3. 准备工作草稿文件
+        draft_file = project_root / ".webnovel" / "tmp" / "chapter_0001_working.md"
+        draft_file.write_text(_sample_draft(), encoding="utf-8")
+
+        # 4. 执行 runtime ingest-draft --package-fingerprint 绑定入库
+        cmd_ingest = [
+            sys.executable,
+            "-X", "utf8",
+            str(webnovel_py),
+            "--project-root", str(project_root),
+            "runtime", "ingest-draft",
+            "--chapter", "1",
+            "--package-fingerprint", obtained_fp,
+            "--draft-file", str(draft_file),
+            "--format", "json",
+        ]
+        res_ingest = subprocess.run(cmd_ingest, capture_output=True, text=True, check=True)
+        ingest_data = json.loads(res_ingest.stdout)
+        assert ingest_data["ok"] is True
+        assert ingest_data["draft_id"]
+        assert ingest_data["package_fingerprint"] == obtained_fp
+
+        # 5. 负面用例：使用伪造/不匹配的 package_fingerprint 调用 ingest-draft 严格被拒
+        cmd_ingest_fake = [
+            sys.executable,
+            "-X", "utf8",
+            str(webnovel_py),
+            "--project-root", str(project_root),
+            "runtime", "ingest-draft",
+            "--chapter", "1",
+            "--package-fingerprint", "fake_fingerprint_000000000000",
+            "--draft-file", str(draft_file),
+            "--format", "json",
+        ]
+        res_fake = subprocess.run(cmd_ingest_fake, capture_output=True, text=True)
+        assert res_fake.returncode != 0
+        fake_data = json.loads(res_fake.stdout)
+        assert fake_data["ok"] is False
+        assert fake_data["error_code"] in ("STALE_WRITER_PACKAGE", "WRITER_PACKAGE_UNSEALED")
+
+        # 6. 修订链路验证（webnovel-revise 复用）：无需二次封口，直接从 status 获取指纹重新登记
+        res_status_rev = subprocess.run(cmd_status, capture_output=True, text=True, check=True)
+        status_rev_data = json.loads(res_status_rev.stdout)
+        assert status_rev_data["has_writer_package"] is True
+        assert status_rev_data["package_fingerprint"] == obtained_fp
+
+        revised_draft_file = project_root / ".webnovel" / "tmp" / "chapter_0001_working.md"
+        revised_draft_file.write_text(_sample_draft(prose_body="修订后的正文内容。"), encoding="utf-8")
+        cmd_reingest = [
+            sys.executable,
+            "-X", "utf8",
+            str(webnovel_py),
+            "--project-root", str(project_root),
+            "runtime", "ingest-draft",
+            "--chapter", "1",
+            "--package-fingerprint", status_rev_data["package_fingerprint"],
+            "--draft-file", str(revised_draft_file),
+            "--format", "json",
+        ]
+        res_reingest = subprocess.run(cmd_reingest, capture_output=True, text=True, check=True)
+        reingest_data = json.loads(res_reingest.stdout)
+        assert reingest_data["ok"] is True
+        assert reingest_data["draft_id"] != ingest_data["draft_id"]
+        assert reingest_data["package_fingerprint"] == obtained_fp
 
     def test_project_root_location_and_guard_contract(self, tmp_path: Path):
         """Project Root Guard Contract: locates valid book root and fails closed on invalid/plugin directory."""

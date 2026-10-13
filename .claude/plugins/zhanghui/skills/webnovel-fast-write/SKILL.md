@@ -57,28 +57,36 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 ```
 
 1. 使用 Agent 工具调用 `webnovel-writer:context-agent`（传入 `chapter`、`project_root` 等），产出文学创作任务书（Creative Brief）；
-2. 调用 `runtime attach-creative-brief` 签名封口，生成唯一 Canonical Writer Prompt：
+2. 调用 `runtime attach-creative-brief` 签名封口，生成唯一 Canonical Writer Prompt，并从同一封口包提取 `package_fingerprint`：
 ```bash
+# 签名封口并将 Canonical Writer Prompt 输出至临时文件供 Writer 消费
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
   --chapter {chapter_num} \
   --brief "{context_agent_creative_brief}" \
-  --format prompt
+  --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
+
+# 立即从同一份刚封口的 runtime 状态中读取 package_fingerprint（确保 Prompt 与 Fingerprint 来自同一 sealed WriterPackage）
+export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime status --chapter {chapter_num} --format json | python3 -c 'import sys, json; print(json.load(sys.stdin)["package_fingerprint"])')"
 ```
-记录返回的已封口 `package_fingerprint` 与 Canonical Writer Prompt。
+**封口与指纹契约**：
+- Creative Brief 经 `runtime attach-creative-brief` 签名封口，原子落盘 `.webnovel/runtime/chapter_{chapter_padded}/writer_package.json`；
+- Canonical Writer Prompt 经 `--format prompt` 渲染输出，直接保存为草稿起草唯一输入；
+- `PACKAGE_FINGERPRINT` 经 `runtime status --format json` 提取（Runtime 校验 `has_writer_package=true` 且 `is_writer_package_stale=false`）；
+- 严禁二次封口、严禁手动计算或伪造指纹、严禁重新拼装 Writer Prompt。
 
 ### Step 2A：正文起草与草稿登记
 
-1. **唯一输入**：Writer 严格且仅消费 Step 1C 生成的 Canonical Writer Prompt。
+1. **唯一输入**：Writer 严格且仅消费 Step 1 封口生成的 Canonical Writer Prompt（`${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt`）。
 2. **工作草稿隔离（Working Draft Isolation）**：
    - 起草只输出到工作草稿文件：`${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`。
    - **严禁在正式提交 accepted 前直接创建或覆盖正式 `正文/第{chapter_padded}章[-title].md` 文件**。
 3. **CHANGES 协议声明**：正文末尾必须严格附带合法的 `<chapter_changes>...</chapter_changes>` 结构化变更提案块（8 个顶级标准字段）。
 4. **登记草稿（Runtime Draft Ingestion）**：
-   生成工作草稿后，立即调用 `runtime ingest-draft`：
+   生成工作草稿后，立即调用 `runtime ingest-draft` 绑定封口指纹：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime ingest-draft \
      --chapter {chapter_num} \
-     --package-fingerprint {package_fingerprint} \
+     --package-fingerprint "${PACKAGE_FINGERPRINT}" \
      --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --format json
    ```

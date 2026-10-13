@@ -296,18 +296,24 @@ Use the Agent tool to run `webnovel-writer:context-agent`
 
 ```bash
 # 将 Context Agent 输出的五段任务书作为参数传给 runtime attach-creative-brief
+# --format prompt 输出 Canonical Writer Prompt，重定向至临时文件供 Writer 消费
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
   --chapter {chapter_num} \
   --brief "{context_agent_creative_brief}" \
-  --format prompt
+  --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
+
+# 立即从同一份刚封口的 runtime 状态中提取 package_fingerprint（确保 Prompt 与 Fingerprint 绝对来自同一个 sealed WriterPackage）
+export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime status --chapter {chapter_num} --format json | python3 -c 'import sys, json; print(json.load(sys.stdin)["package_fingerprint"])')"
 ```
 （亦可将 brief 写入临时文件后使用 `--brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt"`）
 
 - **封口保证**：Runtime 计算 `creative_brief_fingerprint` 与 `package_fingerprint`，将任务书与受治理事实永久绑定为 `is_writer_ready=True` 的 Sealed Native Writer Package。
 - **唯一输入渲染**：命令附带 `--format prompt` 将直接调用 `WriterPackage.to_writer_prompt()` 输出完整的 Canonical Writer Prompt。未提供 Brief 时该命令严格 fail-closed。
+- **指纹获取与绑定**：紧随封口调用 `runtime status --format json` 提取 `package_fingerprint`（Runtime 校验 `has_writer_package=true` 且 `is_writer_package_stale=false`）。严禁重复封口两次、严禁手动计算或伪造指纹、严禁重新拼装 Writer Prompt。
 
 输出：
-- 唯一已封口的 Canonical Writer Prompt（包含 Story Identity、Current Intent、Governed Canon、Creative Brief、Constraints & Craft、Writer Context 六层治理内容及交付协议），直接作为 Step 2A 正文起草的输入。
+- 唯一已封口的 Canonical Writer Prompt（包含 Story Identity、Current Intent、Governed Canon、Creative Brief、Constraints & Craft、Writer Context 六层治理内容及交付协议），保存在临时文件直接作为 Step 2A 正文起草的输入。
+- 提取并绑定的 `PACKAGE_FINGERPRINT`，供 Step 2A 草稿登记。
 
 ### 一致性检查（写前）
 
@@ -330,7 +336,7 @@ sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 ### Step 2A：正文起草（Writer 消费 Canonical Writer Input）
 
 #### 唯一输入契约（Zero Redundant Assembly）
-- **唯一输入来源**：Writer 严格且仅消费 Step 1C 封口生成的 Canonical Writer Prompt（`WriterPackage.to_writer_prompt()` 输出）。
+- **唯一输入来源**：Writer 严格且仅消费 Step 1C 封口生成的 Canonical Writer Prompt（`${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt`，由 `WriterPackage.to_writer_prompt()` 渲染输出）。
 - **禁止事项**：
   - **严禁重新拼装**：Skill 主流程严禁自己重新拼一份 Canon、Intent 或 Craft 模板；
   - **严禁双重模板**：严禁在 Skill 内再造第二套与 External Host 差异化的 Writer prompt 模板；
@@ -340,10 +346,11 @@ sys.exit(main(['check', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 硬要求：
 - **工作草稿隔离（Working Draft Isolation）**：起草只输出纯正文到工作草稿文件 `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`。
 - **发布门禁后置（Publication Gate）**：**严禁在正式提交 accepted 前直接创建或覆盖正式 `正文/第{chapter_padded}章[-title].md` 文件**！正式正文文件的发布严格后置于 `runtime commit` accepted 之后。
-- **登记草稿（Runtime Draft Ingestion）**：生成工作草稿后，必须立即调用 `runtime ingest-draft` 登记草稿并捕获 `draft_id` 与 `draft_fingerprint`：
+- **登记草稿（Runtime Draft Ingestion）**：生成工作草稿后，必须立即调用 `runtime ingest-draft` 登记草稿并绑定封口指纹：
   ```bash
   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime ingest-draft \
-    --package-fingerprint {package_fingerprint} \
+    --chapter {chapter_num} \
+    --package-fingerprint "${PACKAGE_FINGERPRINT}" \
     --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
     --format json
   ```

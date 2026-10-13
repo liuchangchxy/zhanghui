@@ -50,12 +50,15 @@ allowed-tools: Read Write Edit Grep Bash Agent
      exit 1
    fi
    ```
-2. 查询本章状态：
+2. 查询本章状态并提取在编草稿关联的 `package_fingerprint`：
    ```bash
-   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime status --chapter {chapter_num} --format json
+   export STATUS_JSON="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime status --chapter {chapter_num} --format json)"
+   export PACKAGE_FINGERPRINT="$(echo "${STATUS_JSON}" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("package_fingerprint") or "")')"
    ```
-   **硬阻断规则**：
+   **状态检查与硬阻断规则**：
    - 若 `commit_status == "accepted"`：本章事实已锁定入账，**立即阻断**。严禁覆写已接受章节或其正文文件；向用户明确说明已接受章节不可变，需走历史订正流程。
+   - 若 `has_writer_package != true` 或 `[ -z "${PACKAGE_FINGERPRINT}" ]`：未找到有效的封口底包，**阻断**（说明尚未完成起草准备）。
+   - 若 `is_writer_package_stale == true`：封口底包已与上游大纲或前情脱节，**阻断**。
    - 若 `draft_status != "ingested"` 且未找到 `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`：缺少在编工作草稿，提示用户先起草。
 
 ### Step 1：读取审查反馈与受治理上下文
@@ -99,15 +102,15 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
          "${PROJECT_ROOT}/.webnovel/tmp/disambiguation_result.json" \
          "${PROJECT_ROOT}/.webnovel/tmp/reconciliation_result.json"
    ```
-3. **重新登记草稿（获取全新 Draft Identity）**：
+3. **重新登记草稿（复用 Step 0 验证的有效 package_fingerprint，获取全新 Draft Identity）**：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime ingest-draft \
      --chapter {chapter_num} \
-     --package-fingerprint {package_fingerprint} \
+     --package-fingerprint "${PACKAGE_FINGERPRINT}" \
      --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --format json
    ```
-   **草稿身份封口契约**：调用返回全新的 `draft_id` 与 `draft_fingerprint`。旧草稿身份与其关联的审查、对账结果立即失效；后续审查、提取、对账和提交必须严格绑定此 `{new_draft_id}`。
+   **草稿身份封口契约**：调用返回全新的 `draft_id` 与 `draft_fingerprint`。旧草稿身份与其关联的审查、对账结果立即失效；后续审查、提取、对账和提交必须严格绑定此 `{new_draft_id}`。严格复用 Step 0 验证通过的底层 `PACKAGE_FINGERPRINT`，不重复封口，也不伪造指纹。
 
 ### Step 4：重新审查与门禁校验
 
