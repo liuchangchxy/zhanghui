@@ -1699,6 +1699,11 @@ class ChapterRuntime:
             raise RuntimeError(
                 f"Cannot publish draft for chapter {chapter}: Durable commit missing provenance.reconciliation_chapter_sha256."
             )
+        accepted_prose_sha = provenance.get("reconciliation_prose_sha256")
+        if not accepted_prose_sha:
+            raise RuntimeError(
+                f"Cannot publish draft for chapter {chapter}: Durable commit missing provenance.reconciliation_prose_sha256."
+            )
 
         runtime_dir = self._chapter_runtime_dir(chapter)
         draft_file = runtime_dir / "drafts" / f"{target_draft_id}.json"
@@ -1727,10 +1732,34 @@ class ChapterRuntime:
                 f"(draft SHA-256 '{actual_fp}' does not match accepted commit reconciliation_chapter_sha256 '{accepted_sha}')."
             )
 
+        # Extract prose-only by parsing and removing the mandatory CHANGES proposal
+        from data_modules.reconciliation import split_chapter_and_changes
+        try:
+            clean_prose, _ = split_chapter_and_changes(prose)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Cannot publish draft for chapter {chapter}: invalid or missing CHANGES container in staged draft: {exc}"
+            ) from exc
+
+        if not clean_prose.strip():
+            raise RuntimeError(f"Cannot publish draft for chapter {chapter}: Published prose is empty after stripping protocol blocks.")
+
+        if "<chapter_changes>" in clean_prose or "</chapter_changes>" in clean_prose:
+            raise RuntimeError(
+                f"Cannot publish draft for chapter {chapter}: Published prose still contains internal protocol tags."
+            )
+
+        actual_prose_sha = hashlib.sha256(clean_prose.encode("utf-8")).hexdigest()
+        if actual_prose_sha != accepted_prose_sha:
+            raise RuntimeError(
+                f"Cannot publish draft for chapter {chapter}: ACCEPTED_PROSE_MISMATCH "
+                f"(published prose SHA-256 '{actual_prose_sha}' does not match accepted commit reconciliation_prose_sha256 '{accepted_prose_sha}')."
+            )
+
         from chapter_paths import default_chapter_draft_path
         target_file = default_chapter_draft_path(self.project_root, chapter)
         target_file.parent.mkdir(parents=True, exist_ok=True)
-        target_file.write_text(prose, encoding="utf-8")
+        target_file.write_text(clean_prose, encoding="utf-8")
         return target_file
 
     def retry_projection(self, chapter: int) -> dict[str, Any]:
