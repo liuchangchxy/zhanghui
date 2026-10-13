@@ -1038,11 +1038,11 @@ class ChapterRuntime:
         """
         Assemble and return governed context specifically needed for chapter review.
         Delivers:
-        1. 事实权威 (canon_authority): governed_canon items
+        1. 事实权威 (canon_authority): 用于事实一致性检查的受治理事实与状态账本
         2. 创作意图 (creative_intent): goal, must_cover_nodes, forbidden_zones, core_event, hook, hook_type
-        3. 工艺约束 (craft_constraints): core_tone, prohibitions, mandatory_nodes, anti_patterns, story_craft, writing_guidance
-        4. 审查分级 (hard_constraints vs advisory_constraints): 区分硬性门禁与启发式建议（advisory 不得作为阻断）
-        5. 本章规划信息 (chapter_planning): chapter_meta, plot_structure, review_contract
+        3. 工艺建议 (craft_constraints / advisory_constraints): 启发式故事工艺与写作指引（advisory-only，不得作为阻断门禁）
+        4. 本章规划信息 (chapter_planning): chapter_meta, plot_structure, forbidden_zones, must_check_nodes, blocking_rules（审查意图偏差与规划执行，不作为预授权硬门禁）
+        5. 审查合同 (review_contract): 原始章级审查合同
         """
         gov = self.get_governed_context(chapter)
         contracts = load_runtime_sources(self.project_root, chapter).contracts
@@ -1055,7 +1055,6 @@ class ChapterRuntime:
 
         forbidden_zones = list(intent.get("directive", {}).get("forbidden_zones", []))
         blocking_rules = list(review_contract.get("blocking_rules", []))
-        hard_constraints = forbidden_zones + blocking_rules
 
         advisory_constraints = {
             "story_craft": constraints.get("story_craft", {}),
@@ -1083,11 +1082,11 @@ class ChapterRuntime:
                 "story_craft": constraints.get("story_craft", {}),
                 "writing_guidance": constraints.get("writing_guidance", {}),
             },
-            "hard_constraints": hard_constraints,
             "advisory_constraints": advisory_constraints,
             "chapter_planning": {
                 "chapter_meta": ch_meta,
                 "plot_structure": intent.get("plot_structure", {}),
+                "forbidden_zones": forbidden_zones,
                 "must_check_nodes": list(review_contract.get("must_check", [])),
                 "blocking_rules": blocking_rules,
             },

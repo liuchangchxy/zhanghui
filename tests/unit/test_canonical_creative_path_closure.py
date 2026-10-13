@@ -508,17 +508,17 @@ def test_reviewer_receives_closed_creative_pipeline(creative_project: Path):
     assert any("空洞说教" in str(ap) for ap in craft["anti_patterns"])
     assert "story_craft" in craft
 
-    # 4. 门禁与建议区分 (hard_constraints vs advisory_constraints)
-    hard = rev_ctx["hard_constraints"]
-    assert "严禁暴打同门" in hard
+    # 4. 建议性约束 (advisory_constraints)
     advisory = rev_ctx["advisory_constraints"]
     assert "story_craft" in advisory
     assert "ADVISORY_ONLY" in advisory.get("policy", "")
 
-    # 5. 本章规划信息 (chapter_planning)
+    # 5. 确保未非法合成硬性门禁 key，规划禁区保留于本章规划与意图中
+    assert "hard_constraints" not in rev_ctx
     plan = rev_ctx["chapter_planning"]
     assert plan["chapter_meta"]["chapter"] == 2
     assert plan["chapter_meta"]["hook_type"] == "利益发现"
+    assert "严禁暴打同门" in plan["forbidden_zones"]
 
 
 def test_reviewer_craft_checks_consume_chapter_meta_and_story_craft(creative_project: Path):
@@ -562,8 +562,10 @@ def test_webnovel_write_step3_wires_reviewer_context_specification():
     # 3. Explicit authority tier definitions and advisory non-blocking rule
     assert "canon_authority" in skill_text
     assert "creative_intent" in skill_text
+    assert "chapter_planning" in skill_text
     assert "advisory_constraints" in skill_text or "craft_constraints" in skill_text
-    assert "严格作为 advisory finding 处理，不得输出 `blocking=true`" in skill_text or "不得输出 `blocking=true`" in skill_text
+    assert "不得仅凭字段名升级为 hard gate authority" in skill_text
+    assert "所有 raw findings 均严格输出 `blocking=false`" in skill_text
 
 
 def test_reviewer_agent_spec_wires_reviewer_context_consumption():
@@ -591,7 +593,55 @@ def test_reviewer_agent_spec_wires_reviewer_context_consumption():
     assert "craft_constraints" in agent_text
 
     # 4. Strict advisory non-blocking boundary for craft
-    assert "严禁标记 `blocking=true`" in agent_text
+    assert "不得仅凭字段名就自动升级为 hard gate authority" in agent_text
+    assert "所有 raw findings 的输出必须严格保持 `blocking=false`" in agent_text
     assert "严禁升级为 hard gate" in agent_text
+
+
+def test_ordinary_chapter_forbidden_zones_cannot_gain_hard_gate_authority():
+    """Verify chapter outline forbidden_zones cannot gain hard gate authority merely by field name."""
+    from data_modules.gate_findings import (
+        DetectedFinding,
+        EvidenceRef,
+        FindingAuthority,
+        FindingCategory,
+        WorkflowAction,
+    )
+    from data_modules.gate_severity_policy import GateSeverityPolicy
+
+    policy = GateSeverityPolicy()
+
+    # 1. Finding produced from chapter planning deviation (AUTHOR_PLAN authority)
+    plan_finding = DetectedFinding(
+        gate_id="intent.forbidden_zone",
+        stable_subject_key="chapter:2:forbidden_zone:1",
+        category=FindingCategory.INTENT_FULFILLMENT,
+        authority=FindingAuthority.AUTHOR_PLAN,
+        scope={"chapter": 2},
+        evidence=[EvidenceRef(kind="plan_observation", identity={"forbidden_zone": "严禁暴打同门"})],
+        checker_id="chapter_reviewer",
+        checker_version="v1",
+    )
+    decisions = policy.evaluate([plan_finding], policy_version="v1", scope={"chapter": 2})
+    assert decisions.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+    assert decisions.aggregate_action != WorkflowAction.REJECT
+
+    # 2. Even if incorrectly tagged as USER_CONSTRAINT without explicit user contract proof,
+    # shared policy rejects the promotion and keeps it as advisory
+    unproven_user_finding = DetectedFinding(
+        gate_id="intent.forbidden_zone",
+        stable_subject_key="chapter:2:forbidden_zone:1",
+        category=FindingCategory.USER_CONSTRAINT,
+        authority=FindingAuthority.AUTHOR_PLAN,
+        scope={"chapter": 2},
+        evidence=[EvidenceRef(kind="plan_observation", identity={"forbidden_zone": "严禁暴打同门"})],
+        checker_id="chapter_reviewer",
+        checker_version="v1",
+    )
+    decisions_unproven = policy.evaluate([unproven_user_finding], policy_version="v1", scope={"chapter": 2})
+    assert decisions_unproven.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
+    assert decisions_unproven.aggregate_action != WorkflowAction.REJECT
+    assert decisions_unproven.decisions[0].rule_id == "user.constraint_not_proven"
+
 
 

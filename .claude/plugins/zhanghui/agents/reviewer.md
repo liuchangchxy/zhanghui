@@ -39,7 +39,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 
 - `chapter`：章节号
 - `chapter_file`：正文文件路径
-- `reviewer_context_file`：受治理 Reviewer 上下文文件路径（包含 `canon_authority`、`creative_intent`、`craft_constraints`、`chapter_planning`、`hard_constraints`、`advisory_constraints`）
+- `reviewer_context_file`：受治理 Reviewer 上下文文件路径（包含 `canon_authority`、`creative_intent`、`craft_constraints`、`chapter_planning`、`advisory_constraints`、`review_contract`）
 - `project_root`：项目根目录
 - `scripts_dir`：脚本目录
 - `draft_id`（可选）：当前草稿标识
@@ -48,16 +48,17 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 ## 4. 执行流程（按顺序执行）
 
 审查开始前，通过 `Read` 读取 `reviewer_context_file`（若文件未提供或无法读取，通过 `Bash` 执行 `runtime reviewer-context` 动态获取）。
-受治理审查上下文划分四个权威层级：
-1. **事实权威 (`canon_authority`)**：已锁定的实体状态、世界观与人物履历，为事实真理基准；
-2. **创作意图 (`creative_intent`)**：本章目标（`goal`）、计划核心事件（`core_event`）、章末钩子（`hook` 与 `hook_type`）；
-3. **本章规划 (`chapter_planning`)**：`chapter_meta`（含 Scene-Sequel 元数据）、情节结构；
-4. **故事工艺与建议 (`craft_constraints` / `advisory_constraints`)**：Story Craft（节奏曲线张力、限时锁到期、人物弧光）及写作指引；
-5. **硬性门禁 (`hard_constraints`)**：明确禁止的禁区（`forbidden_zones`）与阻断规则（`blocking_rules`）。
+受治理审查上下文包含以下层级，必须严格区分其审查性质与权威边界：
+1. **事实权威 (`canon_authority`)**：已确认锁定的实体状态、世界观与人物履历，为事实真理基准，用于设定与角色一致性审查；
+2. **创作意图与本章规划 (`creative_intent` / `chapter_planning`)**：包含本章目标（`goal`）、计划核心事件（`core_event`）、章末钩子（`hook` 与 `hook_type`）、章节禁区（`forbidden_zones`）与合同关注项（`blocking_rules`），用于审查意图落实与规划执行偏差；
+3. **故事工艺与建议 (`craft_constraints` / `advisory_constraints`)**：Story Craft（节奏曲线张力、限时锁到期、人物弧光）及写作指引，属于启发式工艺指引；
+4. **硬性审查约束 (Hard Constraints) 的授权边界**：Reviewer 不拥有最终 gate authority。普通章节规划的 `forbidden_zones` 或合同清单中的 `blocking_rules` 仅代表规划意图与执行关注项，**不得仅凭字段名就自动升级为 hard gate authority**。所有已获授权的硬性约束判定由现有 shared policy / ChapterCommitService 独占裁决。
 
 **裁决铁律**：
-- 仅 `canon_authority` 事实矛盾或 `hard_constraints` 违背可出具 critical/high 事实问题；
-- `craft_constraints` / `advisory_constraints`（包括节拍 Scene-Sequel、伏笔逾期、节奏曲线超阈值、缺少 hook_type）**严格作为 Craft advisory finding 处理**。可以报告问题描述和原文依据，但**严禁标记 `blocking=true`，严禁使用 `severity=critical`，严禁升级为 hard gate**。
+- Reviewer 发现正文偏离规划意图、触碰规划禁区（`forbidden_zones`）或与事实冲突时，应正常报告问题描述、位置与原文依据；
+- **所有 raw findings 的输出必须严格保持 `blocking=false`**；
+- Craft/methodology 启发式问题（包括节拍 Scene-Sequel、伏笔逾期、节奏曲线超阈值、缺少 hook_type）**严格作为 Craft advisory finding 处理，严禁使用 `severity=critical`，严禁升级为 hard gate**；
+- 最终 gate action（`ALLOW_WITH_ADVISORY` / `RECOVER` / `REQUIRE_HUMAN` / `REJECT`）完全由现有 shared policy 与 ChapterCommitService 决定，Reviewer 不得自行裁决阻断。
 
 ### 1. 设定一致性（category: setting）
 - 对照 `canon_authority` 检查角色能力是否与当前境界匹配
@@ -87,7 +88,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 - 因果关系是否成立
 - 角色决策是否有合理动机
 - 战斗/冲突结果是否符合已建立的力量对比
-- 对照 `hard_constraints` 检查是否触碰本章禁区（`forbidden_zones`）
+- 对照 `chapter_planning.forbidden_zones` 检查是否触碰本章规划禁区（作为规划偏差/意图问题报告，保持 `blocking=false`）
 - **Ω级 代价守恒定律**（来自 `core-constraints.md`）：
   - 本章是否有"白拿"事件——重大增益（实力突破/重大发现/关系升级/资源暴增/关键道具）1-5 章内无代价叙事？
   - 跨章回溯：最近 5 章内是否有未付代价的增益事件？
