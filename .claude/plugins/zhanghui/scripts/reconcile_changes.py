@@ -32,8 +32,6 @@ def main() -> int:
             str(chapter_path),
             "--db",
             args.db,
-            "--extraction-result",
-            args.extraction_result,
             "--json",
         ],
         capture_output=True,

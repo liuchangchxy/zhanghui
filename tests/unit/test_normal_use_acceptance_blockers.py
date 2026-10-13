@@ -2,14 +2,16 @@
 
 Verification Matrix:
 - B1.1: New book chapter 1 legitimate protagonist reference (Chinese & pinyin slug) passes R3.
-- B1.2: Legitimate first-introduced new entity in creative brief / extraction passes R3.
-- B1.3: Ungrounded stranger entity strictly fails closed with blocking R3 failure.
-- B1.4: Existing entity & aliases from index.db recognized normally.
-- B1.5: changes_gate CLI passes deterministically.
-- B1.6: reconcile_changes.py CLI subprocess executes and generates reconciliation_result.json.
-- B2.1: Contract preparation in Step 1A followed by WriterPackage sealing maintains package freshness.
-- B2.2: Post-sealing mutation of story contracts strictly triggers STALE_WRITER_PACKAGE rejection.
-- B2.3: Normal runtime commit with intact contracts accepts and creates durable commit.
+- B1.2: Ghost entity with extraction delta strictly fails closed with blocking R3 failure (no unauthorized absorption).
+- B1.3: Creative briefs (cross-chapter or draft) do not authorize unknown entities in R3.
+- B1.4: Existing entities & aliases from index.db, state.json, MASTER_SETTING.json pass R3.
+- B1.5: Legitimate new entity lifecycle flow (extraction -> commit projection -> index.db available in subsequent chapters).
+- B1.6: Ungrounded stranger entity strictly fails closed with blocking R3 failure.
+- B1.7: changes_gate CLI passes deterministically.
+- B1.8: reconcile_changes.py CLI subprocess executes and generates reconciliation_result.json.
+- B2.1: Post-sealing mutation of story contracts strictly triggers STALE_WRITER_PACKAGE rejection.
+- B2.2: Normal runtime commit with intact contracts accepts and creates durable commit.
+- B2.3: Reconcile changes determinism across python hash seeds.
 """
 import json
 import sqlite3
@@ -186,18 +188,11 @@ def test_b1_chapter_1_protagonist_pinyin_and_chinese_passes(tmp_path: Path):
     assert failures == [], f"Expected zero R3 failures for protagonist, got: {[f.message for f in failures]}"
 
 
-def test_b1_creative_brief_and_extraction_new_entities_pass(tmp_path: Path):
-    """B1.2: First-introduced entities grounded in creative brief and extraction result pass R3."""
+def test_b1_ghost_entity_state_change_strictly_fails_even_with_extraction_delta(tmp_path: Path):
+    """Canon has no ghost_999. CHANGES claims ghost_999 state change.
+    Even if extraction_result.json includes ghost_999 entity_delta, R3 strictly fails."""
     webnovel_dir, db_path, state_path = _setup_book_project(tmp_path)
 
-    # 1. Creative brief defines antagonist 赵崇 in ## 三、人物小动作
-    brief_file = webnovel_dir / "tmp" / "creative_brief_0001.txt"
-    brief_file.write_text(
-        "# Creative Brief\n\n## 三、人物小动作\n**赵崇**（巡查队长）——本章唯一的人际冲突源。\n",
-        encoding="utf-8",
-    )
-
-    # 2. Data agent extraction result includes deep_blue_ore and zhao_chong
     extraction_file = webnovel_dir / "tmp" / "extraction_result.json"
     extraction_file.write_text(
         json.dumps({
@@ -205,16 +200,10 @@ def test_b1_creative_brief_and_extraction_new_entities_pass(tmp_path: Path):
             "state_deltas": [],
             "entity_deltas": [
                 {
-                    "entity_id": "zhao_chong",
+                    "entity_id": "ghost_999",
                     "action": "upsert",
                     "entity_type": "角色",
-                    "payload": {"name": "赵崇", "role": "巡查队长"},
-                },
-                {
-                    "entity_id": "deep_blue_ore",
-                    "action": "upsert",
-                    "entity_type": "物品",
-                    "payload": {"name": "深蓝矿石"},
+                    "payload": {"name": "幽灵999"},
                 },
             ],
             "dominant_strand": "quest",
@@ -224,11 +213,7 @@ def test_b1_creative_brief_and_extraction_new_entities_pass(tmp_path: Path):
 
     changes = {
         "character_state_changes": [
-            {"character_id": "zhao_chong", "new_state": "罚没产量", "importance": "important"},
-            {"character_id": "赵崇", "new_state": "收队撤离", "importance": "normal"},
-        ],
-        "item_transfers": [
-            {"item_id": "deep_blue_ore", "from_holder": "zhao_chong", "to_holder": "lin_yue"},
+            {"character_id": "ghost_999", "new_state": "降临", "importance": "critical"},
         ],
     }
 
@@ -239,7 +224,133 @@ def test_b1_creative_brief_and_extraction_new_entities_pass(tmp_path: Path):
         extraction_path=extraction_file,
         proj_root=tmp_path,
     )
-    assert failures == [], f"Expected zero R3 failures for grounded new entities, got: {[f.message for f in failures]}"
+    assert len(failures) == 1
+    assert failures[0].rule_id == "R3"
+    assert failures[0].severity == "blocking"
+    assert "ghost_999" in failures[0].message
+    assert "不在账本" in failures[0].message
+
+
+def test_b1_old_creative_brief_does_not_authorize_new_chapter_entities(tmp_path: Path):
+    """Creative briefs (cross-chapter or current) must not authorize entities in R3."""
+    webnovel_dir, db_path, state_path = _setup_book_project(tmp_path)
+
+    # Creative brief from chapter 1 or earlier mentions elder_zhang
+    brief_file = webnovel_dir / "tmp" / "creative_brief_0001.txt"
+    brief_file.write_text(
+        "# Creative Brief\n\n## 三、人物小动作\n**张长老**——传法阁长老。\n",
+        encoding="utf-8",
+    )
+
+    changes = {
+        "character_state_changes": [
+            {"character_id": "张长老", "new_state": "传法", "importance": "normal"},
+        ],
+    }
+
+    failures = check_r03_entities(changes, db_path, state_path, proj_root=tmp_path)
+    assert len(failures) == 1
+    assert failures[0].rule_id == "R3"
+    assert failures[0].severity == "blocking"
+    assert "张长老" in failures[0].message
+    assert "不在账本" in failures[0].message
+
+
+def test_b1_existing_canon_entities_state_changes_pass(tmp_path: Path):
+    """Entities established in Canon (index.db, state.json, MASTER_SETTING.json) pass R3."""
+    webnovel_dir, db_path, state_path = _setup_book_project(tmp_path)
+
+    # Insert an existing character and alias into index.db
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO entities (id, type, canonical_name, is_archived) VALUES (?, ?, ?, 0)",
+        ("elder_sun", "character", "孙长老"),
+    )
+    conn.execute(
+        "INSERT INTO aliases (alias, entity_id, entity_type) VALUES (?, ?, ?)",
+        ("老孙", "elder_sun", "character"),
+    )
+    conn.commit()
+    conn.close()
+
+    changes = {
+        "character_state_changes": [
+            {"character_id": "lin_yue", "new_state": "打坐", "importance": "normal"},
+            {"character_id": "elder_sun", "new_state": "巡山", "importance": "normal"},
+            {"character_id": "老孙", "new_state": "饮茶", "importance": "normal"},
+        ],
+    }
+
+    failures = check_r03_entities(changes, db_path, state_path, proj_root=tmp_path)
+    assert failures == []
+
+
+def test_b1_legal_new_entity_lifecycle_flow(tmp_path: Path):
+    """Verify legitimate new entity flow:
+    Chapter 1 introduces a new entity via text & extraction_result;
+    Commit projects it to Canon (index.db);
+    Chapter 2 can then reference it in character_state_changes and pass R3."""
+    _setup_book_project(tmp_path)
+    runtime = ChapterRuntime(tmp_path)
+
+    # 1. Chapter 1: Prepare & Ingest
+    prep = runtime.prepare(chapter=1, with_package=True)
+    assert prep.ok is True
+    pkg = runtime.attach_creative_brief(chapter=1, creative_brief="## 三、人物小动作\n**林越**\n")
+    assert pkg is not None
+
+    ch1_prose = """林越在矿道偶遇巡查队长赵崇。
+
+<chapter_changes>
+{
+  "character_state_changes": [
+    {"character_id": "lin_yue", "new_state": "如常", "importance": "normal"}
+  ],
+  "new_plot_points": [],
+  "foreshadowing_actions": [],
+  "location_state_changes": [],
+  "faction_state_changes": [],
+  "time_progression": null,
+  "item_transfers": [],
+  "unresolved_questions": []
+}
+</chapter_changes>"""
+
+    ingest1 = runtime.ingest_draft(chapter=1, prose=ch1_prose, package_fingerprint=pkg.package_fingerprint)
+    assert ingest1.ok is True
+
+    # Chapter 1 Data Agent extraction discovers new entity 'zhao_chong'
+    artifacts1 = _complete_semantic_artifacts(ch1_prose)
+    artifacts1["extraction_result"]["entity_deltas"] = [
+        {
+            "entity_id": "zhao_chong",
+            "action": "upsert",
+            "entity_type": "角色",
+            "payload": {"name": "赵崇"},
+            "current": {"identity": "巡查队长"},
+        }
+    ]
+    _, proposal1 = split_chapter_and_changes(ch1_prose)
+    artifacts1["reconciliation_result"] = reconcile_changes(
+        proposal1, artifacts1["extraction_result"], chapter_text=ch1_prose
+    )
+
+    commit1 = runtime.commit(chapter=1, draft_id=ingest1.draft_id, **artifacts1)
+    assert commit1.ok is True, f"commit1 failed: {commit1.error_code} - {commit1.error}"
+    assert commit1.chapter_outcome == "accepted"
+
+    # 2. Chapter 2: 'zhao_chong' is now in Canon (index.db).
+    # Now chapter_changes in Chapter 2 can legally reference 'zhao_chong' in character_state_changes!
+    db_path = tmp_path / ".webnovel" / "index.db"
+    state_path = tmp_path / ".webnovel" / "state.json"
+    ch2_changes = {
+        "character_state_changes": [
+            {"character_id": "zhao_chong", "new_state": "巡查归来", "importance": "normal"},
+            {"character_id": "lin_yue", "new_state": "继续挖矿", "importance": "normal"},
+        ]
+    }
+    failures = check_r03_entities(ch2_changes, db_path, state_path, proj_root=tmp_path)
+    assert failures == [], f"Expected zhao_chong to pass R3 after being committed to canon, got {failures}"
 
 
 def test_b1_ungrounded_stranger_entity_strictly_fails(tmp_path: Path):
@@ -271,16 +382,15 @@ def test_b1_changes_gate_cli_deterministic(tmp_path: Path):
     webnovel_dir, db_path, state_path = _setup_book_project(tmp_path)
 
     chapter_file = webnovel_dir / "tmp" / "chapter_0001_working.md"
-    chapter_file.write_text("""林越在三号废弃矿道收尾当班，赵崇带着巡查队过来核查定额。
+    chapter_file.write_text("""林越在三号废弃矿道收尾当班。
 
 <chapter_changes>
 {
   "character_state_changes": [
-    {"character_id": "lin_yue", "new_state": "认罚", "importance": "important"},
-    {"character_id": "赵崇", "new_state": "离开", "importance": "normal"}
+    {"character_id": "lin_yue", "new_state": "认罚", "importance": "important"}
   ],
   "new_plot_points": [
-    {"summary": "克扣矿石", "importance": "normal", "involved_characters": ["lin_yue", "赵崇"]}
+    {"summary": "克扣矿石", "importance": "normal", "involved_characters": ["lin_yue"]}
   ],
   "foreshadowing_actions": [],
   "location_state_changes": [],

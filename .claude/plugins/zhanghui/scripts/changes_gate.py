@@ -787,45 +787,6 @@ def _load_entity_lookup(
             except Exception:
                 pass
 
-        # Check chapter creative briefs in .webnovel/tmp (WriterPackage Context Agent output)
-        tmp_dir = resolved_proj_root / ".webnovel" / "tmp"
-        if tmp_dir.is_dir():
-            for brief_file in tmp_dir.glob("creative_brief_*.txt"):
-                try:
-                    content = brief_file.read_text(encoding="utf-8")
-                    for m in re.finditer(r"\*\*([^\*\(\)（）\s]{2,10})\*\*", content):
-                        candidate_name = m.group(1).strip()
-                        if candidate_name not in ("写作宪法", "核心冲突", "出场人物", "人物小动作", "场景切片", "必须发生", "禁止事项"):
-                            _register_entity_name(candidate_name, ids, aliases)
-                except Exception:
-                    pass
-
-    # Load observed entities from extraction_result.json if provided or found in tmp
-    ext_path: Path | None = None
-    if extraction_path:
-        ext_path = Path(extraction_path)
-    elif resolved_proj_root and (resolved_proj_root / ".webnovel" / "tmp" / "extraction_result.json").is_file():
-        ext_path = resolved_proj_root / ".webnovel" / "tmp" / "extraction_result.json"
-
-    if ext_path and ext_path.is_file() and ext_path.stat().st_size <= MAX_STATE_BYTES:
-        try:
-            ext_data = json.loads(ext_path.read_text(encoding="utf-8"))
-            if isinstance(ext_data, dict):
-                for delta in ext_data.get("entity_deltas", []) or []:
-                    if isinstance(delta, dict):
-                        _register_entity_name(delta.get("entity_id"), ids, aliases)
-                        payload = delta.get("payload") or {}
-                        if isinstance(payload, dict):
-                            _register_entity_name(payload.get("name"), ids, aliases)
-                            for a in payload.get("aliases", []) or []:
-                                _register_entity_name(a, ids, aliases)
-                for ent in ext_data.get("entities_appeared", []) or []:
-                    if isinstance(ent, dict):
-                        _register_entity_name(ent.get("entity_id"), ids, aliases)
-                        _register_entity_name(ent.get("name"), ids, aliases)
-        except Exception:
-            pass
-
     return ids, aliases, tables_ok
 
 
