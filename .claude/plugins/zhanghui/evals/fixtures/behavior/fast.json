@@ -33,20 +33,36 @@
       "id": "skill_write_contract",
       "type": "skill_contract",
       "skill": "webnovel-write",
-      "description": "/webnovel-write calls runtime gates at natural boundaries.",
+      "description": "/webnovel-write calls runtime gates at natural boundaries, and the precommit gate runs after its required artifacts exist and before the commit call.",
       "required": [
         "write-gate --chapter {chapter_num} --stage prewrite",
         "write-gate --chapter {chapter_num} --stage precommit",
         "write-gate --chapter {chapter_num} --stage postcommit",
-        "projections retry --chapter {chapter_num}"
+        "projections retry --chapter {chapter_num}",
+        "fulfillment_result.json",
+        "disambiguation_result.json",
+        "extraction_result.json",
+        "reconciliation_result.json"
       ],
       "ordered": [
         [
-          "write-gate --chapter {chapter_num} --stage precommit",
-          "chapter-commit"
+          "prepare_data_agent_input.py",
+          "write-gate --chapter {chapter_num} --stage precommit"
         ],
         [
-          "chapter-commit",
+          "reconcile_changes.py",
+          "write-gate --chapter {chapter_num} --stage precommit"
+        ],
+        [
+          "write-gate --chapter {chapter_num} --stage precommit",
+          "--reconciliation-result"
+        ],
+        [
+          "reconcile_changes.py",
+          "runtime commit \\"
+        ],
+        [
+          "runtime commit \\",
           "write-gate --chapter {chapter_num} --stage postcommit"
         ]
       ]
@@ -109,7 +125,7 @@
     {
       "id": "write_blocks_before_commit",
       "type": "write_blocking_gate",
-      "description": "/webnovel-write keeps blocking review issues before commit and calls runtime gates."
+      "description": "/webnovel-write keeps blocking review issues before commit, and places the precommit gate after its required artifacts are produced."
     },
     {
       "id": "data_agent_artifact_only",

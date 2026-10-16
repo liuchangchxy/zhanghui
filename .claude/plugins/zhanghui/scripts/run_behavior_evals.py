@@ -108,6 +108,15 @@ def _eval_skill_contract(root: Path, case: dict[str, Any]) -> dict[str, Any]:
 
 
 def _eval_write_blocking_gate(root: Path, case: dict[str, Any]) -> dict[str, Any]:
+    """Verify the write flow keeps advisory vs integrity gates distinct.
+
+    The precommit gate is checked as a *dependency* contract, not as a raw string offset:
+    it validates `review_results` / `fulfillment_result` / `disambiguation_result` /
+    `extraction_result`, which the Data Agent and reconciliation steps produce. The old
+    assertion ("the precommit string appears before the first mention of chapter-commit")
+    described the broken ordering as if it were correct — the real requirement is that the
+    gate runs after its inputs exist and before the commit call.
+    """
     path = _plugin_root(root) / "skills" / "webnovel-write" / "SKILL.md"
     text = _read(path)
     required = [
@@ -119,11 +128,27 @@ def _eval_write_blocking_gate(root: Path, case: dict[str, Any]) -> dict[str, Any
         "chapter-commit",
     ]
     missing = [item for item in required if item not in text]
-    precommit_pos = text.find("write-gate --chapter {chapter_num} --stage precommit")
-    commit_pos = text.find("chapter-commit")
-    ordering_ok = precommit_pos >= 0 and commit_pos >= 0 and precommit_pos < commit_pos
-    if not ordering_ok:
-        missing.append("precommit gate must appear before chapter-commit")
+
+    precommit = "write-gate --chapter {chapter_num} --stage precommit"
+    precommit_pos = text.find(precommit)
+    artifact_producers = ("prepare_data_agent_input.py", "reconcile_changes.py")
+    commit_pos = text.find("runtime commit \\")
+    dependency_errors: list[str] = []
+    if precommit_pos < 0:
+        dependency_errors.append("precommit gate missing")
+    else:
+        for producer in artifact_producers:
+            producer_pos = text.find(producer)
+            if producer_pos < 0:
+                dependency_errors.append(f"{producer} missing")
+            elif producer_pos > precommit_pos:
+                dependency_errors.append(f"precommit gate must run after {producer}")
+        if commit_pos < 0:
+            dependency_errors.append("runtime commit invocation missing")
+        elif precommit_pos > commit_pos:
+            dependency_errors.append("precommit gate must run before the runtime commit call")
+    missing.extend(dependency_errors)
+
     if "任一工具报 critical / blocking → 触发整章重写" in text:
         missing.append("Craft/style detector labels must not force a full-chapter rewrite")
     return _result(

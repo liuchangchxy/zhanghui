@@ -1,0 +1,743 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Normal-use local revision planning (task E).
+
+Why this module exists
+----------------------
+Reviewer findings used to be actionable only through `revise_chapter.py`, which
+located problems exclusively by `## §N` headings. Real chapters do not have those
+headings, and `RejectionContract` defaulted to `blocking=True` findings only — while a
+normal Reviewer's output is mostly non-blocking advice. The net effect was that any
+reviewer finding could only be fixed by re-drafting the whole chapter and paying for a
+full re-review.
+
+This module is the missing middle: it turns a Reviewer JSON into a **targeted revision
+plan** that says exactly which spans of prose must change, why, and how far the edit is
+allowed to reach. The actual rewriting is done by the *host* model (Claude Code); nothing
+here assumes a paid API key. Verification is deterministic and happens afterwards:
+
+    Reviewer JSON  ->  plan (targets + spans)  ->  host edits  ->  apply  ->  verify
+                                                                          |
+                                            boundary + resolution check --+
+
+The existing governance chain is untouched: after a revision the working draft is
+re-ingested (`runtime ingest-draft`) to get a fresh draft identity, re-reviewed, and only
+then may it reach `runtime commit`.
+"""
+from __future__ import annotations
+
+import difflib
+import hashlib
+import json
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+
+SCHEMA_VERSION = "revision-plan/v1"
+
+# kinds of revision target — drives which safety path the caller must use
+KIND_STYLE_ONLY = "STYLE_ONLY"
+KIND_LOCAL_FACT = "LOCAL_FACT"
+KIND_STRUCTURAL = "STRUCTURAL"
+KIND_CANON_HISTORY = "CANON_HISTORY"
+
+# locator strategies
+LOC_PARAGRAPH = "paragraph"
+LOC_LINE = "line"
+LOC_SECTION = "section"
+LOC_QUOTE = "quote"
+LOC_CHAPTER = "chapter"
+LOC_UNRESOLVED = "unresolved"
+
+_STYLE_CATEGORIES = {"ai_flavor", "pacing", "beat_compliance", "foreshadow_compliance"}
+
+_SECTION_HEADING_RE = re.compile(r"^##\s+(§\d+)\b", re.MULTILINE)
+_PARAGRAPH_REF_RE = re.compile(r"第\s*(\d+)\s*(?:[-—~至]\s*(\d+)\s*)?段")
+_LINE_REF_RE = re.compile(r"第\s*(\d+)\s*(?:[-—~至]\s*(\d+)\s*)?行")
+_LINE_REF_EN_RE = re.compile(r"\blines?\s+(\d+)\s*(?:[-—~]\s*(\d+))?", re.IGNORECASE)
+_SECTION_REF_RE = re.compile(r"§\s*(\d+)\s*(?:[-—~]\s*§?\s*(\d+))?")
+_CHAPTER_REF_RE = re.compile(r"^\s*chapter\s+\d+\s*$", re.IGNORECASE)
+
+_QUOTE_PATTERNS = (
+    re.compile(r"「([^」]{2,120})」"),
+    re.compile(r"『([^』]{2,120})』"),
+    re.compile(r"“([^”]{2,120})”"),
+    re.compile(r"『([^』]{2,120})』"),
+    re.compile(r"`([^`]{2,120})`"),
+    re.compile(r"\"([^\"]{2,120})\""),
+    re.compile(r"'([^']{2,120})'"),
+)
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
+
+
+def _file_line_of(text: str, offset: int) -> int:
+    """1-based physical line number of a character offset."""
+    if offset <= 0:
+        return 1
+    return str(text).count("\n", 0, offset) + 1
+
+
+# --------------------------------------------------------------------------- #
+# prose segmentation
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class Paragraph:
+    """A non-empty line of the chapter file.
+
+    `index` is the 1-based paragraph number the Reviewer refers to as `第N段`; `start`/`end`
+    are the character span of the paragraph *excluding* its trailing newline, so replacing a
+    paragraph never silently eats the line break that follows it.
+    """
+
+    index: int
+    start: int
+    end: int
+    text: str
+
+    @property
+    def line_number(self) -> int:
+        return self.index
+
+
+def iter_paragraphs(text: str) -> List[Paragraph]:
+    """Index non-empty lines.
+
+    The chapter files written by this project put one narrative paragraph (or one line of
+    dialogue) per line, and the Reviewer's `第N段` references line up with that indexing.
+    """
+    paragraphs: List[Paragraph] = []
+    offset = 0
+    index = 0
+    for raw_line in str(text).splitlines(keepends=True):
+        body = raw_line.rstrip("\r\n")
+        if body.strip():
+            index += 1
+            start = offset
+            end = offset + len(body)
+            paragraphs.append(Paragraph(index=index, start=start, end=end, text=body))
+        offset += len(raw_line)
+    return paragraphs
+
+
+def _section_span(text: str, section_id: str) -> Optional[Tuple[int, int]]:
+    pattern = re.compile(
+        rf"^(##\s+{re.escape(section_id)}(?!\d).*?)(?=^##\s|\Z)", re.MULTILINE | re.DOTALL
+    )
+    match = pattern.search(text)
+    if not match:
+        return None
+    return match.start(), match.end()
+
+
+def _expand_range(lo: int, hi: Optional[int]) -> Tuple[int, int]:
+    if hi is None:
+        return lo, lo
+    return (lo, hi) if lo <= hi else (hi, lo)
+
+
+# --------------------------------------------------------------------------- #
+# target model
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class RevisionTarget:
+    issue_id: str
+    severity: str
+    category: str
+    blocking: bool
+    kind: str
+    location_raw: str
+    locator: str
+    start: int
+    end: int
+    line_start: int
+    line_end: int
+    before_text: str
+    fix_hint: str
+    description: str
+    anchor_quote: str = ""
+    ambiguity: str = ""
+    resolvable: bool = True
+    file_line_start: int = 0
+    file_line_end: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "issue_id": self.issue_id,
+            "severity": self.severity,
+            "category": self.category,
+            "blocking": self.blocking,
+            "kind": self.kind,
+            "location_raw": self.location_raw,
+            "locator": self.locator,
+            "start": self.start,
+            "end": self.end,
+            "line_start": self.line_start,
+            "line_end": self.line_end,
+            "before_text": self.before_text,
+            "fix_hint": self.fix_hint,
+            "description": self.description,
+            "anchor_quote": self.anchor_quote,
+            "ambiguity": self.ambiguity,
+            "resolvable": self.resolvable,
+            # `line_start`/`line_end` follow the Reviewer's paragraph numbering; the
+            # `file_line_*` pair is the physical line in the draft file.
+            "file_line_start": self.file_line_start,
+            "file_line_end": self.file_line_end,
+            "span_sha256": sha256_text(self.before_text),
+        }
+
+    def with_span(
+        self,
+        *,
+        locator: str,
+        start: int,
+        end: int,
+        line_start: int,
+        line_end: int,
+        before_text: str,
+        kind: Optional[str] = None,
+        anchor_quote: str = "",
+        text: str = "",
+    ) -> "RevisionTarget":
+        """Return a copy carrying the same issue metadata but a concrete prose span."""
+        return RevisionTarget(
+            issue_id=self.issue_id,
+            severity=self.severity,
+            category=self.category,
+            blocking=self.blocking,
+            kind=kind or self.kind,
+            location_raw=self.location_raw,
+            locator=locator,
+            start=start,
+            end=end,
+            line_start=line_start,
+            line_end=line_end,
+            before_text=before_text,
+            fix_hint=self.fix_hint,
+            description=self.description,
+            anchor_quote=anchor_quote or self.anchor_quote,
+            ambiguity=self.ambiguity,
+            resolvable=True,
+            file_line_start=_file_line_of(text, start),
+            file_line_end=_file_line_of(text, max(start, end - 1)),
+        )
+
+
+def _extract_quotes(*texts: str) -> List[str]:
+    found: List[str] = []
+    for text in texts:
+        for pattern in _QUOTE_PATTERNS:
+            for match in pattern.finditer(str(text or "")):
+                candidate = match.group(1).strip()
+                if candidate and candidate not in found:
+                    found.append(candidate)
+    return found
+
+
+def classify_issue_kind(issue: Dict[str, Any]) -> str:
+    """Decide which fact-safety path a finding must take.
+
+    * STYLE_ONLY   — expression-level; may be accepted through the Semantic Judge style check
+    * LOCAL_FACT   — a factual correction inside the in-flight draft; must go through the
+                     governed draft revision + re-review path
+    * STRUCTURAL   — spans the whole chapter (or the finding has no usable anchor)
+    * CANON_HISTORY— the chapter is already accepted; ordinary revision must refuse
+    """
+    if str(issue.get("canon_history") or "").lower() in {"1", "true", "yes"}:
+        return KIND_CANON_HISTORY
+    category = str(issue.get("category") or "other")
+    gate_id = str(issue.get("gate_id") or "")
+    if gate_id.startswith("story_craft") or category in _STYLE_CATEGORIES:
+        return KIND_STYLE_ONLY
+    if category in {"continuity", "setting", "character", "timeline", "logic"}:
+        return KIND_LOCAL_FACT
+    return KIND_LOCAL_FACT
+
+
+def _issue_id(issue: Dict[str, Any], index: int) -> str:
+    for key in ("issue_id", "id", "constraint_id"):
+        value = issue.get(key)
+        if value:
+            return str(value)
+    payload = json.dumps(
+        [issue.get("severity"), issue.get("category"), issue.get("location"), issue.get("description")],
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return f"issue-{index:03d}-{sha256_text(payload)[:8]}"
+
+
+def _span_for_paragraphs(
+    base: "RevisionTarget",
+    text: str,
+    paragraphs: Sequence[Paragraph],
+    lo: int,
+    hi: int,
+    locator: str,
+) -> Optional["RevisionTarget"]:
+    selected = [p for p in paragraphs if lo <= p.index <= hi]
+    if not selected:
+        return None
+    return base.with_span(
+        locator=locator,
+        start=selected[0].start,
+        end=selected[-1].end,
+        line_start=selected[0].line_number,
+        line_end=selected[-1].line_number,
+        before_text=text[selected[0].start:selected[-1].end],
+        text=text,
+    )
+
+
+def _expand_quote_span(
+    base: "RevisionTarget",
+    text: str,
+    paragraphs: Sequence[Paragraph],
+    quote: str,
+) -> Tuple[Optional["RevisionTarget"], str]:
+    """Locate a quote, expanding to its enclosing paragraph.
+
+    Returns (target, ambiguity). Ambiguity is reported instead of guessing a position:
+    replacing the wrong occurrence would silently corrupt prose.
+    """
+    if not quote:
+        return None, ""
+    occurrences = [m.start() for m in re.finditer(re.escape(quote), text)]
+    if not occurrences:
+        return None, "quote_not_found"
+    hit_paragraphs: Dict[int, Paragraph] = {}
+    for occurrence in occurrences:
+        for paragraph in paragraphs:
+            if paragraph.start <= occurrence < paragraph.end:
+                hit_paragraphs[paragraph.index] = paragraph
+                break
+    if not hit_paragraphs:
+        return None, "quote_not_in_paragraph"
+    if len(hit_paragraphs) > 1:
+        # The same wording appears in more than one paragraph: refuse to guess.
+        return None, "ambiguous_quote"
+    paragraph = next(iter(hit_paragraphs.values()))
+    return (
+        base.with_span(
+            locator=LOC_QUOTE,
+            start=paragraph.start,
+            end=paragraph.end,
+            line_start=paragraph.line_number,
+            line_end=paragraph.line_number,
+            before_text=text[paragraph.start:paragraph.end],
+            anchor_quote=quote,
+            text=text,
+        ),
+        "",
+    )
+
+
+def locate_issue(text: str, issue: Dict[str, Any], *, index: int = 0) -> RevisionTarget:
+    """Resolve one Reviewer finding to a concrete span of the working draft."""
+    paragraphs = iter_paragraphs(text)
+    location = str(issue.get("location") or "")
+    description = str(issue.get("description") or "")
+    fix_hint = str(issue.get("fix_hint") or "")
+    kind = classify_issue_kind(issue)
+
+    base = RevisionTarget(
+        issue_id=_issue_id(issue, index),
+        severity=str(issue.get("severity") or "medium"),
+        category=str(issue.get("category") or "other"),
+        blocking=bool(issue.get("blocking")),
+        kind=kind,
+        location_raw=location,
+        locator=LOC_UNRESOLVED,
+        start=0,
+        end=0,
+        line_start=0,
+        line_end=0,
+        before_text="",
+        fix_hint=fix_hint,
+        description=description,
+    )
+
+    candidates: List[Tuple[str, Optional[RevisionTarget], str]] = []
+
+    # 1) legacy §N section reference
+    section_match = _SECTION_REF_RE.search(location)
+    if section_match:
+        lo, hi = _expand_range(int(section_match.group(1)), int(section_match.group(2)) if section_match.group(2) else None)
+        span_lo: Optional[int] = None
+        span_hi: Optional[int] = None
+        for n in range(lo, hi + 1):
+            span = _section_span(text, f"§{n}")
+            if span is None:
+                continue
+            span_lo = span[0] if span_lo is None else min(span_lo, span[0])
+            span_hi = span[1] if span_hi is None else max(span_hi, span[1])
+        if span_lo is not None and span_hi is not None:
+            inside = [p for p in paragraphs if p.start >= span_lo and p.end <= span_hi]
+            candidates.append(
+                (
+                    LOC_SECTION,
+                    base.with_span(
+                        locator=LOC_SECTION,
+                        start=span_lo,
+                        end=span_hi,
+                        line_start=inside[0].line_number if inside else 0,
+                        line_end=inside[-1].line_number if inside else 0,
+                        before_text=text[span_lo:span_hi],
+                        text=text,
+                    ),
+                    "",
+                )
+            )
+
+    # 2) 第N段 / 第N-M段
+    paragraph_match = _PARAGRAPH_REF_RE.search(location)
+    if paragraph_match:
+        lo, hi = _expand_range(
+            int(paragraph_match.group(1)),
+            int(paragraph_match.group(2)) if paragraph_match.group(2) else None,
+        )
+        target = _span_for_paragraphs(base, text, paragraphs, lo, hi, LOC_PARAGRAPH)
+        candidates.append((LOC_PARAGRAPH, target, "" if target else "paragraph_out_of_range"))
+
+    # 3) 第N行 / line N
+    line_match = _LINE_REF_RE.search(location) or _LINE_REF_EN_RE.search(location)
+    if line_match:
+        lo, hi = _expand_range(
+            int(line_match.group(1)),
+            int(line_match.group(2)) if line_match.group(2) else None,
+        )
+        target = _span_for_paragraphs(base, text, paragraphs, lo, hi, LOC_LINE)
+        candidates.append((LOC_LINE, target, "" if target else "line_out_of_range"))
+
+    # 4) exact quote carried by the finding (description / fix_hint / structured evidence)
+    for quote in _extract_quotes(description, fix_hint, json.dumps(issue.get("structured_evidence") or [], ensure_ascii=False)):
+        target, ambiguity = _expand_quote_span(base, text, paragraphs, quote)
+        if target is not None:
+            candidates.append((LOC_QUOTE, target, ""))
+            break
+        if ambiguity:
+            candidates.append((LOC_QUOTE, None, ambiguity))
+
+    # 5) whole-chapter reference -> structural: needs a re-draft decision, never a targeted patch
+    if not candidates and _CHAPTER_REF_RE.match(location):
+        candidates.append(
+            (
+                LOC_CHAPTER,
+                base.with_span(
+                    locator=LOC_CHAPTER,
+                    start=0,
+                    end=len(text),
+                    line_start=paragraphs[0].line_number if paragraphs else 0,
+                    line_end=paragraphs[-1].line_number if paragraphs else 0,
+                    before_text=text,
+                    kind=KIND_STRUCTURAL,
+                    text=text,
+                ),
+                "",
+            )
+        )
+
+    for locator, target, ambiguity in candidates:
+        if target is None:
+            continue
+        target.locator = locator
+        return target
+
+    # nothing locatable -> keep the finding visible instead of dropping it
+    base.locator = LOC_UNRESOLVED
+    base.resolvable = False
+    base.ambiguity = next((a for _, t, a in candidates if t is None and a), "no_locator")
+    return base
+
+
+# --------------------------------------------------------------------------- #
+# plan
+# --------------------------------------------------------------------------- #
+
+
+def _merge_spans(targets: Iterable[RevisionTarget]) -> List[Tuple[int, int]]:
+    """Union of the *targeted* spans.
+
+    Chapter-scope (STRUCTURAL) findings are excluded on purpose: they mean "this needs a
+    re-draft decision", not "you may rewrite the whole chapter in place". Leaving them in the
+    editable set would silently license an unbounded rewrite.
+    """
+    spans = sorted(
+        (t.start, t.end)
+        for t in targets
+        if t.resolvable and t.locator != LOC_CHAPTER and t.end > t.start
+    )
+    merged: List[Tuple[int, int]] = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def build_revision_plan(
+    draft_text: str,
+    reviewer_json: Dict[str, Any],
+    *,
+    chapter: Optional[int] = None,
+    draft_id: str = "",
+    draft_fingerprint: str = "",
+    include_advisory: bool = True,
+    rejected: bool = False,
+) -> Dict[str, Any]:
+    """Turn Reviewer output into a targeted revision plan.
+
+    `include_advisory=True` (default) keeps non-blocking findings: most ordinary Reviewer
+    findings are advice, and dropping them was why the old contract produced an empty plan
+    and pushed users towards a full re-draft.
+    """
+    issues = reviewer_json.get("issues")
+    if not isinstance(issues, list):
+        raise ValueError("reviewer JSON must contain an 'issues' list")
+
+    resolved_chapter = chapter
+    if resolved_chapter is None:
+        try:
+            resolved_chapter = int(reviewer_json.get("chapter"))
+        except (TypeError, ValueError):
+            resolved_chapter = 0
+
+    selected = []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        if not include_advisory and not issue.get("blocking"):
+            continue
+        selected.append(issue)
+
+    targets: List[RevisionTarget] = []
+    for index, issue in enumerate(selected):
+        target = locate_issue(draft_text, issue, index=index)
+        if rejected and target.kind != KIND_CANON_HISTORY:
+            target.kind = KIND_CANON_HISTORY
+        targets.append(target)
+
+    spans = _merge_spans(targets)
+    plan = {
+        "schema_version": SCHEMA_VERSION,
+        "chapter": resolved_chapter,
+        "draft_id": draft_id,
+        "draft_fingerprint": draft_fingerprint,
+        "draft_sha256": sha256_text(draft_text),
+        "include_advisory": include_advisory,
+        "targets": [t.to_dict() for t in targets],
+        "editable_spans": [{"start": s, "end": e} for s, e in spans],
+        "summary": {
+            "total": len(targets),
+            "blocking": sum(1 for t in targets if t.blocking),
+            "advisory": sum(1 for t in targets if not t.blocking),
+            "resolvable": sum(1 for t in targets if t.resolvable),
+            "unresolved": sum(1 for t in targets if not t.resolvable),
+            "ambiguous": sum(1 for t in targets if t.ambiguity),
+            "chapter_scope": sum(1 for t in targets if t.locator == LOC_CHAPTER),
+            "canon_history": sum(1 for t in targets if t.kind == KIND_CANON_HISTORY),
+            "by_kind": {
+                kind: sum(1 for t in targets if t.kind == kind)
+                for kind in (KIND_STYLE_ONLY, KIND_LOCAL_FACT, KIND_STRUCTURAL, KIND_CANON_HISTORY)
+            },
+        },
+    }
+    return plan
+
+
+# --------------------------------------------------------------------------- #
+# apply (host-provided edits) + verify
+# --------------------------------------------------------------------------- #
+
+
+class RevisionApplyError(ValueError):
+    """Raised when a host edit cannot be applied unambiguously."""
+
+
+def apply_edits(
+    draft_text: str,
+    plan: Dict[str, Any],
+    edits: Sequence[Dict[str, Any]],
+) -> Tuple[str, Dict[str, Any]]:
+    """Apply host-authored replacements to the planned spans.
+
+    Each edit is `{"target_id": <issue_id>, "new_text": "..."}`. The replacement must be of
+    a planned span, and `before_text` must still match exactly — otherwise the draft drifted
+    since the plan was produced and we refuse rather than editing blind.
+    """
+    targets = {str(t.get("issue_id")): t for t in plan.get("targets") or []}
+    results: List[Dict[str, Any]] = []
+    # apply from the end so earlier offsets stay valid
+    ordered = sorted(
+        edits,
+        key=lambda e: int(targets.get(str(e.get("target_id")), {}).get("start") or 0),
+        reverse=True,
+    )
+    text = draft_text
+    for edit in ordered:
+        target_id = str(edit.get("target_id") or "")
+        target = targets.get(target_id)
+        if target is None:
+            raise RevisionApplyError(f"unknown target_id: {target_id!r}")
+        new_text = str(edit.get("new_text") or "")
+        start, end = int(target["start"]), int(target["end"])
+        before = str(target["before_text"])
+        current = text[start:end]
+        if current != before:
+            raise RevisionApplyError(
+                f"target {target_id} drifted: draft span no longer matches the plan "
+                f"(expected sha {sha256_text(before)[:12]}, found {sha256_text(current)[:12]})"
+            )
+        text = text[:start] + new_text + text[end:]
+        results.append(
+            {
+                "target_id": target_id,
+                "changed": new_text != before,
+                "locator": target.get("locator"),
+                "line_start": target.get("line_start"),
+                "line_end": target.get("line_end"),
+                "kind": target.get("kind"),
+            }
+        )
+
+    changed = text != draft_text
+    return text, {
+        "changed": changed,
+        "edits_applied": len(results),
+        "edits_that_changed_text": sum(1 for r in results if r["changed"]),
+        "results": list(reversed(results)),
+        "before_sha256": sha256_text(draft_text),
+        "after_sha256": sha256_text(text),
+    }
+
+
+def verify_minimal_edit(
+    before_text: str,
+    after_text: str,
+    plan: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Verify that only the planned spans changed, and report which targets were addressed.
+
+    Boundary check: every differing region between before and after must be contained in a
+    planned span. Anything else is an out-of-scope rewrite and is reported as a violation —
+    "改一个时间数字，只修改必要句段" is enforced here rather than trusted.
+    """
+    spans = [(int(s["start"]), int(s["end"])) for s in plan.get("editable_spans") or []]
+
+    out_of_scope: List[Dict[str, Any]] = []
+
+    def _tightened(i1: int, i2: int) -> Optional[Tuple[int, int]]:
+        """Trim whitespace from a changed region; None when nothing but whitespace changed."""
+        segment = before_text[i1:i2]
+        left = len(segment) - len(segment.lstrip())
+        right = len(segment) - len(segment.rstrip())
+        tight = (i1 + left, i2 - right)
+        return tight if tight[0] < tight[1] else None
+
+    def _inside_spans(tight: Tuple[int, int]) -> bool:
+        return any(lo <= tight[0] and tight[1] <= hi for lo, hi in spans)
+
+    def _adjacent_to_span(i1: int, i2: int) -> bool:
+        return any(lo - 1 <= i1 <= hi + 1 for lo, hi in spans)
+
+    if before_text != after_text:
+        matcher = difflib.SequenceMatcher(None, before_text, after_text, autojunk=False)
+        for tag, i1, i2, _j1, _j2 in matcher.get_opcodes():
+            if tag == "equal":
+                continue
+            tight = _tightened(i1, i2)
+            if tight is None:
+                # whitespace-only change: allowed when it touches a planned span, otherwise
+                # reported (it can legitimately be a paragraph join at a planned boundary).
+                if _adjacent_to_span(i1, i2):
+                    continue
+            elif _inside_spans(tight):
+                continue
+            out_of_scope.append(
+                {
+                    "tag": tag,
+                    "before_start": i1,
+                    "before_end": i2,
+                    "before_excerpt": before_text[max(0, i1 - 20): i2 + 20],
+                }
+            )
+
+    untouched: List[Dict[str, Any]] = []
+    resolved: List[str] = []
+    for target in plan.get("targets") or []:
+        if not target.get("resolvable"):
+            continue
+        start, end = int(target["start"]), int(target["end"])
+        snippet_before = before_text[start:end]
+        snippet_after = after_text[start:end] if len(after_text) == len(before_text) else None
+        if snippet_after is not None and snippet_after == snippet_before:
+            untouched.append({"issue_id": target["issue_id"], "locator": target.get("locator")})
+            continue
+        # length changed → fall back to "is the original paragraph text still present verbatim?"
+        if snippet_after is None and snippet_before and snippet_before in after_text:
+            untouched.append({"issue_id": target["issue_id"], "locator": target.get("locator")})
+            continue
+        resolved.append(str(target["issue_id"]))
+
+    result = {
+        "schema_version": "revision-verify/v1",
+        "changed": before_text != after_text,
+        "spans": [{"start": s, "end": e} for s, e in spans],
+        "out_of_scope_changes": out_of_scope,
+        "boundary_ok": not out_of_scope,
+        "resolved_targets": resolved,
+        "untouched_targets": untouched,
+        "before_sha256": sha256_text(before_text),
+        "after_sha256": sha256_text(after_text),
+    }
+    result["ok"] = result["boundary_ok"] and (not result["changed"] or bool(resolved))
+    return result
+
+
+def load_plan(path: str | Path) -> Dict[str, Any]:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or "targets" not in data:
+        raise ValueError(f"not a revision plan: {path}")
+    return data
+
+
+def write_plan(path: str | Path, plan: Dict[str, Any]) -> Path:
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out
+
+
+def format_plan_text(plan: Dict[str, Any]) -> str:
+    summary = plan.get("summary") or {}
+    lines = [
+        f"revision plan  chapter={plan.get('chapter')}  draft_id={plan.get('draft_id') or '-'}",
+        (
+            f"  targets={summary.get('total')} blocking={summary.get('blocking')} "
+            f"advisory={summary.get('advisory')} resolvable={summary.get('resolvable')} "
+            f"unresolved={summary.get('unresolved')} ambiguous={summary.get('ambiguous')}"
+        ),
+        f"  kinds={summary.get('by_kind')}",
+    ]
+    for target in plan.get("targets") or []:
+        marker = "!" if target.get("blocking") else " "
+        where = f"L{target.get('line_start')}-{target.get('line_end')}" if target.get("line_start") else "-"
+        lines.append(
+            f" [{marker}] {target.get('issue_id')} {target.get('severity')}/{target.get('category')} "
+            f"{target.get('kind')} via {target.get('locator')} {where}"
+        )
+        if target.get("fix_hint"):
+            lines.append(f"      fix: {target['fix_hint']}")
+        if target.get("ambiguity"):
+            lines.append(f"      ambiguity: {target['ambiguity']}（不会自动替换，请人工指定位置）")
+    return "\n".join(lines)

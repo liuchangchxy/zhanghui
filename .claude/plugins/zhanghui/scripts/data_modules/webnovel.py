@@ -25,13 +25,19 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
 
 from runtime_compat import enable_windows_utf8_stdio, normalize_windows_path
-from project_locator import resolve_project_root, write_current_project_pointer, update_global_registry_current_project
+from project_locator import (
+    resolve_project_root,
+    resolve_project_root_with_source,
+    write_current_project_pointer,
+    update_global_registry_current_project,
+)
 
 from .story_runtime_health import build_story_runtime_health
 
@@ -185,11 +191,16 @@ def _build_preflight_report(explicit_project_root: Optional[str]) -> dict:
 
     project_root = ""
     project_root_error = ""
+    project_root_source = ""
     story_runtime: dict = {}
     try:
-        resolved_root = _resolve_root(explicit_project_root)
+        resolved_root, project_root_source = resolve_project_root_with_source(explicit_project_root)
         project_root = str(resolved_root)
-        checks.append({"name": "project_root", "ok": True, "path": project_root})
+        # 解析来源随项目身份一起输出：where / preflight / runtime / Skill 共用同一套解析规则，
+        # 来源可见才能证明「显示的项目 == 实际写入的项目」。
+        checks.append(
+            {"name": "project_root", "ok": True, "path": project_root, "source": project_root_source}
+        )
         story_runtime = build_story_runtime_health(resolved_root)
     except FileNotFoundError as exc:
         project_root_error = _project_root_diagnostic(explicit_project_root, exc)
@@ -208,6 +219,7 @@ def _build_preflight_report(explicit_project_root: Optional[str]) -> dict:
     return {
         "ok": all(bool(item["ok"]) for item in checks),
         "project_root": project_root,
+        "project_root_source": project_root_source,
         "scripts_dir": str(scripts_dir),
         "skill_root": str(skill_root),
         "checks": checks,
@@ -227,6 +239,11 @@ def cmd_preflight(args: argparse.Namespace) -> int:
             print(f"{status} {item['name']}: {path}")
             if item.get("error"):
                 print(f"  detail: {item['error']}")
+        project_root_entry = next(
+            (item for item in report["checks"] if item.get("name") == "project_root"), {}
+        )
+        if project_root_entry.get("source"):
+            print(f"INFO project_root_source: {project_root_entry['source']}")
         story_runtime = report.get("story_runtime") or {}
         if story_runtime:
             print(
@@ -537,13 +554,7 @@ def cmd_prose(args: argparse.Namespace) -> int:
         elif getattr(args, "after", None):
             after_text = args.after
 
-        judge_callable = None
-        judge_payload = getattr(args, "judge_result", "") or ""
-        judge_file = getattr(args, "judge_file", "") or ""
-        if judge_file and Path(judge_file).is_file():
-            judge_payload = Path(judge_file).read_text(encoding="utf-8")
-        if judge_payload:
-            judge_callable = lambda b, a: judge_payload
+        judge_callable, _judge_binding = _build_judge_callable(args, before_text, after_text)
 
         from .prose_semantic_diff import compare_semantic_facts
         res = compare_semantic_facts(before_text, after_text, semantic_judge=judge_callable)
@@ -573,13 +584,7 @@ def cmd_prose(args: argparse.Namespace) -> int:
         elif getattr(args, "after", None):
             after_text = args.after
 
-        judge_callable = None
-        judge_payload = getattr(args, "judge_result", "") or ""
-        judge_file = getattr(args, "judge_file", "") or ""
-        if judge_file and Path(judge_file).is_file():
-            judge_payload = Path(judge_file).read_text(encoding="utf-8")
-        if judge_payload:
-            judge_callable = lambda b, a: judge_payload
+        judge_callable, _judge_binding = _build_judge_callable(args, before_text, after_text)
 
         chapter = getattr(args, "chapter", 1) or 1
         res = pipeline.process_and_validate(before_text, after_text, chapter=chapter, semantic_judge=judge_callable)
@@ -592,7 +597,424 @@ def cmd_prose(args: argparse.Namespace) -> int:
                 print(f"Rollback reason: {res.rollback_reason}")
         return 0 if res.ok else 1
 
+    if action == "judge-request":
+        from .prose_judge_host import build_judge_request, format_request_text
+
+        before_text = _read_prose_arg(getattr(args, "before", "") or "", getattr(args, "before_file", "") or "")
+        after_text = _read_prose_arg(getattr(args, "after", "") or "", getattr(args, "after_file", "") or "")
+        if not before_text or not after_text:
+            print("ERROR: before/after text required (use --before-file/--after-file)", file=sys.stderr)
+            return 2
+
+        canon_constraints = None
+        constraints_file = getattr(args, "constraints_file", "") or ""
+        if constraints_file and Path(constraints_file).is_file():
+            try:
+                canon_constraints = json.loads(Path(constraints_file).read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                canon_constraints = Path(constraints_file).read_text(encoding="utf-8")
+
+        request = build_judge_request(
+            before_text, after_text, chapter=getattr(args, "chapter", 0) or 0, canon_constraints=canon_constraints
+        )
+        out = getattr(args, "output", "") or ""
+        if out:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
+            Path(out).write_text(json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8")
+            request["request_file"] = out
+        prompt_out = getattr(args, "prompt_output", "") or ""
+        if prompt_out:
+            Path(prompt_out).parent.mkdir(parents=True, exist_ok=True)
+            Path(prompt_out).write_text(request["prompt"], encoding="utf-8")
+            request["prompt_file"] = prompt_out
+        if args.format == "json":
+            print(json.dumps(request, ensure_ascii=False, indent=2))
+        else:
+            print(format_request_text(request))
+        return 0
+
+    if action == "judge-bind":
+        from .prose_judge_host import JudgeBindingError, bind_judge_response
+
+        before_text = _read_prose_arg(getattr(args, "before", "") or "", getattr(args, "before_file", "") or "")
+        after_text = _read_prose_arg(getattr(args, "after", "") or "", getattr(args, "after_file", "") or "")
+        if not before_text or not after_text:
+            print("ERROR: before/after text required (use --before-file/--after-file)", file=sys.stderr)
+            return 2
+        response_file = Path(args.response_file)
+        if not response_file.is_file():
+            print(f"ERROR: response file not found: {response_file}", file=sys.stderr)
+            return 2
+        try:
+            verdict = bind_judge_response(
+                response_file.read_text(encoding="utf-8"),
+                before_text,
+                after_text,
+                chapter=getattr(args, "chapter", 0) or 0,
+            )
+        except (JudgeBindingError, ValueError) as exc:
+            # 非法裁决不落盘：调用方会 fail-closed 回滚，不允许伪造通过。
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        out = getattr(args, "output", "") or ""
+        if out:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
+            Path(out).write_text(json.dumps(verdict, ensure_ascii=False, indent=2), encoding="utf-8")
+            verdict["verdict_file"] = out
+        print(json.dumps(verdict, ensure_ascii=False, indent=2))
+        return 0
+
     return 2
+
+
+def _read_prose_arg(inline: str, file_path: str) -> str:
+    if file_path:
+        path = Path(file_path)
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+    return inline or ""
+
+
+def _build_judge_callable(args: argparse.Namespace, before_text: str, after_text: str):
+    """Return (judge_callable, binding_note) honouring the judge binding contract (task F).
+
+    * `--judge-file`  : the verdict must already be bound to this before/after (stale verdicts
+                        are rejected and the caller fails closed).
+    * `--judge-result`: inline verdict supplied in the same invocation; validated and bound now.
+    """
+    from .prose_judge_host import bind_judge_response, make_bound_judge_callable
+
+    judge_file = getattr(args, "judge_file", "") or ""
+    judge_result = getattr(args, "judge_result", "") or ""
+    chapter = getattr(args, "chapter", 0) or 0
+
+    if judge_file and Path(judge_file).is_file():
+        payload = Path(judge_file).read_text(encoding="utf-8")
+        return (
+            make_bound_judge_callable(
+                payload, before_text, after_text, chapter=chapter, require_binding=True
+            ),
+            f"bound_file:{judge_file}",
+        )
+    if judge_result:
+        return (
+            make_bound_judge_callable(
+                bind_judge_response(judge_result, before_text, after_text, chapter=chapter),
+                before_text,
+                after_text,
+                chapter=chapter,
+                require_binding=False,
+            ),
+            "inline_unbound",
+        )
+    return None, "none"
+
+
+def cmd_revise(args: argparse.Namespace) -> int:
+    """Reviewer-driven local revision: plan -> host edits -> apply -> boundary verification."""
+    from .revision_planner import (
+        RevisionApplyError,
+        apply_edits,
+        build_revision_plan,
+        format_plan_text,
+        load_plan,
+        write_plan,
+    )
+
+    action = args.revise_action
+
+    if action == "plan":
+        draft_path = Path(args.draft_file)
+        if not draft_path.is_file():
+            print(f"ERROR: draft file not found: {draft_path}", file=sys.stderr)
+            return 2
+        review_path = Path(args.review_result)
+        if not review_path.is_file():
+            print(f"ERROR: review result not found: {review_path}", file=sys.stderr)
+            return 2
+        try:
+            reviewer_json = json.loads(review_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            print(f"ERROR: review result is not valid JSON: {exc}", file=sys.stderr)
+            return 2
+
+        plan = build_revision_plan(
+            draft_path.read_text(encoding="utf-8"),
+            reviewer_json,
+            chapter=args.chapter,
+            draft_id=args.draft_id or "",
+            draft_fingerprint=getattr(args, "draft_fingerprint", "") or "",
+            include_advisory=not args.blocking_only,
+        )
+        out = args.output or str(draft_path.parent / f"revision_plan_{int(args.chapter):04d}.json")
+        write_plan(out, plan)
+        plan["plan_file"] = out
+        if args.format == "json":
+            print(json.dumps(plan, ensure_ascii=False, indent=2))
+        else:
+            print(format_plan_text(plan))
+            print(f"plan_file: {out}")
+        return 0
+
+    if action == "apply":
+        draft_path = Path(args.draft_file)
+        for required in (draft_path, Path(args.plan), Path(args.edits)):
+            if not required.is_file():
+                print(f"ERROR: file not found: {required}", file=sys.stderr)
+                return 2
+        plan = load_plan(args.plan)
+        try:
+            edits = json.loads(Path(args.edits).read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            print(f"ERROR: edits file is not valid JSON: {exc}", file=sys.stderr)
+            return 2
+        if not isinstance(edits, list):
+            print("ERROR: edits file must be a JSON list of {target_id,new_text}", file=sys.stderr)
+            return 2
+
+        original = draft_path.read_text(encoding="utf-8")
+        try:
+            updated, report = apply_edits(original, plan, edits)
+        except RevisionApplyError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
+        report["draft_file"] = str(draft_path)
+        report["plan_file"] = str(args.plan)
+        if not report["changed"]:
+            # E-F: 正文没有变化就不产生新草稿身份、不重复登记、不重复审查。
+            report["action"] = "no_op"
+            report["next"] = "正文未变化：沿用当前 draft_id 与既有审查结果，不要重新 ingest-draft / 重审。"
+        else:
+            out = Path(args.output) if args.output else draft_path
+            if not args.dry_run:
+                out.write_text(updated, encoding="utf-8")
+                report["written"] = str(out)
+            report["action"] = "dry_run" if args.dry_run else "written"
+            report["next"] = (
+                "正文已变化：必须重新 runtime ingest-draft 取得新 draft_id，"
+                "再对新草稿重跑 reviewer，旧审查结果一律失效。"
+            )
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    if action == "verify":
+        before_path, after_path, plan_path = Path(args.before_file), Path(args.after_file), Path(args.plan)
+        for required in (before_path, after_path, plan_path):
+            if not required.is_file():
+                print(f"ERROR: file not found: {required}", file=sys.stderr)
+                return 2
+        from .revision_planner import verify_minimal_edit
+
+        report = verify_minimal_edit(
+            before_path.read_text(encoding="utf-8"),
+            after_path.read_text(encoding="utf-8"),
+            load_plan(plan_path),
+        )
+        if args.format == "json":
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            print(f"changed={report['changed']} boundary_ok={report['boundary_ok']} ok={report['ok']}")
+            for item in report["out_of_scope_changes"]:
+                print(f"  OUT-OF-SCOPE {item['tag']} @{item['before_start']}: {item['before_excerpt']!r}")
+            for item in report["untouched_targets"]:
+                print(f"  UNTOUCHED {item['issue_id']} ({item['locator']})")
+        return 0 if report["ok"] else 1
+
+    print(f"unknown revise action: {action}", file=sys.stderr)
+    return 2
+
+
+def cmd_observe_summary(args: argparse.Namespace) -> int:
+    """Aggregate stage-cost evidence from existing artifacts (task L11)."""
+    from .observability_report import build_observability_summary, format_observability_text
+
+    root = _resolve_root(args.project_root)
+    report = build_observability_summary(root, chapters=getattr(args, "chapter", None) or None)
+    if args.format == "json":
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(format_observability_text(report))
+    return 0
+
+
+def cmd_plan_check(args: argparse.Namespace) -> int:
+    """Planning-stage consistency check (task I). Deterministic blockers + advisory leakage."""
+    from .plan_consistency import format_report_text, run_plan_consistency
+
+    root = _resolve_root(args.project_root)
+    expected_range = None
+    raw_range = (getattr(args, "chapters_range", "") or "").strip()
+    if raw_range:
+        match = re.fullmatch(r"\s*(\d+)\s*[-—~]\s*(\d+)\s*", raw_range)
+        if not match:
+            print(f"ERROR: --chapters-range 需要形如 1-24，得到 {raw_range!r}", file=sys.stderr)
+            return 2
+        expected_range = (int(match.group(1)), int(match.group(2)))
+
+    report = run_plan_consistency(root, volume=int(args.volume), expected_range=expected_range)
+    if args.format == "json":
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(format_report_text(report))
+    return 0 if report.get("ok") else 1
+
+
+def cmd_chapter_intent(args: argparse.Namespace) -> int:
+    """Inspect / refresh the derived `chapter_meta` copy against the authoritative outline."""
+    from .chapter_intent_sync import build_report, format_report_text, load_state, sync_chapter_meta
+
+    root = _resolve_root(args.project_root)
+    chapter = int(args.chapter)
+    state = load_state(root)
+
+    if args.chapter_intent_action == "check":
+        report = build_report(root, chapter, state)
+        if args.format == "json":
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            print(format_report_text(report))
+        # drift is reported, not raised: the runtime refreshes it on the next prepare
+        return 0
+
+    result = sync_chapter_meta(root, chapter, state)
+    if result.get("ok"):
+        try:
+            from security_utils import atomic_write_json
+
+            atomic_write_json(root / ".webnovel" / "state.json", state, backup=True)
+        except Exception as exc:
+            print(f"ERROR: 回写 state.json 失败: {exc}", file=sys.stderr)
+            return 1
+    if args.format == "json":
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        if result.get("ok"):
+            print(
+                f"chapter_intent sync chapter={chapter} changed={result.get('changed')} "
+                f"fields={len(result.get('changed_fields') or {})}"
+            )
+        else:
+            print(f"chapter_intent sync chapter={chapter} REFUSED: {result.get('message')}")
+    return 0 if result.get("ok") else 1
+
+
+def _story_craft_fulfill_lock(root: Path, state: dict, args: argparse.Namespace) -> int:
+    """Mark a timed lock fulfilled — with official evidence, idempotently (task K).
+
+    限时锁是规划义务（Intent），不是 Canon 事实。兑现必须由**正式已接受的正文**支撑：
+    本命令要求目标章节存在 `status=accepted` 的 durable commit，`--evidence` 给出的原文
+    引用还必须能在该章正式正文里逐字找到。Writer 自称兑现不构成证据。
+    """
+    import hashlib
+
+    from .chapter_intent_sync import chapter_is_accepted
+    from .durable_projection import discover_validated_chapter_commits
+    from story_craft import fulfill_timed_lock
+
+    lock_id = str(getattr(args, "lock_id", "") or "").strip()
+    chapter = getattr(args, "chapter", None)
+    if not lock_id:
+        print("ERROR: --lock-id is required", file=sys.stderr)
+        return 2
+    if not chapter or chapter < 1:
+        print("ERROR: --chapter is required (the already-accepted chapter that fulfils the lock)", file=sys.stderr)
+        return 2
+
+    locks = (state.get("story_craft") or {}).get("timed_locks") or []
+    lock = next((item for item in locks if isinstance(item, dict) and item.get("id") == lock_id), None)
+    if lock is None:
+        print(f"ERROR: timed_lock {lock_id} not found", file=sys.stderr)
+        return 2
+
+    accepted_commit = None
+    try:
+        for commit in discover_validated_chapter_commits(root):
+            if int(commit.get("chapter") or 0) != int(chapter):
+                continue
+            payload = commit.get("payload") or {}
+            if str((payload.get("meta") or {}).get("status") or "") == "accepted":
+                accepted_commit = payload
+            break
+    except Exception as exc:
+        print(f"ERROR: 无法校验 durable commit: {exc}", file=sys.stderr)
+        return 2
+
+    if accepted_commit is None:
+        if chapter_is_accepted(root, chapter):
+            accepted_commit = {}
+        else:
+            print(
+                f"ERROR: 第 {chapter} 章没有已接受的正式提交，不能据此关闭限时锁 {lock_id}。"
+                "请先完成 runtime commit（accepted）后再兑现。",
+                file=sys.stderr,
+            )
+            return 1
+
+    evidence = str(getattr(args, "evidence", "") or "")
+    evidence_sha = ""
+    if evidence:
+        prose_text, prose_source = _accepted_chapter_prose(root, chapter)
+        if not prose_text:
+            print(
+                f"ERROR: 找不到第 {chapter} 章的正式正文，无法校验 --evidence 引用。"
+                "请先完成 runtime publish-draft，或去掉 --evidence 仅凭 accepted commit 兑现。",
+                file=sys.stderr,
+            )
+            return 1
+        if evidence not in prose_text:
+            print(
+                f"ERROR: --evidence 引用在第 {chapter} 章正式正文（{prose_source}）中找不到，"
+                "拒绝用无法核验的证据关闭限时锁。",
+                file=sys.stderr,
+            )
+            return 1
+        evidence_sha = hashlib.sha256(evidence.encode("utf-8")).hexdigest()
+
+    try:
+        fulfill_timed_lock(
+            state,
+            lock_id,
+            chapter,
+            evidence=evidence,
+            evidence_sha256=evidence_sha,
+            note=str(getattr(args, "note", "") or ""),
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    _save_state_via_atomic(root, state)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "lock_id": lock_id,
+                "fulfilled_chapter": chapter,
+                "evidence_verified": bool(evidence),
+                "note": "限时锁是规划义务；兑现依据为该章的 accepted durable commit。",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _accepted_chapter_prose(root: Path, chapter: int) -> tuple[str, str]:
+    """Return the officially published prose for an accepted chapter, if present."""
+    try:
+        from chapter_paths import find_chapter_file
+    except ImportError:  # pragma: no cover
+        from scripts.chapter_paths import find_chapter_file
+
+    path = find_chapter_file(root, chapter)
+    if path is None or not path.is_file():
+        return "", ""
+    try:
+        return path.read_text(encoding="utf-8"), path.name
+    except OSError:
+        return "", ""
 
 
 def cmd_migration(args: argparse.Namespace) -> int:
@@ -912,6 +1334,7 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
             check_volume_beat, check_rhythm_status,
             check_timed_lock_deadlines, check_scene_sequel,
         )
+        from .chapter_intent_sync import chapter_is_accepted
 
         issues: list[str] = []
         # Craft observations remain advisory; malformed required state stays a blocker.
@@ -933,6 +1356,16 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
             overdue = check_timed_lock_deadlines(state, current_chapter=args.chapter)
             for lock in overdue:
                 issues.append(f"ADVISORY: 定时锁计划偏差：{lock['id']} deadline={lock['deadline_chapter']}")
+                # K5: 若截止章已被正式接受，锁大概率早已兑现 —— 给出可执行的裁决路径，
+                # 而不是让它在后续每一章继续被报成「逾期」。
+                if chapter_is_accepted(root, int(lock.get("deadline_chapter") or 0)):
+                    issues.append(
+                        "ADVISORY: "
+                        f"{lock['id']} 的截止章第 {lock['deadline_chapter']} 章已被正式接受，"
+                        "请核对正文后执行 `story-craft fulfill-lock "
+                        f"--lock-id {lock['id']} --chapter {lock['deadline_chapter']} "
+                        "--evidence \"<正文原文引用>\"` 完成兑现裁决。"
+                    )
             cm = state.get("chapter_meta", {})
             if isinstance(cm, dict):
                 cm_entry = cm.get(str(args.chapter), {})
@@ -1115,6 +1548,9 @@ def cmd_story_craft(args: argparse.Namespace) -> int:
         _save_state_via_atomic(root, state)
         print(f"init-locks: added {added} timed_lock(s) for volume {volume} (total now {len(state['story_craft']['timed_locks'])})")
         return 0
+    if action == "fulfill-lock":
+        return _story_craft_fulfill_lock(root, state, args)
+
     if action == "set-chapter-meta":
         from story_craft import set_chapter_meta
 
@@ -1291,6 +1727,95 @@ def build_parser() -> argparse.ArgumentParser:
     p_prose_val.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_prose_val.set_defaults(func=cmd_prose)
 
+    p_prose_judge_req = prose_sub.add_parser(
+        "judge-request", help="生成宿主演裁决请求（Semantic Judge，无需额外 API Key）"
+    )
+    p_prose_judge_req.add_argument("--before", default="", help="修改前正文内容")
+    p_prose_judge_req.add_argument("--before-file", default="", help="修改前正文文件")
+    p_prose_judge_req.add_argument("--after", default="", help="修改后正文内容")
+    p_prose_judge_req.add_argument("--after-file", default="", help="修改后正文文件")
+    p_prose_judge_req.add_argument("--chapter", type=int, default=0, help="章节号")
+    p_prose_judge_req.add_argument(
+        "--constraints-file", default="", help="受治理约束 JSON（Canon/Intent/禁区）"
+    )
+    p_prose_judge_req.add_argument("--output", default="", help="请求 JSON 输出路径")
+    p_prose_judge_req.add_argument("--prompt-output", default="", help="仅输出 prompt 文本的路径")
+    p_prose_judge_req.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_prose_judge_req.set_defaults(func=cmd_prose)
+
+    p_prose_judge_bind = prose_sub.add_parser(
+        "judge-bind", help="把宿主模型回答的裁决结果绑定到当前 before/after 文本"
+    )
+    p_prose_judge_bind.add_argument("--before", default="", help="修改前正文内容")
+    p_prose_judge_bind.add_argument("--before-file", default="", help="修改前正文文件")
+    p_prose_judge_bind.add_argument("--after", default="", help="修改后正文内容")
+    p_prose_judge_bind.add_argument("--after-file", default="", help="修改后正文文件")
+    p_prose_judge_bind.add_argument("--response-file", required=True, help="宿主模型回答的 JSON 文件")
+    p_prose_judge_bind.add_argument("--chapter", type=int, default=0, help="章节号")
+    p_prose_judge_bind.add_argument("--output", default="", help="绑定后裁决 JSON 输出路径")
+    p_prose_judge_bind.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_prose_judge_bind.set_defaults(func=cmd_prose)
+
+    p_revise = sub.add_parser("revise", help="审查驱动的局部修订计划 / 应用 / 边界校验（宿主模型执行）")
+    revise_sub = p_revise.add_subparsers(dest="revise_action", required=True)
+
+    p_revise_plan = revise_sub.add_parser("plan", help="把 reviewer JSON 转成定向修订计划")
+    p_revise_plan.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_revise_plan.add_argument("--draft-file", required=True, help="在编工作草稿路径")
+    p_revise_plan.add_argument("--review-result", required=True, help="reviewer JSON 路径")
+    p_revise_plan.add_argument("--draft-id", default="", help="当前 draft_id（可选，用于绑定计划）")
+    p_revise_plan.add_argument("--draft-fingerprint", default="", help="当前 draft_fingerprint（可选）")
+    p_revise_plan.add_argument(
+        "--blocking-only", action="store_true", help="只保留 blocking 问题（默认包含 advisory）"
+    )
+    p_revise_plan.add_argument("--output", default="", help="计划 JSON 输出路径")
+    p_revise_plan.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_revise_plan.set_defaults(func=cmd_revise)
+
+    p_revise_apply = revise_sub.add_parser("apply", help="应用宿主模型给出的定向替换")
+    p_revise_apply.add_argument("--draft-file", required=True, help="在编工作草稿路径")
+    p_revise_apply.add_argument("--plan", required=True, help="修订计划 JSON 路径")
+    p_revise_apply.add_argument("--edits", required=True, help="宿主替换 JSON 路径：[{target_id,new_text}]")
+    p_revise_apply.add_argument("--output", default="", help="新草稿输出路径（默认原地覆盖）")
+    p_revise_apply.add_argument("--dry-run", action="store_true", help="只做校验，不写文件")
+    p_revise_apply.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_revise_apply.set_defaults(func=cmd_revise)
+
+    p_revise_verify = revise_sub.add_parser("verify", help="校验修改只落在计划范围内，并报告未处理目标")
+    p_revise_verify.add_argument("--before-file", required=True, help="修改前草稿路径")
+    p_revise_verify.add_argument("--after-file", required=True, help="修改后草稿路径")
+    p_revise_verify.add_argument("--plan", required=True, help="修订计划 JSON 路径")
+    p_revise_verify.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_revise_verify.set_defaults(func=cmd_revise)
+
+    p_observe = sub.add_parser(
+        "observe-summary", help="阶段开销观测汇总（草稿版本数 / Reviewer 次数 / 上下文规模）"
+    )
+    p_observe.add_argument("--chapter", type=int, action="append", help="限定章节（可重复）")
+    p_observe.add_argument("--format", choices=["json", "text"], default="text")
+    p_observe.set_defaults(func=cmd_observe_summary)
+
+    p_plan_check = sub.add_parser(
+        "plan-check", help="规划期一致性检查（章号/必需字段/时间线/反转保护）"
+    )
+    p_plan_check.add_argument("--volume", type=int, default=1)
+    p_plan_check.add_argument("--chapters-range", default="", help="本卷计划章节范围，如 1-24")
+    p_plan_check.add_argument("--format", choices=["json", "text"], default="json")
+    p_plan_check.set_defaults(func=cmd_plan_check)
+
+    p_chapter_intent = sub.add_parser(
+        "chapter-intent", help="章节规划权威检查与派生副本刷新（章纲为准，chapter_meta 为派生）"
+    )
+    chapter_intent_sub = p_chapter_intent.add_subparsers(dest="chapter_intent_action", required=True)
+    p_ci_check = chapter_intent_sub.add_parser("check", help="只读报告章纲与 chapter_meta 的漂移")
+    p_ci_check.add_argument("--chapter", type=int, required=True)
+    p_ci_check.add_argument("--format", choices=["json", "text"], default="json")
+    p_ci_check.set_defaults(func=cmd_chapter_intent)
+    p_ci_sync = chapter_intent_sub.add_parser("sync", help="按章纲刷新 state.json 的 chapter_meta 派生副本")
+    p_ci_sync.add_argument("--chapter", type=int, required=True)
+    p_ci_sync.add_argument("--format", choices=["json", "text"], default="json")
+    p_ci_sync.set_defaults(func=cmd_chapter_intent)
+
     p_migration = sub.add_parser("phase9-migration", help="Phase 9 migration preflight, dry run, and verified backup")
     migration_sub = p_migration.add_subparsers(dest="migration_action", required=True)
     p_migration_preflight = migration_sub.add_parser("preflight", help="read-only ownership and candidate preflight")
@@ -1358,8 +1883,13 @@ def build_parser() -> argparse.ArgumentParser:
     craft_parser = sub.add_parser("story-craft", help="Story craft operations")
     craft_parser.add_argument("story_craft_action", choices=[
         "init-volume-beat", "fill-beat", "check-volume",
-        "init-forechains", "init-locks", "set-chapter-meta",
+        "init-forechains", "init-locks", "set-chapter-meta", "fulfill-lock",
     ])
+    craft_parser.add_argument("--lock-id", help="fulfill-lock: 限时锁 ID（如 TL-004）")
+    craft_parser.add_argument(
+        "--evidence", help="fulfill-lock: 已接受正文中的原文引用（逐字校验，用于绑定兑现证据）"
+    )
+    craft_parser.add_argument("--note", help="fulfill-lock: 兑现说明（可选）")
     craft_parser.add_argument("--volume", type=int)
     craft_parser.add_argument("--total-chapters", type=int)
     craft_parser.add_argument("--beat-name")

@@ -25,7 +25,25 @@ class ContextRanker:
     def __init__(self, config=None):
         self.config = config or get_config()
 
-    def rank_pack(self, pack: Dict[str, Any], chapter: int) -> Dict[str, Any]:
+    # Per-section item caps applied when a character budget is supplied. Ranking was previously
+    # order-only: it sorted everything and then handed the whole (unbounded) pack downstream, so
+    # it never actually controlled context size.
+    BUDGET_SECTION_CAPS: Dict[str, int] = {
+        "reference": 6,
+        "craft": 8,
+        "memory": 6,
+        "long_term_memory": 6,
+        "recent_summaries": 5,
+        "recent_meta": 5,
+        "story_skeleton": 8,
+    }
+
+    def rank_pack(
+        self,
+        pack: Dict[str, Any],
+        chapter: int,
+        budget: Optional[int] = None,
+    ) -> Dict[str, Any]:
         ranked = dict(pack)
 
         core = dict(ranked.get("core") or {})
@@ -52,8 +70,37 @@ class ContextRanker:
             "frequency_weight": float(self.config.context_ranker_frequency_weight),
             "hook_bonus": float(self.config.context_ranker_hook_bonus),
         }
+        if budget and budget > 0:
+            meta["ranker"]["budget"] = int(budget)
+            meta["ranker"]["selection"] = self._apply_budget(ranked, int(budget))
         ranked["meta"] = meta
         return ranked
+
+    def _apply_budget(self, ranked: Dict[str, Any], budget: int) -> Dict[str, Any]:
+        """Select (not just sort): keep the top-scored items per section under a total budget.
+
+        Canon / Intent / Constraints sections are untouched — those are contract inputs, not
+        ranking candidates.
+        """
+        selected: Dict[str, Any] = {}
+        remaining = budget
+        core = ranked.get("core") if isinstance(ranked.get("core"), dict) else {}
+
+        for section, cap in self.BUDGET_SECTION_CAPS.items():
+            container = core if section in ("recent_summaries", "recent_meta") else ranked
+            items = container.get(section)
+            if not isinstance(items, list) or not items:
+                continue
+            keep = min(cap, len(items))
+            # shrink further while the running total is over budget
+            while keep > 1 and remaining <= 0:
+                keep -= 1
+            container[section] = items[:keep]
+            dropped = len(items) - keep
+            if dropped:
+                selected[section] = {"kept": keep, "dropped": dropped}
+            remaining -= keep
+        return selected
 
     def rank_recent_summaries(self, items: List[Dict[str, Any]], current_chapter: int) -> List[Dict[str, Any]]:
         scored = []
