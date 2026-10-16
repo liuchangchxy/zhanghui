@@ -104,6 +104,35 @@ def test_the_scanner_actually_detects_the_original_defect():
     assert fstring_fields_with_backslash(healthy) == []
 
 
+# A sample (not exhaustive) of APIs that exist only from Python 3.12, while the plugin declares
+# >=3.11. Both real defects found during this round were of this class: a backslash inside an
+# f-string expression, and `tempfile.TemporaryDirectory(..., delete=...)` forwarded by the test
+# conftest, which broke every TemporaryDirectory() call on the declared floor.
+_PY312_ONLY_PATTERNS: tuple[tuple[str, str], ...] = (
+    (r"TemporaryDirectory\([^)]*delete\s*=", "tempfile.TemporaryDirectory(delete=)"),
+    (r"\bonexc\s*=", "shutil.rmtree(onexc=)"),
+    (r"\bitertools\.batched\b", "itertools.batched"),
+    (r"\btyping\.override\b", "typing.override"),
+    (r"\bsys\.monitoring\b", "sys.monitoring"),
+    (r"\bos\.path\.isjunction\b", "os.path.isjunction"),
+    (r"\.walk\(\s*\)", "pathlib.Path.walk()"),
+    (r"\bcalendar\.(Month|Day)\b", "calendar.Month / calendar.Day"),
+)
+
+
+def test_no_python_312_only_apis_in_plugin_sources():
+    offenders: list[str] = []
+    for path in _iter_python_files():
+        source = path.read_text(encoding="utf-8")
+        for pattern, label in _PY312_ONLY_PATTERNS:
+            if re.search(pattern, source):
+                offenders.append(f"{path.relative_to(PLUGIN_SCRIPTS)}: {label}")
+    assert not offenders, (
+        "these require Python 3.12+ but scripts/pyproject.toml declares >=3.11: "
+        f"{sorted(set(offenders))}"
+    )
+
+
 def test_declared_python_floor_matches_the_contract():
     """Guard the declaration itself: the floor must be the low bound, not raised silently."""
     import sys
