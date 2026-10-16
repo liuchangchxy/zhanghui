@@ -1,0 +1,58 @@
+name: contract-tests
+
+# Cross-module contract tests for the normal-use creative loop.
+#
+# These are the tests that would have caught the acceptance-run defects: template -> outline
+# loader -> governed context, project resolution under a polluted global pointer, guard-hook
+# command classification, write-gate dependency ordering, reviewer -> targeted revision ->
+# new draft identity, Semantic Judge binding, fingerprint scope, single-volume planning and
+# timed-lock closure. They are deterministic and need no API keys or network access.
+
+on:
+  pull_request:
+    paths:
+      - '.claude/plugins/zhanghui/**'
+      - 'tests/**'
+      - '.github/workflows/contract-tests.yml'
+  push:
+    branches: [main]
+
+jobs:
+  contract-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pydantic
+      - name: Cross-module contract tests
+        run: |
+          python -m pytest \
+            tests/integration/test_write_flow_gate_dependencies.py \
+            tests/integration/test_writer_package_fingerprint_scope.py \
+            tests/integration/test_single_volume_planning.py \
+            tests/integration/test_timed_lock_closure.py \
+            tests/integration/test_plan_consistency.py \
+            tests/integration/test_context_budget_and_observability.py \
+            tests/unit/test_local_revision_and_judge.py \
+            -q
+      - name: Guard hook command contract
+        run: |
+          python -m pytest .claude/plugins/zhanghui/scripts/tests/test_guard_command_contract.py -q
+      - name: Project locator contract
+        run: |
+          python -m pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_project_locator.py -q
+      - name: Outline heading contract
+        run: |
+          python -m pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_chapter_outline_directive.py -q
+      - name: Behavior evals (fast suite)
+        run: |
+          python -m pytest .claude/plugins/zhanghui/scripts/tests/test_run_behavior_evals.py -q

@@ -139,15 +139,47 @@ def add_timed_lock(state: dict, item: dict) -> dict:
     return state
 
 
-def fulfill_timed_lock(state: dict, lock_id: str, chapter: int) -> dict:
+def fulfill_timed_lock(
+    state: dict,
+    lock_id: str,
+    chapter: int,
+    *,
+    evidence: str = "",
+    evidence_sha256: str = "",
+    note: str = "",
+    idempotent: bool = True,
+) -> dict:
+    """Mark a timed lock fulfilled by an already-accepted chapter.
+
+    限时锁是**规划义务**（Intent），不是 Canon 事实：它只描述「必须在第 N 章之前发生」。
+    因此兑现判定必须由调用方先拿到正式证据（该章已被 `ChapterCommitService` 接受，必要时
+    再绑定正文原文引用），本函数只负责落状态，绝不自行推断「Writer 说兑现了就算兑现」。
+
+    Idempotent by default: re-running with the same (lock_id, chapter) is a no-op success, so a
+    retried workflow does not fail. A *different* chapter for an already-fulfilled lock is
+    refused — silently re-pointing a fulfilled obligation at another chapter would rewrite the
+    audit trail.
+    """
     locks = state["story_craft"]["timed_locks"]
     for item in locks:
-        if item["id"] == lock_id:
-            if item["status"] == "fulfilled":
-                raise ValueError(f"{lock_id} already fulfilled")
-            item["status"] = "fulfilled"
-            item["fulfilled_chapter"] = chapter
-            return state
+        if item["id"] != lock_id:
+            continue
+        if item["status"] == "fulfilled":
+            if idempotent and int(item.get("fulfilled_chapter") or 0) == int(chapter):
+                return state
+            raise ValueError(
+                f"{lock_id} already fulfilled at chapter {item.get('fulfilled_chapter')}; "
+                "拒绝改指到其它章节"
+            )
+        item["status"] = "fulfilled"
+        item["fulfilled_chapter"] = chapter
+        if evidence:
+            item["fulfilled_evidence"] = evidence
+        if evidence_sha256:
+            item["fulfilled_evidence_sha256"] = evidence_sha256
+        if note:
+            item["fulfilled_note"] = note
+        return state
     raise ValueError(f"timed_lock {lock_id} not found")
 
 
@@ -288,6 +320,9 @@ def classify_story_craft_field(field_path: str, value: Any = None, *,
             return "INTENT"
         if key in _DOCUMENT_META_FIELDS:
             return "DERIVED_REFERENCE"
+        if key == "_source":
+            # provenance of the derived chapter_meta copy (chapter_intent_sync)
+            return "DERIVED_REFERENCE"
         if key in {"foreshadow_buried", "foreshadow_paid_off"}:
             return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
         return "UNKNOWN"
@@ -327,7 +362,9 @@ def classify_story_craft_field(field_path: str, value: Any = None, *,
     if root == "timed_locks":
         if child in {"id", "description", "trigger_chapter", "deadline_chapter", "status"}:
             return "INTENT"
-        if child == "fulfilled_chapter":
+        if child in {"fulfilled_chapter", "fulfilled_evidence", "fulfilled_evidence_sha256",
+                     "fulfilled_note"}:
+            # evidence pointing at an already-accepted chapter
             return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
         if child == "occurrence_ref":
             return "DERIVED_REFERENCE" if accepted_evidence_linked else "UNKNOWN"
