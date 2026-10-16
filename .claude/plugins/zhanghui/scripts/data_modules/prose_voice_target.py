@@ -83,7 +83,12 @@ class VoiceTarget:
         if self.core_rules:
             lines.append("- 最高优先级写作原则 (宪法):")
             for r in self.core_rules[:4]:
-                lines.append(f"  * {r.lstrip('#-*\t ').strip()}")
+                # NOTE: the strip expression is lifted out of the f-string on purpose — a
+                # backslash inside an f-string expression is a Python 3.12+ feature, while the
+                # plugin declares `requires-python = ">=3.11"`. Inlined, this line made
+                # `prose_pipeline` un-importable on a supported interpreter.
+                rule_text = r.lstrip("#-*\t ").strip()
+                lines.append(f"  * {rule_text}")
         elif self.positive_guidance:
             lines.append("- 正向写作准则:")
             for item in self.positive_guidance[:4]:

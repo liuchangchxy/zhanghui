@@ -32,7 +32,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest pydantic
+          # the plugin's declared runtime deps (scripts/pyproject.toml) plus pytest, so the
+          # contract tests exercise the same import surface a real installation has
+          python -m pip install pytest pydantic filelock aiohttp jieba jinja2 pypinyin
       - name: Cross-module contract tests
         run: |
           python -m pytest \
@@ -47,6 +49,9 @@ jobs:
       - name: Guard hook command contract
         run: |
           python -m pytest .claude/plugins/zhanghui/scripts/tests/test_guard_command_contract.py -q
+      - name: Declared Python floor is actually supported
+        run: |
+          python -m pytest tests/integration/test_python_floor_compat.py -q
       - name: Project locator contract
         run: |
           python -m pytest .claude/plugins/zhanghui/scripts/data_modules/tests/test_project_locator.py -q

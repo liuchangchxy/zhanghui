@@ -39,11 +39,25 @@ def _payload() -> dict:
     }
 
 
-def test_rank_pack_budget_selects_instead_of_only_sorting():
+def _ranker(tmp_path: Path):
+    """Bind the ranker to an explicit project root.
+
+    `ContextRanker()` defaults to the ambient project resolution, which made these tests depend
+    on wherever the suite happened to run from.
+    """
+    from data_modules.config import DataModulesConfig
     from data_modules.context_ranker import ContextRanker
 
+    return ContextRanker(DataModulesConfig.from_project_root(tmp_path))
+
+
+def test_rank_pack_budget_selects_instead_of_only_sorting(tmp_path: Path):
+    from data_modules.context_ranker import ContextRanker
+
+    ranker = _ranker(tmp_path)
+
     pack = _payload()
-    ranked = ContextRanker().rank_pack(pack, 3, budget=20000)
+    ranked = ranker.rank_pack(pack, 3, budget=20000)
     selection = ranked["meta"]["ranker"]["selection"]
     assert selection, "budget must actually drop items"
     assert len(ranked["reference"]) <= ContextRanker.BUDGET_SECTION_CAPS["reference"]
@@ -51,11 +65,11 @@ def test_rank_pack_budget_selects_instead_of_only_sorting():
     assert len(ranked["core"]["recent_summaries"]) <= ContextRanker.BUDGET_SECTION_CAPS["recent_summaries"]
 
 
-def test_rank_pack_without_budget_keeps_full_pack():
+def test_rank_pack_without_budget_keeps_full_pack(tmp_path: Path):
     from data_modules.context_ranker import ContextRanker
 
     pack = _payload()
-    ranked = ContextRanker().rank_pack(pack, 3)
+    ranked = _ranker(tmp_path).rank_pack(pack, 3)
     assert len(ranked["reference"]) == len(pack["reference"])
     assert "selection" not in ranked["meta"]["ranker"]
 
