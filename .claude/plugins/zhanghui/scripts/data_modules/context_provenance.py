@@ -234,6 +234,7 @@ def load_commit_fact_items(project_root: Path, chapter: int, owned_view=None) ->
                     chapter=commit_chapter, provenance_status="verified",
                     fact_key=(entity, str(field_name)),
                 ))
+        state_delta_keys: set[tuple[str, str]] = set()
         for delta in extraction.get("state_deltas", []) or []:
             if not isinstance(delta, dict):
                 continue
@@ -242,6 +243,7 @@ def load_commit_fact_items(project_root: Path, chapter: int, owned_view=None) ->
             if not entity or not field_name:
                 continue
             value = delta.get("new", delta.get("new_value"))
+            state_delta_keys.add((entity, field_name))
             items.append(ContextItem(
                 content={"entity_id": entity, "field": field_name, "value": value},
                 semantic_role="CANON", source_role="COMMIT", source_ref=ref,
@@ -277,6 +279,17 @@ def load_commit_fact_items(project_root: Path, chapter: int, owned_view=None) ->
                 ))
                 continue
             if event_type not in {"character_state_changed", "power_breakthrough", "relationship_changed"} or not entity or not field_name:
+                continue
+            # A character_state_changed/power_breakthrough event is the mirror representation of
+            # a field-level state_delta for the same (entity, field) (agents/data-agent.md 7.1:
+            # "field + old + new, 与 state_deltas 一致"). Every projection writer already applies
+            # that precedence: it seeds a `seen` set from state_deltas and skips any event whose
+            # (entity, field) a delta already covers (state_projection_writer._collect_state_deltas,
+            # index_projection_writer._collect_state_changes). Mirror that precedence at this read
+            # boundary too, so a wording-only difference between the two representations of one
+            # change is not misread as a canonical fact conflict. Two conflicting state_deltas, two
+            # conflicting events, and cross-chapter conflicts still fail closed in resolve_fact_items.
+            if (entity, field_name) in state_delta_keys:
                 continue
             value = body.get("new", body.get("to", body.get("new_value", body.get("new_state"))))
             items.append(ContextItem(

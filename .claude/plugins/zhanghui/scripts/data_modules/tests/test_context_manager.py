@@ -937,3 +937,49 @@ CEN：决定将计就计
     assert plot_structure.get("cen") == "决定将计就计"
     assert plot_structure.get("mandatory_nodes") == ["发现陷阱"]
     assert plot_structure.get("prohibitions") == ["不能直接翻脸"]
+
+
+def test_context_manager_builds_next_chapter_after_mirrored_state_commit(temp_project):
+    """End-to-end: a real commit whose mirror event is re-worded must not halt chapter N+1.
+
+    agents/data-agent.md 7.1 makes `character_state_changed` a mirror of the field-level
+    `state_delta` for the same (entity, field). Before the fix, `load_commit_fact_items` read
+    both as independent authoritative facts, so a wording-only difference raised
+    "canonical fact conflict" from `build_governed_context` and the whole creative run stopped
+    after chapter 1. This drives the real ContextManager path, not just the reader in isolation.
+    """
+    temp_project.state_file.write_text(json.dumps({
+        "project": {"genre": "末世"},
+        "progress": {"current_chapter": 1},
+        "protagonist_state": {"name": "林玥"},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    story_root = temp_project.story_system_dir
+    (story_root / "commits").mkdir(parents=True, exist_ok=True)
+    (story_root / "MASTER_SETTING.json").write_text(json.dumps({
+        "meta": {"schema_version": "story-system/v1", "contract_type": "MASTER_SETTING"},
+        "route": {"primary_genre": "末世"},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    payload = _commit_payload(1, "accepted")
+    payload["extraction_result"] = {
+        "entity_deltas": [],
+        "state_deltas": [
+            {"entity_id": "lin_yue", "field": "equipment.mask_condition", "old": "完好",
+             "new": "侧面被锈蚀断口刮开一道口子，断口对不齐、按不平，不可修补"},
+        ],
+        "accepted_events": [
+            {"event_id": "evt-ch001-003", "chapter": 1, "event_type": "character_state_changed",
+             "subject": "lin_yue",
+             "payload": {"field": "equipment.mask_condition", "old": "完好",
+                         "new": "侧面被锈蚀断口刮开一道口子，断口对不齐、按不平"}},
+        ],
+    }
+    (story_root / "commits" / "chapter_001.commit.json").write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    built = ContextManager(temp_project).build_context(2)
+
+    canon = json.dumps(built["canon"], ensure_ascii=False)
+    assert "不可修补" in canon
+    assert "equipment.mask_condition" in canon
