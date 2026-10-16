@@ -57,7 +57,34 @@ REGISTERED_CLI_SUBCOMMANDS = {
     "init", "extract-context", "memory-contract", "project-memory", "review-pipeline",
     "placeholder-scan", "master-outline-sync",
     "story-system", "chapter-commit", "story-events", "correction", "knowledge", "runtime", "prose",
+    "story-craft",
 }
+
+
+def _registered_subcommands_from_parser() -> set[str]:
+    """Read the real CLI registry instead of maintaining a parallel hand-written list.
+
+    The hand-written set had already drifted (it was missing `story-craft`), so prompts could
+    reference a real command and still fail this test. Deriving the set from the parser makes
+    the check about *whether the command exists*, which is what it is meant to verify.
+    """
+    try:
+        from data_modules.webnovel import build_parser
+    except Exception:  # pragma: no cover - fall back to the static list
+        return set(REGISTERED_CLI_SUBCOMMANDS)
+
+    parser = build_parser()
+    names: set[str] = set()
+    for action in parser._actions:  # noqa: SLF001 - argparse exposes no public API for this
+        choices = getattr(action, "choices", None)
+        if isinstance(choices, dict) and getattr(action, "dest", "") == "command":
+            names.update(str(name) for name in choices)
+        elif isinstance(choices, dict):
+            names.update(str(name) for name in choices)
+    return names or set(REGISTERED_CLI_SUBCOMMANDS)
+
+
+REGISTERED_CLI_SUBCOMMANDS |= _registered_subcommands_from_parser()
 
 
 # ---------------------------------------------------------------------------

@@ -12,13 +12,154 @@ To keep scripts robust, always resolve chapter files via these helpers instead o
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 
 _CHAPTER_NUM_RE = re.compile(r"第(?P<num>\d+)章")
-_OUTLINE_HEADING_RE = re.compile(r"^#{1,6}\s*第\s*(?P<num>\d+)\s*章[：:]\s*(?P<title>.+?)\s*$", re.MULTILINE)
 _SPLIT_OUTLINE_FILENAME_RE = re.compile(r"^第0*(?P<num>\d+)章[-—_ ]+(?P<title>.+?)\.md$")
+
+
+# ---------------------------------------------------------------------------
+# 章纲标题契约（单一真源 / single shared heading contract）
+# ---------------------------------------------------------------------------
+# 官方模板 `templates/output/大纲-卷详细大纲.md` 生成的章标题写作 `## 第{N}章：`，
+# 而 planner 手写章纲时可能用 `### 第1章：` / `## 第一章` 等变体。历史上
+# `chapter_outline_loader._extract_outline_section` 只匹配 `###`，导致「照官方模板
+# 规划 → runtime prepare 读不到章纲」。
+#
+# 该正则即为模板、加载器与章节路径识别共用的唯一标题契约，兼容：
+#   - 1..6 级标题（# ~ ######）
+#   - 阿拉伯数字与常用中文数字（一/二/两/三/十/二十一 …）
+#   - 全角冒号、半角冒号、无冒号（`## 第1章 标题` 也接受）
+#   - 标题前后任意合理空格
+CHINESE_NUMERAL_DIGITS: dict[str, int] = {
+    "零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+    "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
+}
+
+OUTLINE_CHAPTER_HEADING_RE = re.compile(
+    r"^(?P<hashes>#{1,6})[ \t]*第[ \t]*(?P<num>\d+|[零〇一二两三四五六七八九十]+)[ \t]*章"
+    r"(?P<rest>[ \t]*(?:[：:、.．][ \t]*)?(?P<title>.*?))[ \t]*$",
+    re.MULTILINE,
+)
+
+
+def parse_chapter_number(value: object) -> Optional[int]:
+    """把章号写法（阿拉伯数字或中文数字）解析成 int。无法解析返回 None。"""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.isdigit():
+        return int(text)
+    if text in CHINESE_NUMERAL_DIGITS:
+        return CHINESE_NUMERAL_DIGITS[text]
+    if text == "十":
+        return 10
+    if "十" in text:
+        left, _, right = text.partition("十")
+        tens = CHINESE_NUMERAL_DIGITS.get(left, 1 if not left else 0)
+        ones = CHINESE_NUMERAL_DIGITS.get(right, 0) if right else 0
+        return (tens * 10 + ones) or None
+    parsed = 0
+    for char in text:
+        digit = CHINESE_NUMERAL_DIGITS.get(char)
+        if digit is None:
+            return None
+        parsed = parsed * 10 + digit
+    return parsed or None
+
+
+@dataclass(frozen=True)
+class OutlineChapterHeading:
+    """章纲里的一个章标题。"""
+
+    num: int
+    title: str
+    level: int
+    start: int
+    end: int
+
+
+_FENCE_RE = re.compile(r"^[ \t]*(?P<fence>```+|~~~+)")
+
+
+def _blank(line: str) -> str:
+    return "".join("\n" if ch == "\n" else "\r" if ch == "\r" else " " for ch in line)
+
+
+def mask_fenced_code_blocks(text: str) -> str:
+    """把围栏代码块（``` / ~~~）内容替换成等长空格，保留全部偏移与行结构。
+
+    官方章纲模板把「章模板」与「章节示例」都放在 fenced block 里；如果 planner
+    把整份模板连同示例一起复制进 `大纲/第N卷-详细大纲.md`，示例里的
+    `## 第4章：迦南学院的考验` 会被误当成第 4 章的真实章纲。屏蔽 fenced block
+    后，只有真实章纲参与标题解析。
+    """
+    lines = str(text or "").splitlines(keepends=True)
+    masked: list[str] = []
+    fence_token: Optional[str] = None
+    for line in lines:
+        stripped_line = line.rstrip("\r\n")
+        match = _FENCE_RE.match(stripped_line)
+        if fence_token is None:
+            if match is not None:
+                fence_token = match.group("fence")[0]
+                masked.append(_blank(line))
+                continue
+            masked.append(line)
+            continue
+        # inside a fenced block
+        masked.append(_blank(line))
+        if match is not None and match.group("fence")[0] == fence_token and len(match.group("fence")) >= 3:
+            fence_token = None
+    return "".join(masked)
+
+
+def iter_outline_chapter_headings(text: str) -> list[OutlineChapterHeading]:
+    """按出现顺序返回文本中所有章标题（含层级、标题、行首/行尾偏移）。
+
+    围栏代码块内的标题（模板示例）不参与解析。
+    """
+    masked = mask_fenced_code_blocks(text)
+    headings: list[OutlineChapterHeading] = []
+    for match in OUTLINE_CHAPTER_HEADING_RE.finditer(masked):
+        num = parse_chapter_number(match.group("num"))
+        if num is None:
+            continue
+        headings.append(
+            OutlineChapterHeading(
+                num=num,
+                title=(match.group("title") or "").strip(),
+                level=len(match.group("hashes")),
+                start=match.start(),
+                end=match.end(),
+            )
+        )
+    return headings
+
+
+def find_outline_chapter_section(text: str, chapter_num: int) -> Optional[str]:
+    """截取某章在章纲文件中的完整小节（含章标题行）。
+
+    小节结束于「下一个同级或更高级标题」。因为章正文内部只用加粗字段标签、
+    不用 markdown 标题，所以正常章纲不会被截断；若某章正文里出现更深的
+    `####` 小标题，也会被正确包含在本章小节内。
+    """
+    content = str(text or "")
+    headings = iter_outline_chapter_headings(content)
+    # offsets come from the fenced-masked copy, which is length-preserving
+    for index, heading in enumerate(headings):
+        if heading.num != chapter_num:
+            continue
+        end = len(content)
+        for following in headings[index + 1:]:
+            if following.level <= heading.level:
+                end = following.start
+                break
+        return content[heading.start:end].strip()
+    return None
 
 
 def volume_num_for_chapter(chapter_num: int, *, chapters_per_volume: int = 50) -> int:
@@ -52,10 +193,12 @@ def _safe_title_for_filename(title: str) -> str:
 
 
 def _extract_title_from_outline_text(outline_text: str, chapter_num: int) -> str:
-    for match in _OUTLINE_HEADING_RE.finditer(outline_text):
-        if int(match.group("num")) != chapter_num:
+    for heading in iter_outline_chapter_headings(outline_text):
+        if heading.num != chapter_num:
             continue
-        return _safe_title_for_filename(match.group("title"))
+        title = _safe_title_for_filename(heading.title)
+        if title:
+            return title
     return ""
 
 
