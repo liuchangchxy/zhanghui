@@ -35,6 +35,9 @@ allowed-tools: Read Write Edit Grep Bash Agent
 
 ## 执行流程
 
+> **绝对禁令**：**严禁直接修改或覆盖 `正文/第{chapter_padded}章*.md`**！所有修订输出严格保存在
+> 工作草稿与 `.webnovel/tmp/` 下。正式正文只能由 `runtime publish-draft` 发布。
+
 ### Step 0：状态机与前置检查
 
 1. 环境与项目解析：
@@ -70,28 +73,87 @@ allowed-tools: Read Write Edit Grep Bash Agent
      --chapter {chapter_num} --format json > "${PROJECT_ROOT}/.webnovel/tmp/ch{chapter_padded}-revise-context.json"
    ```
 
-### Step 2：局部重写工作草稿（Working Draft Local Revision）
+### Step 2：定向修订（Host-Model Local Revision）
 
-针对工作草稿执行 dry-run 验证与真实重写：
-```bash
-# 1. dry-run 确认目标段落
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
-    --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
-    --contract "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
-    --context-file "${PROJECT_ROOT}/.webnovel/tmp/ch{chapter_padded}-revise-context.json" \
-    --dry-run
+**定位不依赖 `## §N` 标题。** 真实章节正文没有这种结构，审查意见给的是「第79段」「第45段 / 第83段」
+或原文引用。修订分四步，全部走正式 CLI：
 
-# 2. 真实重写并写回工作草稿
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
-    --chapter-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
-    --contract "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
-    --context-file "${PROJECT_ROOT}/.webnovel/tmp/ch{chapter_padded}-revise-context.json" \
-    --output "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"
-```
+1. **生成定向修订计划**（把 reviewer JSON 转成可执行的最小改动清单）：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise plan \
+     --chapter {chapter_num} \
+     --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --review-result "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+     --draft-id "{draft_id}" --draft-fingerprint "{draft_fingerprint}" \
+     --output "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" --format text
+   ```
+   计划逐条给出 `locator`（`paragraph` / `line` / `quote` / `section` / `chapter`）、命中的字符区间、
+   `before_text`、`fix_hint` 与 `kind`。默认包含非阻断（advisory）问题；`--blocking-only` 可只看阻断项。
+   - `resolvable=false` / `ambiguity=ambiguous_quote` 的条目**不会被自动替换**：同一句话在正文里
+     出现多次时，脚本拒绝猜位置，需要在 `--edits` 里补上更长的原文引用或改用段落号。
+   - `locator=chapter`（整章范围）不属于可编辑区间 —— 它表示「这需要重新起草的决策」，不是「可以就地重写整章」。
 
-**绝对禁令**：**严禁直接修改或覆盖 `正文/第{chapter_padded}章*.md`**！所有修订输出严格保存在工作草稿。
+2. **读取受治理上下文**（供改写时对照 Canon / 意图 / 禁区）：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime governed-context \
+     --chapter {chapter_num} --format json > "${PROJECT_ROOT}/.webnovel/tmp/ch{chapter_padded}-revise-context.json"
+   ```
+
+3. **主流程（当前模型）改写对应句段**，把替换写成 edits 文件：
+   `${PROJECT_ROOT}/.webnovel/tmp/revision_edits_{chapter_padded}.json`
+   ```json
+   [{"target_id": "<计划里的 issue_id>", "new_text": "<该区间改写后的原文>"}]
+   ```
+   一次只改计划命中的区间；不做整章重写。
+
+4. **应用并校验**：
+   ```bash
+   # 应用（草稿若在计划生成后被改过，会以 drift 报错拒绝，绝不盲改）
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise apply \
+     --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" \
+     --edits "${PROJECT_ROOT}/.webnovel/tmp/revision_edits_{chapter_padded}.json" \
+     --output "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md"
+
+   # 边界校验：只允许计划区间发生变化
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise verify \
+     --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
+     --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json"
+   ```
+   - `out_of_scope_changes` 非空 → 改动越界，回退重做，不得带着越界改动进入重审。
+   - `untouched_targets` 列出本轮没有真正改到的条目，需要回到第 3 步补做。
+   - `changed=false`（正文没变）→ **不登记新草稿、不重跑审查、不重新初始化全书或整卷规划**，
+     沿用当前 `draft_id` 与既有审查结论。
+
+5. **事实安全校验**（事实类改动必须过这道门；纯文风改动用宿主 Judge 裁决路径）：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
+     --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
+     --chapter {chapter_num}
+   ```
+   看 `semantic_outcome`（不是 `status`）。`UNCERTAIN` 时按 `webnovel-write` 的
+   「Semantic Judge 宿主裁决」三步接线重验（`prose judge-request` → 宿主模型裁决 → `prose judge-bind`
+   → `prose validate --judge-file`）；Judge 未接通或失败则保持 `ROLLEDBACK`（fail-closed），
+   **严禁伪造裁决**。
+
+   > 事实边界的区分（不要混淆）：
+   > - 纯文风修饰 / 非事实性措辞优化 → 可走 Semantic Judge 的 `STYLE_ONLY_SAFE` 判断；
+   > - 待提交草稿内部的事实纠错 → 走本步骤的受治理草稿修订 + 重新审查；
+   > - 已 accepted 章节的历史订正 → 只能走 Canon Correction，普通 revise 必须 fail-closed。
+   > **不得把事实修改伪装成 STYLE_ONLY_SAFE。**
+
+> **兼容路径（非默认）**：`scripts/revise_chapter.py` 仍然保留，用 `## §N` 分段 + 独立 Anthropic SDK
+> 重写段落，需要额外的 `ANTHROPIC_API_KEY`。它只适用于正文确实采用 `## §N` 结构的老项目；
+> 正常流程请使用上面的宿主模型路径，不需要额外 API Key。
 
 ### Step 3：刷新 ProposedChanges 与重新登记草稿（Re-Ingestion）
+
+0. **确认采用修订稿**：`revise verify` 通过（`boundary_ok=true`）且 `semantic_outcome` 允许后，
+   把 `${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md` 覆盖回工作草稿
+   `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`。
+   若 `changed=false`，跳过本步全部动作，直接沿用现有草稿身份。
 
 1. **刷新 CHANGES**：依据修订后的工作草稿全文重新生成末尾的 `<chapter_changes>...</chapter_changes>` 提案块。局部重写必须保持完整的 8 个顶级标准字段，确保协议块不被破坏。
 2. **清理历史与上一轮草稿残留产物（防止脏数据与跨版本混用）**：
@@ -187,7 +249,12 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/revise_chapter.py \
    done
    ```
    若任一必需产物缺失，严禁调用 `runtime commit`。
-5. **事实提交（Runtime Commit）**：
+5. **write-gate precommit 闸门**（产物齐备后、提交之前；退出码 `0` 才可提交）：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage precommit
+   ```
+   非 `0` 时按 `errors[].repair` 回到对应上游步骤补齐，严禁为通过闸门伪造 Data Agent 产物。
+6. **事实提交（Runtime Commit）**：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime commit \
      --chapter {chapter_num} \

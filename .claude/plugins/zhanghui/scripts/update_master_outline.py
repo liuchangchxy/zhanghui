@@ -94,10 +94,55 @@ def _render_row(cells: list[Any]) -> str:
     return "| " + " | ".join(_cell(cell) for cell in cells) + " |"
 
 
-def _normalize_anchor(payload: dict[str, Any], expected_volume: int) -> dict[str, str]:
-    raw = payload.get("next_volume_anchor")
-    if not isinstance(raw, dict):
+# 单卷 / 明确 deferred 时，写回 JSON 用这些形态表达「不存在 V+1」。skill 规定
+# 「V+1 不存在或 deferred 时留空（不伪造）」，因此 CLI 必须接受空状态，而不是逼作者编造
+# 一个不存在的下一卷。
+_EMPTY_ANCHOR_TOKENS = {"", "none", "null", "n/a", "na", "deferred", "无", "空", "[]", "{}"}
+_EMPTY_ANCHOR_STATUSES = {"deferred", "absent", "none", "not_planned", "unplanned", "single_volume", "无", "未规划"}
+
+
+def _anchor_declares_absent(raw: Any) -> bool:
+    """True when the writeback explicitly says there is no V+1 (single volume / deferred)."""
+    if raw is None:
+        return True
+    if isinstance(raw, str):
+        return raw.strip().lower() in _EMPTY_ANCHOR_TOKENS
+    if isinstance(raw, (list, tuple)):
+        return len(raw) == 0
+    if isinstance(raw, dict):
+        if not raw:
+            return True
+        status = str(raw.get("status") or raw.get("state") or "").strip().lower()
+        if status in _EMPTY_ANCHOR_STATUSES:
+            return True
+        volume_value = raw.get("volume") or raw.get("volume_id") or raw.get("卷号")
+        if volume_value in (None, "", 0, "0"):
+            # A dict with no volume number and no name/conflict/climax carries no anchor.
+            name = raw.get("volume_name") or raw.get("name") or raw.get("卷名")
+            conflict = raw.get("core_conflict") or raw.get("核心冲突")
+            climax = raw.get("volume_end_climax") or raw.get("end_climax") or raw.get("卷末高潮")
+            if not any(_cell(v) for v in (name, conflict, climax)):
+                return True
+        return False
+    return False
+
+
+def _normalize_anchor(payload: dict[str, Any], expected_volume: int) -> dict[str, str] | None:
+    """Return the V+1 anchor row, or None when the writeback declares no next volume.
+
+    Returning None is a legitimate, *supported* state — it is how a single-volume book
+    (`volumes: []`, `later_volumes_status: deferred`) completes planning without inventing a
+    next volume.
+    """
+    if "next_volume_anchor" not in payload:
         raise MasterOutlineSyncError("writeback JSON missing object field: next_volume_anchor")
+    raw = payload.get("next_volume_anchor")
+    if _anchor_declares_absent(raw):
+        return None
+    if not isinstance(raw, dict):
+        raise MasterOutlineSyncError(
+            "next_volume_anchor must be an object, null, or an empty/deferred marker"
+        )
 
     volume_value = raw.get("volume") or raw.get("volume_id") or raw.get("卷号") or expected_volume
     try:
@@ -313,7 +358,15 @@ def sync_master_outline(
     structured_items = _structured_writeback_items(payload)
 
     before = master_path.read_text(encoding="utf-8")
-    after, volume_changed = _update_volume_table(before, anchor, on_conflict=on_conflict, target_path=master_path)
+    if anchor is None:
+        # 单卷 / deferred：合法空状态。不写 V+1 行，也不伪造下一卷名称与剧情。
+        after, volume_changed = before, False
+        anchor_state = "absent"
+    else:
+        after, volume_changed = _update_volume_table(
+            before, anchor, on_conflict=on_conflict, target_path=master_path
+        )
+        anchor_state = "written" if volume_changed else "already_present"
     after, appended_count = _append_foreshadow_rows(after, structured_items)
     if after != before:
         master_path.write_text(after, encoding="utf-8")
@@ -323,6 +376,7 @@ def sync_master_outline(
         "master_outline": master_path.relative_to(root).as_posix(),
         "writeback_file": source_path.relative_to(root).as_posix(),
         "next_volume": volume + 1,
+        "next_volume_anchor_state": anchor_state,
         "volume_anchor_written": volume_changed,
         "structured_items_appended": appended_count,
         "updated": after != before,
@@ -366,9 +420,16 @@ def main() -> None:
     if args.format == "json":
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
+        anchor_state = result.get("next_volume_anchor_state", "written")
+        note = (
+            "  (单卷/deferred：V+1 留空，未伪造下一卷)"
+            if anchor_state == "absent"
+            else ""
+        )
         print(
             "OK master outline synced: "
             f"next_volume={result['next_volume']} "
+            f"anchor={anchor_state}{note} "
             f"structured_items_appended={result['structured_items_appended']}"
         )
 

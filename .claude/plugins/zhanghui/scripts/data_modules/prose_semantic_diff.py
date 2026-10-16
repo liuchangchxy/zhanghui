@@ -63,21 +63,60 @@ def set_default_semantic_judge(judge: Optional[SemanticJudgeCallable]) -> None:
 
 
 def get_default_semantic_judge() -> Optional[SemanticJudgeCallable]:
-    """Get current default semantic judge callback."""
+    """Get current default semantic judge callback.
+
+    The environment-provided verdict (`ZHANGHUI_SEMANTIC_JUDGE_RESULT`, either an inline JSON
+    string or a path to a response file) is **bound** to the prose it was produced for: when
+    the callback is invoked with different before/after text, binding validation raises and
+    `compare_semantic_facts` fails closed to UNCERTAIN. That is what stops an old verdict from
+    being silently replayed onto a different chapter.
+    """
     global _DEFAULT_SEMANTIC_JUDGE
     if _DEFAULT_SEMANTIC_JUDGE is not None:
         return _DEFAULT_SEMANTIC_JUDGE
     env_judge = os.environ.get("ZHANGHUI_SEMANTIC_JUDGE_RESULT", "").strip()
-    if env_judge:
-        if Path(env_judge).is_file():
-            content = Path(env_judge).read_text(encoding="utf-8")
-            return lambda b, a: content
-        return lambda b, a: env_judge
-    return None
+    if not env_judge:
+        return None
+    if Path(env_judge).is_file():
+        payload: Any = Path(env_judge).read_text(encoding="utf-8")
+    else:
+        payload = env_judge
+
+    def _bound_judge(before_prose: str, after_prose: str) -> Any:
+        from .prose_judge_host import make_bound_judge_callable
+
+        return make_bound_judge_callable(
+            payload, before_prose, after_prose, require_binding=True
+        )(before_prose, after_prose)
+
+    return _bound_judge
 
 
-def build_semantic_judge_prompt(before_prose: str, after_prose: str) -> str:
-    """Construct structured semantic judge prompt for LLM host."""
+def build_semantic_judge_prompt(
+    before_prose: str,
+    after_prose: str,
+    canon_constraints: Any = None,
+) -> str:
+    """Construct structured semantic judge prompt for LLM host.
+
+    `canon_constraints` (optional) is rendered into the prompt so the judge reasons against the
+    chapter's governing facts, not just the two text blobs.
+    """
+    constraints_block = ""
+    if canon_constraints:
+        try:
+            rendered = (
+                canon_constraints
+                if isinstance(canon_constraints, str)
+                else json.dumps(canon_constraints, ensure_ascii=False, indent=2)
+            )
+        except Exception:
+            rendered = str(canon_constraints)
+        constraints_block = (
+            "\n【本章受治理约束（Canon / Intent / 禁区）】\n"
+            f"{rendered}\n"
+            "裁决时必须同时检查改动是否违反上述约束；违反即 SEMANTIC_CHANGE_PROPOSED。\n"
+        )
     return f"""你现在是网文事实安全裁决员（Semantic Judge）。
 请对比以下【修改前正文】与【修改后正文】，严格审查是否存在任何故事事实、设定或逻辑漂移。
 
@@ -93,7 +132,7 @@ def build_semantic_judge_prompt(before_prose: str, after_prose: str) -> str:
 9. 世界规则 (world_rule)
 10. 线索 (clue)
 11. 知情状态 (epistemic)
-
+{constraints_block}
 【输出要求】：
 必须且仅输出以下 JSON 格式（不要包含任何其他文字或多余解释）：
 {{

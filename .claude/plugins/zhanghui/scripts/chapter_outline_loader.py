@@ -9,9 +9,19 @@ from pathlib import Path
 from typing import Any, Dict
 
 try:
-    from chapter_paths import volume_num_for_chapter
+    from chapter_paths import (
+        find_outline_chapter_section,
+        iter_outline_chapter_headings,
+        parse_chapter_number,
+        volume_num_for_chapter,
+    )
 except ImportError:  # pragma: no cover
-    from scripts.chapter_paths import volume_num_for_chapter
+    from scripts.chapter_paths import (
+        find_outline_chapter_section,
+        iter_outline_chapter_headings,
+        parse_chapter_number,
+        volume_num_for_chapter,
+    )
 
 
 _CHAPTER_RANGE_RE = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
@@ -99,50 +109,17 @@ def _find_volume_outline_file(project_root: Path, chapter_num: int) -> Path | No
 
 
 def _extract_outline_section(content: str, chapter_num: int) -> str | None:
-    patterns = [
-        rf"###\s*第\s*{chapter_num}\s*章[：:]\s*(.+?)(?=###\s*第\s*\d+\s*章|##\s|$)",
-        rf"###\s*第{chapter_num}章[：:]\s*(.+?)(?=###\s*第\d+章|##\s|$)",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, content, re.DOTALL)
-        if match:
-            return match.group(0).strip()
-    return None
+    """截取某章章纲小节。
 
-
-def _parse_chinese_chapter_num(value: str) -> int | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    if text.isdigit():
-        return int(text)
-    if text in _CHINESE_NUMERAL_DIGITS:
-        return _CHINESE_NUMERAL_DIGITS[text]
-    if text == "十":
-        return 10
-    if "十" in text:
-        left, _, right = text.partition("十")
-        tens = _CHINESE_NUMERAL_DIGITS.get(left, 1 if not left else 0)
-        ones = _CHINESE_NUMERAL_DIGITS.get(right, 0) if right else 0
-        parsed = tens * 10 + ones
-        return parsed or None
-    parsed = 0
-    for char in text:
-        digit = _CHINESE_NUMERAL_DIGITS.get(char)
-        if digit is None:
-            return None
-        parsed = parsed * 10 + digit
-    return parsed or None
+    标题层级/数字写法/冒号形态统一走 `chapter_paths.find_outline_chapter_section`
+    的共享标题契约（官方模板写 `## 第N章：`，历史章纲可能写 `### 第N章：` 或
+    `## 第N章`）。此函数不再自带第三套正则。
+    """
+    return find_outline_chapter_section(content, chapter_num)
 
 
 def _extract_directive_section(content: str, chapter_num: int) -> str | None:
-    matches = list(_CHAPTER_HEADING_RE.finditer(content))
-    for index, match in enumerate(matches):
-        parsed = _parse_chinese_chapter_num(match.group(2))
-        if parsed != chapter_num:
-            continue
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
-        return content[match.start():end].strip()
+    """与 `_extract_outline_section` 完全同源，避免两套标题解析互相漂移。"""
     return _extract_outline_section(content, chapter_num)
 
 
@@ -173,26 +150,21 @@ _PLOT_SECTION_FIELD_MAP = {
     "本章禁区": "prohibitions",
 }
 
-_CHAPTER_HEADING_RE = re.compile(
-    r"^(#{1,6})\s*第\s*([0-9零〇一二两三四五六七八九十]+)\s*章\b.*$",
-    re.MULTILINE,
-)
+def _is_chapter_heading_line(line: str) -> bool:
+    """判断一行是否是章标题行（共享标题契约，含中文数字与可选冒号）。"""
+    return bool(iter_outline_chapter_headings(line))
 
-_CHINESE_NUMERAL_DIGITS = {
-    "零": 0,
-    "〇": 0,
-    "一": 1,
-    "二": 2,
-    "两": 2,
-    "三": 3,
-    "四": 4,
-    "五": 5,
-    "六": 6,
-    "七": 7,
-    "八": 8,
-    "九": 9,
-}
 
+def _parse_chinese_chapter_num(value: str) -> int | None:
+    """向后兼容别名：章号解析已统一到 `chapter_paths.parse_chapter_number`。"""
+    return parse_chapter_number(value)
+
+
+# 章纲字段契约。键为章纲里出现过的字段名（大小写不敏感），值为 governed context
+# 中 `current_intent.directive` 使用的规范键。上半部为历史字段，下半部为官方模板
+# `templates/output/大纲-卷详细大纲.md`「新增 craft 必填字段」段落的字段 —— 这些字段
+# 此前从未被解析，导致 Writer / Reviewer 拿不到本章的 scene_goal / hook_type /
+# foreshadow 义务与 本章禁区。
 _DIRECTIVE_FIELD_MAP = {
     "目标": "goal",
     "本章目标": "goal",
@@ -200,6 +172,8 @@ _DIRECTIVE_FIELD_MAP = {
     "阻力": "obstacles",
     "障碍": "obstacles",
     "代价": "cost",
+    "核心冲突": "conflict",
+    "本章变化": "chapter_change",
     "时间锚点": "time_anchor",
     "时间": "time_anchor",
     "章内跨度": "chapter_span",
@@ -213,27 +187,88 @@ _DIRECTIVE_FIELD_MAP = {
     "本章禁区": "forbidden_zones",
     "章末未闭合问题": "chapter_end_open_question",
     "章末问题": "chapter_end_open_question",
+    "未闭合问题": "chapter_end_open_question",
+    "钩子": "hook",
     "钩子类型": "hook_type",
     "钩子强度": "hook_strength",
     "关键实体": "key_entities",
     "涉及实体": "key_entities",
     "strand": "strand",
     "反派层级": "antagonist_tier",
+    # 官方模板「新增 craft 必填字段」
+    "beat_position": "beat_position",
+    "hook_type": "hook_type",
+    "scene_goal": "scene_goal",
+    "scene_conflict": "scene_conflict",
+    "scene_setback": "scene_setback",
+    "scene_resolution": "scene_resolution",
+    "sequel_reaction": "sequel_reaction",
+    "sequel_dilemma": "sequel_dilemma",
+    "sequel_decision": "sequel_decision",
+    "foreshadow_buried": "foreshadow_buried",
+    "foreshadow_paid_off": "foreshadow_paid_off",
 }
 
-_DIRECTIVE_LIST_FIELDS = {"cpns", "must_cover_nodes", "forbidden_zones", "key_entities"}
+_DIRECTIVE_LIST_FIELDS = {
+    "cpns", "must_cover_nodes", "forbidden_zones", "key_entities",
+    "foreshadow_buried", "foreshadow_paid_off",
+}
+
+# 列表字段的分隔符。cpns 的规范写法是「角色 | 动作 | 结果」，`|` 是字段内分隔符
+# 而非条目分隔符，因此只按中文分号切分，不能把一条 CPN 切成三段。
+_DIRECTIVE_SPLIT_RE = {
+    "cpns": re.compile(r"[；;]+"),
+    "must_cover_nodes": re.compile(r"[、,，；;|]+"),
+    "forbidden_zones": re.compile(r"[、,，；;|]+"),
+    "key_entities": re.compile(r"[、,，；;|]+"),
+    "foreshadow_buried": re.compile(r"[、,，；;|]+"),
+    "foreshadow_paid_off": re.compile(r"[、,，；;|]+"),
+}
+
+# 「无 / 无。 / none / n/a / -」等占位值在列表字段里不入账。
+_EMPTY_FIELD_VALUES = {"", "无", "无。", "none", "n/a", "na", "-", "—", "null", "[]"}
+
+# 未知标签且同行为空值 → 视为结构性小标题（如官方模板的「**新增 craft 必填字段**：」
+# 「**结构化节点**：」），重置当前字段，避免把标题文本拼进上一字段的值里。
+_LABEL_ONLY_RE = re.compile(r"^[^：:\n]{1,32}[：:]\s*$")
+_BOLD_LABEL_RE = re.compile(r"^\*\*[^*]+\*\*\s*[：:]?\s*$")
+_SENTENCE_PUNCT_RE = re.compile(r"[。！？，、；;,.!?…]")
 
 
 def _clean_plot_line(line: str) -> str:
+    """归一化一行章纲：去掉列表符号与 markdown 强调标记。
+
+    官方模板的字段写作 `**目标**：…`、`- **beat_position**：…`；若不清掉 `**`，
+    标签正则匹配不到任何字段，整章 directive / plot_structure 会退化成空字典。
+    """
     text = str(line or "").strip()
-    text = re.sub(r"^[\-\*•]+\s*", "", text)
+    text = re.sub(r"^[-*•]\s+", "", text)
     text = re.sub(r"^\d+[\.、]\s*", "", text)
+    text = text.replace("**", "").replace("__", "")
+    text = re.sub(r"^`+|`+$", "", text)
     return text.strip()
+
+
+def _is_structural_label_line(raw_line: str, cleaned: str) -> bool:
+    """判断一行是否是「结构性小标题」而不是某个字段的延续行。
+
+    官方模板用 `**新增 craft 必填字段**：` / `**结构化节点**：` 分节。这些行若不识别，
+    会把标题文字拼进上一个字段的值里（例如把「新增 craft 必填字段」拼进 scene_resolution）。
+    只在「带加粗的独立标签行」或「短标签行且无句读」时判定为小标题，避免误吃正文。
+    """
+    if _BOLD_LABEL_RE.match(str(raw_line or "").strip()):
+        return True
+    if not _LABEL_ONLY_RE.match(cleaned):
+        return False
+    label = re.split(r"[：:]", cleaned, maxsplit=1)[0]
+    return not _SENTENCE_PUNCT_RE.search(label)
 
 
 def _append_plot_value(target: Dict[str, Any], field: str, value: str) -> None:
     value = _clean_plot_line(value)
     if not value:
+        return
+    if field in {"cpns", "mandatory_nodes", "prohibitions"} and value.lower() in _EMPTY_FIELD_VALUES:
         return
 
     if field in {"cpns", "mandatory_nodes", "prohibitions"}:
@@ -252,20 +287,24 @@ def _append_plot_value(target: Dict[str, Any], field: str, value: str) -> None:
         target[field] = value
 
 
-def _split_directive_values(value: str) -> list[str]:
+def _split_directive_values(value: str, field: str = "") -> list[str]:
     text = _clean_plot_line(value)
     if not text:
         return []
-    return [part.strip() for part in re.split(r"[、,，；;|]+", text) if part.strip()]
+    pattern = _DIRECTIVE_SPLIT_RE.get(field, re.compile(r"[、,，；;|]+"))
+    return [part.strip() for part in pattern.split(text) if part.strip()]
 
 
 def _append_directive_value(target: Dict[str, Any], field: str, value: str) -> None:
     value = _clean_plot_line(value)
     if not value:
         return
+    if value.lower() in _EMPTY_FIELD_VALUES:
+        # 「无」「n/a」这类占位值不入账；否则 `foreshadow_paid_off：无` 会被当义务。
+        return
     if field in _DIRECTIVE_LIST_FIELDS:
         target.setdefault(field, [])
-        for item in _split_directive_values(value) or [value]:
+        for item in _split_directive_values(value, field) or [value]:
             if item not in target[field]:
                 target[field].append(item)
         return
@@ -286,7 +325,7 @@ def parse_chapter_plot_structure(outline_text: str) -> Dict[str, Any]:
         if not stripped:
             current_field = ""
             continue
-        if re.match(r"^#{1,6}\s*第\s*\d+\s*章", stripped):
+        if _is_chapter_heading_line(stripped):
             current_field = ""
             continue
 
@@ -303,6 +342,10 @@ def parse_chapter_plot_structure(outline_text: str) -> Dict[str, Any]:
         if matched_field:
             current_field = matched_field
             _append_plot_value(structure, matched_field, matched_value)
+            continue
+
+        if _is_structural_label_line(stripped, cleaned):
+            current_field = ""
             continue
 
         if current_field:
@@ -341,7 +384,7 @@ def parse_chapter_execution_directive(outline_text: str) -> Dict[str, Any]:
         if not stripped:
             current_field = ""
             continue
-        if _CHAPTER_HEADING_RE.match(stripped):
+        if _is_chapter_heading_line(stripped):
             current_field = ""
             continue
 
@@ -358,6 +401,9 @@ def parse_chapter_execution_directive(outline_text: str) -> Dict[str, Any]:
         if matched_field:
             current_field = matched_field
             _append_directive_value(directive, matched_field, matched_value)
+            continue
+        if _is_structural_label_line(stripped, cleaned):
+            current_field = ""
             continue
         if current_field:
             _append_directive_value(directive, current_field, cleaned)

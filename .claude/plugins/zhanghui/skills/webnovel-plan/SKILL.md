@@ -284,8 +284,41 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
 
 输出文件：`大纲/第{volume_id}卷-详细大纲.md`
 
-### 一致性检查（plan 阶段）
+### Step 7.5（已存在但常被跳过）：章纲机器一致性检查（plan-check）
 
+章纲写完后、进入 Step 8 前必须运行（这是「按官方模板规划完，写作链路读不到章纲 / 章纲字段丢失」
+这类问题唯一的自动防线）：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" plan-check \
+  --volume {volume_id} --chapters-range "{start}-{end}" --format text
+```
+
+**确定性检查（阻断，退出码 1）**：
+- 章号重复 / 缺号 / 顺序错误 / 超出本卷计划范围；
+- 每章缺少必需字段（`目标`、`本章禁区`、`CBN`、`CEN`、`beat_position`、`hook_type`、
+  `scene_goal`、`scene_conflict`、`sequel_decision`）；
+- 时间线锚点倒退（读 `大纲/第N卷-时间线.md`）。
+
+**信息泄露检查（advisory，不阻断）**：
+章纲里显式写了「第N章…反转/真相/揭示」这类前瞻引用时，检查 `第N章` 的反转用词是否已经出现在
+更早的章节里。命中会给出具体证据（哪个词、哪个来源、哪一行）与三条可裁决选项。
+**注意**：未显式声明的语义泄露不会被猜测 —— 检查只对显式声明下判断，避免制造假门禁。
+因此章纲如果要保护某个反转，请把它写出来，例如：
+
+- 在本章 `本章禁区` 写明 `不得提前透光第8章的位置反转`；或
+- 在 `.webnovel/intent/reveal_protection.json` 登记：
+  ```json
+  {"protections": [{"term": "旧航道", "revealed_at_chapter": 8, "source": "作者确认"}]}
+  ```
+
+报告末尾的 `candidate_protections` 是**候选清单**（从设定集的反转行与伏笔表中层/深层条目里，
+按「原文用词 + 该章反转字段」交叉筛出，已过滤角色名与模板套话）：请逐个确认，确认后写回上面的
+两种声明之一，下一次 `plan-check` 才会对它产生判断。
+
+处理：`ok=false` 时按 `blockers[].options` 修正章纲后重跑；advisory 记录后继续。
+
+### 一致性检查（plan 阶段）
 拆完章后，对每个新章调用：
 
 ```bash
@@ -354,6 +387,22 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
 
 ```
 
+**单卷 / V+1 deferred 时的合法空状态（不得伪造下一卷）**：
+
+```json
+{
+  "next_volume_anchor": null,
+  "foreshadow_writeback": [],
+  "open_loop_writeback": []
+}
+
+```
+
+`null`（或 `""` / `"none"` / `"deferred"` / `{}` / `{"status": "deferred"}`）都是**受支持的空状态**：
+`master-outline-sync` 会跳过 V+1 行、不伪造卷名与剧情，照常执行伏笔与开放环写回，
+并在输出里标注 `next_volume_anchor_state=absent`。**字段整体缺失仍然是错误**（那是写回 JSON 写坏了），
+声明了 V+1 却缺 `volume_name` / `core_conflict` / `volume_end_climax` 也仍然拒绝。
+
 执行最小总纲写回（语义调整）：从 `.webnovel/state.json` 读取 `volumes[]`，按状态决定 V+1 行的填充：
 
 - 若 V+1 `status=confirmed`：从 state.json 取其 `title / core_conflict / climax`，写回总纲 V+1 行
@@ -390,6 +439,28 @@ python "${SCRIPTS_DIR}/webnovel.py" --project-root "$PROJECT_ROOT" update-state 
   --on-conflict=overwrite
 
 ```
+
+### Step 9.5：章节规划权威同步（章纲 → chapter_meta，无需手工补两份数据）
+
+**权威关系**：章纲（`大纲/第N卷-详细大纲.md`）是章节规划的唯一权威；
+`state.json` 的 `chapter_meta["N"]` 只是**派生副本**（`story-craft set-chapter-meta` 写的）。
+
+规划完成后核对一次派生副本，避免出现「改了章纲，但 `chapter_meta` 还是旧措辞」的漂移
+（漂移会被原样带进 `runtime reviewer-context`，让 Reviewer 依据一份已被撤回的规划做判断）：
+
+```bash
+# 只读检查漂移
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" chapter-intent check \
+  --chapter {chapter_num} --format text
+
+# 按章纲刷新派生副本（幂等；已 accepted 的章节会被拒绝，历史不可改写）
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" chapter-intent sync \
+  --chapter {chapter_num}
+```
+
+后续任何时候修改章纲（含写作过程中修订），都不需要人工分别修补 `state.json`：
+`runtime prepare` 会自动检测漂移并对**尚未 accepted** 的章节刷新派生副本，并在 advisories 里报告。
+已 accepted 章节的规划字段属于历史，只报告、不改写（要订正走 Canon Correction）。
 
 **`--all-volumes` 模式（可选）**:
 

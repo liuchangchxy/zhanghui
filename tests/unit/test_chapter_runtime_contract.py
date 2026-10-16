@@ -410,9 +410,33 @@ def test_negative_stale_package(tmp_path: Path):
     prep = runtime.prepare(chapter=1, with_package=True, creative_brief="测试策划")
     pkg = prep.writer_package
 
-    # Invalidate authoritative source by changing the outline
     outline_file = project_root / "大纲" / "第1卷-详细大纲.md"
-    outline_file.write_text(outline_file.read_text(encoding="utf-8") + "\n- 新的重大设定变更", encoding="utf-8")
+    original_outline = outline_file.read_text(encoding="utf-8")
+
+    # (a) Editing a *later* chapter's outline must NOT stale chapter 1's package: chapter 1's
+    #     own intent, its volume preamble and its (absent) predecessor are all unchanged.
+    outline_file.write_text(
+        original_outline.replace(
+            "- 目标：林凡在藏经阁寻找基础吐纳法，引发未来暗线",
+            "- 目标：林凡在藏经阁寻找基础吐纳法，引发未来暗线（第2章改写）",
+        ),
+        encoding="utf-8",
+    )
+    unrelated = runtime.ingest_draft(
+        chapter=1,
+        prose="某正文...",
+        package_fingerprint=pkg.package_fingerprint,
+    )
+    assert unrelated.ok is True, "unrelated later-chapter outline edit must not stale chapter 1"
+
+    # (b) Editing chapter 1's OWN outline invalidates the sealed package.
+    outline_file.write_text(
+        original_outline.replace(
+            "- 目标：主角林凡通过灵根测试进入天阳宗",
+            "- 目标：主角林凡通过灵根测试进入天阳宗（本章目标已改）",
+        ),
+        encoding="utf-8",
+    )
 
     # Ingesting with stale package fingerprint must fail
     res = runtime.ingest_draft(

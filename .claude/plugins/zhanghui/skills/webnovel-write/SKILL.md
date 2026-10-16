@@ -33,6 +33,13 @@ allowed-tools: Read Write Edit Grep Bash Agent
 - `.webnovel/summaries/ch{NNNN}.md`
 - `.webnovel/state.json` 的进度与 `chapter_meta` 更新
 
+修订路径（Reviewer 发现问题时用哪条）：
+- **定点小修**（时间/数字/编号/道具/措辞类，`revise plan` 给出的 `kind=LOCAL_FACT` 或 `STYLE_ONLY`）
+  → Step 4 的定向修订流程：只改计划命中的句段，重登记新 `draft_id`，重审受影响草稿。
+- **整章重做**（`kind=STRUCTURAL`，大面积剧情冲突）
+  → ledger 的「重新起草」路径（Step 2A 重新生成），必须在报告中写明理由。
+- **已 accepted 章节**（`kind=CANON_HISTORY`）→ 常规修订 fail-closed，只能走 Canon Correction。
+
 ### 流程硬约束（禁止事项）
 
 - **禁止并步**：不得将两个 Step 合并为一个动作执行（如同时做 2A 和 3）。
@@ -415,10 +422,60 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
   --chapter {chapter_num}
 ```
 
-判定逻辑：
-- `status == ACCEPTED`：文风调整通过，将候选正文覆盖回工作草稿 `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`。因为正文发生变更，重新生成 `<chapter_changes>` 块并重新调用 `runtime ingest-draft` 登记，获取更新后的 `draft_id` 与 `draft_fingerprint`。
-- `status == UNCERTAIN` 且提示需要 Semantic Judge：若改动超出确定性检查覆盖（涉及知情状态/事件结果/因果/线索等），调用 Semantic Judge 并传入 `--judge-result '<json>'`（或 `--judge-file`）重验；若未配置或执行失败，严格遵循 fail-closed 保持 `ROLLEDBACK`。
-- `status == ROLLEDBACK`：检测到事实漂移、新增未授权履历/设定或质量退化，**自动保留 Step 2A Draft 原稿**，记录回退审计信息。
+判定逻辑（**先看 `semantic_outcome`，不是 `status`**）：
+
+`prose validate` 的 `status` 只有 `ACCEPTED` / `ROLLEDBACK` 两个值；真正的语义裁决结果在
+`semantic_outcome`（`STYLE_ONLY_SAFE` / `SEMANTIC_CHANGE_PROPOSED` / `UNCERTAIN`）。
+按 `status == UNCERTAIN` 判断永远不成立 —— 这正是历史上改稿门禁「看起来接通、实际没接通」的原因。
+
+| `status` | `semantic_outcome` | 处理 |
+|---|---|---|
+| `ACCEPTED` | `STYLE_ONLY_SAFE` | 文风调整通过：候选正文覆盖回工作草稿，重刷 `<chapter_changes>` 并重新 `runtime ingest-draft` 取得新 `draft_id` / `draft_fingerprint` |
+| `ROLLEDBACK` | `SEMANTIC_CHANGE_PROPOSED` | 检测到事实漂移/新增未授权设定：**保留 Step 2A 原稿**，记录回退审计；事实类问题走 Step 4 的定向修订路径 |
+| `ROLLEDBACK` | `UNCERTAIN` | 确定性覆盖不足 → 按下方「Semantic Judge 宿主裁决」接线重验；Judge 未接通或失败则保持 `ROLLEDBACK`（fail-closed） |
+| `ROLLEDBACK` | 其它 | 质量退化（缩水/电报体）：保留原稿并记录 |
+
+#### Semantic Judge 宿主裁决（默认路径，不需要额外 API Key）
+
+宿主模型（即当前的 Claude Code 会话）就是 Semantic Judge。标准三步：
+
+```bash
+# 1) 生成裁决请求（prompt 与 before/after 的 sha256 一起落盘）
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose judge-request \
+  --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+  --after-file "${PROJECT_ROOT}/.webnovel/tmp/step2b_candidate_{chapter_padded}.md" \
+  --chapter {chapter_num} \
+  --output "${PROJECT_ROOT}/.webnovel/tmp/judge_request_{chapter_padded}.json" \
+  --prompt-output "${PROJECT_ROOT}/.webnovel/tmp/judge_prompt_{chapter_padded}.txt"
+
+# 2) 主流程读取 prompt，用当前模型产出裁决 JSON（11 项事实维度），
+#    把模型的回答原样写进：
+#    ${PROJECT_ROOT}/.webnovel/tmp/judge_response_{chapter_padded}.json
+#    应答里必须回填 judge_request 给出的 before_sha256 / after_sha256。
+
+# 3) 绑定并校验（裁决会被钉死在这两份正文上）
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose judge-bind \
+  --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+  --after-file "${PROJECT_ROOT}/.webnovel/tmp/step2b_candidate_{chapter_padded}.md" \
+  --response-file "${PROJECT_ROOT}/.webnovel/tmp/judge_response_{chapter_padded}.json" \
+  --chapter {chapter_num} \
+  --output "${PROJECT_ROOT}/.webnovel/tmp/judge_verdict_{chapter_padded}.json"
+
+# 4) 用绑定的裁决重验
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
+  --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+  --after-file "${PROJECT_ROOT}/.webnovel/tmp/step2b_candidate_{chapter_padded}.md" \
+  --chapter {chapter_num} \
+  --judge-file "${PROJECT_ROOT}/.webnovel/tmp/judge_verdict_{chapter_padded}.json"
+```
+
+契约：
+- **严禁伪造 Judge 裁决**：模型没有真正裁决就让门禁 fail-closed 回滚，不允许手写一个 `STYLE_ONLY_SAFE`。
+- `--judge-file` 的裁决必须已经绑定到当前 before/after 文本；指纹不匹配会被判为 `UNCERTAIN` 并回滚，
+  防止旧裁决被复用到另一份正文。
+- 只有 `STYLE_ONLY_SAFE` 会放行；`SEMANTIC_CHANGE_PROPOSED` 与 `UNCERTAIN` 一律保留原稿。
+- 判定事实错误（时间/数字/道具/知情状态）不是文风问题：把它交给下面 Step 4 的**定向修订**，
+  不要试图用「伪装成风格修改」骗过 Judge。
 
 输出：
 - 文风适配后工作草稿（通过则覆盖，未通过则保持 Step 2A 原工作草稿）及当前有效 `draft_id`。
@@ -515,22 +572,54 @@ cat "${SKILL_ROOT}/references/polish-guide.md"
 cat "${SKILL_ROOT}/references/writing/typesetting.md"
 ```
 
-执行原则（先诊断再修改，定向小修优先）：
-1. **先诊断**：运行 `python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose diagnose --file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"`，列出真实病灶，不得无病呻吟或整篇机械改写。
-2. **定向生成候选**：针对审查意见与诊断项生成润色候选稿（Targeted Edit Candidate），保存至 `${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md`。严禁为了修补逻辑漏洞或增加合理性而私自发明履历、设定、翻转所有权或颠倒意图。
-3. **事实与退化校验**：运行：
-```bash
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
-  --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
-  --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
-  --chapter {chapter_num}
-```
-   - 检查语义事实差异（`diff-semantic`）：禁止新增未授权履历/故意行为转变/所有权翻转/规则极性颠倒。
-   - 检查质量退化（字数缩水率 > 20%、电报式断句率飙升）。
-4. **决策判定与失效重审规则（Targeted Polish Invalidation Rule）**：
-   - 若 `status == ROLLEDBACK` 或正文未发生改变：自动保持润色前工作草稿（即 Step 3 审查版本），沿用原 `draft_id` 与原审查结论，记录回退原因与审计记录。
-   - 若 `status == UNCERTAIN` 且提示需要 Semantic Judge：若候选修改超出确定性覆盖范围，调用 Semantic Judge 并传入 `--judge-result '<json>'`（或 `--judge-file`）重验；若 Judge 未配置或失败，严格遵循 fail-closed 保持回滚。
-   - 若 `status == ACCEPTED` 且正文发生改变：
+**改动范围契约（先定位，再最小修改）**：Step 4 只做**定向**修改，不做整章重写。
+
+1. 把 Step 3 的审查结果转成定向修订计划（无需 `## §N` 标题，普通正文即可）：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise plan \
+     --chapter {chapter_num} \
+     --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --review-result "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
+     --draft-id "{draft_id}" --draft-fingerprint "{draft_fingerprint}" \
+     --output "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" --format text
+   ```
+   计划逐条给出：定位方式（行号 / 段落号 / 原文引用）、命中的最小可编辑区间、修复指令、
+   以及 `kind`（`STYLE_ONLY` / `LOCAL_FACT` / `STRUCTURAL` / `CANON_HISTORY`）。
+   `advisory`（非阻断）问题默认一并纳入；`unresolved` / `ambiguous` 条目**不会自动替换**，需人工指定位置。
+2. **先诊断**：运行 `prose diagnose --file ...`，列出真实病灶，不得无病呻吟或整篇机械改写。
+3. 主流程按计划改写**对应句段**，把替换写成：
+   `[{"target_id": "<issue_id>", "new_text": "<改写后的该段原文>"}]`
+   保存到 `${PROJECT_ROOT}/.webnovel/tmp/revision_edits_{chapter_padded}.json`。
+   严禁借此发明履历、设定、翻转所有权或颠倒意图。
+4. **应用并校验边界**：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise apply \
+     --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" \
+     --edits "${PROJECT_ROOT}/.webnovel/tmp/revision_edits_{chapter_padded}.json" \
+     --output "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md"
+   ```
+   - 草稿在计划生成后又被改过 → `drift` 报错并拒绝应用（不盲改）。
+   - `changed=false`（正文没有变化）→ **不登记新草稿、不重跑审查**，直接沿用现有 `draft_id` 与审查结论。
+5. **事实与退化校验**（Semantic Judge 走 Step 2B 的同一套宿主裁决流程）：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
+     --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
+     --chapter {chapter_num} --judge-file "<已绑定的 judge_verdict_*.json>"
+   ```
+6. **只允许计划内改动**：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise verify \
+     --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+     --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
+     --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json"
+   ```
+   退出码非 0 或出现 `out_of_scope_changes` → 改动越界，回退重做；`untouched_targets` 列出本轮没修到的条目。
+7. **决策判定与失效重审规则（Targeted Polish Invalidation Rule）**：
+   - `status == ROLLEDBACK` 或正文未发生改变：保留润色前工作草稿（即 Step 3 审查版本），沿用原
+     `draft_id` 与原审查结论，记录回退原因与审计记录。
+   - `status == ACCEPTED` 且正文发生改变：
      1. 将候选正文覆盖回工作草稿 `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`；
      2. 依据新正文刷新工作草稿末尾的 `<chapter_changes>` 块；
      3. 重新调用 `runtime ingest-draft`：
@@ -545,10 +634,17 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
      5. 重新调用 `webnovel-writer:reviewer` 对新草稿进行完整审查（继续传入 `reviewer_context_{chapter_padded}.json` 作为审查依据），产出与新 `draft_id` 绑定的全新 `review_results.json`，并调用 `review-pipeline --save-metrics` 刷新 metrics；
      6. 只有完成新草稿审查并绑定新 `draft_id` 后，方可进入 Step 4.5。
 
+**收敛策略（不设隐藏分数线）**：
+- 哪些问题阻断由正式 Gate 判断；非阻断（advisory）问题记录建议后继续，不追求把分数刷到某个阈值。
+- 已确定的具体事实错误（时间/数字/编号/道具/知情状态）→ 优先走上面的**定向修订**。
+- 大面积剧情冲突（`kind=STRUCTURAL`，计划里标为章级范围）→ 允许按 ledger 的「重新起草」路径整章重写，
+  但必须在报告中写明理由。
+- `kind=CANON_HISTORY`（本章已 accepted）→ 禁止常规修订，只能走 Canon Correction。
+
 输出：
 - 最终工作草稿（通过则为润色正文，回退则为原工作草稿）
 - 当前有效的最新 `draft_id` 与对应的审查结果
-- 编辑与校验审计记录（包含 diagnosis, edit_plan, diff_result, decision）
+- 编辑与校验审计记录（包含 plan, applied_edits, boundary_verification, diagnosis, diff_result, decision）
 
 ### Step 4.5：刷新 ProposedChanges 并校验协议
 
@@ -632,16 +728,33 @@ git -c color.ui=never diff --check HEAD
 - `diff --check`：检测空白错误（trailing whitespace / indent-with-tab / no-newline-at-eof）与冲突标记（<<<<<<< / ======= / >>>>>>>）；命中冲突标记直接阻断，未通过空白检查记 warning。
 - 此步只读 git，不做任何 `add` / `commit`；提交动作由 Step 6 的 `webnovel.py ... backup` 唯一完成。
 
-### Step 4.7：write-gate precommit 检查
+### Step 4.7：提交前协议复核（precommit 已后移至 Step 5.4.5）
 
-提交前再跑一道闸门（Step 5 之前必跑）：
+**本步骤不再运行 `write-gate --stage precommit`。** 原因见下方依赖表：precommit 闸门校验
+`fulfillment_result.json` / `disambiguation_result.json` / `extraction_result.json` /
+`review_results.json` 四份产物，而这四份产物由 Step 5 的 Data Agent 与 reconciliation 生成。
+在 Step 5 之前调用它，首次必然 `ok=false`（`artifact.missing_artifact`），
+使用者只能「先跑一个注定失败的闸门，再回头补跑一次」。
 
-```bash
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage precommit
+三个逻辑阶段（prewrite → precommit → postcommit）保持不变，只是 precommit 的**执行位置**
+移到了它全部前置产物产生之后、`runtime commit` 之前（Step 5.4.5）。
 
-```
+此处只做与提交无关的协议复核：
 
-闸门会检查项目/章节是否具备提交条件，并验证必需 review、fulfillment、disambiguation、extraction artifacts 的存在与 schema。此命令不会把 anti-slop detector 的 exit code 当成硬 gate；Craft/style finding 也不能单独阻止 Step 5。必需产物损坏或缺失、尚未解决的人类决策、以及 shared policy / ChapterCommitService 验证出的真实 Canon、用户约束或 integrity 问题仍按各自既有规则处理。
+- 确认 Step 4.5 的 `changes_gate` 已 `passed=true`；
+- 确认 Step 4.6.5 的只读 git diff 变更面无冲突标记；
+- 确认当前工作草稿的 `draft_id` 与 Step 3 审查结论绑定一致（正文若已变更，必须已按 Step 4
+  的身份同步规则重新登记并重审）。
+
+> **闸门依赖契约（Step 5.4.5 会按此校验）**
+>
+> | 闸门阶段 | 必需产物 | 产物作者 |
+> |---|---|---|
+> | prewrite | 大纲、章纲、Story System 合同、占位符扫描 | Step 1A / planner |
+> | precommit | `review_results.json`、`fulfillment_result.json`、`disambiguation_result.json`、`extraction_result.json` | Step 3 / Step 5（Data Agent） |
+> | postcommit | durable commit + 5 项 projection + placeholder-scan | Step 5.5 / 5.6 |
+>
+> 严禁为了让 precommit 通过而伪造 Data Agent 产物；缺失就是缺失，必须回到 Step 5 补齐。
 
 ### 一致性 apply（写后）
 
@@ -744,6 +857,23 @@ done
 - 严禁在 WriterPackage 封口后、commit 执行前调用修改 `.story-system/` 合同的写命令（合同刷新已统一在 Step 1A 执行，并在 commit accepted 时由 `ChapterCommitService` 自动原子更新），确保 `contracts_fp` 指纹严格有效、无合同漂移。
 - 任何产物缺失或空文件立即阻断提交，排查对应上游 Agent 产物生成，不强行发起 commit。
 
+#### Step 5.4.5：write-gate precommit 闸门（必需产物齐备后、提交之前）
+
+5 份必需产物齐备后、调用 `runtime commit` **之前**运行 precommit 闸门：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage precommit
+
+```
+
+- 退出码 `0` = `ok=true`：进入 Step 5.5A。
+- 退出码非 `0`：读取 `errors[].code` / `errors[].repair`，回到对应上游步骤补齐，**不得**继续 commit。
+  常见码：`artifact.missing_artifact`（回 Step 5 重跑 Data Agent）、
+  `artifact.invalid_artifact`（产物 schema 损坏）、`phase_not_ready_for_precommit`（回 Step 0 预检）。
+- 此命令不会把 anti-slop detector 的 exit code 当成硬 gate；Craft/style finding 也不能单独阻止提交。
+  必需产物损坏或缺失、尚未解决的人类决策、以及 shared policy / ChapterCommitService 验证出的真实
+  Canon、用户约束或 integrity 问题仍按各自既有规则处理。
+
 #### Step 5.5：runtime commit 事实提交与 publish-draft 正文发布（本章主链真源）
 
 `chapter-commit` / `CHAPTER_COMMIT` 是本章写作事实的唯一 Canon 提交权威，**取代旧的 state 流程（process-chapter / 同步落库链路）**。收敛架构下，主流程分为两个独立而精确契合的阶段：首先执行事实提交（Canon Acceptance），提交 accepted 后显式发布正文草稿（Publication Gate）。
@@ -814,6 +944,28 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" wr
 ```
 
 闸门校验：chapter-commit + projection 五项 + placeholder-scan 全通过；任一 fail 进入最终报告"必须处理"段。
+
+**限时锁兑现裁决（本章 accepted 后）**：
+
+限时锁是**规划义务**（Intent），不是 Canon 事实，所以它不会因为"本章提交了"自动关闭 ——
+需要一次显式的、有证据的兑现裁决。查看是否有本章到期的锁：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" story-craft check-volume \
+  --volume {volume_num} --chapter {chapter_num}
+```
+
+输出里出现 `fulfill-lock` 提示时，核对正文后执行（`--evidence` 必须是本周正式正文里的原文引用，
+逐字校验；不写 `--evidence` 则仅凭 accepted commit 兑现）：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" story-craft fulfill-lock \
+  --lock-id {lock_id} --chapter {chapter_num} --evidence "<正文原文引用>"
+```
+
+- 幂等：同一 (lock_id, chapter) 重复执行是 no-op 成功；改指到另一章会被拒绝。
+- 未 accepted 的章节不能用来兑现；无法核验的证据一律拒绝，**严禁把未兑现的锁静默清空**。
+- 不执行本步不会阻断提交，但该锁会在后续每一章的 `check-volume` 里继续被报成「逾期」。
 
 债务利息：
 - 默认关闭，仅在用户明确要求或开启追踪时执行。

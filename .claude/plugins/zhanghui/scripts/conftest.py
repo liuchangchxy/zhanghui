@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import os
 import shutil
 import sqlite3
@@ -53,15 +54,29 @@ def _install_safe_tempfile() -> None:
     tempfile.TemporaryDirectory = _SafeTemporaryDirectory
 
 
+# `delete=` was added to tempfile.TemporaryDirectory in Python 3.12, while scripts/pyproject.toml
+# declares `requires-python = ">=3.11"`. Forwarding it unconditionally made every
+# TemporaryDirectory() call raise TypeError on a supported interpreter.
+_TEMPDIR_SUPPORTS_DELETE = "delete" in inspect.signature(_ORIGINAL_TEMPORARY_DIRECTORY).parameters
+
+
 class _SafeTemporaryDirectory(_ORIGINAL_TEMPORARY_DIRECTORY):
-    def __init__(self, suffix=None, prefix=None, dir=None, ignore_cleanup_errors=True, *, delete=True):
+    def __init__(self, suffix=None, prefix=None, dir=None, ignore_cleanup_errors=True, **kwargs):
+        self._keep_on_exit = bool(kwargs.pop("delete", True))
+        if _TEMPDIR_SUPPORTS_DELETE:
+            kwargs["delete"] = self._keep_on_exit
         super().__init__(
             suffix=suffix,
             prefix=prefix,
             dir=dir,
             ignore_cleanup_errors=ignore_cleanup_errors,
-            delete=delete,
+            **kwargs,
         )
+
+    def cleanup(self):  # pragma: no cover - exercised only when delete=False is requested
+        if not self._keep_on_exit:
+            return
+        return super().cleanup()
 
 
 def _safe_sqlite_connect(*args, **kwargs):

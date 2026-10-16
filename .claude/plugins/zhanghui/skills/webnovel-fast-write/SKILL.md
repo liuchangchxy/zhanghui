@@ -251,6 +251,12 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
    done
    ```
 
+6. **write-gate precommit 闸门（必需产物齐备后、提交之前）**：
+   5 份必需产物齐备后运行（退出码 `0` 才可提交；非 `0` 按 `errors[].repair` 回上游补齐，严禁伪造产物）：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" write-gate --chapter {chapter_num} --stage precommit
+   ```
+
 ### Step 5.5A：事实提交（Runtime Commit）
 
 通过统一事务入口提交本章事实：

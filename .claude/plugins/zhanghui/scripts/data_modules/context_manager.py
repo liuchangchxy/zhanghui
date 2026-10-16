@@ -167,9 +167,86 @@ class ContextManager:
         pack = self._build_pack(chapter)
         pack["canon"], pack["intent"], pack["craft"], pack["reference"], pack["context_diagnostics"], pack["context_snapshot"] = self._govern_pack(pack, chapter)
         if getattr(self.config, "context_ranker_enabled", True):
-            pack = self.context_ranker.rank_pack(pack, chapter)
+            pack = self.context_ranker.rank_pack(pack, chapter, budget=max_chars)
 
-        return self._assemble_json_payload(pack, template=template)
+        payload = self._assemble_json_payload(pack, template=template)
+
+        # `max_chars` is a documented budget parameter: enforce it here instead of accepting it
+        # and ignoring it (which is what made the parameter a lie).
+        if max_chars and max_chars > 0:
+            payload = self._enforce_context_budget(payload, chapter, int(max_chars))
+        return payload
+
+    # Compression ladder, applied in this order. Canon / intent / constraints are NEVER
+    # trimmed: L9 forbids buying token savings by arbitrarily cutting accepted facts.
+    _BUDGET_LADDER = (
+        "context_diagnostics",
+        "runtime_status",
+        "reference",
+        "story_skeleton",
+        "recent_summaries",
+        "recent_meta",
+        "craft",
+        "genre_profile",
+        "memory",
+        "long_term_memory",
+    )
+
+    # Whole-section drops: pure diagnostics / run status with no writing value.
+    _DROPPABLE_SECTIONS = frozenset({"context_diagnostics", "runtime_status"})
+
+    def _payload_chars(self, payload: Dict[str, Any]) -> int:
+        return len(json.dumps(payload, ensure_ascii=False, default=str))
+
+    def _enforce_context_budget(self, payload: Dict[str, Any], chapter: int, limit: int) -> Dict[str, Any]:
+        before = self._payload_chars(payload)
+        applied: list[str] = []
+
+        if before > limit:
+            for section in self._BUDGET_LADDER:
+                if self._payload_chars(payload) <= limit:
+                    break
+                if self._trim_section(payload, section):
+                    applied.append(section)
+
+        after = self._payload_chars(payload)
+        payload.setdefault("meta", {})
+        payload["meta"]["context_budget"] = {
+            "limit": limit,
+            "before_chars": before,
+            "after_chars": after,
+            "enforced": after <= limit,
+            "sections_trimmed": applied,
+            "shortfall_chars": max(0, after - limit),
+            "note": (
+                "Canon / Intent / Constraints 不参与裁剪；若压缩阶梯用尽仍超预算，"
+                "这里如实报告 shortfall，而不是截断已接受的事实。"
+            ),
+        }
+        return payload
+
+    def _trim_section(self, payload: Dict[str, Any], section: str) -> bool:
+        """Halve one compressible section. Returns True when something was actually removed."""
+        if section in self._DROPPABLE_SECTIONS:
+            return payload.pop(section, None) is not None
+
+        if section in {"reference", "craft", "memory", "long_term_memory", "story_skeleton"}:
+            items = payload.get(section)
+            if isinstance(items, list) and len(items) > 1:
+                payload[section] = items[: max(1, len(items) // 2)]
+                return True
+            return False
+
+        if section in {"recent_summaries", "recent_meta"}:
+            core = payload.get("core")
+            if isinstance(core, dict):
+                items = core.get(section)
+                if isinstance(items, list) and len(items) > 1:
+                    core[section] = items[: max(1, len(items) // 2)]
+                    return True
+            return False
+
+        return False
 
     def _assemble_json_payload(self, pack: Dict[str, Any], template: str = DEFAULT_TEMPLATE) -> Dict[str, Any]:
         chapter = int((pack.get("meta") or {}).get("chapter") or 0)
@@ -193,6 +270,7 @@ class ContextManager:
                     payload[section_name] = content
 
         payload["meta"]["context_snapshot"] = pack.get("context_snapshot") or {}
+        payload["core"] = pack.get("core") or {}
 
         if chapter > 0:
             payload["meta"]["context_weight_stage"] = self._resolve_context_stage(chapter)

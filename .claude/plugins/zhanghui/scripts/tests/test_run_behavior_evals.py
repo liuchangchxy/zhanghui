@@ -21,5 +21,12 @@ def test_run_behavior_evals_fast_suite_passes_for_current_package():
 
     report = run_behavior_evals(root, suite="fast")
 
-    assert report["ok"] is True
+    failures = [
+        {"id": item.get("id"), "reason": item.get("reason"), "evidence": item.get("evidence")}
+        for item in report.get("results") or []
+        if not item.get("passed")
+    ]
+    # name the failing cases: "ok is False" alone gives no way to tell an environment gap
+    # from a real contract drift when the suite runs on a machine you cannot poke at
+    assert report["ok"] is True, f"behavior eval failures: {failures}"
     assert report["total"] >= 5

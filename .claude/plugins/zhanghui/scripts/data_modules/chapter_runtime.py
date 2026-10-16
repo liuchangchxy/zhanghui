@@ -43,6 +43,12 @@ from .gate_finding_adapters import adapt_changes_gate_result, adapt_legacy_artif
 from .projections import retry_projection
 from .reconciliation import reconcile_changes, split_chapter_and_changes
 from .runtime_contract_builder import RuntimeContractBuilder
+from .chapter_intent_sync import (
+    chapter_is_accepted,
+    effective_chapter_meta,
+    outline_intent_digest,
+    sync_chapter_meta,
+)
 from .state_validator import get_chapter_meta_entry
 from .story_contracts import (
     StoryContractPaths,
@@ -584,7 +590,17 @@ class ChapterRuntime:
             )
 
         # 2. Chapter contract
+        #
+        # The chapter contract is a *derived* projection of the chapter outline. It records the
+        # outline digest it was generated from, so a later outline edit can be detected without
+        # regenerating every contract on every write (G7):
+        #   * no digest yet  -> adopt the current digest, do NOT regenerate (no churn on
+        #     existing projects),
+        #   * digest differs and the chapter is not yet accepted -> regenerate the chapter
+        #     contract from the current outline,
+        #   * digest differs but the chapter is already accepted -> leave history alone.
         ch_path = self.paths.chapter_json(chapter)
+        current_digest = outline_intent_digest(self.project_root, chapter)
         if not ch_path.is_file():
             seed = engine.build(
                 query=query,
@@ -595,8 +611,30 @@ class ChapterRuntime:
             if seed.get("chapter_brief"):
                 from .story_contracts import write_json, write_marked_markdown, render_chapter_markdown
                 ch_path.parent.mkdir(parents=True, exist_ok=True)
-                write_json(ch_path, seed["chapter_brief"])
-                write_marked_markdown(ch_path.with_suffix(".md"), render_chapter_markdown(seed["chapter_brief"]))
+                payload = dict(seed["chapter_brief"])
+                payload["source_outline_digest"] = current_digest
+                write_json(ch_path, payload)
+                write_marked_markdown(ch_path.with_suffix(".md"), render_chapter_markdown(payload))
+        else:
+            existing = read_json_if_exists(ch_path) or {}
+            stored_digest = str(existing.get("source_outline_digest") or "")
+            if not stored_digest:
+                from .story_contracts import write_json
+                existing["source_outline_digest"] = current_digest
+                write_json(ch_path, existing)
+            elif stored_digest != current_digest and not chapter_is_accepted(self.project_root, chapter):
+                seed = engine.build(
+                    query=query,
+                    genre=genre,
+                    chapter=chapter,
+                    chapter_directive=directive,
+                )
+                if seed.get("chapter_brief"):
+                    from .story_contracts import write_json, write_marked_markdown, render_chapter_markdown
+                    payload = dict(seed["chapter_brief"])
+                    payload["source_outline_digest"] = current_digest
+                    write_json(ch_path, payload)
+                    write_marked_markdown(ch_path.with_suffix(".md"), render_chapter_markdown(payload))
 
         # 3. Volume brief and Review contract
         volume = volume_num_for_chapter_from_state(self.project_root, chapter) or 1
@@ -663,8 +701,13 @@ class ChapterRuntime:
                 error=str(exc),
             )
 
-        # 3. Prewrite gate validation
+        # 2.5 章纲是章节规划的唯一权威。若 state.json 的派生副本与章纲漂移，
+        # 对「尚未被正式接受」的章节就地刷新派生副本；已接受章节只报告、不改写历史。
         advisories: list[dict[str, Any]] = []
+        advisories.extend(self._refresh_chapter_intent(chapter))
+        advisories.extend(self._plan_consistency_advisories(chapter))
+
+        # 3. Prewrite gate validation
         try:
             gate_res = run_write_gate(self.project_root, chapter=chapter, stage="prewrite")
         except Exception as exc:
@@ -731,15 +774,210 @@ class ChapterRuntime:
             next_required_action=next_action,
         )
 
+    def _plan_consistency_advisories(self, chapter: int) -> list[dict[str, Any]]:
+        """Surface planning-stage consistency findings for this chapter.
+
+        Only *advisories* for this chapter are surfaced here (Craft/planning heuristics must not
+        become a hidden write gate — I7); deterministic blockers belong to the plan flow, which
+        is where the author can actually fix them.
+        """
+        try:
+            from .plan_consistency import run_plan_consistency
+        except ImportError:  # pragma: no cover
+            return []
+
+        volume = volume_num_for_chapter_from_state(self.project_root, chapter) or 1
+        try:
+            report = run_plan_consistency(self.project_root, volume=volume)
+        except Exception:  # pragma: no cover - planning checks must never block prepare
+            return []
+
+        out: list[dict[str, Any]] = []
+        for item in report.get("advisories") or []:
+            if item.get("chapter") not in (None, chapter):
+                continue
+            out.append(
+                {
+                    "rule": f"plan.{item.get('code')}",
+                    "severity": "warning",
+                    "message": str(item.get("message") or ""),
+                    "details": item.get("evidence") or {},
+                    "options": item.get("options") or [],
+                }
+            )
+        return out
+
+    def _refresh_chapter_intent(self, chapter: int) -> list[dict[str, Any]]:
+        """Bring `state.json:chapter_meta` back in line with the authoritative chapter outline.
+
+        Returns advisories describing what happened; never raises, because a stale derived
+        copy must not block an otherwise valid chapter.
+        """
+        advisories: list[dict[str, Any]] = []
+        state_path = self.project_root / ".webnovel" / "state.json"
+        state = read_json_if_exists(state_path) or {}
+        try:
+            _effective, provenance = effective_chapter_meta(self.project_root, chapter, state)
+        except Exception as exc:  # pragma: no cover - defensive
+            return [
+                {
+                    "rule": "chapter_intent_unavailable",
+                    "severity": "warning",
+                    "message": f"无法解析本章规划权威来源: {exc}",
+                }
+            ]
+
+        drift = provenance.get("drift") or {}
+        if not drift:
+            return advisories
+
+        try:
+            result = sync_chapter_meta(self.project_root, chapter, state)
+        except Exception as exc:  # pragma: no cover - defensive
+            result = {"ok": False, "reason": "sync_failed", "message": str(exc)}
+
+        if result.get("ok"):
+            try:
+                from security_utils import atomic_write_json
+
+                atomic_write_json(state_path, state, backup=True)
+            except Exception as exc:  # pragma: no cover - defensive
+                advisories.append(
+                    {
+                        "rule": "chapter_intent_refresh_failed",
+                        "severity": "warning",
+                        "message": f"章纲与 chapter_meta 漂移，但回写失败: {exc}",
+                        "details": {"drift": drift},
+                    }
+                )
+                return advisories
+            advisories.append(
+                {
+                    "rule": "chapter_intent_refreshed",
+                    "severity": "warning",
+                    "message": (
+                        "章纲已更新，state.json 的 chapter_meta 派生副本已按章纲刷新"
+                        f"（{len(result.get('changed_fields') or {})} 个字段）。"
+                    ),
+                    "details": {
+                        "changed_fields": result.get("changed_fields") or {},
+                        "outline_digest": result.get("outline_digest"),
+                    },
+                }
+            )
+        else:
+            advisories.append(
+                {
+                    "rule": "chapter_intent_drift_unresolved",
+                    "severity": "warning",
+                    "message": str(result.get("message") or result.get("reason") or "章纲与 chapter_meta 不一致"),
+                    "details": {"drift": drift, "reason": result.get("reason")},
+                }
+            )
+        return advisories
+
+    # ------------------------------------------------------------------ #
+    # Source fingerprints (task H)
+    # ------------------------------------------------------------------ #
+    # The WriterPackage fingerprint decides whether an in-flight chapter's sealed inputs are
+    # still valid. It used to hash the *entire* volume outline file, the *entire*
+    # `state.json`, and the whole contract set — so editing chapter 8's outline invalidated
+    # chapter 2's package, and any unrelated `state.json` touch (a review checkpoint, another
+    # chapter's `chapter_meta`) forced a pointless re-seal.
+    #
+    # The scope below is the set of inputs that genuinely determine *this* chapter's writing:
+    #
+    #   outline            this chapter's own outline section (Intent authority)
+    #   outline_prev       the previous chapter's section — its sequel_decision seeds this
+    #                      chapter's goal, so a change there must invalidate (H5)
+    #   outline_volume     the volume-level preamble (卷基本信息: conflict / climax), which
+    #                      governs every chapter in the volume
+    #   contracts          Story System contracts for this chapter (master / volume / chapter /
+    #                      review / anti-patterns)
+    #   state              only the governing planning/state fields, see
+    #                      `_state_fingerprint_payload`
+    #   latest_commit      the newest accepted commit before this chapter (Canon)
+    #
+    # Deliberately NOT included: derived Canon projections in `state.json`
+    # (`entity_state` / `protagonist_state` / `relationships` / `world_settings` /
+    # `state_changes`) and per-chapter `chapter_meta` for other chapters. Those are
+    # rebuildable Projection data: the Canon that produced them is already covered by
+    # `latest_commit`, and the planning fields for *this* chapter come from the outline
+    # (see `chapter_intent_sync`). Excluding them is what removes the meaningless
+    # re-sealings, without weakening any real upstream check.
+
+    _STATE_FINGERPRINT_KEYS = ("project_info", "story_craft")
+
+    def _state_fingerprint_payload(self, chapter: int, state: dict[str, Any]) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        for key in self._STATE_FINGERPRINT_KEYS:
+            if key in state:
+                payload[key] = state.get(key)
+
+        progress = state.get("progress") if isinstance(state.get("progress"), dict) else {}
+        payload["progress"] = {
+            key: progress.get(key)
+            for key in ("current_volume", "volumes_planned", "volumes_completed", "total_volumes", "target_chapters")
+            if key in progress
+        }
+
+        volumes = state.get("volumes")
+        if isinstance(volumes, list):
+            # Volume-level planning that can redirect this chapter's intent.
+            payload["volumes"] = [
+                {k: item.get(k) for k in ("volume", "title", "chapters_range", "status") if k in item}
+                if isinstance(item, dict)
+                else item
+                for item in volumes
+            ]
+        return payload
+
+    def _volume_outline_preamble(self, chapter: int) -> str:
+        """Volume-level text preceding the first chapter heading (卷基本信息 等)."""
+        from chapter_outline_loader import _find_volume_outline_file
+
+        try:
+            from chapter_paths import iter_outline_chapter_headings
+        except ImportError:  # pragma: no cover
+            from scripts.chapter_paths import iter_outline_chapter_headings
+
+        volume_file = _find_volume_outline_file(self.project_root, chapter)
+        if volume_file is None or not volume_file.is_file():
+            return ""
+        try:
+            content = volume_file.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+        headings = iter_outline_chapter_headings(content)
+        return content[: headings[0].start] if headings else content
+
     def compute_source_fingerprints(self, chapter: int) -> dict[str, str]:
-        """Compute fingerprints for authoritative inputs governing this chapter."""
-        outline = load_chapter_outline(self.project_root, chapter, max_chars=None)
-        
-        # Also check volume outline file if present
-        from chapter_outline_loader import _find_volume_outline_file, _find_split_outline_file
-        outline_file = _find_split_outline_file(self.project_root / "大纲", chapter) or _find_volume_outline_file(self.project_root, chapter)
-        file_bytes = outline_file.read_bytes() if outline_file and outline_file.is_file() else b""
-        outline_fp = hashlib.sha256(file_bytes + outline.encode("utf-8")).hexdigest()
+        """Fingerprints for the authoritative inputs that govern *this* chapter."""
+        from chapter_outline_loader import _find_split_outline_file
+
+        split_file = _find_split_outline_file(self.project_root / "大纲", chapter)
+        if split_file is not None:
+            outline_text = split_file.read_text(encoding="utf-8")
+            prev_file = _find_split_outline_file(self.project_root / "大纲", chapter - 1) if chapter > 1 else None
+            prev_text = prev_file.read_text(encoding="utf-8") if prev_file is not None else ""
+            volume_preamble = ""
+        else:
+            outline_text = load_chapter_outline(self.project_root, chapter, max_chars=None)
+            if outline_text.startswith("⚠️"):
+                outline_text = ""
+            if chapter > 1:
+                prev_text = load_chapter_outline(self.project_root, chapter - 1, max_chars=None)
+                if prev_text.startswith("⚠️"):
+                    prev_text = ""
+            else:
+                prev_text = ""
+            volume_preamble = self._volume_outline_preamble(chapter)
+
+        outline_fp = hashlib.sha256(outline_text.encode("utf-8")).hexdigest()
+        outline_prev_fp = hashlib.sha256(prev_text.encode("utf-8")).hexdigest() if prev_text else "none"
+        outline_volume_fp = (
+            hashlib.sha256(volume_preamble.encode("utf-8")).hexdigest() if volume_preamble else "none"
+        )
 
         # Story system contracts
         volume = volume_num_for_chapter_from_state(self.project_root, chapter) or 1
@@ -754,10 +992,16 @@ class ChapterRuntime:
             json.dumps(contracts_data, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
 
-        # State file
-        state_path = self.project_root / ".webnovel" / "state.json"
-        state_bytes = state_path.read_bytes() if state_path.is_file() else b"{}"
-        state_fp = hashlib.sha256(state_bytes).hexdigest()
+        # State file: governing planning/state fields only
+        state = read_json_if_exists(self.project_root / ".webnovel" / "state.json") or {}
+        state_fp = hashlib.sha256(
+            json.dumps(
+                self._state_fingerprint_payload(chapter, state),
+                sort_keys=True,
+                ensure_ascii=False,
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()
 
         # Latest accepted commit before this chapter
         sources = load_runtime_sources(self.project_root, chapter)
@@ -771,7 +1015,10 @@ class ChapterRuntime:
         )
 
         return {
+            # `outline` is kept as the key name for this chapter's own outline section
             "outline": outline_fp,
+            "outline_prev": outline_prev_fp,
+            "outline_volume": outline_volume_fp,
             "contracts": contracts_fp,
             "state": state_fp,
             "latest_commit": latest_commit_fp,
@@ -853,7 +1100,9 @@ class ChapterRuntime:
                 continue
             intent_items.append(item_d)
 
-        chapter_meta = get_chapter_meta_entry(state, chapter)
+        # 章节规划字段以章纲为唯一权威；state.json 里的 chapter_meta 只是派生副本。
+        # Writer 与 Reviewer 都从这份 effective intent 取值，保证二者看到同一版本规划。
+        chapter_meta, intent_provenance = effective_chapter_meta(self.project_root, chapter, state)
         current_intent = {
             "chapter": chapter,
             "outline": core.get("chapter_outline") or load_chapter_outline(self.project_root, chapter, max_chars=None),
@@ -861,6 +1110,7 @@ class ChapterRuntime:
             "plot_structure": plot_structure,
             "chapter_brief": chapter_contract.get("override_allowed") or {},
             "chapter_meta": chapter_meta,
+            "chapter_meta_provenance": intent_provenance,
             "intent_items": intent_items,
         }
 
@@ -966,6 +1216,9 @@ class ChapterRuntime:
             "meta": {
                 "schema_version": "governed-context/v1",
                 "authority": "ContextManager.build_context",
+                "chapter_intent_authority": intent_provenance["authority"],
+                "chapter_intent_outline_digest": intent_provenance["outline_digest"],
+                "chapter_intent_drift": intent_provenance["drift"],
             },
         }
 
