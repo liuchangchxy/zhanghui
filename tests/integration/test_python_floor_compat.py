@@ -7,18 +7,22 @@
 `prose_pipeline` un-importable on 3.11 — i.e. on the very floor the plugin advertises, the
 whole prose validation path (Step 2B / Step 4 / Semantic Judge) failed at import time.
 
-This test scans the plugin sources for that construct so it cannot silently come back.
+The scan is a hand-rolled literal walker rather than `tokenize.FSTRING_START`, because that
+token type only exists from Python 3.12 — using it would make this guard itself un-runnable on
+the interpreter it is meant to protect.
 """
 
 from __future__ import annotations
 
-import io
-import tokenize
+import re
 from pathlib import Path
 
 import pytest
 
 PLUGIN_SCRIPTS = Path(__file__).resolve().parents[2] / ".claude" / "plugins" / "zhanghui" / "scripts"
+
+_FSTRING_OPEN_RE = re.compile(r"""(?<![A-Za-z0-9_])[fF](?P<quote>'''|\"\"\"|'|\")""")
+_TRIPLE = ("'''", '"""')
 
 
 def _iter_python_files() -> list[Path]:
@@ -29,32 +33,53 @@ def _iter_python_files() -> list[Path]:
     )
 
 
-def _fstring_expression_tokens(source: str):
-    """Yield tokens that belong to an f-string's replacement-field expression."""
-    try:
-        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        return
-    stack: list[bool] = []
-    for token in tokens:
-        if token.type == tokenize.FSTRING_START:
-            stack.append(False)
-            continue
-        if token.type == tokenize.FSTRING_END:
-            if stack:
-                stack.pop()
-            continue
-        if not stack:
-            continue
-        depth = stack[-1]
-        if token.type == tokenize.OP and token.string == "{":
-            stack[-1] = True
-            continue
-        if token.type == tokenize.OP and token.string == "}":
-            stack[-1] = False
-            continue
-        if depth:
-            yield token
+def fstring_fields_with_backslash(source: str) -> list[tuple[int, str]]:
+    """Return `(line, field_text)` for every f-string replacement field containing a backslash."""
+    offenders: list[tuple[int, str]] = []
+    for match in _FSTRING_OPEN_RE.finditer(source):
+        quote = match.group("quote")
+        index = match.end()
+        depth = 0
+        field_start = index
+        inner_quote = ""
+        while index < len(source):
+            char = source[index]
+            if inner_quote:
+                if char == "\\":
+                    index += 2
+                    continue
+                if char == inner_quote:
+                    inner_quote = ""
+                index += 1
+                continue
+            if depth == 0:
+                if char == "\\" and quote not in _TRIPLE:
+                    index += 2
+                    continue
+                if source.startswith(quote, index):
+                    break
+                if char in "'\"":
+                    inner_quote = char
+                elif char == "{":
+                    if index + 1 < len(source) and source[index + 1] == "{":
+                        index += 2
+                        continue
+                    depth = 1
+                    field_start = index + 1
+            else:
+                if char in "'\"":
+                    inner_quote = char
+                elif char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        field = source[field_start:index]
+                        if "\\" in field:
+                            line = source.count("\n", 0, field_start) + 1
+                            offenders.append((line, field.strip()))
+            index += 1
+    return offenders
 
 
 def test_no_backslash_inside_fstring_expressions():
@@ -63,18 +88,24 @@ def test_no_backslash_inside_fstring_expressions():
         source = path.read_text(encoding="utf-8")
         if "f'" not in source and 'f"' not in source:
             continue
-        for token in _fstring_expression_tokens(source):
-            if token.type == tokenize.STRING and "\\" in token.string:
-                offenders.append(f"{path.relative_to(PLUGIN_SCRIPTS)}:{token.start[0]}")
+        for line, field in fstring_fields_with_backslash(source):
+            offenders.append(f"{path.relative_to(PLUGIN_SCRIPTS)}:{line}: {{{field}}}")
     assert not offenders, (
         "backslash inside an f-string expression requires Python 3.12+ but "
         f"scripts/pyproject.toml declares >=3.11: {offenders}"
     )
 
 
-def test_declared_python_floor_matches_the_installed_interpreters_expectation():
-    """Guard the declaration itself: the floor must be the low bound, not something higher."""
-    import re
+def test_the_scanner_actually_detects_the_original_defect():
+    """Negative control: the guard must fail on the construct it exists for."""
+    broken = 'x = f"  * {r.lstrip(\'#-*\\t \').strip()}"\n'
+    assert fstring_fields_with_backslash(broken)
+    healthy = 'rule = r.lstrip("#-*\\t ").strip()\nx = f"  * {rule}"\n'
+    assert fstring_fields_with_backslash(healthy) == []
+
+
+def test_declared_python_floor_matches_the_contract():
+    """Guard the declaration itself: the floor must be the low bound, not raised silently."""
     import sys
 
     pyproject = PLUGIN_SCRIPTS / "pyproject.toml"
