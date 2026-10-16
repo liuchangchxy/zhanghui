@@ -579,3 +579,123 @@ def test_rag_commit_lineage_requires_a_matching_accepted_commit(tmp_path):
         "source_file": "commit:chapter_005", "chunk_id": "c5", "chapter": 5, "score": 0.98,
     }, target_chapter=5)
     assert same_target["semantic_role"] == "UNKNOWN"
+
+
+# --- Mirrored character_state_changed events vs field-level state_deltas ----------------
+# agents/data-agent.md 7.1 defines a `character_state_changed` event as the mirror
+# representation of a field-level `state_delta` for the same (entity, field): "field + old
+# + new, 与 state_deltas 一致". Every projection writer therefore seeds a `seen` set from
+# state_deltas and skips any event whose (entity, field) a delta already covers. The governed
+# context reader must apply the same precedence, otherwise a wording-only difference between
+# the two representations of ONE change is reported as a canonical fact conflict and halts the
+# run on the next chapter's prepare().
+
+
+def mirrored_extraction(*, delta_new, event_new, field="equipment.mask_condition",
+                        entity="lin_yue", event_type="character_state_changed"):
+    """One character-state change, emitted as BOTH a state_delta and a mirror event."""
+    return {
+        "entity_deltas": [],
+        "state_deltas": [
+            {"entity_id": entity, "field": field, "old": "完好", "new": delta_new},
+        ],
+        "accepted_events": [
+            {"event_id": "evt-ch001-003", "chapter": 1, "event_type": event_type,
+             "subject": entity, "payload": {"field": field, "old": "完好", "new": event_new}},
+        ],
+    }
+
+
+def test_mirrored_event_wording_difference_is_not_a_canon_conflict(tmp_path):
+    """The state_delta is authoritative; a re-worded mirror event must not raise."""
+    write_commit(tmp_path, 1, valid_commit(1, extraction=mirrored_extraction(
+        delta_new="侧面被锈蚀断口刮开一道口子，断口对不齐、按不平，不可修补",
+        event_new="侧面被锈蚀断口刮开一道口子，断口对不齐、按不平",
+    )))
+    bundle = build_governed_context(project_root=tmp_path, chapter=2, state={}, source_sections={})
+    mask = [row for row in bundle["canon"] if row["content"].get("field") == "equipment.mask_condition"]
+    assert len(mask) == 1
+    assert mask[0]["content"]["value"] == "侧面被锈蚀断口刮开一道口子，断口对不齐、按不平，不可修补"
+    assert mask[0]["provenance_status"] == "verified"
+
+
+def test_mirrored_event_without_wording_difference_still_yields_one_fact(tmp_path):
+    """Identical representations collapse to a single Canon fact (no duplicate rows)."""
+    same = "侧面被锈蚀断口刮开一道口子"
+    write_commit(tmp_path, 1, valid_commit(1, extraction=mirrored_extraction(
+        delta_new=same, event_new=same)))
+    bundle = build_governed_context(project_root=tmp_path, chapter=2, state={}, source_sections={})
+    mask = [row for row in bundle["canon"] if row["content"].get("field") == "equipment.mask_condition"]
+    assert len(mask) == 1
+    assert mask[0]["content"]["value"] == same
+
+
+def test_mirrored_power_breakthrough_does_not_raise(tmp_path):
+    """power_breakthrough is the same mirror case as character_state_changed."""
+    write_commit(tmp_path, 1, valid_commit(1, extraction=mirrored_extraction(
+        field="realm", delta_new="金丹", event_new="金丹期",
+        event_type="power_breakthrough")))
+    bundle = build_governed_context(project_root=tmp_path, chapter=2, state={}, source_sections={})
+    realm = [row for row in bundle["canon"] if row["content"].get("field") == "realm"]
+    assert len(realm) == 1
+    assert realm[0]["content"]["value"] == "金丹"
+
+
+def test_conflicting_state_deltas_still_fail_closed(tmp_path):
+    """Two contradicting state_deltas for one field remain a real conflict."""
+    write_commit(tmp_path, 1, valid_commit(1, extraction={
+        "entity_deltas": [], "accepted_events": [],
+        "state_deltas": [
+            {"entity_id": "A", "field": "status", "new": "alive"},
+            {"entity_id": "A", "field": "status", "new": "dead"},
+        ],
+    }))
+    with pytest.raises(ValueError, match="canonical fact conflict"):
+        build_governed_context(project_root=tmp_path, chapter=2, state={}, source_sections={})
+
+
+def test_conflicting_mirror_events_without_state_delta_still_fail_closed(tmp_path):
+    """Two contradicting events with no delta counterpart remain a real conflict."""
+    write_commit(tmp_path, 1, valid_commit(1, extraction={
+        "entity_deltas": [], "state_deltas": [],
+        "accepted_events": [
+            {"event_id": "e1", "chapter": 1, "event_type": "character_state_changed",
+             "subject": "A", "payload": {"field": "status", "new": "alive"}},
+            {"event_id": "e2", "chapter": 1, "event_type": "character_state_changed",
+             "subject": "A", "payload": {"field": "status", "new": "dead"}},
+        ],
+    }))
+    with pytest.raises(ValueError, match="canonical fact conflict"):
+        build_governed_context(project_root=tmp_path, chapter=2, state={}, source_sections={})
+
+
+def test_event_without_matching_state_delta_still_produces_canon(tmp_path):
+    """An event with no delta counterpart is not over-suppressed: it still becomes Canon."""
+    write_commit(tmp_path, 1, valid_commit(1, extraction={
+        "entity_deltas": [], "state_deltas": [],
+        "accepted_events": [
+            {"event_id": "e1", "chapter": 1, "event_type": "character_state_changed",
+             "subject": "A", "payload": {"field": "mood", "old": "躁动", "new": "冷静"}},
+        ],
+    }))
+    bundle = build_governed_context(project_root=tmp_path, chapter=2, state={}, source_sections={})
+    mood = [row for row in bundle["canon"] if row["content"].get("field") == "mood"]
+    assert len(mood) == 1
+    assert mood[0]["content"]["value"] == "冷静"
+
+
+def test_cross_chapter_state_change_is_resolved_by_recency(tmp_path):
+    """A later chapter's state_delta supersedes the earlier one (recency, not a conflict)."""
+    write_commit(tmp_path, 1, valid_commit(1, extraction={
+        "entity_deltas": [], "accepted_events": [],
+        "state_deltas": [{"entity_id": "A", "field": "status", "new": "alive"}],
+    }))
+    write_commit(tmp_path, 2, valid_commit(2, extraction={
+        "entity_deltas": [], "accepted_events": [],
+        "state_deltas": [{"entity_id": "A", "field": "status", "new": "dead"}],
+    }))
+    bundle = build_governed_context(project_root=tmp_path, chapter=3, state={}, source_sections={})
+    status = [row for row in bundle["canon"] if row["content"].get("field") == "status"]
+    assert len(status) == 1
+    assert status[0]["content"]["value"] == "dead"
+    assert status[0]["chapter"] == 2
