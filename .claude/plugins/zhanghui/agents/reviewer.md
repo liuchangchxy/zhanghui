@@ -42,8 +42,12 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 - `reviewer_context_file`：受治理 Reviewer 上下文文件路径（包含 `canon_authority`、`creative_intent`、`craft_constraints`、`chapter_planning`、`advisory_constraints`、`review_contract`）
 - `project_root`：项目根目录
 - `scripts_dir`：脚本目录
-- `draft_id`（可选）：当前草稿标识
-- `draft_fingerprint`（可选）：当前草稿指纹
+- `draft_id`：当前草稿标识（**必须原样回填到输出 JSON**）
+- `draft_fingerprint`：当前草稿指纹（**必须原样回填到输出 JSON**）
+
+> 这两个字段是审查结果与草稿身份的唯一关联凭据。回填后，`review-pipeline` 会校验它们
+> 与当前在编草稿一致；不一致的审查会被拒绝登记，`revise plan` 也会拒绝把旧审查用在
+> （已变更的）新草稿上。未回填时 `review-pipeline` 会补写并标注来源，但**回填才是可核验的路径**。
 
 ## 4. 执行流程（按顺序执行）
 
@@ -168,11 +172,15 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 
 ## 7. 输出格式
 
-严格按以下 JSON 格式输出（无其他文本）。`issues_count`、`blocking_count`、`has_blocking` 必须与 `issues` 一致。Reviewer 不拥有 gate authority，所有 raw findings 均输出 `blocking=false`；review-pipeline 会归一化 Craft finding，最终 action 由 shared policy / ChapterCommitService 计算。
+严格按以下 JSON 格式输出（无其他文本）。`issues_count`、`blocking_count`、`has_blocking` 必须与 `issues` 一致。
+`draft_id` / `draft_fingerprint` 必须把入参原样回填。Reviewer 不拥有 gate authority，所有 raw findings 均输出 `blocking=false`；
+review-pipeline 会归一化 Craft finding，最终 action 由 shared policy / ChapterCommitService 计算。
 
 ```json
 {
   "chapter": 100,
+  "draft_id": "draft-100-1a2b3c4d",
+  "draft_fingerprint": "<入参 draft_fingerprint 原样回填>",
   "issues": [
     {
       "severity": "critical | high | medium | low",

@@ -39,6 +39,38 @@ DRAFT = "\n".join(
 )
 
 
+def _bound_reviewer_json(
+    draft: str = DRAFT,
+    *,
+    issues: list | None = None,
+    draft_id: str = "draft-002-abcdef12",
+) -> dict:
+    """A reviewer result that declares which draft it reviewed.
+
+    Reviewer output now carries the draft identity it was produced for (and `review-pipeline`
+    stamps it when the reviewer omits it), which is what lets `revise plan` refuse a stale
+    review instead of silently locating old findings in a new draft.
+    """
+    import hashlib
+
+    payload = _reviewer_json()
+    if issues is not None:
+        payload["issues"] = list(issues)
+    payload["draft_id"] = draft_id
+    payload["draft_fingerprint"] = hashlib.sha256(draft.encode("utf-8")).hexdigest()
+    return payload
+
+
+def _active_draft(draft: str = DRAFT, *, draft_id: str = "draft-002-abcdef12") -> dict:
+    import hashlib
+
+    return {
+        "available": True,
+        "draft_id": draft_id,
+        "draft_fingerprint": hashlib.sha256(draft.encode("utf-8")).hexdigest(),
+    }
+
+
 def _reviewer_json() -> dict:
     return {
         "chapter": 2,
@@ -80,7 +112,7 @@ def _reviewer_json() -> dict:
 def test_plan_locates_paragraph_and_quote_without_section_headings():
     from data_modules.revision_planner import build_revision_plan
 
-    plan = build_revision_plan(DRAFT, _reviewer_json(), chapter=2, draft_id="draft-002-abc")
+    plan = build_revision_plan(DRAFT, _bound_reviewer_json(), chapter=2, draft_id="draft-002-abc", active_draft=_active_draft())
     assert "§" not in DRAFT  # the prose has no §N structure at all
 
     targets = plan["targets"]
@@ -104,11 +136,11 @@ def test_plan_keeps_advisory_findings_by_default_and_can_drop_them():
     advice produced an empty plan."""
     from data_modules.revision_planner import build_revision_plan
 
-    with_advisory = build_revision_plan(DRAFT, {"chapter": 2, "issues": [i for i in _reviewer_json()["issues"]]}, chapter=2)
+    with_advisory = build_revision_plan(DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft())
     assert with_advisory["summary"]["advisory"] == 2
 
     blocking_only = build_revision_plan(
-        DRAFT, {"chapter": 2, "issues": list(_reviewer_json()["issues"])}, chapter=2, include_advisory=False
+        DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft(), include_advisory=False
     )
     assert blocking_only["summary"]["total"] == 1
     assert blocking_only["summary"]["blocking"] == 1
@@ -120,9 +152,10 @@ def test_plan_reports_ambiguity_instead_of_guessing():
     ambiguous = "第一段有「同一句话」。\n\n第二段也有「同一句话」。\n"
     plan = build_revision_plan(
         ambiguous,
-        {
-            "chapter": 1,
-            "issues": [
+        _bound_reviewer_json(
+            ambiguous,
+            draft_id="draft-001-aaaaaaaa",
+            issues=[
                 {
                     "severity": "low",
                     "category": "logic",
@@ -132,8 +165,9 @@ def test_plan_reports_ambiguity_instead_of_guessing():
                     "blocking": False,
                 }
             ],
-        },
+        ),
         chapter=1,
+        active_draft=_active_draft(ambiguous, draft_id="draft-001-aaaaaaaa"),
     )
     target = plan["targets"][0]
     assert target["resolvable"] is False
@@ -153,12 +187,20 @@ def test_plan_classifies_kind_for_safety_routing():
         {"severity": "low", "category": "ai_flavor", "location": "第3段", "description": "套话", "fix_hint": "删", "blocking": False},
         {"severity": "high", "category": "timeline", "location": "第4段", "description": "时间冲突", "fix_hint": "改", "blocking": True},
     ]
-    plan = build_revision_plan(DRAFT, {"chapter": 2, "issues": issues}, chapter=2)
+    plan = build_revision_plan(
+        DRAFT, _bound_reviewer_json(issues=issues), chapter=2, active_draft=_active_draft()
+    )
     kinds = [t["kind"] for t in plan["targets"]]
     assert KIND_STYLE_ONLY in kinds
     assert KIND_LOCAL_FACT in kinds
 
-    canon = build_revision_plan(DRAFT, {"chapter": 2, "issues": issues}, chapter=2, rejected=True)
+    canon = build_revision_plan(
+        DRAFT,
+        _bound_reviewer_json(issues=issues),
+        chapter=2,
+        active_draft=_active_draft(),
+        rejected=True,
+    )
     assert all(t["kind"] == KIND_CANON_HISTORY for t in canon["targets"])
 
 
@@ -170,7 +212,12 @@ def test_plan_classifies_kind_for_safety_routing():
 def test_apply_and_verify_accepts_minimal_edit():
     from data_modules.revision_planner import apply_edits, build_revision_plan, verify_minimal_edit
 
-    plan = build_revision_plan(DRAFT, {"chapter": 2, "issues": [_reviewer_json()["issues"][0]]}, chapter=2)
+    plan = build_revision_plan(
+        DRAFT,
+        _bound_reviewer_json(issues=[_reviewer_json()["issues"][0]]),
+        chapter=2,
+        active_draft=_active_draft(),
+    )
     target = plan["targets"][0]
     fixed = target["before_text"].replace("七行", "八行")
     updated, report = apply_edits(DRAFT, plan, [{"target_id": target["issue_id"], "new_text": fixed}])
@@ -190,7 +237,9 @@ def test_apply_rejects_out_of_scope_rewrite():
     """改一个数字不能变成重写整章。"""
     from data_modules.revision_planner import build_revision_plan, verify_minimal_edit
 
-    plan = build_revision_plan(DRAFT, {"chapter": 2, "issues": [_reviewer_json()["issues"][0]]}, chapter=2)
+    plan = build_revision_plan(
+        DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft()
+    )
     started = plan["editable_spans"][0]["start"]
     rewritten = DRAFT[:started] + DRAFT[started:] + "\n\n他又把整章重新写了一遍。\n"
 
@@ -203,7 +252,9 @@ def test_apply_rejects_out_of_scope_rewrite():
 def test_apply_detects_draft_drift():
     from data_modules.revision_planner import RevisionApplyError, apply_edits, build_revision_plan
 
-    plan = build_revision_plan(DRAFT, {"chapter": 2, "issues": [_reviewer_json()["issues"][0]]}, chapter=2)
+    plan = build_revision_plan(
+        DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft()
+    )
     span = plan["editable_spans"][0]
     drifted = DRAFT[: span["start"]] + "别人改过了" + DRAFT[span["end"] :]
 
@@ -214,7 +265,9 @@ def test_apply_detects_draft_drift():
 def test_apply_reports_no_op_so_the_draft_identity_is_not_recycled():
     from data_modules.revision_planner import apply_edits, build_revision_plan
 
-    plan = build_revision_plan(DRAFT, {"chapter": 2, "issues": [_reviewer_json()["issues"][0]]}, chapter=2)
+    plan = build_revision_plan(
+        DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft()
+    )
     target = plan["targets"][0]
     _updated, report = apply_edits(DRAFT, plan, [{"target_id": target["issue_id"], "new_text": target["before_text"]}])
     assert report["changed"] is False
@@ -224,7 +277,9 @@ def test_apply_reports_no_op_so_the_draft_identity_is_not_recycled():
 def test_verify_reports_untouched_targets():
     from data_modules.revision_planner import build_revision_plan, verify_minimal_edit
 
-    plan = build_revision_plan(DRAFT, {"chapter": 2, "issues": list(_reviewer_json()["issues"][:2])}, chapter=2)
+    plan = build_revision_plan(
+        DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft()
+    )
     first = plan["targets"][0]
     edited = DRAFT.replace(first["before_text"], first["before_text"].replace("七行", "八行"))
     verification = verify_minimal_edit(DRAFT, edited, plan)

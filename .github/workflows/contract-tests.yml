@@ -44,7 +44,10 @@ jobs:
             tests/integration/test_timed_lock_closure.py \
             tests/integration/test_plan_consistency.py \
             tests/integration/test_context_budget_and_observability.py \
+            tests/integration/test_revise_fact_fix_flow.py \
+            tests/integration/test_semantic_judge_binding.py \
             tests/unit/test_local_revision_and_judge.py \
+            tests/unit/test_prose_fact_fix_gate.py \
             -q
       - name: Guard hook command contract
         run: |

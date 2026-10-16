@@ -25,13 +25,20 @@ allowed-tools: Read Write Edit Grep Bash Agent
 
 ### 2. 适用与不适用场景
 - **适用**：
-  - 在编草稿的 reviewer 审查输出 blocking issues
-  - 局部段落修改（比整章重写节省 60-80% token）
+  - 在编草稿的 reviewer 审查输出 findings（含非阻断建议；默认全部纳入计划）
+  - 局部段落修改
   - 保持未受影响段落的原文，避免 AI 改稿漂移
 - **不适用**：
   - 本章已被 commit accepted 并已正式发布（不可变，阻断）
   - reviewer 尚未运行（先跑 `/webnovel-review` 或 `/webnovel-write` Step 3）
   - 大面积返工（>50% 段落需改）—— 建议重新起草工作草稿
+
+> **省的是什么**：定点修订省下的是**正文重新生成**（以及由此带来的改稿漂移风险）——
+> 只改必要句段，其余原文一字不动。
+> **不省的是什么**：只要正文发生任何变化，就**必须**重新登记新 Draft 并对新草稿完整重跑 Reviewer；
+> 正文变了却复用旧审查是被拒绝的（`revise plan` 拒绝旧审查、`runtime commit` 以
+> `REVIEW_DRAFT_MISMATCH` 拒收）。因此本流程**不减少审查轮次**，只减少每轮的正文生成成本。
+> 唯一真正省掉一次审查的情况是「正文没有变化」（`changed=false`）——那种情况下也确实没有什么可审。
 
 ## 执行流程
 
@@ -125,18 +132,23 @@ allowed-tools: Read Write Edit Grep Bash Agent
    - `untouched_targets` 列出本轮没有真正改到的条目，需要回到第 3 步补做。
    - `changed=false`（正文没变）→ **不登记新草稿、不重跑审查、不重新初始化全书或整卷规划**，
      沿用当前 `draft_id` 与既有审查结论。
+   - 退出码 `4` = 版本/来源不匹配（计划不属于当前草稿，或审查未绑定当前草稿）→ 重新 `revise plan`。
 
-5. **事实安全校验**（事实类改动必须过这道门；纯文风改动用宿主 Judge 裁决路径）：
+5. **事实安全校验**（按改动性质分流）：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
      --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
-     --chapter {chapter_num}
+     --chapter {chapter_num} \
+     --revision-plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json"
    ```
-   看 `semantic_outcome`（不是 `status`）。`UNCERTAIN` 时按 `webnovel-write` 的
-   「Semantic Judge 宿主裁决」三步接线重验（`prose judge-request` → 宿主模型裁决 → `prose judge-bind`
-   → `prose validate --judge-file`）；Judge 未接通或失败则保持 `ROLLEDBACK`（fail-closed），
-   **严禁伪造裁决**。
+   - `semantic_outcome=STYLE_ONLY_SAFE` → 纯文风修改，接受。
+   - `status=PENDING_REREVIEW` + `semantic_outcome=FACT_FIX_DECLARED` → **待提交草稿内的事实纠错**的正常结果：
+     不要求判成 `STYLE_ONLY_SAFE`，也不回滚；但必须完成 Step 3 的新 Draft 登记与新 Reviewer 审查。
+   - `status=ROLLEDBACK` → 越界改写或事实篡改；回退重做。确定性层抓到的事实漂移一律硬阻断。
+   - 若确属纯文风且需要裁决背书，按 `webnovel-write` 的「Semantic Judge 宿主裁决」接线
+     （`prose judge-request` → 宿主模型裁决 → `prose judge-bind --request-file` → `prose validate --judge-file`）；
+     Judge 未接通或失败则保持 `ROLLEDBACK`（fail-closed），**严禁伪造裁决**。
 
    > 事实边界的区分（不要混淆）：
    > - 纯文风修饰 / 非事实性措辞优化 → 可走 Semantic Judge 的 `STYLE_ONLY_SAFE` 判断；

@@ -71,8 +71,96 @@ _QUOTE_PATTERNS = (
 )
 
 
+class RevisionApplyError(ValueError):
+    """Raised when a host edit cannot be applied unambiguously / against the wrong draft."""
+
+
+class RevisionBindingError(RevisionApplyError):
+    """Raised when a review/plan is not bound to the draft it is being used on."""
+
+
 def sha256_text(text: str) -> str:
     return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
+
+
+# --------------------------------------------------------------------------- #
+# Draft identity / version protection
+# --------------------------------------------------------------------------- #
+# A revision plan is only meaningful for the exact draft it was built from. Two things make
+# that checkable:
+#
+#   * the draft's *content* hash: `ingest_draft` stores `draft_fingerprint = sha256(prose)`,
+#     so the working draft file on disk must hash to the active draft's fingerprint — if it
+#     does not, the file has unregistered edits and any plan built from it is unsound;
+#   * the reviewer result's declared identity, when it carries one (`draft_id` /
+#     `draft_fingerprint`).
+#
+# Before this, `revise apply` only compared the individual planned spans, so a plan made
+# against draft A could still be applied to an unrelated draft B as long as B happened to
+# contain the same sentences.
+
+ACTIVE_DRAFT_FILE = "draft.json"
+
+
+def resolve_active_draft_identity(project_root: str | Path, chapter: int) -> Dict[str, Any]:
+    """Read the active ingested draft identity for a chapter from the runtime registry."""
+    path = Path(project_root) / ".webnovel" / "runtime" / f"chapter_{int(chapter):03d}" / ACTIVE_DRAFT_FILE
+    if not path.is_file():
+        return {"available": False, "reason": "no_active_draft", "path": str(path)}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"available": False, "reason": f"unreadable_active_draft: {exc}", "path": str(path)}
+    if not isinstance(payload, dict):
+        return {"available": False, "reason": "malformed_active_draft", "path": str(path)}
+    return {
+        "available": True,
+        "path": str(path),
+        "draft_id": str(payload.get("draft_id") or ""),
+        "draft_fingerprint": str(payload.get("draft_fingerprint") or ""),
+    }
+
+
+def check_draft_version(plan: Dict[str, Any], draft_text: str) -> None:
+    """Refuse to operate on a draft that is not the one the plan was built from.
+
+    Raises `RevisionApplyError` with a concrete repair hint instead of silently editing the
+    wrong version.
+    """
+    expected = str(plan.get("draft_sha256") or "")
+    if not expected:
+        raise RevisionBindingError(
+            "revision plan has no draft_sha256; regenerate it with `revise plan`"
+        )
+    actual = sha256_text(draft_text)
+    if actual != expected:
+        raise RevisionBindingError(
+            "draft version mismatch: the working draft has changed since the revision plan was "
+            f"built (plan={expected[:12]}, draft={actual[:12]}). "
+            "重新运行 `revise plan` 生成与新草稿匹配的计划；不要把旧计划用在已变更的草稿上。"
+        )
+    fingerprint = str(plan.get("draft_fingerprint") or "")
+    if fingerprint and fingerprint != actual:
+        raise RevisionBindingError(
+            "draft identity mismatch: the plan was bound to draft_fingerprint "
+            f"{fingerprint[:12]} but the current draft hashes to {actual[:12]}."
+        )
+
+
+def review_result_identity(reviewer_json: Dict[str, Any]) -> Dict[str, str]:
+    """Pull a declared draft identity out of a reviewer result, if it carries one."""
+    identity: Dict[str, str] = {}
+    for key in ("draft_id", "draft_fingerprint"):
+        value = reviewer_json.get(key)
+        if isinstance(value, str) and value.strip():
+            identity[key] = value.strip()
+    nested = reviewer_json.get("draft")
+    if isinstance(nested, dict):
+        for key in ("draft_id", "draft_fingerprint"):
+            value = nested.get(key)
+            if isinstance(value, str) and value.strip() and key not in identity:
+                identity[key] = value.strip()
+    return identity
 
 
 def _file_line_of(text: str, offset: int) -> int:
@@ -494,13 +582,74 @@ def build_revision_plan(
     draft_fingerprint: str = "",
     include_advisory: bool = True,
     rejected: bool = False,
+    active_draft: Optional[Dict[str, Any]] = None,
+    require_review_binding: bool = True,
 ) -> Dict[str, Any]:
     """Turn Reviewer output into a targeted revision plan.
 
     `include_advisory=True` (default) keeps non-blocking findings: most ordinary Reviewer
     findings are advice, and dropping them was why the old contract produced an empty plan
     and pushed users towards a full re-draft.
+
+    Version protection: the plan is bound to the *content* of the draft it was built from, and
+    to the active draft identity when one is available. `require_review_binding=True` refuses a
+    Reviewer result that declares a draft identity contradicting this draft, and refuses a
+    result that declares nothing unless the caller opts in explicitly — an old review must
+    never be reused on a new draft silently.
     """
+    draft_sha = sha256_text(draft_text)
+    active = dict(active_draft or {})
+    identity: Dict[str, Any] = {"verified": False, "source": "none"}
+
+    if active.get("available"):
+        active_fp = str(active.get("draft_fingerprint") or "")
+        active_id = str(active.get("draft_id") or "")
+        if active_fp and active_fp != draft_sha:
+            raise RevisionBindingError(
+                "工作草稿自 ingest 之后已被改动："
+                f"active draft_fingerprint={active_fp[:12]} 但草稿当前 sha256={draft_sha[:12]}。"
+                "先运行 `runtime ingest-draft` 重新登记草稿，再基于新草稿生成修订计划。"
+            )
+        draft_id = active_id or draft_id
+        draft_fingerprint = active_fp or draft_fingerprint
+        identity = {"verified": bool(active_fp), "source": "runtime.active_draft", "draft_id": draft_id}
+    elif active:
+        identity = {"verified": False, "source": "runtime.unavailable", "reason": active.get("reason", "")}
+        if require_review_binding:
+            raise RevisionBindingError(
+                "找不到在编草稿身份（.webnovel/runtime/chapter_NNN/draft.json）："
+                f"{active.get('reason') or 'no_active_draft'}。"
+                "修订必须针对已登记的草稿；先 `runtime ingest-draft`，或显式传 --allow-unregistered-draft。"
+            )
+
+    declared = review_result_identity(reviewer_json)
+    review_binding: Dict[str, Any] = {
+        "declared": dict(declared),
+        "verified": False,
+        "mode": "unbound",
+    }
+    if declared.get("draft_fingerprint"):
+        if declared["draft_fingerprint"] != draft_sha:
+            raise RevisionBindingError(
+                "审查结果声明的 draft_fingerprint 与当前草稿不一致："
+                f"review={declared['draft_fingerprint'][:12]} draft={draft_sha[:12]}。"
+                "这是把旧审查用在（已变更的）新草稿上；请对新草稿重新运行 Reviewer。"
+            )
+        review_binding.update({"verified": True, "mode": "declared_fingerprint"})
+    elif declared.get("draft_id"):
+        if draft_id and declared["draft_id"] != draft_id:
+            raise RevisionBindingError(
+                "审查结果声明的 draft_id 与当前在编草稿不一致："
+                f"review={declared['draft_id']} draft={draft_id}。请对新草稿重新运行 Reviewer。"
+            )
+        review_binding.update({"verified": True, "mode": "declared_draft_id"})
+    elif require_review_binding:
+        raise RevisionBindingError(
+            "审查结果没有声明它审查的是哪一版草稿（draft_id / draft_fingerprint 均为空），"
+            "无法确认它属于当前草稿。请重新运行 Reviewer 并按其输出契约回填草稿身份，"
+            "或显式传 --allow-unbound-review 承担该风险。"
+        )
+
     issues = reviewer_json.get("issues")
     if not isinstance(issues, list):
         raise ValueError("reviewer JSON must contain an 'issues' list")
@@ -533,7 +682,9 @@ def build_revision_plan(
         "chapter": resolved_chapter,
         "draft_id": draft_id,
         "draft_fingerprint": draft_fingerprint,
-        "draft_sha256": sha256_text(draft_text),
+        "draft_sha256": draft_sha,
+        "draft_identity": identity,
+        "review_binding": review_binding,
         "include_advisory": include_advisory,
         "targets": [t.to_dict() for t in targets],
         "editable_spans": [{"start": s, "end": e} for s, e in spans],
@@ -560,10 +711,6 @@ def build_revision_plan(
 # --------------------------------------------------------------------------- #
 
 
-class RevisionApplyError(ValueError):
-    """Raised when a host edit cannot be applied unambiguously."""
-
-
 def apply_edits(
     draft_text: str,
     plan: Dict[str, Any],
@@ -571,10 +718,16 @@ def apply_edits(
 ) -> Tuple[str, Dict[str, Any]]:
     """Apply host-authored replacements to the planned spans.
 
-    Each edit is `{"target_id": <issue_id>, "new_text": "..."}`. The replacement must be of
-    a planned span, and `before_text` must still match exactly — otherwise the draft drifted
-    since the plan was produced and we refuse rather than editing blind.
+    Each edit is `{"target_id": <issue_id>, "new_text": "..."}`. Two gates run before any
+    replacement:
+
+    1. the **whole draft** must hash to `plan.draft_sha256` (version protection), and
+    2. each planned span must still match its recorded `before_text`.
+
+    Either check failing means the draft is not the one the plan describes, and we refuse
+    rather than editing blind.
     """
+    check_draft_version(plan, draft_text)
     targets = {str(t.get("issue_id")): t for t in plan.get("targets") or []}
     results: List[Dict[str, Any]] = []
     # apply from the end so earlier offsets stay valid
@@ -631,7 +784,16 @@ def verify_minimal_edit(
     Boundary check: every differing region between before and after must be contained in a
     planned span. Anything else is an out-of-scope rewrite and is reported as a violation —
     "改一个时间数字，只修改必要句段" is enforced here rather than trusted.
+
+    The `before_text` is also required to be the draft the plan was built from; otherwise the
+    whole comparison would be meaningless.
     """
+    version_error = ""
+    try:
+        check_draft_version(plan, before_text)
+    except RevisionApplyError as exc:
+        version_error = str(exc)
+
     spans = [(int(s["start"]), int(s["end"])) for s in plan.get("editable_spans") or []]
 
     out_of_scope: List[Dict[str, Any]] = []
@@ -692,6 +854,9 @@ def verify_minimal_edit(
     result = {
         "schema_version": "revision-verify/v1",
         "changed": before_text != after_text,
+        "plan_draft_sha256": str(plan.get("draft_sha256") or ""),
+        "before_sha256_matches_plan": not version_error,
+        "draft_version_error": version_error,
         "spans": [{"start": s, "end": e} for s, e in spans],
         "out_of_scope_changes": out_of_scope,
         "boundary_ok": not out_of_scope,
@@ -700,7 +865,9 @@ def verify_minimal_edit(
         "before_sha256": sha256_text(before_text),
         "after_sha256": sha256_text(after_text),
     }
-    result["ok"] = result["boundary_ok"] and (not result["changed"] or bool(resolved))
+    result["ok"] = (
+        result["boundary_ok"] and not version_error and (not result["changed"] or bool(resolved))
+    )
     return result
 
 
@@ -720,8 +887,11 @@ def write_plan(path: str | Path, plan: Dict[str, Any]) -> Path:
 
 def format_plan_text(plan: Dict[str, Any]) -> str:
     summary = plan.get("summary") or {}
+    binding = plan.get("review_binding") or {}
     lines = [
         f"revision plan  chapter={plan.get('chapter')}  draft_id={plan.get('draft_id') or '-'}",
+        f"  draft_sha256={str(plan.get('draft_sha256') or '')[:16]}  "
+        f"review_binding={'verified:' + str(binding.get('mode')) if binding.get('verified') else 'UNVERIFIED'}",
         (
             f"  targets={summary.get('total')} blocking={summary.get('blocking')} "
             f"advisory={summary.get('advisory')} resolvable={summary.get('resolvable')} "

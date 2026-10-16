@@ -132,8 +132,74 @@ def test_observability_summary_never_fabricates_tokens(tmp_path: Path):
     }
     entry = next(item for item in report["chapters"] if item["chapter"] == 3)
     assert entry["draft_versions"] == 3
-    assert entry["reviewer_runs"] == 3
     assert entry["draft_ids"] == ["draft-003-a", "draft-003-b", "draft-003-c"]
+
+
+def test_draft_identities_do_not_impersonate_reviewer_runs(tmp_path: Path):
+    """A draft identity means prose was registered — not that a Reviewer ran.
+
+    Counting identities as reviews inflated the reported cost: three identities could come from
+    three ingest attempts with a single review, or with none at all. Without an execution log
+    the count must be reported as unavailable, never inferred.
+    """
+    from data_modules.observability_report import build_observability_summary
+
+    (tmp_path / ".webnovel" / "runtime" / "chapter_003" / "drafts").mkdir(parents=True)
+    for draft_id in ("draft-003-a", "draft-003-b", "draft-003-c"):
+        (
+            tmp_path / ".webnovel" / "runtime" / "chapter_003" / "drafts" / f"{draft_id}.json"
+        ).write_text(json.dumps({"draft_id": draft_id, "prose": "正文"}), encoding="utf-8")
+
+    report = build_observability_summary(tmp_path)
+    entry = next(item for item in report["chapters"] if item["chapter"] == 3)
+
+    assert entry["draft_versions"] == 3
+    assert entry["reviewer_runs"] == {
+        "available": False,
+        "reason": "no_subagent_run_log",
+        "note": (
+            "找不到 .webnovel/tmp/subagent_runs/*.jsonl 执行记录；"
+            "Reviewer 执行次数标记为未知，不由草稿身份数推断。"
+        ),
+    }
+    assert report["totals"]["reviewer_runs"]["available"] is False
+    assert "不等于审查次数" in entry["return_reason_evidence"]
+
+
+def test_reviewer_runs_come_from_the_execution_log_when_present(tmp_path: Path):
+    """With a real execution log the count comes from it — with its real durations."""
+    from data_modules.observability_report import build_observability_summary
+
+    runs_dir = tmp_path / ".webnovel" / "tmp" / "subagent_runs"
+    runs_dir.mkdir(parents=True)
+    (runs_dir / "write-3.jsonl").write_text(
+        "\n".join(
+            [
+                json.dumps({"name": "context-agent", "status": "completed", "duration_ms": 120000}),
+                json.dumps({"name": "reviewer", "status": "completed", "duration_ms": 245453}),
+                json.dumps({"name": "reviewer", "status": "completed", "duration_ms": 265776}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    # two identities, two recorded reviews, one context agent: the identity count is unrelated
+    (tmp_path / ".webnovel" / "runtime" / "chapter_003" / "drafts").mkdir(parents=True)
+    for draft_id in ("draft-003-a", "draft-003-b"):
+        (
+            tmp_path / ".webnovel" / "runtime" / "chapter_003" / "drafts" / f"{draft_id}.json"
+        ).write_text(json.dumps({"draft_id": draft_id}), encoding="utf-8")
+
+    report = build_observability_summary(tmp_path, chapters=[3])
+    entry = report["chapters"][0]
+
+    assert entry["draft_versions"] == 2
+    assert entry["reviewer_runs"]["available"] is True
+    assert entry["reviewer_runs"]["count"] == 2
+    assert entry["reviewer_runs"]["total_duration_ms"] == 245453 + 265776
+    assert entry["reviewer_runs"]["measure"] == "recorded_reviewer_executions"
+    assert [r["duration_ms"] for r in entry["reviewer_runs"]["records"]] == [245453, 265776]
+    assert "可能被轮转或截断" in entry["reviewer_runs"]["note"]
 
 
 def test_observability_summary_reads_review_metrics(tmp_path: Path):

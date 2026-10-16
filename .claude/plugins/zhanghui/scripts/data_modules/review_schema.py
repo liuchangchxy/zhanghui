@@ -91,6 +91,12 @@ class ReviewResult:
     chapter: int
     issues: List[ReviewIssue] = field(default_factory=list)
     summary: str = ""
+    # Draft identity this review was produced for. Optional for backward compatibility, but a
+    # review that declares it can be *checked* against the draft being revised/committed —
+    # without it, a stale review could be reused on a different draft with nothing noticing.
+    draft_id: Optional[str] = None
+    draft_fingerprint: Optional[str] = None
+    draft_identity_source: str = ""
 
     @property
     def issues_count(self) -> int:
@@ -148,7 +154,7 @@ class ReviewResult:
         return _clamp_score(score)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "chapter": self.chapter,
             "issues": [i.to_dict() for i in self.issues],
             "issues_count": self.issues_count,
@@ -156,6 +162,13 @@ class ReviewResult:
             "has_blocking": self.has_blocking,
             "summary": self.summary,
         }
+        if self.draft_id:
+            payload["draft_id"] = self.draft_id
+        if self.draft_fingerprint:
+            payload["draft_fingerprint"] = self.draft_fingerprint
+        if self.draft_identity_source:
+            payload["draft_identity_source"] = self.draft_identity_source
+        return payload
 
     def to_metrics_dict(self, report_file: str = "") -> Dict[str, Any]:
         categories = self.categories
@@ -210,10 +223,16 @@ def parse_review_output(chapter: int, raw: Dict[str, Any]) -> ReviewResult:
             structured_evidence=item.get("structured_evidence"),
             score=item.get("score"),
         ))
+    nested_draft = raw.get("draft") if isinstance(raw.get("draft"), dict) else {}
+    draft_id = raw.get("draft_id") or nested_draft.get("draft_id")
+    draft_fingerprint = raw.get("draft_fingerprint") or nested_draft.get("draft_fingerprint")
     return ReviewResult(
         chapter=chapter,
         issues=issues,
         summary=str(raw.get("summary", "")),
+        draft_id=str(draft_id).strip() if draft_id else None,
+        draft_fingerprint=str(draft_fingerprint).strip() if draft_fingerprint else None,
+        draft_identity_source=str(raw.get("draft_identity_source") or "").strip(),
     )
 
 
