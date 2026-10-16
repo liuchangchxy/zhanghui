@@ -451,13 +451,14 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 # 2) 主流程读取 prompt，用当前模型产出裁决 JSON（11 项事实维度），
 #    把模型的回答原样写进：
 #    ${PROJECT_ROOT}/.webnovel/tmp/judge_response_{chapter_padded}.json
-#    应答里必须回填 judge_request 给出的 before_sha256 / after_sha256。
+#    应答里必须回填 judge_request 给出的 request_id 与 before_sha256 / after_sha256。
 
-# 3) 绑定并校验（裁决会被钉死在这两份正文上）
+# 3) 绑定并校验（裁决会被钉死在「这一次请求」上，而不是「当前正文」上）
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose judge-bind \
   --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
   --after-file "${PROJECT_ROOT}/.webnovel/tmp/step2b_candidate_{chapter_padded}.md" \
   --response-file "${PROJECT_ROOT}/.webnovel/tmp/judge_response_{chapter_padded}.json" \
+  --request-file "${PROJECT_ROOT}/.webnovel/tmp/judge_request_{chapter_padded}.json" \
   --chapter {chapter_num} \
   --output "${PROJECT_ROOT}/.webnovel/tmp/judge_verdict_{chapter_padded}.json"
 
@@ -471,11 +472,16 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 
 契约：
 - **严禁伪造 Judge 裁决**：模型没有真正裁决就让门禁 fail-closed 回滚，不允许手写一个 `STYLE_ONLY_SAFE`。
-- `--judge-file` 的裁决必须已经绑定到当前 before/after 文本；指纹不匹配会被判为 `UNCERTAIN` 并回滚，
-  防止旧裁决被复用到另一份正文。
+- `judge-bind` 必须带 `--request-file`：裁决要与**原始 judge-request** 关联。回答里声明的
+  `request_id` / `before_sha256` / `after_sha256` 只要有一项与请求不一致就被拒绝，**不会**被当前正文的
+  哈希重新盖章；缺 `request_id` 且缺哈希的回答同样拒绝（不能让「没写绑定」变成「随手绑定」）。
+- `--judge-file` 的裁决必须已经绑定到当前 before/after 文本；指纹不匹配会被判为 `UNCERTAIN` 并回滚。
 - 只有 `STYLE_ONLY_SAFE` 会放行；`SEMANTIC_CHANGE_PROPOSED` 与 `UNCERTAIN` 一律保留原稿。
-- 判定事实错误（时间/数字/道具/知情状态）不是文风问题：把它交给下面 Step 4 的**定向修订**，
-  不要试图用「伪装成风格修改」骗过 Judge。
+- 判定事实错误（时间/数字/道具/知情状态）**不是文风问题**：交给下面 Step 4 的**定向修订 + 事实纠错路径**
+  （`prose validate --revision-plan`），不要试图用「伪装成风格修改」骗过 Judge，
+  也不要把合法的事实纠错硬凑成 `STYLE_ONLY_SAFE`。
+- Judge 的裁决与**原始 judge-request** 绑定：`judge-bind` 必须带 `--request-file`，
+  回答里的 `request_id` / `before_sha256` / `after_sha256` 与请求不一致时一律拒绝（不是在当前正文上重新盖章）。
 
 输出：
 - 文风适配后工作草稿（通过则覆盖，未通过则保持 Step 2A 原工作草稿）及当前有效 `draft_id`。
@@ -616,6 +622,42 @@ cat "${SKILL_ROOT}/references/writing/typesetting.md"
      --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json"
    ```
    退出码非 0 或出现 `out_of_scope_changes` → 改动越界，回退重做；`untouched_targets` 列出本轮没修到的条目。
+   退出码 `4` 表示**版本/来源不匹配**（计划不是为当前草稿生成的，或审查没有绑定当前草稿），
+   必须重新 `revise plan`，不得改用手工定位。
+
+6.5 **事实安全裁决（按改动性质分流，不要混淆）**：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
+  --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
+  --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
+  --chapter {chapter_num} \
+  --revision-plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json"
+```
+
+三类改动走三条不同的路，**不能混用**：
+
+| 改动性质 | 判定 | 处理 |
+|---|---|---|
+| **待提交草稿内的事实纠错**（时间/数字/编号/道具，Reviewer 指出且计划已定位） | `status=PENDING_REREVIEW`，`semantic_outcome=FACT_FIX_DECLARED` | **正常路径**：不要求判成 `STYLE_ONLY_SAFE`，也不回滚；但必须完成下面的「事实纠错后置动作」 |
+| **纯文风修饰** | `status=ACCEPTED`，`semantic_outcome=STYLE_ONLY_SAFE` | 直接采用，仍需重新登记 + 重审（正文变了） |
+| **越界改写 / 非法事实篡改** | `status=ROLLEDBACK` | 回退重做；确定性层抓到的事实漂移（所有权/世界规则/关系/状态/履历/动机/能力）一律硬阻断，声明也不能豁免 |
+
+- `--revision-plan` 是「这次改动属于计划内的事实纠错」的声明。它**不放宽**任何检查：
+  改动必须完全落在计划命中的 `LOCAL_FACT` 区间内，且声明里的 `draft_sha256` 必须等于当前正文，
+  否则一律 `ROLLEDBACK`。章节整体重写、把事实篡改伪装成纠错，都会被这条挡住。
+- 合法性不来自「声明」，而来自「声明 + 强制重审」：事实纠错**必须**绑定新 Draft 并重新审查。
+
+**事实纠错后置动作（`PENDING_REREVIEW` 时必做，缺一不可）**：
+1. 采用候选正文覆盖工作草稿，重刷 `<chapter_changes>`；
+2. `runtime ingest-draft` 取得**新 `draft_id` / `draft_fingerprint`**；
+3. 用 `webnovel-writer:reviewer` 对**新草稿**完整重审（并将新 `draft_id` / `draft_fingerprint` 传入，
+   Reviewer 会回填到审查结果里）；
+4. `review-pipeline --chapter {chapter_num} --review-results ... --save-metrics` 把新审查绑定到新草稿；
+5. 只有第 4 步完成后，才允许进入 Step 4.5 与 Step 5。
+
+> **旧审查不得复用**：`revise plan` 会拒绝未声明草稿身份的审查（除非显式 `--allow-unbound-review`）；
+> `runtime commit` 遇到「审查声明的草稿身份与本次提交的草稿不一致」会以 `REVIEW_DRAFT_MISMATCH` 直接拒收。
 7. **决策判定与失效重审规则（Targeted Polish Invalidation Rule）**：
    - `status == ROLLEDBACK` 或正文未发生改变：保留润色前工作草稿（即 Step 3 审查版本），沿用原
      `draft_id` 与原审查结论，记录回退原因与审计记录。

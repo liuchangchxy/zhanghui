@@ -24,6 +24,7 @@ from .prose_semantic_diff import (
     compare_semantic_facts,
 )
 from .prose_quality_gate import (
+    STATUS_PENDING_REREVIEW,
     QualityGateDecision,
     evaluate_prose_quality_and_decide,
 )
@@ -32,7 +33,10 @@ from .prose_quality_gate import (
 @dataclass
 class ProsePipelineResult:
     ok: bool
-    status: str  # "ACCEPTED" | "ROLLEDBACK"
+    # "ACCEPTED" | "ROLLEDBACK" | "PENDING_REREVIEW".
+    # `ok` is False for PENDING_REREVIEW: a declared fact correction is not accepted prose —
+    # it is a bounded edit that still owes a fresh draft identity and a fresh review.
+    status: str
     chapter: int
     before_chars: int
     after_chars: int
@@ -41,17 +45,24 @@ class ProsePipelineResult:
     rollback_reason: Optional[str]
     final_prose: str
     audit_record: Dict[str, Any]
+    required_actions: List[str] = field(default_factory=list)
+    next_step: str = ""
+    declared_fact_fix: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "ok": self.ok,
             "status": self.status,
+            "gate": self.status,
             "chapter": self.chapter,
             "before_chars": self.before_chars,
             "after_chars": self.after_chars,
             "diagnosis": self.diagnosis,
             "semantic_outcome": self.semantic_outcome,
             "rollback_reason": self.rollback_reason,
+            "requires_rereview": self.status == STATUS_PENDING_REREVIEW,
+            "required_actions": list(self.required_actions),
+            "next_step": self.next_step,
             "audit_record": self.audit_record,
         }
 
@@ -116,6 +127,7 @@ class ProseQualityPipeline:
         diagnosis_report: Optional[DiagnosisReport] = None,
         edit_plan: Optional[str] = None,
         semantic_judge: Optional[Callable[[str, str], Any]] = None,
+        declared_fact_fix: Optional[Dict[str, Any]] = None,
     ) -> ProsePipelineResult:
         """
         Validate edited prose through Fact-Safe Semantic Diff & Quality Regression Gate.
@@ -128,6 +140,7 @@ class ProseQualityPipeline:
             diagnosis_summary=diag.to_dict(),
             edit_plan=edit_plan,
             semantic_judge=semantic_judge,
+            declared_fact_fix=declared_fact_fix,
         )
 
         return ProsePipelineResult(
@@ -141,4 +154,7 @@ class ProseQualityPipeline:
             rollback_reason=decision.rollback_reason,
             final_prose=decision.final_prose,
             audit_record=decision.audit_record,
+            required_actions=list(decision.required_actions),
+            next_step=decision.next_step,
+            declared_fact_fix=dict(decision.declared_fact_fix),
         )

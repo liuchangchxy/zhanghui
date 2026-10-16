@@ -154,6 +154,73 @@ def _build_review_metrics_record(metrics: Dict[str, Any]):
     )
 
 
+class ReviewDraftIdentityError(ValueError):
+    """Raised when a review declares a draft identity that contradicts the active draft."""
+
+
+def _bind_review_draft_identity(project_root: Path, chapter: int, result) -> Dict[str, Any]:
+    """Attach the active draft identity to a review result, or verify the declared one.
+
+    This is the attestation point of the workflow: it runs immediately after the Reviewer, so
+    "the review belongs to the draft that is active right now" is recorded here rather than
+    assumed later. A review that declares an identity contradicting the active draft is
+    refused outright — that is a stale review being reused, which must never pass silently.
+    """
+    from data_modules.revision_planner import resolve_active_draft_identity
+
+    active = resolve_active_draft_identity(project_root, chapter)
+    declared = {
+        "draft_id": str(result.draft_id or ""),
+        "draft_fingerprint": str(result.draft_fingerprint or ""),
+    }
+    if not active.get("available"):
+        return {
+            "available": False,
+            "reason": active.get("reason", "no_active_draft"),
+            "verified": False,
+            "stamped": False,
+            "declared": declared,
+        }
+
+    active_id = str(active.get("draft_id") or "")
+    active_fp = str(active.get("draft_fingerprint") or "")
+
+    if declared["draft_fingerprint"] and declared["draft_fingerprint"] != active_fp:
+        raise ReviewDraftIdentityError(
+            "审查结果声明的 draft_fingerprint 与当前在编草稿不一致："
+            f"review={declared['draft_fingerprint'][:12]} active={active_fp[:12]}。"
+            "这是旧审查被用于新草稿，拒绝登记；请对新草稿重新运行 Reviewer。"
+        )
+    if declared["draft_id"] and active_id and declared["draft_id"] != active_id:
+        raise ReviewDraftIdentityError(
+            "审查结果声明的 draft_id 与当前在编草稿不一致："
+            f"review={declared['draft_id']} active={active_id}。请对新草稿重新运行 Reviewer。"
+        )
+
+    if declared["draft_fingerprint"] or declared["draft_id"]:
+        result.draft_identity_source = result.draft_identity_source or "reviewer"
+        return {
+            "available": True,
+            "verified": True,
+            "stamped": False,
+            "draft_id": active_id,
+            "draft_fingerprint": active_fp,
+            "declared": declared,
+        }
+
+    result.draft_id = active_id or None
+    result.draft_fingerprint = active_fp or None
+    result.draft_identity_source = "review-pipeline"
+    return {
+        "available": True,
+        "verified": True,
+        "stamped": True,
+        "draft_id": active_id,
+        "draft_fingerprint": active_fp,
+        "declared": declared,
+    }
+
+
 def build_review_artifacts(
     project_root: Path,
     chapter: int,
@@ -162,6 +229,7 @@ def build_review_artifacts(
 ) -> Dict[str, Any]:
     raw = json.loads(review_results_path.read_text(encoding="utf-8"))
     result = parse_review_output(chapter=chapter, raw=raw)
+    draft_binding = _bind_review_draft_identity(project_root, chapter, result)
     _inject_craft_issues(project_root, result, chapter)
     anti_patterns_added = append_ai_flavor_anti_patterns(project_root, result)
     metrics = result.to_metrics_dict(report_file=report_file)
@@ -174,6 +242,7 @@ def build_review_artifacts(
         "review_result": normalized_review,
         "metrics": metrics,
         "anti_patterns_added": anti_patterns_added,
+        "draft_binding": draft_binding,
     }
 
 

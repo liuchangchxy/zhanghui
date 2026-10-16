@@ -1795,6 +1795,45 @@ class ChapterRuntime:
                 next_required_action=f"generate_{missing_artifacts[0]}",
             )
 
+        # 3.5 Review <-> draft identity consistency.
+        #
+        # A review result that declares which draft it reviewed must be about the draft being
+        # committed. Without this, a review produced for an earlier draft version could be
+        # replayed against a newer one — the exact "旧审查被静默用于新草稿" failure mode.
+        # Reviews that declare nothing keep working (the field is optional for compatibility),
+        # but a *declared contradiction* is a hard reject.
+        if isinstance(rev, dict):
+            declared_fp = str(rev.get("draft_fingerprint") or "").strip()
+            declared_id = str(rev.get("draft_id") or "").strip()
+            actual_fp = hashlib.sha256(str(resolved_prose).encode("utf-8")).hexdigest()
+            mismatches: list[str] = []
+            if declared_fp and declared_fp != actual_fp:
+                mismatches.append(
+                    f"draft_fingerprint declared={declared_fp[:12]} actual={actual_fp[:12]}"
+                )
+            if declared_id and draft_id and declared_id != str(draft_id):
+                mismatches.append(f"draft_id declared={declared_id} committing={draft_id}")
+            if mismatches:
+                return ChapterCommitOutcomeResult(
+                    ok=False,
+                    chapter=chapter,
+                    action="reject",
+                    attempt_id=f"reviewdraft-{uuid.uuid4().hex[:8]}",
+                    chapter_outcome="rejected",
+                    gate_decision_ref="",
+                    durable_commit_persisted=False,
+                    projection_status={},
+                    projection_success=False,
+                    can_retry_projection=False,
+                    error_code="REVIEW_DRAFT_MISMATCH",
+                    error=(
+                        "Cannot commit: review_result 声明的草稿身份与本次提交的草稿不一致（"
+                        + "; ".join(mismatches)
+                        + "）。必须对新草稿重新运行 Reviewer。"
+                    ),
+                    next_required_action="rerun_reviewer",
+                )
+
         # Parse proposed changes from prose if not passed
         if proposed_changes is None:
             proposed_changes = art.get("proposed_changes")

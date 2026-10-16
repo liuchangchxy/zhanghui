@@ -587,15 +587,39 @@ def cmd_prose(args: argparse.Namespace) -> int:
         judge_callable, _judge_binding = _build_judge_callable(args, before_text, after_text)
 
         chapter = getattr(args, "chapter", 1) or 1
-        res = pipeline.process_and_validate(before_text, after_text, chapter=chapter, semantic_judge=judge_callable)
+
+        declared_fact_fix = None
+        plan_path = getattr(args, "revision_plan", "") or ""
+        if plan_path:
+            path = Path(plan_path)
+            if not path.is_file():
+                print(f"ERROR: revision plan not found: {path}", file=sys.stderr)
+                return 2
+            plan = json.loads(path.read_text(encoding="utf-8"))
+            declared_fact_fix = _declared_fact_fix_from_plan(plan, chapter)
+            if not declared_fact_fix["spans"]:
+                declared_fact_fix = None  # nothing declared as a fact fix; stay fail-closed
+
+        res = pipeline.process_and_validate(
+            before_text,
+            after_text,
+            chapter=chapter,
+            semantic_judge=judge_callable,
+            declared_fact_fix=declared_fact_fix,
+        )
         if args.format == "json":
             print(res.to_json())
         else:
-            status = "ACCEPTED" if res.ok else "ROLLEDBACK"
-            print(f"Status: {status} | Semantic: {res.semantic_outcome}")
+            print(f"Status: {res.status} | Semantic: {res.semantic_outcome}")
             if res.rollback_reason:
                 print(f"Rollback reason: {res.rollback_reason}")
-        return 0 if res.ok else 1
+            if res.status == "PENDING_REREVIEW":
+                print("事实纠错已登记，但尚未通过审查。必须完成：")
+                for action in res.required_actions:
+                    print(f"  - {action}")
+        if res.status == "ROLLEDBACK":
+            return 1
+        return 0
 
     if action == "judge-request":
         from .prose_judge_host import build_judge_request, format_request_text
@@ -645,12 +669,23 @@ def cmd_prose(args: argparse.Namespace) -> int:
         if not response_file.is_file():
             print(f"ERROR: response file not found: {response_file}", file=sys.stderr)
             return 2
+
+        request_payload = None
+        request_path = getattr(args, "request_file", "") or ""
+        if request_path:
+            path = Path(request_path)
+            if not path.is_file():
+                print(f"ERROR: judge request file not found: {path}", file=sys.stderr)
+                return 2
+            request_payload = path.read_text(encoding="utf-8")
+
         try:
             verdict = bind_judge_response(
                 response_file.read_text(encoding="utf-8"),
                 before_text,
                 after_text,
                 chapter=getattr(args, "chapter", 0) or 0,
+                request=request_payload,
             )
         except (JudgeBindingError, ValueError) as exc:
             # 非法裁决不落盘：调用方会 fail-closed 回滚，不允许伪造通过。
@@ -710,10 +745,44 @@ def _build_judge_callable(args: argparse.Namespace, before_text: str, after_text
     return None, "none"
 
 
+def _declared_fact_fix_from_plan(plan: dict, chapter: int) -> dict:
+    """Turn a revision plan into the gate's declared-fact-fix scope.
+
+    Only targets the Reviewer itself located as `LOCAL_FACT` and that resolved to a concrete
+    span qualify. Everything else (style-only, chapter-scope, unresolved) is excluded, so the
+    declaration can never widen into a licence to rewrite arbitrary prose.
+    """
+    spans = []
+    for target in plan.get("targets") or []:
+        if not isinstance(target, dict):
+            continue
+        if target.get("kind") != "LOCAL_FACT" or not target.get("resolvable"):
+            continue
+        spans.append(
+            {
+                "start": int(target.get("start") or 0),
+                "end": int(target.get("end") or 0),
+                "kind": "LOCAL_FACT",
+                "issue_id": str(target.get("issue_id") or ""),
+                "locator": str(target.get("locator") or ""),
+            }
+        )
+    return {
+        "source": "revision_plan",
+        "chapter": int(plan.get("chapter") or chapter or 0),
+        "draft_sha256": str(plan.get("draft_sha256") or ""),
+        "draft_id": str(plan.get("draft_id") or ""),
+        "draft_fingerprint": str(plan.get("draft_fingerprint") or ""),
+        "target_ids": [span["issue_id"] for span in spans],
+        "spans": spans,
+    }
+
+
 def cmd_revise(args: argparse.Namespace) -> int:
     """Reviewer-driven local revision: plan -> host edits -> apply -> boundary verification."""
     from .revision_planner import (
         RevisionApplyError,
+        RevisionBindingError,
         apply_edits,
         build_revision_plan,
         format_plan_text,
@@ -738,14 +807,27 @@ def cmd_revise(args: argparse.Namespace) -> int:
             print(f"ERROR: review result is not valid JSON: {exc}", file=sys.stderr)
             return 2
 
-        plan = build_revision_plan(
-            draft_path.read_text(encoding="utf-8"),
-            reviewer_json,
-            chapter=args.chapter,
-            draft_id=args.draft_id or "",
-            draft_fingerprint=getattr(args, "draft_fingerprint", "") or "",
-            include_advisory=not args.blocking_only,
+        from .revision_planner import RevisionBindingError, resolve_active_draft_identity
+
+        active_draft = resolve_active_draft_identity(
+            _resolve_root(args.project_root), int(args.chapter)
         )
+        if not active_draft.get("available") and getattr(args, "allow_unregistered_draft", False):
+            active_draft = {}
+        try:
+            plan = build_revision_plan(
+                draft_path.read_text(encoding="utf-8"),
+                reviewer_json,
+                chapter=args.chapter,
+                draft_id=args.draft_id or "",
+                draft_fingerprint=getattr(args, "draft_fingerprint", "") or "",
+                include_advisory=not args.blocking_only,
+                active_draft=active_draft,
+                require_review_binding=not getattr(args, "allow_unbound_review", False),
+            )
+        except RevisionBindingError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 4
         out = args.output or str(draft_path.parent / f"revision_plan_{int(args.chapter):04d}.json")
         write_plan(out, plan)
         plan["plan_file"] = out
@@ -775,6 +857,9 @@ def cmd_revise(args: argparse.Namespace) -> int:
         original = draft_path.read_text(encoding="utf-8")
         try:
             updated, report = apply_edits(original, plan, edits)
+        except RevisionBindingError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 4
         except RevisionApplyError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
@@ -815,6 +900,8 @@ def cmd_revise(args: argparse.Namespace) -> int:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:
             print(f"changed={report['changed']} boundary_ok={report['boundary_ok']} ok={report['ok']}")
+            if report.get("draft_version_error"):
+                print(f"  DRAFT VERSION ERROR: {report['draft_version_error']}")
             for item in report["out_of_scope_changes"]:
                 print(f"  OUT-OF-SCOPE {item['tag']} @{item['before_start']}: {item['before_excerpt']!r}")
             for item in report["untouched_targets"]:
@@ -1724,6 +1811,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_prose_val.add_argument("--chapter", type=int, default=1, help="章节号")
     p_prose_val.add_argument("--judge-result", default="", help="Semantic Judge 裁决结果 JSON 字符串")
     p_prose_val.add_argument("--judge-file", default="", help="Semantic Judge 裁决结果 JSON 文件路径")
+    p_prose_val.add_argument(
+        "--revision-plan",
+        default="",
+        help="定向修订计划 JSON：声明本次改动属于计划内的事实纠错（走受治理重审路径，不要求判为 STYLE_ONLY_SAFE）",
+    )
     p_prose_val.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_prose_val.set_defaults(func=cmd_prose)
 
@@ -1751,6 +1843,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_prose_judge_bind.add_argument("--after", default="", help="修改后正文内容")
     p_prose_judge_bind.add_argument("--after-file", default="", help="修改后正文文件")
     p_prose_judge_bind.add_argument("--response-file", required=True, help="宿主模型回答的 JSON 文件")
+    p_prose_judge_bind.add_argument(
+        "--request-file",
+        default="",
+        help="原始 judge-request JSON：用于校验裁决与该请求的关联（强烈建议；缺失时仅能校验裁决自带的哈希）",
+    )
     p_prose_judge_bind.add_argument("--chapter", type=int, default=0, help="章节号")
     p_prose_judge_bind.add_argument("--output", default="", help="绑定后裁决 JSON 输出路径")
     p_prose_judge_bind.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
@@ -1769,6 +1866,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--blocking-only", action="store_true", help="只保留 blocking 问题（默认包含 advisory）"
     )
     p_revise_plan.add_argument("--output", default="", help="计划 JSON 输出路径")
+    p_revise_plan.add_argument(
+        "--allow-unbound-review",
+        action="store_true",
+        help="显式允许使用未声明草稿身份的审查结果（默认拒绝：旧审查不得静默用于新草稿）",
+    )
+    p_revise_plan.add_argument(
+        "--allow-unregistered-draft",
+        action="store_true",
+        help="显式允许在没有已登记在编草稿时生成计划（默认拒绝）",
+    )
     p_revise_plan.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_revise_plan.set_defaults(func=cmd_revise)
 

@@ -7,16 +7,21 @@ without adding a monitoring service, a database or an external collector (L12).
 
 Every number is derived from something already on disk:
 
-  * `.webnovel/runtime/chapter_NNN/drafts/*.json` — every ingested draft identity, i.e. the
-    real draft-version count and therefore the number of Reviewer runs a chapter needed;
+  * `.webnovel/runtime/chapter_NNN/drafts/*.json` — every ingested draft identity. This is a
+    **draft-version count and nothing more**: a draft identity records that prose was
+    registered, not that a Reviewer ran, and several identities can be produced without any
+    review at all;
+  * `.webnovel/tmp/subagent_runs/write-*.jsonl` — the actual subagent execution log. Reviewer
+    runs are counted from **these** records (with their real durations). When there is no such
+    log, the reviewer count is reported as **unknown** rather than inferred;
   * `.webnovel/observability/data_agent_timing.jsonl` — Data Agent sub-step durations;
   * `index.db:review_metrics` — the latest review score and severity counts per chapter;
   * `index.db:tool_call_stats` — tool call counts and failures;
   * `writer_package.json` / `governed_context_*.json` — real context sizes in characters.
 
-Anything the host does not expose is reported as `unknown` rather than fabricated. In
-particular **token usage is never invented**: Claude Code does not hand token metadata to the
-plugin, so `tokens` is always `{"available": false}` here.
+Anything the host does not expose is reported as `unknown` rather than fabricated. Token
+usage is never invented (Claude Code does not hand token metadata to the plugin), and neither
+is a call count: an identity is not an execution.
 """
 from __future__ import annotations
 
@@ -53,6 +58,84 @@ def _chapter_drafts(project_root: Path, chapter: int) -> List[Dict[str, Any]]:
             }
         )
     return out
+
+
+def _subagent_runs(project_root: Path) -> List[Dict[str, Any]]:
+    """Read the subagent execution log: one JSON object per real subagent invocation."""
+    runs_dir = project_root / ".webnovel" / "tmp" / "subagent_runs"
+    if not runs_dir.is_dir():
+        return []
+    entries: List[Dict[str, Any]] = []
+    for path in sorted(runs_dir.glob("*.jsonl")):
+        chapter = None
+        digits = "".join(ch for ch in path.stem if ch.isdigit())
+        if digits:
+            chapter = int(digits)
+        for line_no, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            entries.append(
+                {
+                    "name": str(payload.get("name") or ""),
+                    "status": str(payload.get("status") or ""),
+                    "duration_ms": payload.get("duration_ms"),
+                    "chapter": payload.get("chapter") or chapter,
+                    "source_file": path.name,
+                    "line": line_no,
+                    "outputs": payload.get("outputs") or [],
+                }
+            )
+    return entries
+
+
+def _reviewer_runs(project_root: Path, chapter: Optional[int]) -> Dict[str, Any]:
+    """Reviewer executions, counted from the real execution log only.
+
+    A draft identity is *not* evidence that a Reviewer ran: identities are produced by
+    `runtime ingest-draft`, and several can exist for one review (or none). Inferring
+    "n drafts ⇒ at least n reviews" overstates the cost, so when no execution log exists the
+    count is reported as unavailable.
+    """
+    runs = _subagent_runs(project_root)
+    if not runs:
+        return {
+            "available": False,
+            "reason": "no_subagent_run_log",
+            "note": (
+                "找不到 .webnovel/tmp/subagent_runs/*.jsonl 执行记录；"
+                "Reviewer 执行次数标记为未知，不由草稿身份数推断。"
+            ),
+        }
+    selected = [r for r in runs if r.get("name") == "reviewer"]
+    if chapter is not None:
+        selected = [r for r in selected if r.get("chapter") in (None, chapter)]
+    durations = [int(r["duration_ms"]) for r in selected if isinstance(r.get("duration_ms"), int)]
+    return {
+        "available": True,
+        "count": len(selected),
+        "total_duration_ms": sum(durations) if durations else None,
+        "measure": "recorded_reviewer_executions",
+        "note": (
+            "计数来源为 .webnovel/tmp/subagent_runs/*.jsonl 的真实执行记录；"
+            "该日志由写章流程追加写入，可能被轮转或截断，因此是已记录次数而非必然的完整次数。"
+        ),
+        "records": [
+            {
+                "chapter": r.get("chapter"),
+                "status": r.get("status"),
+                "duration_ms": r.get("duration_ms"),
+                "source": f"{r.get('source_file')}:{r.get('line')}",
+            }
+            for r in selected
+        ],
+    }
 
 
 def _review_metrics(project_root: Path) -> Dict[int, Dict[str, Any]]:
@@ -184,10 +267,7 @@ def build_observability_summary(
             "chapter": chapter,
             "draft_versions": len(drafts),
             "draft_ids": [item["draft_id"] for item in drafts],
-            # one Reviewer run per ingested draft is the workflow contract (any prose change
-            # requires a fresh review), so this is the reviewer-run count, not a guess about
-            # how long each run took.
-            "reviewer_runs": len(drafts),
+            "reviewer_runs": _reviewer_runs(root, chapter),
             "review_score_latest": metric.get("overall_score"),
             "severity_counts_latest": metric.get("severity_counts") or {},
             "review_updated_at": metric.get("updated_at") or "",
@@ -195,10 +275,19 @@ def build_observability_summary(
             "data_agent_timing": _data_agent_timing(root, chapter),
         }
         entry["return_reason_evidence"] = (
-            f"{len(drafts)} 个草稿身份 ⇒ 至少 {len(drafts)} 次审查；"
+            f"{len(drafts)} 个已登记草稿身份（不等于审查次数）；"
             "具体返稿原因见各轮 review_results.json / review_metrics.notes"
         )
         per_chapter.append(entry)
+
+    reviewer_total = 0
+    reviewer_known = True
+    for entry in per_chapter:
+        runs = entry["reviewer_runs"]
+        if runs.get("available"):
+            reviewer_total += int(runs.get("count") or 0)
+        else:
+            reviewer_known = False
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -207,7 +296,11 @@ def build_observability_summary(
         "totals": {
             "chapters": len(per_chapter),
             "draft_versions": total_drafts,
-            "reviewer_runs": total_drafts,
+            "reviewer_runs": (
+                {"available": True, "count": reviewer_total}
+                if reviewer_known
+                else {"available": False, "reason": "no_subagent_run_log"}
+            ),
         },
         "tool_call_stats": _tool_call_stats(root),
         "tokens": {
@@ -218,16 +311,27 @@ def build_observability_summary(
 
 
 def format_observability_text(report: Dict[str, Any]) -> str:
+    totals = report["totals"]
+    reviewer_totals = totals.get("reviewer_runs") or {}
+    reviewer_text = (
+        str(reviewer_totals.get("count"))
+        if reviewer_totals.get("available")
+        else "unknown（无执行记录，不由草稿身份数推断）"
+    )
     lines = [
-        f"observability chapters={report['totals']['chapters']} "
-        f"draft_versions={report['totals']['draft_versions']} "
-        f"reviewer_runs={report['totals']['reviewer_runs']}"
+        f"observability chapters={totals['chapters']} "
+        f"draft_versions={totals['draft_versions']} "
+        f"reviewer_runs={reviewer_text}"
     ]
     for entry in report.get("chapters") or []:
+        runs = entry.get("reviewer_runs") or {}
+        run_text = str(runs.get("count")) if runs.get("available") else "unknown"
         lines.append(
-            f"  第{entry['chapter']}章: drafts={entry['draft_versions']} "
-            f"reviewer_runs={entry['reviewer_runs']} score={entry['review_score_latest']}"
+            f"  第{entry['chapter']}章: draft_versions={entry['draft_versions']} "
+            f"reviewer_runs={run_text} score={entry['review_score_latest']}"
         )
+        if not runs.get("available"):
+            lines.append(f"      reviewer_runs: {runs.get('note', runs.get('reason', 'unknown'))}")
         if entry["context_sizes"]:
             sizes = ", ".join(f"{k}={v}B" for k, v in entry["context_sizes"].items())
             lines.append(f"      context: {sizes}")
