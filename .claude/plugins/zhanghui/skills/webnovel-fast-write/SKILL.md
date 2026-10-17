@@ -56,7 +56,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime governed-context --chapter {chapter_num} --format json
 ```
 
-1. 使用 Agent 工具调用 `webnovel-writer:context-agent`（传入 `chapter`、`project_root` 等），产出文学创作任务书（Creative Brief）；
+1. 使用 Agent 工具调用 `zhanghui:context-agent`（传入 `chapter`、`project_root` 等），产出文学创作任务书（Creative Brief）；
 2. 调用 `runtime attach-creative-brief` 签名封口，生成唯一 Canonical Writer Prompt，并从同一封口包提取 `package_fingerprint`：
 ```bash
 # 签名封口并将 Canonical Writer Prompt 输出至临时文件供 Writer 消费
@@ -113,9 +113,9 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
      --chapter {chapter_num} \
      --format json > "${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"
    ```
-2. 使用 `Agent` 工具调用 `webnovel-writer:reviewer`：
+2. 使用 `Agent` 工具调用 `zhanghui:reviewer`：
    ```
-   Use the Agent tool to run `webnovel-writer:reviewer`
+   Use the Agent tool to run `zhanghui:reviewer`
    ```
    输入参数：
    - `chapter`: `{chapter_num}`
@@ -179,9 +179,9 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
    获取全新的 `{new_draft_id}` 与 `{new_draft_fingerprint}`。
 2. **Reviewer 原始结果所有权与重新审查（Reviewer Re-invocation & Ownership Protection）**：
    - **所有权绝对禁令**：Reviewer Agent 独占拥有 `review_results.json` 的生成权威；**严禁主流程直接手工修改或就地替换 Reviewer Agent 原始审查产物中的 `draft_id` / `draft_fingerprint`**。
-   - **权威重审**：新 `draft_id` 产生后，必须复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder），使用 `Agent` 工具重新调用 `webnovel-writer:reviewer`：
+   - **权威重审**：新 `draft_id` 产生后，必须复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder），使用 `Agent` 工具重新调用 `zhanghui:reviewer`：
      ```
-     Use the Agent tool to run `webnovel-writer:reviewer`
+     Use the Agent tool to run `zhanghui:reviewer`
      ```
      输入参数传入新草稿身份：
      - `chapter`: `{chapter_num}`
@@ -224,7 +224,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
    ```
 
 3. **调用 Data Agent 提取事实与元数据**：
-   使用 Agent 工具调用 `webnovel-writer:data-agent`（只传入 `.webnovel/tmp/data_agent_prose.md`，严禁传入包含 CHANGES 的文件）。
+   使用 Agent 工具调用 `zhanghui:data-agent`（只传入 `.webnovel/tmp/data_agent_prose.md`，严禁传入包含 CHANGES 的文件）。
    Data Agent 依据唯一 schema 规范产出 3 份 canonical commit 必需产物到 `${PROJECT_ROOT}/.webnovel/tmp/`：
    - `extraction_result.json`（实体/状态变更、事件、摘要与场景）
    - `fulfillment_result.json`（大纲目标履约结果：planned_nodes, covered_nodes, missed_nodes, extra_nodes）

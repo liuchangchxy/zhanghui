@@ -52,11 +52,24 @@ def test_plugin_name_is_exact() -> None:
     )
 
 
-def test_plugin_version_is_6_4_0() -> None:
-    """plugin.json version 必须是 6.4.0——避免 marketplace 与 plugin drift。"""
+def test_plugin_version_matches_marketplace_and_is_semver() -> None:
+    """plugin.json 与 marketplace.json 的版本必须一致且为 semver。
+
+    这里刻意**不写死具体版本号**：写死会逼着每次发版都改测试，而这一次的验收缺陷恰恰是
+    PR #46/#47 合并后版本号没有递增，导致老用户的 `claude plugin update` 永远返回
+    "already at the latest version"，修复根本没有到达用户。
+    """
     import json
-    data = json.loads((PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-    assert data["version"] == "6.4.0", f"plugin version 必须是 6.4.0，实际是 {data['version']!r}"
+    import re
+
+    plugin = json.loads((PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    marketplace_path = PLUGIN_ROOT.parent.parent.parent / ".claude-plugin" / "marketplace.json"
+    marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
+    entry = next(p for p in marketplace["plugins"] if p.get("name") == "zhanghui")
+    assert re.fullmatch(r"\d+\.\d+\.\d+", str(plugin["version"])), plugin["version"]
+    assert entry["version"] == plugin["version"], (
+        f"marketplace={entry['version']!r} plugin={plugin['version']!r}"
+    )
 
 
 def test_no_scripts_in_dev_dotclaude() -> None:

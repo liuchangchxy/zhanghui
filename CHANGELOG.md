@@ -2,6 +2,21 @@
 
 > 变更日志。新条目加在最上面。
 
+## 2026-10-17 — 6.5.0 正常用户验收返修
+
+### 修复
+
+- **发布版本号**：plugin.json / marketplace.json / README 同步到 `6.5.0`。PR #46/#47 合并后版本号仍停在 `6.4.0`，`claude plugin update zhanghui@zhanghui` 会直接返回 “already at the latest version”，老用户永远收不到修复。
+- **`sync_plugin_version.py` 路径**：脚本原先假设 plugin 树就是仓库根，实际布局是 `<repo>/.claude/plugins/zhanghui` + `<repo>/.claude-plugin/marketplace.json`，导致发布辅助工具直接 `FileNotFoundError`。现已按现行布局解析，并新增回归测试。
+- **修订计划定位**：`revise plan` 把 Reviewer 的 `第N行` 当成了“第 N 个非空段落”，标题和空行会让它落到另一段。现在行引用按**真实文件行号**解析；当行/段引用指向不同区间且 finding 的引用证据无法唯一裁决时，标记为 `line_paragraph_conflict`（不可自动应用），不再静默改错段落。
+- **Agent 注册名**：Skills / 行为 fixture / `prose_quality_gate` 的 required action 仍写 `webnovel-writer:reviewer` 等旧插件命名；实际注册名是 `zhanghui:reviewer` / `zhanghui:context-agent` / `zhanghui:data-agent`。已统一，避免启用旧 `webnovel-writer` 插件时调用到错误的 agent。
+
+### 回归测试
+
+- `tests/unit/test_local_revision_and_judge.py`：`正文第N行（第N段）` 必须命中引用证据所在的行；无证据时拒绝猜测。
+- `tests/unit/test_plugin_release_version_sync.py`：真实仓库布局下 `sync_plugin_version.py --check` 必须通过。
+- `test_self_contained` / `test_distribution_integrity` 不再写死版本号，改为校验 plugin 与 marketplace 一致 + semver。
+
 ## 2026-08-19 — safe-rerun 重构
 
 ### 新增

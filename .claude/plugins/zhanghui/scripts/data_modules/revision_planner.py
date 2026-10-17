@@ -182,12 +182,17 @@ class Paragraph:
     `index` is the 1-based paragraph number the Reviewer refers to as `第N段`; `start`/`end`
     are the character span of the paragraph *excluding* its trailing newline, so replacing a
     paragraph never silently eats the line break that follows it.
+
+    `file_line` is the *physical* 1-based line number in the file. It differs from `index`
+    whenever the file contains a heading or blank lines — the exact situation where a
+    Reviewer reference like `正文第11行（第11段）` used to be resolved to the wrong paragraph.
     """
 
     index: int
     start: int
     end: int
     text: str
+    file_line: int = 0
 
     @property
     def line_number(self) -> int:
@@ -209,7 +214,15 @@ def iter_paragraphs(text: str) -> List[Paragraph]:
             index += 1
             start = offset
             end = offset + len(body)
-            paragraphs.append(Paragraph(index=index, start=start, end=end, text=body))
+            paragraphs.append(
+                Paragraph(
+                    index=index,
+                    start=start,
+                    end=end,
+                    text=body,
+                    file_line=_file_line_of(text, start),
+                )
+            )
         offset += len(raw_line)
     return paragraphs
 
@@ -386,6 +399,88 @@ def _span_for_paragraphs(
     )
 
 
+def _span_for_file_lines(
+    base: "RevisionTarget",
+    text: str,
+    paragraphs: Sequence[Paragraph],
+    lo: int,
+    hi: int,
+    locator: str,
+) -> Optional["RevisionTarget"]:
+    """Map a 1-based *physical file line* range to a character span.
+
+    Reviewer locations such as `正文第11行` refer to the line numbering a reader sees in the
+    file, not to the Nth non-empty paragraph. Blank lines and the chapter heading therefore
+    shift the two numbering systems apart; resolving a line reference through the paragraph
+    index (the old behaviour) silently edited the wrong paragraph.
+    """
+    selected = [p for p in paragraphs if lo <= p.file_line <= hi]
+    if not selected:
+        return None
+    return base.with_span(
+        locator=locator,
+        start=selected[0].start,
+        end=selected[-1].end,
+        line_start=selected[0].index,
+        line_end=selected[-1].index,
+        before_text=text[selected[0].start:selected[-1].end],
+        text=text,
+    )
+
+
+def _anchor_quotes(issue: Dict[str, Any]) -> List[str]:
+    """Quoted text the finding itself points at, used to disambiguate locators."""
+    anchors: List[str] = []
+    for key in ("anchor_quote", "excerpt"):
+        value = str(issue.get(key) or "").strip()
+        if value:
+            anchors.append(value)
+    anchors.extend(
+        _extract_quotes(
+            str(issue.get("description") or ""),
+            str(issue.get("evidence") or ""),
+            str(issue.get("fix_hint") or ""),
+            json.dumps(issue.get("structured_evidence") or [], ensure_ascii=False),
+        )
+    )
+    # Keep order, drop duplicates and trivially short fragments.
+    return [a for a in dict.fromkeys(anchors) if len(a) >= 2]
+
+
+def _select_candidate(
+    resolved: Sequence[Tuple[str, "RevisionTarget"]],
+    anchors: Sequence[str],
+) -> Optional[Tuple[str, "RevisionTarget"]]:
+    """Pick one locator among candidates that disagree.
+
+    Rules:
+    * identical spans -> first candidate;
+    * a quoted anchor contained by exactly one span -> that span;
+    * none/ambiguous -> ``None`` so the caller can mark the finding unresolvable instead of
+      silently editing the wrong paragraph.
+    """
+    if len(resolved) == 1:
+        return resolved[0]
+    if len({(t.start, t.end) for _, t in resolved}) == 1:
+        return resolved[0]
+    scored: List[Tuple[int, str, "RevisionTarget"]] = []
+    for locator, target in resolved:
+        score = sum(len(anchor) for anchor in anchors if anchor in target.before_text)
+        scored.append((score, locator, target))
+    best = max(score for score, _, _ in scored)
+    if best <= 0:
+        return None
+    winners = [(locator, target) for score, locator, target in scored if score == best]
+    if len(winners) == 1:
+        return winners[0]
+    # A tie means both spans quote the finding equally well. Prefer the explicit physical
+    # line reference, which is the unambiguous half of `第N行（第N段）`.
+    for locator, target in winners:
+        if locator == LOC_LINE:
+            return locator, target
+    return winners[0]
+
+
 def _expand_quote_span(
     base: "RevisionTarget",
     text: str,
@@ -503,7 +598,7 @@ def locate_issue(text: str, issue: Dict[str, Any], *, index: int = 0) -> Revisio
             int(line_match.group(1)),
             int(line_match.group(2)) if line_match.group(2) else None,
         )
-        target = _span_for_paragraphs(base, text, paragraphs, lo, hi, LOC_LINE)
+        target = _span_for_file_lines(base, text, paragraphs, lo, hi, LOC_LINE)
         candidates.append((LOC_LINE, target, "" if target else "line_out_of_range"))
 
     # 4) exact quote carried by the finding (description / fix_hint / structured evidence)
@@ -534,9 +629,15 @@ def locate_issue(text: str, issue: Dict[str, Any], *, index: int = 0) -> Revisio
             )
         )
 
-    for locator, target, ambiguity in candidates:
-        if target is None:
-            continue
+    resolved = [(locator, target) for locator, target, _ in candidates if target is not None]
+    if resolved:
+        selected = _select_candidate(resolved, _anchor_quotes(issue))
+        if selected is None:
+            base.locator = LOC_UNRESOLVED
+            base.resolvable = False
+            base.ambiguity = "line_paragraph_conflict"
+            return base
+        locator, target = selected
         target.locator = locator
         return target
 

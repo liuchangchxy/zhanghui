@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -7,10 +7,18 @@ from pathlib import Path
 from typing import Any
 
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-PLUGIN_JSON_PATH = ROOT / "zhanghui" / ".claude-plugin" / "plugin.json"
-MARKETPLACE_JSON_PATH = ROOT / ".claude-plugin" / "marketplace.json"
-README_PATH = ROOT / "README.md"
+# Layout contract (checked by tests/unit/test_plugin_release_version_sync.py):
+#   <repo>/.claude/plugins/zhanghui/scripts/sync_plugin_version.py
+# The plugin manifest lives in the plugin tree; the marketplace catalog and the README
+# release badge/table live at the repository root. The previous constants assumed the
+# plugin tree *was* the repository root, so the documented release helper crashed with
+# FileNotFoundError instead of bumping the version — which is how PR #46/#47 shipped
+# without a version change and existing users never saw an update.
+PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = PLUGIN_ROOT.parent.parent.parent
+PLUGIN_JSON_PATH = PLUGIN_ROOT / ".claude-plugin" / "plugin.json"
+MARKETPLACE_JSON_PATH = REPO_ROOT / ".claude-plugin" / "marketplace.json"
+README_PATH = REPO_ROOT / "README.md"
 PLUGIN_NAME = "zhanghui"
 VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 README_ROW_PATTERN = re.compile(

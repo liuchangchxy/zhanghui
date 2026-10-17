@@ -131,6 +131,87 @@ def test_plan_locates_paragraph_and_quote_without_section_headings():
     assert plan["summary"]["chapter_scope"] == 1
 
 
+DUAL_REF_DRAFT = "\n".join(
+    [
+        "# 第1章 被改过的一行",
+        "",
+        "他数了一遍。记录本上共有七行。",
+        "",
+        "回到第 5 行。",
+        "",
+        "四个数字是蓝的。",
+    ]
+)
+
+
+def _dual_ref_review(**issue_overrides) -> dict:
+    import hashlib
+
+    issue = {
+        "severity": "high",
+        "category": "setting",
+        "location": "正文第3行（第3段）",
+        "description": "前一段确认八行，紧接着又写“记录本上共有七行”。",
+        "evidence": "正文第3行“共七行”；世界观要求每页固定八行。",
+        "fix_hint": "删除七行表述，保留八行。",
+        "blocking": False,
+    }
+    issue.update(issue_overrides)
+    return {
+        "chapter": 1,
+        "draft_id": "draft-001-dualref",
+        "draft_fingerprint": hashlib.sha256(DUAL_REF_DRAFT.encode("utf-8")).hexdigest(),
+        "issues": [issue],
+    }
+
+
+def test_plan_resolves_dual_line_paragraph_reference_to_the_quoted_line():
+    """`正文第3行（第3段）` must follow the physical line, not the Nth non-empty paragraph.
+
+    The live acceptance run lost a fact correction here: the file had a heading and blank
+    lines, so the 3rd non-empty paragraph was a different paragraph than line 3. The plan was
+    marked resolvable against the wrong span, which would have re-written an unrelated
+    sentence. A quoted anchor must break the tie in favour of the span that actually contains
+    the finding.
+    """
+    from data_modules.revision_planner import build_revision_plan
+
+    plan = build_revision_plan(
+        DUAL_REF_DRAFT,
+        _dual_ref_review(),
+        chapter=1,
+        active_draft=_active_draft(DUAL_REF_DRAFT, draft_id="draft-001-dualref"),
+    )
+    target = plan["targets"][0]
+    assert target["locator"] == "line"
+    assert target["resolvable"] is True
+    assert target["file_line_start"] == 3
+    assert "七行" in target["before_text"]
+    assert "回到第 5 行" not in target["before_text"]
+
+
+def test_plan_refuses_to_guess_when_line_and_paragraph_disagree_without_evidence():
+    """Two disagreeing locators and no quoted anchor must become an explicit ambiguity."""
+    from data_modules.revision_planner import build_revision_plan
+
+    review = _dual_ref_review(
+        description="行数与前文不一致。",
+        evidence="",
+        fix_hint="按前文行数修正。",
+    )
+    plan = build_revision_plan(
+        DUAL_REF_DRAFT,
+        review,
+        chapter=1,
+        active_draft=_active_draft(DUAL_REF_DRAFT, draft_id="draft-001-dualref"),
+    )
+    target = plan["targets"][0]
+    assert target["resolvable"] is False
+    assert target["locator"] == "unresolved"
+    assert target["ambiguity"] == "line_paragraph_conflict"
+    assert plan["editable_spans"] == []
+
+
 def test_plan_keeps_advisory_findings_by_default_and_can_drop_them():
     """The old contract only accepted blocking=True findings, which is why ordinary review
     advice produced an empty plan."""

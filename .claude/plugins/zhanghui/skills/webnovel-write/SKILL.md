@@ -276,7 +276,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
      - `satisfaction_point`（爽点落点）
      由 Context Agent 在产出 Creative Brief 时深度消化并落实为本章创作禁区与结构借鉴。
 
-使用 Agent 调用 `webnovel-writer:context-agent`，参数：
+使用 Agent 调用 `zhanghui:context-agent`，参数：
 - `chapter`
 - `project_root`
 - `storage_path=.webnovel/`
@@ -284,12 +284,12 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 
 按以下字面调用方式触发：
 ```
-Use the Agent tool to run `webnovel-writer:context-agent`
+Use the Agent tool to run `zhanghui:context-agent`
 ```
 
 硬要求：
 - 若 `state` 或大纲不可用，立即阻断并返回缺失项。
-- 写章链路隔离约束：本步使用 `webnovel-writer:context-agent`（写作任务书），与下游 `webnovel-writer:reviewer` / `webnovel-writer:data-agent` 通过 Agent 工具显式分隔；不得用主流程口头代替 subagent 输出。
+- 写章链路隔离约束：本步使用 `zhanghui:context-agent`（写作任务书），与下游 `zhanghui:reviewer` / `zhanghui:data-agent` 通过 Agent 工具显式分隔；不得用主流程口头代替 subagent 输出。
 - **保留 Context Agent 文学认知能力**：Context Agent 消费上述受治理上下文及参考输入，专注文学层面的创作决策：
   - 人物核心动机与心理走向；
   - 本章核心冲突、阻力与代价；
@@ -497,9 +497,9 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 ```
 
 调用约束：
-- 必须用 `Agent` 工具按注册名 `webnovel-writer:reviewer` 调用审查 subagent：
+- 必须用 `Agent` 工具按注册名 `zhanghui:reviewer` 调用审查 subagent：
   ```
-  Use the Agent tool to run `webnovel-writer:reviewer`
+  Use the Agent tool to run `zhanghui:reviewer`
   ```
   输入参数：
   - `chapter`: `{chapter_num}`
@@ -651,7 +651,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 **事实纠错后置动作（`PENDING_REREVIEW` 时必做，缺一不可）**：
 1. 采用候选正文覆盖工作草稿，重刷 `<chapter_changes>`；
 2. `runtime ingest-draft` 取得**新 `draft_id` / `draft_fingerprint`**；
-3. 用 `webnovel-writer:reviewer` 对**新草稿**完整重审（并将新 `draft_id` / `draft_fingerprint` 传入，
+3. 用 `zhanghui:reviewer` 对**新草稿**完整重审（并将新 `draft_id` / `draft_fingerprint` 传入，
    Reviewer 会回填到审查结果里）；
 4. `review-pipeline --chapter {chapter_num} --review-results ... --save-metrics` 把新审查绑定到新草稿；
 5. 只有第 4 步完成后，才允许进入 Step 4.5 与 Step 5。
@@ -673,7 +673,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
         ```
         获取全新的 `draft_id` 与 `draft_fingerprint`；
      4. **旧草稿的审查结果彻底失效**：严禁沿用旧 `draft_id` 对应的 review_results；
-     5. 重新调用 `webnovel-writer:reviewer` 对新草稿进行完整审查（继续传入 `reviewer_context_{chapter_padded}.json` 作为审查依据），产出与新 `draft_id` 绑定的全新 `review_results.json`，并调用 `review-pipeline --save-metrics` 刷新 metrics；
+     5. 重新调用 `zhanghui:reviewer` 对新草稿进行完整审查（继续传入 `reviewer_context_{chapter_padded}.json` 作为审查依据），产出与新 `draft_id` 绑定的全新 `review_results.json`，并调用 `review-pipeline --save-metrics` 刷新 metrics；
      6. 只有完成新草稿审查并绑定新 `draft_id` 后，方可进入 Step 4.5。
 
 **收敛策略（不设隐藏分数线）**：
@@ -705,7 +705,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py \
 **判定逻辑**：
 - `passed=true`：进入 Step 5（data-agent）。
 - `passed=false`：读取 `failures` 列表，把每条规则的报错反馈给主流程 LLM，要求**只重写 `<chapter_changes>` 块**（不改正文）。最多 2 次。
-- **重写后身份同步规则**：若重写了 `<chapter_changes>` 块导致工作草稿发生变更，旧草稿身份与其审查产物彻底失效。严禁主流程手工篡改 `review_results.json` 中的草稿身份。必须重新调用 `runtime ingest-draft` 登记草稿以获得最新 `draft_id`，复用既有 `reviewer_context` 重新调用 `webnovel-writer:reviewer` 产出与新草稿绑定的全新审查结果并刷新 metrics，确保后续 Step 5 提取、对账产物及最终 `runtime commit` 严格基于同一有效草稿身份。若未修改则沿用现有 `draft_id`，不得无意义重复登记或重审。
+- **重写后身份同步规则**：若重写了 `<chapter_changes>` 块导致工作草稿发生变更，旧草稿身份与其审查产物彻底失效。严禁主流程手工篡改 `review_results.json` 中的草稿身份。必须重新调用 `runtime ingest-draft` 登记草稿以获得最新 `draft_id`，复用既有 `reviewer_context` 重新调用 `zhanghui:reviewer` 产出与新草稿绑定的全新审查结果并刷新 metrics，确保后续 Step 5 提取、对账产物及最终 `runtime commit` 严格基于同一有效草稿身份。若未修改则沿用现有 `draft_id`，不得无意义重复登记或重审。
 - 2 次仍未通过：记录到 `.webnovel/tmp/changes_gate_failures.jsonl`，人工介入后由 ledger 续跑接管。
 
 **调 changes_gate.py R4b**（advisory 子规则，不阻塞）：
@@ -816,7 +816,7 @@ sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 
 ### Step 5：Data Agent + reconciliation + runtime commit / chapter-commit 提交（事实回写主链）
 
-使用 Agent 调用 `webnovel-writer:data-agent`，参数：
+使用 Agent 调用 `zhanghui:data-agent`，参数：
 - `chapter`
 - 先运行 `prepare_data_agent_input.py`，把实际最终章节工作草稿拆成 prose-only 文件与独立 ProposedChanges JSON；Data Agent 的 `chapter_file` 必须指向 prose-only 文件，绝不传原始章节工作草稿。
 - 工作草稿 `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md` 对应的提取产物与 proposal JSON 必须一致。
@@ -827,7 +827,7 @@ sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 
 按以下字面调用方式触发：
 ```
-Use the Agent tool to run `webnovel-writer:data-agent`
+Use the Agent tool to run `zhanghui:data-agent`
 ```
 
 生成隔离输入并调用 Data Agent：

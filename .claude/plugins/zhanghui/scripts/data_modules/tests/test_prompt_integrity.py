@@ -309,7 +309,7 @@ def test_webnovel_review_skill_uses_unified_reviewer_pipeline():
     skill_text = _read_text(SKILLS_DIR / "webnovel-review" / "SKILL.md")
 
     assert "`reviewer`" in skill_text
-    assert "Use the Agent tool to run `webnovel-writer:reviewer`" in skill_text
+    assert "Use the Agent tool to run `zhanghui:reviewer`" in skill_text
     assert "subagent_type:" not in skill_text
     assert "review-pipeline" in skill_text
     assert ".webnovel/tmp/review_results.json" in skill_text
@@ -340,13 +340,13 @@ def test_active_skills_use_agent_tool_name_not_legacy_task():
 
 
 def test_webnovel_write_skill_uses_explicit_agent_invocation_templates():
-    """关键 subagent 必须经 Agent 工具按注册名 webnovel-writer:X 显式调用；不再用伪函数 subagent_type 块（plan §4.4.2/§8.4）。"""
+    """关键 subagent 必须经 Agent 工具按注册名 zhanghui:X 显式调用；不再用伪函数 subagent_type 块（plan §4.4.2/§8.4）。"""
     text = _read_text(SKILLS_DIR / "webnovel-write" / "SKILL.md")
     fm = _extract_frontmatter(text)
 
     assert "Agent" in fm.get("allowed-tools", "")
     for subagent in ("context-agent", "reviewer", "data-agent"):
-        assert f"webnovel-writer:{subagent}" in text, f"缺少 {subagent} 的注册名显式调用"
+        assert f"zhanghui:{subagent}" in text, f"缺少 {subagent} 的注册名显式调用"
     assert "subagent_type:" not in text, "不应再使用伪函数 subagent_type 调用块"
     assert "不得用主流程口头代替 subagent 输出" in text
 
@@ -744,7 +744,7 @@ def test_webnovel_init_deconstruction_wiring_keeps_confirmation_gate():
     """init may consume only confirmed, transformed reference patterns."""
     text = _read_text(SKILLS_DIR / "webnovel-init" / "SKILL.md")
 
-    assert "Use the Agent tool to run `webnovel-writer:deconstruction-agent`" in text
+    assert "Use the Agent tool to run `zhanghui:deconstruction-agent`" in text
     assert "subagent_type:" not in text
     assert "Step 1.5：灵感来源询问" in text
     assert "进入故事核采集前" in text

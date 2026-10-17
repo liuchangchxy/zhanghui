@@ -46,7 +46,7 @@ OUTCOME_FACT_FIX_DECLARED = "FACT_FIX_DECLARED"
 
 FACT_FIX_REQUIRED_ACTIONS = (
     "runtime ingest-draft（取得新 draft_id / draft_fingerprint）",
-    "webnovel-writer:reviewer（对新草稿完整重审）",
+    "zhanghui:reviewer（对新草稿完整重审）",
     "review-pipeline --save-metrics（把新审查绑定到新草稿）",
 )
 

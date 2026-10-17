@@ -511,7 +511,7 @@ def test_webnovel_write_skill_adopts_native_writer_package_workflow():
     # Workflow chain: Governed Context -> Context Agent -> attach-creative-brief -> sealed prompt -> Writer
     assert "runtime prepare" in text
     assert "runtime governed-context" in text
-    assert "webnovel-writer:context-agent" in text
+    assert "zhanghui:context-agent" in text
     assert "runtime attach-creative-brief" in text
     assert "WriterPackage.to_writer_prompt()" in text
 
