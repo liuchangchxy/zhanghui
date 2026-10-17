@@ -128,9 +128,9 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 - 若审查已发布正文：指向 `正文/第$(printf "%04d" {end})章-{title_safe}.md`（无标题时回退 `正文/第$(printf "%04d" {end})章.md`）。
 
 **调用约束**:
-- 必须通过 Agent 工具调用 `webnovel-writer:reviewer`，由 reviewer 自身统揽设定一致性、时间线、叙事连贯、角色一致性等客观事实维度。禁止主流程直接内联审查结论：
+- 必须通过 Agent 工具调用 `zhanghui:reviewer`，由 reviewer 自身统揽设定一致性、时间线、叙事连贯、角色一致性等客观事实维度。禁止主流程直接内联审查结论：
   ```
-  Use the Agent tool to run `webnovel-writer:reviewer`
+  Use the Agent tool to run `zhanghui:reviewer`
   ```
   输入参数：
   - `chapter`: `{end}`

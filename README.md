@@ -1,6 +1,15 @@
 # 章回 Zhanghui
 
+[![Version](https://img.shields.io/badge/version-6.5.0-brightgreen.svg)](.claude-plugin/marketplace.json)
+
 > 让 AI 写完整本长篇网文 —— 一套跑在 [Claude Code](https://claude.com/claude-code) 里的长篇创作系统
+
+## 版本
+
+| 版本 | 说明 |
+|------|------|
+| **v6.5.0 (当前)** | 修复正常用户创作闭环：老用户可通过 plugin update 收到 PR #46/#47；修订计划按真实文件行定位；Semantic Judge 绑定与事实纠错重审。 |
+| **v6.4.0** | 章回 6.4 基线（PR #45）。 |
 
 章回不解决「生成一段好看的文字」，它解决的是：**写到第 800 章，设定还没崩、文风还没飘、伏笔还没丢。**
 

@@ -194,9 +194,9 @@ allowed-tools: Read Write Edit Grep Bash Agent
      --chapter {chapter_num} \
      --format json > "${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"
    ```
-2. 使用 `Agent` 工具调用 `webnovel-writer:reviewer`：
+2. 使用 `Agent` 工具调用 `zhanghui:reviewer`：
    ```
-   Use the Agent tool to run `webnovel-writer:reviewer`
+   Use the Agent tool to run `zhanghui:reviewer`
    ```
    传入参数：
    - `chapter`: `{chapter_num}`
@@ -221,7 +221,7 @@ allowed-tools: Read Write Edit Grep Bash Agent
 5. **草稿变更后的身份同步与 Reviewer 所有权规则（Post-Ingest Mutation & Reviewer Re-invocation）**：
    若 `changes_gate` 校验未通过并对 `<chapter_changes>` 进行了重写或修改，导致工作草稿发生任何内容变化：
    - **重新登记草稿**：必须重新调用 `runtime ingest-draft` 登记，获取更新后的 `{new_draft_id}` 与 `{new_draft_fingerprint}`；
-   - **Reviewer 原始结果所有权**：严禁主流程手工篡改或就地修改 `review_results.json` 中的 `draft_id` 或指纹。必须复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder）重新调用 `webnovel-writer:reviewer`，传入新 `{new_draft_id}` 与 `{new_draft_fingerprint}`，由 Reviewer Agent 权威生成与新草稿绑定的全新审查结果，并重新运行 `review-pipeline --chapter {chapter_num} --review-results ... --save-metrics`；
+   - **Reviewer 原始结果所有权**：严禁主流程手工篡改或就地修改 `review_results.json` 中的 `draft_id` 或指纹。必须复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder）重新调用 `zhanghui:reviewer`，传入新 `{new_draft_id}` 与 `{new_draft_fingerprint}`，由 Reviewer Agent 权威生成与新草稿绑定的全新审查结果，并重新运行 `review-pipeline --chapter {chapter_num} --review-results ... --save-metrics`；
    - **重新提取与对账**：Step 5 依据最新工作草稿重新拆分正文与 proposal，重新执行 Data Agent 提取与 `reconcile_changes.py`；
    - **最终提交**：`runtime commit` 必须且仅能传入最终的 `{new_draft_id}`；
    - **未变直通**：若草稿未变更，则沿用 Step 3 登记的草稿身份与既有审查产物，不得无意义重复调用。
@@ -236,7 +236,7 @@ allowed-tools: Read Write Edit Grep Bash Agent
      --changes-output "${PROJECT_ROOT}/.webnovel/tmp/proposed_changes.json"
    ```
 2. **调用 Data Agent 重新提取事实**：
-   使用 Agent 工具调用 `webnovel-writer:data-agent`（只传入 `.webnovel/tmp/data_agent_prose.md`，严禁传入带有 CHANGES 的文件）。
+   使用 Agent 工具调用 `zhanghui:data-agent`（只传入 `.webnovel/tmp/data_agent_prose.md`，严禁传入带有 CHANGES 的文件）。
    Data Agent 依据唯一 schema 规范产出 3 份 canonical commit 必需产物到 `${PROJECT_ROOT}/.webnovel/tmp/`：
    - `extraction_result.json`（实体/状态变更、事件、摘要与场景）
    - `fulfillment_result.json`（大纲目标履约结果：planned_nodes, covered_nodes, missed_nodes, extra_nodes）

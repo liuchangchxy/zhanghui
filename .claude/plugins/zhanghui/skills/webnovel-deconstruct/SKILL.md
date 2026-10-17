@@ -45,7 +45,7 @@ CLI 形式（命令壳 `commands/deconstruct.md` 已经在）：
 
 2. **调用 deconstruction-agent**：
    ```
-   Use the Agent tool to run `webnovel-writer:deconstruction-agent`
+   Use the Agent tool to run `zhanghui:deconstruction-agent`
    ```
    传入 §2 列出的字段。**禁止使用 `subagent-type` 字段**。
 

@@ -31,7 +31,9 @@ def test_canonical_plugin_manifest_integrity():
     assert plugin_json.is_file(), "Canonical plugin.json must exist"
     data = json.loads(plugin_json.read_text(encoding="utf-8"))
     assert data.get("name") == "zhanghui"
-    assert data.get("version") == "6.4.0"
+    import re
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+", str(data.get("version")))
     assert (CANONICAL_PLUGIN_ROOT / "skills").is_dir()
 
 
@@ -47,7 +49,10 @@ def test_repo_marketplace_manifest_points_to_canonical_source():
     assert zh_plugin is not None
     # Source path relative to repo root must point to canonical plugin tree
     assert zh_plugin.get("source") == "./.claude/plugins/zhanghui"
-    assert zh_plugin.get("version") == "6.4.0"
+    canonical_version = json.loads(
+        (CANONICAL_PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+    )["version"]
+    assert zh_plugin.get("version") == canonical_version
 
 
 def test_canonical_tree_contains_complete_runtime_and_skills():

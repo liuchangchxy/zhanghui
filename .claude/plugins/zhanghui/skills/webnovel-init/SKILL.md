@@ -201,7 +201,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/check_plan_artifacts.py" \
 用户选 B/C/D：用以下字面调用方式触发拆解子代理（主流程**不得由 init 主流程口头替代拆解结果**，必须拿原始 JSON）：
 
 ```
-Use the Agent tool to run `webnovel-writer:deconstruction-agent`
+Use the Agent tool to run `zhanghui:deconstruction-agent`
 ```
 
 调用时传入字段（参考 `agents/deconstruction-agent.md §2`）：`reference_title`、`reference_source`、`reference_text_path` 或 `reference_text_excerpt`、`analysis_mode`、`init_goal`、`target_genre`。**禁止使用 `subagent-type` 字段**——Claude Code 的 Agent tool 不接受该参数。拆解子代理还必须返回 9 个 handoff 字段：`reader_promise`、`opening_hook_patterns`、`cool_point_loops`、`protagonist_patterns`、`antagonist_pressure_patterns`、`pacing_notes`、`borrowable_structures`、`differentiation_requirements`、`init_candidates`。

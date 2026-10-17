@@ -555,8 +555,8 @@ def test_webnovel_write_step3_wires_reviewer_context_specification():
     assert "runtime reviewer-context" in skill_text
     assert "reviewer_context_{chapter_padded}.json" in skill_text
 
-    # 2. Step 3 passes reviewer_context_file to webnovel-writer:reviewer
-    assert "webnovel-writer:reviewer" in skill_text
+    # 2. Step 3 passes reviewer_context_file to zhanghui:reviewer
+    assert "zhanghui:reviewer" in skill_text
     assert "reviewer_context_file" in skill_text
 
     # 3. Explicit authority tier definitions and advisory non-blocking rule
