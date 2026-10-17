@@ -48,6 +48,7 @@ jobs:
             tests/integration/test_semantic_judge_binding.py \
             tests/unit/test_local_revision_and_judge.py \
             tests/unit/test_prose_fact_fix_gate.py \
+            tests/unit/test_plugin_release_version_sync.py \
             -q
       - name: Guard hook command contract
         run: |
