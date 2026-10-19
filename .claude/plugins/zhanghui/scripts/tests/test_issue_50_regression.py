@@ -82,8 +82,13 @@ def test_reviewer_convergence_re_review_tracks_resolved_persistent_and_new():
         draft_fingerprint="fp222",
     )
 
-    # Provide revision evidence confirming 功法品阶前后矛盾 was resolved
+    # Provide verified revision evidence confirming 功法品阶前后矛盾 was resolved
     evidence = {
+        "ok": True,
+        "target_draft_id": "draft-001-b2c3d4e5",
+        "target_draft_fingerprint": "fp222",
+        "source_draft_id": "draft-001-a1b2c3d4",
+        "source_draft_fingerprint": "fp111",
         "closed_issues": ["功法品阶前后矛盾：前文玄阶中级此处写地阶"],
         "resolved_targets": ["target-setting-001"],
     }
@@ -156,7 +161,7 @@ def test_reviewer_critical_reworded_remains_persistent_or_uncertain():
 
 
 def test_reviewer_high_with_explicit_closure_evidence_is_resolved():
-    """上轮 high 有明确修复证据 → resolved，且全部 closure 后 all_high_critical_closed 为 True."""
+    """上轮 high 有明确修复证据且正确绑定 Draft identity → resolved，且全部 closure 后 all_high_critical_closed 为 True."""
     prev = ReviewResult(
         chapter=1,
         issues=[
@@ -172,6 +177,11 @@ def test_reviewer_high_with_explicit_closure_evidence_is_resolved():
         draft_fingerprint="fp2",
     )
     evidence = {
+        "ok": True,
+        "target_draft_id": "d2",
+        "target_draft_fingerprint": "fp2",
+        "source_draft_id": "d1",
+        "source_draft_fingerprint": "fp1",
         "closed_issues": ["时间锚点冲突：三日前发生的事写成昨日"],
         "resolved_targets": ["target-time-001"],
     }
@@ -276,6 +286,198 @@ def test_reviewer_different_draft_identity_full_re_review_preserved():
     conv = compute_review_convergence(curr, prev, revision_evidence=None)
     assert conv["has_previous_review"] is True
     assert conv["new_count"] == 2
+
+
+def test_reviewer_changed_true_alone_cannot_be_resolved_evidence():
+    """changed=True 不得作为 resolved 证据：仅有编辑改动而未经验证，问题统一保持 uncertain."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="critical", category="logic", description="已阵亡角色在宴会上再次发言", issue_id="target-001"),
+        ],
+        draft_id="d1",
+        draft_fingerprint="fp1",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[],
+        draft_id="d2",
+        draft_fingerprint="fp2",
+    )
+    # Merely edit result with changed=True without verification ok=True
+    unverified_evidence = {
+        "changed": True,
+        "results": [{"target_id": "target-001", "changed": True}],
+    }
+    conv = compute_review_convergence(curr, prev, revision_evidence=unverified_evidence)
+    assert conv["resolved_count"] == 0
+    assert conv["uncertain_count"] == 1
+    assert "unverified" in conv["uncertain"][0]["uncertain_reason"] or "invalid" in conv["uncertain"][0]["uncertain_reason"]
+    assert conv["high_critical_closure"][0]["status"] == "uncertain"
+    assert conv["all_high_critical_closed"] is False
+
+
+def test_reviewer_failed_verification_remains_uncertain():
+    """验证失败（ok=False 或 boundary_ok=False）时，统一保持 uncertain，禁止虚假 closure."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="setting", description="功法品阶错误", issue_id="target-002"),
+        ],
+        draft_id="d1",
+        draft_fingerprint="fp1",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[],
+        draft_id="d2",
+        draft_fingerprint="fp2",
+    )
+    # Verification failed
+    failed_evidence = {
+        "ok": False,
+        "boundary_ok": False,
+        "target_draft_id": "d2",
+        "target_draft_fingerprint": "fp2",
+        "resolved_targets": ["target-002"],
+    }
+    conv = compute_review_convergence(curr, prev, revision_evidence=failed_evidence)
+    assert conv["resolved_count"] == 0
+    assert conv["uncertain_count"] == 1
+    assert conv["high_critical_closure"][0]["status"] == "uncertain"
+    assert conv["all_high_critical_closed"] is False
+
+
+def test_reviewer_old_draft_identity_evidence_remains_uncertain():
+    """旧 Draft 的验证证据不能用于当前新 Draft，身份不匹配时统一保持 uncertain."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="critical", category="timeline", description="时间跨度倒流", issue_id="target-003"),
+        ],
+        draft_id="d1",
+        draft_fingerprint="fp1",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[],
+        draft_id="d2_new",
+        draft_fingerprint="fp2_new",
+    )
+    # Evidence was produced for an older/different draft identity
+    stale_draft_evidence = {
+        "ok": True,
+        "target_draft_id": "d2_old_stale",
+        "target_draft_fingerprint": "fp_stale",
+        "source_draft_id": "d1",
+        "source_draft_fingerprint": "fp1",
+        "resolved_targets": ["target-003"],
+    }
+    conv = compute_review_convergence(curr, prev, revision_evidence=stale_draft_evidence)
+    assert conv["resolved_count"] == 0
+    assert conv["uncertain_count"] == 1
+    assert "draft_id_mismatch" in conv["uncertain"][0]["uncertain_reason"] or "invalid" in conv["uncertain"][0]["uncertain_reason"]
+    assert conv["high_critical_closure"][0]["status"] == "uncertain"
+    assert conv["all_high_critical_closed"] is False
+
+
+def test_reviewer_previous_draft_identity_mismatch_remains_uncertain():
+    """证据中前置草稿身份与实际 previous draft 不一致时，统一保持 uncertain."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="character", description="角色性格矛盾", issue_id="target-004"),
+        ],
+        draft_id="d1_actual",
+        draft_fingerprint="fp1_actual",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[],
+        draft_id="d2",
+        draft_fingerprint="fp2",
+    )
+    mismatched_source_evidence = {
+        "ok": True,
+        "target_draft_id": "d2",
+        "target_draft_fingerprint": "fp2",
+        "source_draft_id": "d0_wrong",
+        "source_draft_fingerprint": "fp0_wrong",
+        "resolved_targets": ["target-004"],
+    }
+    conv = compute_review_convergence(curr, prev, revision_evidence=mismatched_source_evidence)
+    assert conv["resolved_count"] == 0
+    assert conv["uncertain_count"] == 1
+    assert conv["high_critical_closure"][0]["status"] == "uncertain"
+    assert conv["all_high_critical_closed"] is False
+
+
+def test_reviewer_revision_round_mismatch_remains_uncertain():
+    """修订轮次不匹配时，统一保持 uncertain."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="logic", description="因果倒置", issue_id="target-005"),
+        ],
+        draft_id="d1",
+        draft_fingerprint="fp1",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[],
+        draft_id="d2",
+        draft_fingerprint="fp2",
+    )
+    # Round 1 evidence cannot satisfy round 2 review
+    round_mismatch_evidence = {
+        "ok": True,
+        "round": 1,
+        "target_draft_id": "d2",
+        "target_draft_fingerprint": "fp2",
+        "source_draft_id": "d1",
+        "source_draft_fingerprint": "fp1",
+        "resolved_targets": ["target-005"],
+    }
+    curr_dict = curr.to_dict()
+    curr_dict["revision_round"] = 2
+    conv = compute_review_convergence(curr_dict, prev, revision_evidence=round_mismatch_evidence)
+    assert conv["resolved_count"] == 0
+    assert conv["uncertain_count"] == 1
+    assert "revision_round_mismatch" in conv["uncertain"][0]["uncertain_reason"] or "invalid" in conv["uncertain"][0]["uncertain_reason"]
+    assert conv["high_critical_closure"][0]["status"] == "uncertain"
+    assert conv["all_high_critical_closed"] is False
+
+
+def test_reviewer_unassociated_finding_id_remains_uncertain():
+    """证据缺失或无法关联到具体 finding ID 时，统一保持 uncertain."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="critical", category="logic", description="剧情致命断层", issue_id="target-fatal"),
+        ],
+        draft_id="d1",
+        draft_fingerprint="fp1",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[],
+        draft_id="d2",
+        draft_fingerprint="fp2",
+    )
+    # Evidence verified target-other, NOT target-fatal
+    unassociated_evidence = {
+        "ok": True,
+        "target_draft_id": "d2",
+        "target_draft_fingerprint": "fp2",
+        "source_draft_id": "d1",
+        "source_draft_fingerprint": "fp1",
+        "resolved_targets": ["target-other-unrelated"],
+    }
+    conv = compute_review_convergence(curr, prev, revision_evidence=unassociated_evidence)
+    assert conv["resolved_count"] == 0
+    assert conv["uncertain_count"] == 1
+    assert conv["high_critical_closure"][0]["status"] == "uncertain"
+    assert conv["all_high_critical_closed"] is False
 
 
 def test_reviewer_result_to_metrics_preserves_penalties_and_includes_convergence():

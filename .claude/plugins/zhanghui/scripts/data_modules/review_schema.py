@@ -71,6 +71,7 @@ class ReviewIssue:
     explicitness: Optional[str] = None
     subject_id: Optional[str] = None
     constraint_id: Optional[str] = None
+    issue_id: Optional[str] = None
     source_ref: Optional[str] = None
     structured_evidence: Optional[List[Dict[str, Any]]] = None
     score: Optional[Dict[str, Any]] = None
@@ -232,6 +233,7 @@ def parse_review_output(chapter: int, raw: Dict[str, Any]) -> ReviewResult:
             explicitness="UNKNOWN" if is_craft_heuristic else item.get("explicitness"),
             subject_id=item.get("subject_id"),
             constraint_id=item.get("constraint_id"),
+            issue_id=item.get("issue_id") or item.get("id"),
             source_ref=item.get("source_ref"),
             structured_evidence=item.get("structured_evidence"),
             score=item.get("score"),
@@ -250,6 +252,128 @@ def parse_review_output(chapter: int, raw: Dict[str, Any]) -> ReviewResult:
     )
 
 
+def _validate_revision_evidence(
+    rev_ev: Dict[str, Any],
+    curr_id: str,
+    curr_fp: str,
+    prev_id: str,
+    prev_fp: str,
+    curr_round: Any = None,
+) -> Tuple[bool, str, set[str], Dict[str, str]]:
+    """Validate that revision evidence represents an authentic, verified closure.
+
+    Invariants:
+    1. changed=True alone is NEVER resolution evidence.
+    2. resolved strictly requires explicit post-revision verification results (ok=True / verified=True).
+    3. Evidence must bind to current Draft identity (as target/after) and previous Draft (as source/before),
+       as well as revision round when present.
+    4. Mismatched draft, failed verification, missing evidence, or inability to associate finding ID
+       strictly falls back to uncertain.
+    """
+    if not rev_ev or not isinstance(rev_ev, dict):
+        return False, "missing_evidence", set(), {}
+
+    # Reject if merely unverified edit outputs (e.g. apply_edits results with changed=True)
+    if "results" in rev_ev and "ok" not in rev_ev and "status" not in rev_ev and "verified" not in rev_ev:
+        return False, "unverified_change_not_resolution_evidence", set(), {}
+
+    # 1. Verification status check
+    is_ok = rev_ev.get("ok")
+    if is_ok is False:
+        return False, "verification_failed_ok_false", set(), {}
+
+    if rev_ev.get("boundary_ok") is False:
+        return False, "verification_failed_boundary_violation", set(), {}
+
+    if rev_ev.get("draft_version_error"):
+        return False, f"draft_version_error:{rev_ev['draft_version_error']}", set(), {}
+
+    if rev_ev.get("status") in ("failed", "rejected", "error"):
+        return False, f"verification_status_{rev_ev.get('status')}", set(), {}
+
+    if rev_ev.get("verified") is False:
+        return False, "verification_explicitly_false", set(), {}
+
+    has_verification_stamp = (
+        is_ok is True
+        or rev_ev.get("verified") is True
+        or rev_ev.get("status") in ("verified", "verified_resolved", "ok", "success")
+        or bool(rev_ev.get("resolved_targets"))
+        or bool(rev_ev.get("verified_targets"))
+        or bool(rev_ev.get("closed_issues"))
+        or bool(rev_ev.get("verified_issues"))
+        or bool(rev_ev.get("closure_evidence"))
+    )
+    if not has_verification_stamp:
+        return False, "evidence_not_verified", set(), {}
+
+    # 2. Draft identity binding (Target / Current Draft)
+    target_id = str(rev_ev.get("target_draft_id") or rev_ev.get("after_draft_id") or "").strip()
+    if target_id and curr_id and target_id != curr_id:
+        return False, f"target_draft_id_mismatch:{target_id}_vs_{curr_id}", set(), {}
+
+    target_fp = str(
+        rev_ev.get("target_draft_fingerprint")
+        or rev_ev.get("after_draft_fingerprint")
+        or rev_ev.get("after_sha256")
+        or ""
+    ).strip()
+    if target_fp and curr_fp and target_fp != curr_fp:
+        return False, f"target_draft_fingerprint_mismatch:{target_fp[:8]}_vs_{curr_fp[:8]}", set(), {}
+
+    # 3. Draft identity binding (Source / Previous Draft)
+    source_id = str(rev_ev.get("source_draft_id") or rev_ev.get("before_draft_id") or "").strip()
+    if source_id and prev_id and source_id != prev_id:
+        return False, f"source_draft_id_mismatch:{source_id}_vs_{prev_id}", set(), {}
+
+    source_fp = str(
+        rev_ev.get("source_draft_fingerprint")
+        or rev_ev.get("before_draft_fingerprint")
+        or rev_ev.get("before_sha256")
+        or rev_ev.get("plan_draft_sha256")
+        or ""
+    ).strip()
+    if source_fp and prev_fp and source_fp != prev_fp:
+        return False, f"source_draft_fingerprint_mismatch:{source_fp[:8]}_vs_{prev_fp[:8]}", set(), {}
+
+    # 4. Revision round binding
+    ev_round = rev_ev.get("round") or rev_ev.get("revision_round")
+    if ev_round is not None and curr_round is not None:
+        if str(ev_round).strip() != str(curr_round).strip():
+            return False, f"revision_round_mismatch:{ev_round}_vs_{curr_round}", set(), {}
+
+    # 5. Extract verified targets and finding IDs
+    ev_verified_targets: set[str] = set()
+    ev_notes: Dict[str, str] = {}
+
+    for item in rev_ev.get("resolved_targets") or rev_ev.get("verified_targets") or []:
+        if item:
+            ev_verified_targets.add(str(item).strip())
+
+    for item in rev_ev.get("closed_issues") or rev_ev.get("verified_issues") or []:
+        if isinstance(item, str) and item.strip():
+            ev_verified_targets.add(item.strip())
+        elif isinstance(item, dict):
+            ident = str(
+                item.get("issue_id") or item.get("id") or item.get("gate_id") or item.get("description") or ""
+            ).strip()
+            if ident:
+                ev_verified_targets.add(ident)
+                if item.get("evidence") or item.get("note"):
+                    ev_notes[ident] = str(item.get("evidence") or item.get("note"))
+
+    if isinstance(rev_ev.get("closure_evidence"), dict):
+        for k, v in rev_ev["closure_evidence"].items():
+            k_str = str(k).strip()
+            ev_verified_targets.add(k_str)
+            ev_notes[k_str] = str(v)
+
+    if not ev_verified_targets:
+        return False, "no_verified_targets_in_evidence", set(), {}
+
+    return True, "verified", ev_verified_targets, ev_notes
+
+
 def compute_review_convergence(
     current: ReviewResult | Dict[str, Any],
     previous: Optional[ReviewResult | Dict[str, Any]],
@@ -258,15 +382,17 @@ def compute_review_convergence(
     """Compute review convergence telemetry between previous and current review (Issue #50 task C, PR #51 Blocker B).
 
     Categorizes findings into:
-    - resolved: issues in previous review with explicit closure evidence proving resolution
+    - resolved: issues in previous review with explicit, verified closure evidence bound to current Draft identity
     - persistent: issues in previous review that continue to appear in current review
-    - uncertain: issues with ambiguous/partial match, or disappeared without explicit closure evidence
+    - uncertain: issues with ambiguous/partial match, failed verification, old draft evidence, or disappeared without evidence
     - new: issues in current review that were not present in previous review
 
     Tracks explicit closure for previous high/critical issues:
-    - Text similarity alone cannot prove an issue is resolved.
-    - When a high/critical issue disappears without explicit closure evidence, it is classified as 'uncertain'.
-    - all_high_critical_closed can only be True when all previous high/critical issues have explicit closure evidence.
+    - changed=True alone is NEVER resolution evidence.
+    - resolved strictly requires verified post-revision results (ok=True).
+    - Closure evidence must bind to correct Draft identity, finding ID, and revision round.
+    - Stale draft, failed verification, missing evidence, or inability to associate finding ID strictly falls back to uncertain.
+    - all_high_critical_closed can only be True when all previous high/critical issues have verified closure evidence.
     - Repeated reviews of the identical draft cannot be counted as a new revision round.
     """
     curr_dict = current.to_dict() if hasattr(current, "to_dict") else dict(current or {})
@@ -317,38 +443,22 @@ def compute_review_convergence(
 
     prev_issues = prev_dict.get("issues") or []
 
-    # Collect explicit closure evidence from revision_evidence parameter or curr_dict
+    # Collect and strictly validate revision closure evidence
     rev_ev = dict(revision_evidence or {})
     if not rev_ev and isinstance(curr_dict.get("revision_evidence"), dict):
         rev_ev = dict(curr_dict["revision_evidence"])
 
-    ev_resolved_targets: set[str] = set()
-    ev_closed_issues: set[str] = set()
-    ev_notes: Dict[str, str] = {}
-
-    for item in rev_ev.get("resolved_targets") or []:
-        if item:
-            ev_resolved_targets.add(str(item).strip())
-    for item in rev_ev.get("closed_issues") or rev_ev.get("resolved_issues") or []:
-        if isinstance(item, str) and item.strip():
-            ev_closed_issues.add(item.strip())
-        elif isinstance(item, dict):
-            desc = str(item.get("description") or item.get("issue_id") or item.get("gate_id") or "").strip()
-            if desc:
-                ev_closed_issues.add(desc)
-                if item.get("evidence"):
-                    ev_notes[desc] = str(item.get("evidence"))
-    if isinstance(rev_ev.get("closure_evidence"), dict):
-        for k, v in rev_ev["closure_evidence"].items():
-            ev_closed_issues.add(str(k).strip())
-            ev_notes[str(k).strip()] = str(v)
-    for r in rev_ev.get("results") or []:
-        if isinstance(r, dict) and r.get("changed") and r.get("target_id"):
-            ev_resolved_targets.add(str(r["target_id"]).strip())
+    curr_round = curr_dict.get("round") or curr_dict.get("revision_round") or prev_dict.get("round") or prev_dict.get("revision_round")
+    evidence_valid, ev_reject_reason, ev_resolved_targets, ev_notes = _validate_revision_evidence(
+        rev_ev, curr_id, curr_fp, prev_id, prev_fp, curr_round
+    )
 
     def _find_closure_evidence(issue_dict: dict, index: int) -> Optional[str]:
+        if not evidence_valid:
+            return None
+
         iid = str(issue_dict.get("issue_id") or issue_dict.get("id") or issue_dict.get("constraint_id") or "").strip()
-        if iid and (iid in ev_resolved_targets or iid in ev_closed_issues):
+        if iid and (iid in ev_resolved_targets):
             return ev_notes.get(iid) or f"verified_by_revision_target:{iid}"
 
         synth_id = f"issue-{index:03d}"
@@ -356,16 +466,13 @@ def compute_review_convergence(
             if t.startswith(synth_id):
                 return f"verified_by_revision_target:{t}"
 
-        desc = str(issue_dict.get("description") or "").strip()
-        if desc and desc in ev_closed_issues:
-            return ev_notes.get(desc) or f"verified_by_closed_issue:{desc}"
-
         gid = str(issue_dict.get("gate_id") or "").strip()
-        if gid and gid in ev_closed_issues:
+        if gid and (gid in ev_resolved_targets):
             return ev_notes.get(gid) or f"verified_by_gate_id:{gid}"
 
-        if issue_dict.get("closure_evidence"):
-            return str(issue_dict["closure_evidence"])
+        desc = str(issue_dict.get("description") or "").strip()
+        if desc and (desc in ev_resolved_targets):
+            return ev_notes.get(desc) or f"verified_by_closed_issue:{desc}"
 
         return None
 
@@ -446,7 +553,12 @@ def compute_review_convergence(
                 info["closure_evidence"] = evidence_str
                 resolved.append(info)
             else:
-                info["uncertain_reason"] = "disappeared_without_closure_evidence"
+                reason = "disappeared_without_closure_evidence"
+                if not evidence_valid and ev_reject_reason != "missing_evidence":
+                    reason = f"evidence_invalid:{ev_reject_reason}"
+                elif evidence_valid:
+                    reason = "unassociated_finding_id_not_in_verified_evidence"
+                info["uncertain_reason"] = reason
                 uncertain.append(info)
 
     new_issues = [
