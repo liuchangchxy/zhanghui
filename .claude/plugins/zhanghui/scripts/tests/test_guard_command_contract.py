@@ -74,6 +74,34 @@ def test_allows_reconcile_changes_reading_index_db():
     assert _run(command) == 0
 
 
+def test_allows_stage2_accident_command_with_x_utf8_and_protected_db():
+    """Stage 2 事故复现测试：
+
+    对 `python3 -X utf8 <official-readonly-script> ... <protected index.db>`，
+    旧逻辑曾将 `utf8` 误判为脚本名导致 fallback 误拒（direct_write）；修后必须正确判定为 official_readonly 并放行。
+    """
+    command = (
+        f"python3 -X utf8 /plugin/scripts/changes_gate.py --chapter-file \"{_project('p')}/.webnovel/tmp/x.md\" "
+        f"--db {_project('p')}/{INDEX_DB} --json"
+    )
+    assert _run(command) == 0
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"python3 -Xutf8 /plugin/scripts/changes_gate.py --db {_project('p')}/{INDEX_DB} --json",
+        f"python3 -W ignore /plugin/scripts/changes_gate.py --db {_project('p')}/{INDEX_DB} --json",
+        f"python3 -Wignore /plugin/scripts/changes_gate.py --db {_project('p')}/{INDEX_DB} --json",
+        f"python3 -- /plugin/scripts/changes_gate.py --db {_project('p')}/{INDEX_DB} --json",
+        f"python3 -u -B -X utf8 /plugin/scripts/changes_gate.py --db {_project('p')}/{INDEX_DB} --json",
+        f"python3 -X utf8 --check-hash-based-pycs always /plugin/scripts/changes_gate.py --db {_project('p')}/{INDEX_DB} --json",
+    ],
+)
+def test_allows_python_interpreter_options_with_readonly_scripts(command):
+    assert _run(command) == 0
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -84,6 +112,8 @@ def test_allows_reconcile_changes_reading_index_db():
         'python3 -X utf8 "/plugin/scripts/webnovel.py" --project-root "/p" where',
         'python3 -X utf8 "/plugin/scripts/webnovel.py" --project-root "/p" preflight',
         'python -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" projections retry --chapter 3',
+        'python3 -Xutf8 "/plugin/scripts/webnovel.py" --project-root "/p" runtime status --chapter 2',
+        'python3 -Wignore "/plugin/scripts/webnovel.py" --project-root "/p" runtime status --chapter 2',
     ],
 )
 def test_allows_official_runtime_entry_points(command):
@@ -141,6 +171,22 @@ def test_denies_chapter_commit_script_bypass():
 
 def test_denies_inline_python_opening_protected_file_for_write():
     command = f"python3 -c \"open('{_project('p')}/{INDEX_DB}','w').close()\""
+    assert _run(command) == 2
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"python3 -X utf8 -c \"open('{_project('p')}/{INDEX_DB}','w').close()\"",
+        f"python3 -Xutf8 -c \"open('{_project('p')}/{INDEX_DB}','w').close()\"",
+        f"python3 -Wignore -c \"open('{_project('p')}/{INDEX_DB}','w').close()\"",
+        f"python3 -X utf8 -m unittest {_project('p')}/{INDEX_DB}",
+        f"python3 -X utf8 scripts/chapter_commit.py --project-root book --chapter 3",
+        f'python3 -X utf8 /plugin/scripts/changes_gate.py --output "{_project("p")}/{INDEX_DB}"',
+        f'python3 -X utf8 /plugin/scripts/changes_gate.py --db {_project("p")}/{INDEX_DB} --json && rm {_project("p")}/{INDEX_DB}',
+    ],
+)
+def test_denies_malicious_commands_with_python_options(command):
     assert _run(command) == 2
 
 

@@ -210,11 +210,18 @@ class ContextManager:
                     applied.append(section)
 
         after = self._payload_chars(payload)
+        section_chars: Dict[str, int] = {}
+        for k, v in payload.items():
+            if k == "meta":
+                continue
+            section_chars[k] = self._payload_chars({k: v})
+
         payload.setdefault("meta", {})
         payload["meta"]["context_budget"] = {
             "limit": limit,
             "before_chars": before,
             "after_chars": after,
+            "section_chars": section_chars,
             "enforced": after <= limit,
             "sections_trimmed": applied,
             "shortfall_chars": max(0, after - limit),

@@ -207,6 +207,16 @@ _DIRECTIVE_FIELD_MAP = {
     "sequel_decision": "sequel_decision",
     "foreshadow_buried": "foreshadow_buried",
     "foreshadow_paid_off": "foreshadow_paid_off",
+    # 章节定位与类型
+    "章节类型": "chapter_type",
+    "本章类型": "chapter_type",
+    "章类型": "chapter_type",
+    "类型": "chapter_type",
+    "chapter_type": "chapter_type",
+    "章节定位": "chapter_role",
+    "本章定位": "chapter_role",
+    "章节角色": "chapter_role",
+    "chapter_role": "chapter_role",
 }
 
 _DIRECTIVE_LIST_FIELDS = {

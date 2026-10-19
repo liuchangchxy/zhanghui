@@ -328,7 +328,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
 
     if action == "governed-context":
         try:
-            ctx = runtime.get_governed_context(chapter=args.chapter)
+            ctx = runtime.get_governed_context(chapter=args.chapter, max_chars=getattr(args, "max_chars", None))
             if args.format == "json":
                 print(json.dumps(ctx, ensure_ascii=False, indent=2))
             else:
@@ -343,7 +343,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
 
     if action == "reviewer-context":
         try:
-            ctx = runtime.get_reviewer_context(chapter=args.chapter)
+            ctx = runtime.get_reviewer_context(chapter=args.chapter, max_chars=getattr(args, "max_chars", None))
             if args.format == "json":
                 print(json.dumps(ctx, ensure_ascii=False, indent=2))
             else:
@@ -364,7 +364,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                 bf_p = Path(brief_file)
                 if bf_p.is_file():
                     brief = bf_p.read_text(encoding="utf-8")
-            pkg = runtime.get_writer_package(chapter=args.chapter, creative_brief=brief)
+            pkg = runtime.get_writer_package(chapter=args.chapter, creative_brief=brief, max_chars=getattr(args, "max_chars", None))
             if args.format == "json":
                 print(pkg.to_json())
             elif args.format == "prompt":
@@ -1720,16 +1720,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_rt_gov = runtime_sub.add_parser("governed-context", help="获取受治理的上下文 (ContextManager authority)")
     p_rt_gov.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_gov.add_argument("--max-chars", type=int, default=None, help="上下文最大字符限额预算")
     p_rt_gov.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_gov.set_defaults(func=cmd_runtime)
 
     p_rt_rev = runtime_sub.add_parser("reviewer-context", help="获取 Reviewer 审查所需的受治理意图与 Craft 约束")
     p_rt_rev.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_rev.add_argument("--max-chars", type=int, default=None, help="上下文最大字符限额预算")
     p_rt_rev.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_rev.set_defaults(func=cmd_runtime)
 
     p_rt_pkg = runtime_sub.add_parser("package", help="获取指定章节的 Writer Package")
     p_rt_pkg.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_pkg.add_argument("--max-chars", type=int, default=None, help="上下文最大字符限额预算")
     p_rt_pkg.add_argument("--brief", default=None, help="Context Agent 提供的 Creative Brief 文本")
     p_rt_pkg.add_argument("--brief-file", default=None, help="Context Agent 提供的 Creative Brief 文件路径")
     p_rt_pkg.add_argument("--format", choices=["json", "text", "prompt"], default="json", help="输出格式")
