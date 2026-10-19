@@ -56,7 +56,8 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 1. **事实权威 (`canon_authority`)**：已确认锁定的实体状态、世界观与人物履历，为事实真理基准，用于设定与角色一致性审查；
 2. **创作意图与本章规划 (`creative_intent` / `chapter_planning`)**：包含本章目标（`goal`）、计划核心事件（`core_event`）、章末钩子（`hook` 与 `hook_type`）、章节禁区（`forbidden_zones`）与合同关注项（`blocking_rules`），用于审查意图落实与规划执行偏差；
 3. **故事工艺与建议 (`craft_constraints` / `advisory_constraints`)**：Story Craft（节奏曲线张力、限时锁到期、人物弧光）及写作指引，属于启发式工艺指引；
-4. **硬性审查约束 (Hard Constraints) 的授权边界**：Reviewer 不拥有最终 gate authority。普通章节规划的 `forbidden_zones` 或合同清单中的 `blocking_rules` 仅代表规划意图与执行关注项，**不得仅凭字段名就自动升级为 hard gate authority**。所有已获授权的硬性约束判定由现有 shared policy / ChapterCommitService 独占裁决。
+4. **硬性审查约束 (Hard Constraints) 的授权边界**：Reviewer 不拥有最终 gate authority。普通章节规划的 `forbidden_zones` 或合同清单中的 `blocking_rules` 仅代表规划意图与执行关注项，**不得仅凭字段名就自动升级为 hard gate authority**。所有已获授权的硬性约束判定由现有 shared policy / ChapterCommitService 独占裁决；
+5. **收敛上下文 (`convergence_context`)**：若当前为重审（re-review），上下文提供上一轮审查问题（特别是上一轮 high/critical 问题）。Reviewer 仍必须从头独立检查全部 8 个维度并可报告全新问题；同时对上一轮 high/critical 问题在当前草稿中的状态进行核验并在 summary 中明确闭环结论（closure）。严禁复用旧审查替代当前草稿独立审查。
 
 **裁决铁律**：
 - Reviewer 发现正文偏离规划意图、触碰规划禁区（`forbidden_zones`）或与事实冲突时，应正常报告问题描述、位置与原文依据；

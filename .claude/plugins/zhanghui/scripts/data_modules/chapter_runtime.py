@@ -61,6 +61,58 @@ from .story_system_engine import StorySystemEngine
 from .write_gates import run_write_gate
 
 
+def derive_chapter_progress_obligation(
+    chapter: int,
+    directive: Optional[dict[str, Any]] = None,
+    chapter_meta: Optional[dict[str, Any]] = None,
+    outline: str = "",
+) -> dict[str, Any]:
+    """
+    Derive chapter progress obligation (Issue #50 task D).
+    Distinguishes "preparing to do something" vs "actually progressing something this chapter".
+    Advisory-only Intent/Craft guidance; not a hard gate.
+    """
+    directive = directive or {}
+    chapter_meta = chapter_meta or {}
+    goal = str(directive.get("goal") or chapter_meta.get("goal") or "")
+    core_event = str(directive.get("core_event") or chapter_meta.get("core_event") or "")
+
+    combined_text = f"{goal} {core_event} {outline}".lower()
+    setup_keywords = ("setup", "transition", "过渡", "铺垫", "整备", "休整", "谋划", "蓄势")
+    is_setup_or_transition = any(kw in combined_text for kw in setup_keywords)
+
+    if is_setup_or_transition:
+        desc = (
+            "本章性质判定为【过渡/铺垫/整备章】：准备与蓄势本身可作为有效目标，"
+            "但本章结束前仍须完成准备阶段的关键节点闭环，不得无限期拖延。"
+        )
+        obligation_type = "setup_or_transition"
+    else:
+        goal_display = f"“{goal[:40]}”" if goal else "本章核心目标"
+        desc = (
+            f"本章性质判定为【正向推进章】：本章结束前，与本章 goal（{goal_display}）"
+            "直接相关的核心状态必须发生实质变化（行动推进、信息推进、关系推进、状态推进、位置推进或资源推进之一）。"
+            "严禁仅以'准备做某事'空转结束；章末钩子不能替代本章剧情实质兑现。"
+        )
+        obligation_type = "progression"
+
+    return {
+        "chapter": chapter,
+        "obligation_type": obligation_type,
+        "is_setup_or_transition": is_setup_or_transition,
+        "description": desc,
+        "allowed_progress_dimensions": [
+            "action",       # 行动推进
+            "information",  # 信息推进
+            "relationship", # 关系推进
+            "state",        # 状态推进
+            "location",     # 位置推进
+            "resource",     # 资源推进
+        ],
+        "policy": "ADVISORY_INTENT: 指导创作推进与审查意图核验，不升级为 Canon，不作为阻断门禁。",
+    }
+
+
 @dataclass
 class WriterPackage:
     chapter: int
@@ -169,6 +221,11 @@ class WriterPackage:
             lines.append(f"- 必须覆盖节点：{', '.join(must_nodes)}")
         if prohibitions:
             lines.append(f"- 本章绝对禁区：{', '.join(prohibitions)}")
+        prog_obligation = intent.get("progress_obligation") or {}
+        if prog_obligation and isinstance(prog_obligation, dict):
+            ob_desc = prog_obligation.get("description", "")
+            if ob_desc:
+                lines.append(f"- 剧情推进义务 (Progress Obligation)：{ob_desc}")
         if outline:
             outline_snippet = outline[:600] + ("..." if len(outline) > 600 else "")
             lines.append(f"- 大纲参考：\n{outline_snippet}")
@@ -1053,7 +1110,7 @@ class ChapterRuntime:
             json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
 
-    def get_governed_context(self, chapter: int) -> dict[str, Any]:
+    def get_governed_context(self, chapter: int, max_chars: Optional[int] = None) -> dict[str, Any]:
         """
         Extract governed factual context assembled by ContextManager.
         Consumed by Context Agent for creative planning without parallel authority querying.
@@ -1062,8 +1119,9 @@ class ChapterRuntime:
         source_fps = self.compute_source_fingerprints(chapter)
 
         cfg = DataModulesConfig.from_project_root(self.project_root)
+        effective_max_chars = max_chars if max_chars is not None else cfg.context_max_chars
         ctx_mgr = ContextManager(cfg)
-        native_ctx = ctx_mgr.build_context(chapter)
+        native_ctx = ctx_mgr.build_context(chapter, max_chars=effective_max_chars)
 
         core = native_ctx.get("core") or {}
         state = read_json_if_exists(self.project_root / ".webnovel" / "state.json") or {}
@@ -1103,6 +1161,12 @@ class ChapterRuntime:
         # 章节规划字段以章纲为唯一权威；state.json 里的 chapter_meta 只是派生副本。
         # Writer 与 Reviewer 都从这份 effective intent 取值，保证二者看到同一版本规划。
         chapter_meta, intent_provenance = effective_chapter_meta(self.project_root, chapter, state)
+        progress_obligation = derive_chapter_progress_obligation(
+            chapter=chapter,
+            directive=merged_directive,
+            chapter_meta=chapter_meta,
+            outline=str(core.get("chapter_outline") or ""),
+        )
         current_intent = {
             "chapter": chapter,
             "outline": core.get("chapter_outline") or load_chapter_outline(self.project_root, chapter, max_chars=None),
@@ -1112,6 +1176,7 @@ class ChapterRuntime:
             "chapter_meta": chapter_meta,
             "chapter_meta_provenance": intent_provenance,
             "intent_items": intent_items,
+            "progress_obligation": progress_obligation,
         }
 
         raw_canon = native_ctx.get("canon") or []
@@ -1120,10 +1185,9 @@ class ChapterRuntime:
             for item in raw_canon
         ]
         scene = native_ctx.get("scene") or {}
-        snapshot = (native_ctx.get("meta") or {}).get("context_snapshot") or {}
+        snapshot = dict((native_ctx.get("meta") or {}).get("context_snapshot") or {})
         proj_entities = read_json_if_exists(self.project_root / ".story-system" / "projections" / "entities.json") or {}
-        if proj_entities and not snapshot.get("entities"):
-            snapshot["entities"] = proj_entities
+        # proj_entities is stored in governed_canon["entities"]. snapshot["entities"] is omitted to avoid duplicate bloat.
 
         governed_canon = {
             "canon_items": canon_items,
@@ -1204,6 +1268,9 @@ class ChapterRuntime:
             "context_contract_version": (native_ctx.get("meta") or {}).get("context_contract_version") or "v3",
             "voice_target": self.get_voice_target(chapter, genre=story_identity.get("genre")).to_dict(),
         }
+        context_budget = (native_ctx.get("meta") or {}).get("context_budget")
+        if context_budget:
+            writer_context["context_budget"] = context_budget
 
         return {
             "chapter": chapter,
@@ -1219,6 +1286,7 @@ class ChapterRuntime:
                 "chapter_intent_authority": intent_provenance["authority"],
                 "chapter_intent_outline_digest": intent_provenance["outline_digest"],
                 "chapter_intent_drift": intent_provenance["drift"],
+                "context_budget": context_budget,
             },
         }
 
@@ -1226,6 +1294,7 @@ class ChapterRuntime:
         self,
         chapter: int,
         creative_brief: Optional[str] = None,
+        max_chars: Optional[int] = None,
     ) -> WriterPackage:
         """
         Assemble and return the stable Native Writer Package for the specified chapter.
@@ -1237,7 +1306,7 @@ class ChapterRuntime:
         - seals creative planning brief when provided (e.g. from Context Agent)
         - computes deterministic package fingerprint over source and brief fingerprints
         """
-        gov_ctx = self.get_governed_context(chapter)
+        gov_ctx = self.get_governed_context(chapter, max_chars=max_chars)
         source_fps = gov_ctx["source_fingerprints"]
         story_identity = gov_ctx["story_identity"]
         current_intent = gov_ctx["current_intent"]
@@ -1260,6 +1329,7 @@ class ChapterRuntime:
             "native_context_authority": "ContextManager.build_context",
             "creative_planning_authority": "ContextAgent" if final_brief else "none",
             "is_writer_ready": bool(final_brief),
+            "context_budget": writer_context.get("context_budget"),
         }
 
         package = WriterPackage(
@@ -1287,17 +1357,18 @@ class ChapterRuntime:
             raise ValueError("creative_brief must be a non-empty string to seal writer package")
         return self.get_writer_package(chapter=chapter, creative_brief=str(creative_brief).strip())
 
-    def get_reviewer_context(self, chapter: int) -> dict[str, Any]:
+    def get_reviewer_context(self, chapter: int, max_chars: Optional[int] = None) -> dict[str, Any]:
         """
         Assemble and return governed context specifically needed for chapter review.
         Delivers:
         1. 事实权威 (canon_authority): 用于事实一致性检查的受治理事实与状态账本
-        2. 创作意图 (creative_intent): goal, must_cover_nodes, forbidden_zones, core_event, hook, hook_type
+        2. 创作意图 (creative_intent): goal, must_cover_nodes, forbidden_zones, core_event, hook, hook_type, progress_obligation
         3. 工艺建议 (craft_constraints / advisory_constraints): 启发式故事工艺与写作指引（advisory-only，不得作为阻断门禁）
         4. 本章规划信息 (chapter_planning): chapter_meta, plot_structure, forbidden_zones, must_check_nodes, blocking_rules（审查意图偏差与规划执行，不作为预授权硬门禁）
         5. 审查合同 (review_contract): 原始章级审查合同
+        6. 收敛上下文 (convergence_context): 上轮审查问题跟踪与 closure 核验（Issue #50 task C）
         """
-        gov = self.get_governed_context(chapter)
+        gov = self.get_governed_context(chapter, max_chars=max_chars)
         contracts = load_runtime_sources(self.project_root, chapter).contracts
         review_contract = contracts.get("review") or read_json_if_exists(self.paths.review_json(chapter)) or {}
 
@@ -1316,6 +1387,67 @@ class ChapterRuntime:
             "policy": "ADVISORY_ONLY: Craft and methodology heuristics must not be treated as blocking gates.",
         }
 
+        # Convergence context for re-review (Issue #50 task C)
+        runtime_dir = self._chapter_runtime_dir(chapter)
+        prev_review = None
+        for cand in (
+            runtime_dir / "last_review.json",
+            self.project_root / ".webnovel" / "tmp" / "review_results.json",
+        ):
+            if cand.is_file():
+                try:
+                    data = json.loads(cand.read_text(encoding="utf-8"))
+                    if isinstance(data, dict) and int(data.get("chapter", 0)) == chapter:
+                        prev_review = data
+                        break
+                except Exception:
+                    pass
+
+        convergence_context: dict[str, Any]
+        if prev_review and isinstance(prev_review.get("issues"), list):
+            prev_issues = prev_review.get("issues") or []
+            hi_crit = [
+                {
+                    "category": i.get("category"),
+                    "severity": i.get("severity"),
+                    "location": i.get("location"),
+                    "description": i.get("description"),
+                    "fix_hint": i.get("fix_hint"),
+                }
+                for i in prev_issues
+                if isinstance(i, dict) and i.get("severity") in ("high", "critical")
+            ]
+            convergence_context = {
+                "has_previous_review": True,
+                "previous_draft_id": prev_review.get("draft_id"),
+                "previous_draft_fingerprint": prev_review.get("draft_fingerprint"),
+                "previous_finding_count": len(prev_issues),
+                "previous_findings": [
+                    {
+                        "category": i.get("category"),
+                        "severity": i.get("severity"),
+                        "location": i.get("location"),
+                        "description": i.get("description"),
+                        "fix_hint": i.get("fix_hint"),
+                    }
+                    for i in prev_issues
+                    if isinstance(i, dict)
+                ],
+                "high_or_critical_findings": hi_crit,
+                "instruction": (
+                    "这是上一轮草稿的审查问题列表。本次审查仍须从头独立检查全部 8 个维度并可提出全新问题；"
+                    "同时请重点核验上一轮 high/critical 问题在当前草稿中是否已得到明确解决 (closure)。"
+                ),
+            }
+        else:
+            convergence_context = {
+                "has_previous_review": False,
+                "previous_finding_count": 0,
+                "previous_findings": [],
+                "high_or_critical_findings": [],
+                "instruction": "这是本章的首次审查，请从头完整独立检查全部 8 个维度。",
+            }
+
         return {
             "chapter": chapter,
             "canon_authority": governed_canon,
@@ -1326,6 +1458,7 @@ class ChapterRuntime:
                 "core_event": ch_meta.get("core_event", ""),
                 "hook": ch_meta.get("hook", ""),
                 "hook_type": ch_meta.get("hook_type", ""),
+                "progress_obligation": intent.get("progress_obligation") or {},
             },
             "craft_constraints": {
                 "core_tone": constraints.get("core_tone", ""),
@@ -1344,6 +1477,7 @@ class ChapterRuntime:
                 "blocking_rules": blocking_rules,
             },
             "review_contract": review_contract,
+            "convergence_context": convergence_context,
         }
 
     def ingest_draft(

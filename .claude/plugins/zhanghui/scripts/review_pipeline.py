@@ -26,7 +26,11 @@ def _ensure_scripts_path() -> None:
 _ensure_scripts_path()
 
 from data_modules.review_author_view import render_review_author_view
-from data_modules.review_schema import append_ai_flavor_anti_patterns, parse_review_output
+from data_modules.review_schema import (
+    append_ai_flavor_anti_patterns,
+    compute_review_convergence,
+    parse_review_output,
+)
 from security_utils import atomic_write_json, atomic_write_text
 from story_craft import (
     check_rhythm_status,
@@ -232,10 +236,38 @@ def build_review_artifacts(
     draft_binding = _bind_review_draft_identity(project_root, chapter, result)
     _inject_craft_issues(project_root, result, chapter)
     anti_patterns_added = append_ai_flavor_anti_patterns(project_root, result)
+    # Review convergence tracking (Issue #50 task C)
+    runtime_dir = project_root / ".webnovel" / "runtime" / f"chapter_{chapter:03d}"
+    last_review_file = runtime_dir / "last_review.json"
+    prev_review = None
+    if last_review_file.is_file():
+        try:
+            prev_data = json.loads(last_review_file.read_text(encoding="utf-8"))
+            if isinstance(prev_data, dict):
+                prev_id = prev_data.get("draft_id")
+                prev_fp = prev_data.get("draft_fingerprint")
+                if (prev_id and prev_id != result.draft_id) or (prev_fp and prev_fp != result.draft_fingerprint):
+                    prev_review = prev_data
+        except Exception:
+            pass
+
+    if prev_review is not None:
+        result.convergence = compute_review_convergence(result, prev_review)
+
     metrics = result.to_metrics_dict(report_file=report_file)
     normalized_review = result.to_dict()
     review_results_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(review_results_path, normalized_review, use_lock=False, backup=False)
+
+    try:
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(last_review_file, normalized_review, use_lock=False, backup=False)
+        if result.draft_id:
+            draft_reviews_dir = runtime_dir / "draft_reviews"
+            draft_reviews_dir.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(draft_reviews_dir / f"{result.draft_id}.review.json", normalized_review, use_lock=False, backup=False)
+    except Exception:
+        pass
 
     return {
         "chapter": chapter,

@@ -11,6 +11,7 @@ Goals:
 
 from __future__ import annotations
 
+import json
 import math
 from typing import Any, Dict, List, Optional
 
@@ -76,6 +77,15 @@ class ContextRanker:
         ranked["meta"] = meta
         return ranked
 
+    @staticmethod
+    def _item_chars(item: Any) -> int:
+        if isinstance(item, str):
+            return len(item)
+        try:
+            return len(json.dumps(item, ensure_ascii=False, default=str))
+        except Exception:
+            return len(str(item))
+
     def _apply_budget(self, ranked: Dict[str, Any], budget: int) -> Dict[str, Any]:
         """Select (not just sort): keep the top-scored items per section under a total budget.
 
@@ -92,14 +102,16 @@ class ContextRanker:
             if not isinstance(items, list) or not items:
                 continue
             keep = min(cap, len(items))
-            # shrink further while the running total is over budget
-            while keep > 1 and remaining <= 0:
+            # shrink further while running char total is over budget
+            while keep > 1 and (remaining <= 0 or sum(self._item_chars(it) for it in items[:keep]) > remaining):
                 keep -= 1
-            container[section] = items[:keep]
+            kept_items = items[:keep]
+            container[section] = kept_items
             dropped = len(items) - keep
             if dropped:
                 selected[section] = {"kept": keep, "dropped": dropped}
-            remaining -= keep
+            section_chars = sum(self._item_chars(it) for it in kept_items)
+            remaining -= section_chars
         return selected
 
     def rank_recent_summaries(self, items: List[Dict[str, Any]], current_chapter: int) -> List[Dict[str, Any]]:

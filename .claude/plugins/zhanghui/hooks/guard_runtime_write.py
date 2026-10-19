@@ -203,17 +203,54 @@ def _strip_command_prefix(tokens: list[str]) -> list[str]:
 
 
 def _script_basename(tokens: list[str]) -> str:
-    """Basename of the first python script argument, if the command is a python invocation."""
+    """Basename of the first python script argument, if the command is a python invocation.
+
+    Properly parses Python interpreter options before the script name:
+      - `-X <arg>` and attached `-X<arg>` (e.g. -X utf8, -Xutf8)
+      - `-W <arg>` and attached `-W<arg>` (e.g. -W ignore, -Wignore)
+      - `--check-hash-based-pycs <arg>` and `--check-hash-based-pycs=<arg>`
+      - `--` option terminator
+      - `-c` and `-m` (inline/module execution -> return "" as they are not script files)
+      - `-` (stdin -> return "")
+      - standard single or combined flags (-u, -B, -O, etc.)
+    """
     if not tokens:
         return ""
     executable = os.path.basename(tokens[0]).lower()
     if not _PYTHON_BASENAMES.match(executable):
         return ""
-    for token in tokens[1:]:
-        if token == "-m":
+
+    i = 1
+    n = len(tokens)
+    while i < n:
+        token = tokens[i]
+        if token == "--":
+            if i + 1 < n:
+                return os.path.basename(tokens[i + 1])
+            return ""
+        if token == "-c" or token.startswith("-c"):
+            # Inline Python command, not an official script file.
+            return ""
+        if token == "-m" or token.startswith("-m"):
             # `python -m <module>` is not an official entry point.
             return ""
+        if token == "-":
+            # Stdin input, not a script file.
+            return ""
+        if token in ("-W", "-X", "--check-hash-based-pycs"):
+            # Option that takes a separate argument in the next token.
+            i += 2
+            continue
+        if token.startswith(("-W", "-X")):
+            # Attached option argument, e.g. -Wignore, -Xutf8.
+            i += 1
+            continue
+        if token.startswith("--check-hash-based-pycs="):
+            i += 1
+            continue
         if token.startswith("-"):
+            # Other flags without arguments or bundled short options (-u, -B, -E, etc.)
+            i += 1
             continue
         return os.path.basename(token)
     return ""

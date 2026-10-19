@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import difflib
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -97,6 +98,7 @@ class ReviewResult:
     draft_id: Optional[str] = None
     draft_fingerprint: Optional[str] = None
     draft_identity_source: str = ""
+    convergence: Optional[Dict[str, Any]] = None
 
     @property
     def issues_count(self) -> int:
@@ -168,12 +170,14 @@ class ReviewResult:
             payload["draft_fingerprint"] = self.draft_fingerprint
         if self.draft_identity_source:
             payload["draft_identity_source"] = self.draft_identity_source
+        if self.convergence:
+            payload["convergence"] = self.convergence
         return payload
 
     def to_metrics_dict(self, report_file: str = "") -> Dict[str, Any]:
         categories = self.categories
         severity_counts = self.severity_counts
-        return {
+        metrics = {
             "chapter": self.chapter,
             "start_chapter": self.chapter,
             "end_chapter": self.chapter,
@@ -188,6 +192,15 @@ class ReviewResult:
             "categories": categories,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
         }
+        if self.convergence:
+            metrics["convergence"] = self.convergence
+            metrics["previous_finding_count"] = self.convergence.get("previous_finding_count", 0)
+            metrics["resolved_count"] = self.convergence.get("resolved_count", 0)
+            metrics["persistent_count"] = self.convergence.get("persistent_count", 0)
+            metrics["uncertain_count"] = self.convergence.get("uncertain_count", 0)
+            metrics["new_count"] = self.convergence.get("new_count", 0)
+            metrics["finding_churn"] = self.convergence.get("finding_churn", 0)
+        return metrics
 
 
 def parse_review_output(chapter: int, raw: Dict[str, Any]) -> ReviewResult:
@@ -233,7 +246,145 @@ def parse_review_output(chapter: int, raw: Dict[str, Any]) -> ReviewResult:
         draft_id=str(draft_id).strip() if draft_id else None,
         draft_fingerprint=str(draft_fingerprint).strip() if draft_fingerprint else None,
         draft_identity_source=str(raw.get("draft_identity_source") or "").strip(),
+        convergence=raw.get("convergence"),
     )
+
+
+def compute_review_convergence(
+    current: ReviewResult | Dict[str, Any],
+    previous: Optional[ReviewResult | Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Compute review convergence telemetry between previous and current review (Issue #50 task C).
+
+    Categorizes findings into:
+    - resolved: issues in previous review that no longer appear in current review
+    - persistent: issues in previous review that continue to appear in current review
+    - uncertain: issues with ambiguous or partial match
+    - new: issues in current review that were not present in previous review
+
+    Tracks explicit closure for previous high/critical issues.
+    """
+    curr_dict = current.to_dict() if hasattr(current, "to_dict") else dict(current or {})
+    prev_dict = (previous.to_dict() if hasattr(previous, "to_dict") else dict(previous or {})) if previous else None
+
+    curr_issues = curr_dict.get("issues") or []
+    if not prev_dict or not prev_dict.get("issues"):
+        return {
+            "has_previous_review": False,
+            "previous_finding_count": 0,
+            "resolved_count": 0,
+            "persistent_count": 0,
+            "uncertain_count": 0,
+            "new_count": len(curr_issues),
+            "finding_churn": len(curr_issues),
+            "resolved": [],
+            "persistent": [],
+            "uncertain": [],
+            "new": [str(i.get("description", "")) for i in curr_issues if isinstance(i, dict)],
+            "high_critical_closure": [],
+            "all_high_critical_closed": True,
+        }
+
+    prev_issues = prev_dict.get("issues") or []
+
+    resolved: List[Dict[str, Any]] = []
+    persistent: List[Dict[str, Any]] = []
+    uncertain: List[Dict[str, Any]] = []
+    matched_curr_indices: set[int] = set()
+
+    for p_idx, p in enumerate(prev_issues):
+        if not isinstance(p, dict):
+            continue
+        p_desc = str(p.get("description") or "").strip()
+        p_cat = str(p.get("category") or "other")
+        p_loc = str(p.get("location") or "")
+        p_sev = str(p.get("severity") or "medium")
+        p_gate = str(p.get("gate_id") or "")
+
+        best_match_idx = -1
+        best_match_score = 0.0
+
+        for c_idx, c in enumerate(curr_issues):
+            if not isinstance(c, dict) or c_idx in matched_curr_indices:
+                continue
+            c_desc = str(c.get("description") or "").strip()
+            c_cat = str(c.get("category") or "other")
+            c_loc = str(c.get("location") or "")
+            c_gate = str(c.get("gate_id") or "")
+
+            score = 0.0
+            if p_gate and c_gate and p_gate == c_gate and not p_gate.startswith("story_craft.heuristic"):
+                score = 1.0
+            elif p_cat == c_cat:
+                sim = difflib.SequenceMatcher(None, p_desc, c_desc).ratio()
+                loc_match = 0.2 if p_loc and c_loc and p_loc == c_loc else 0.0
+                if p_desc and c_desc and (p_desc in c_desc or c_desc in p_desc):
+                    sim = max(sim, 0.85)
+                score = sim + loc_match
+
+            if score > best_match_score:
+                best_match_score = score
+                best_match_idx = c_idx
+
+        info = {
+            "category": p_cat,
+            "severity": p_sev,
+            "description": p_desc,
+            "location": p_loc,
+        }
+
+        if best_match_score >= 0.7:
+            matched_curr_indices.add(best_match_idx)
+            persistent.append(info)
+        elif best_match_score >= 0.4:
+            matched_curr_indices.add(best_match_idx)
+            uncertain.append(info)
+        else:
+            resolved.append(info)
+
+    new_issues = [
+        str(curr_issues[idx].get("description", ""))
+        for idx in range(len(curr_issues))
+        if idx not in matched_curr_indices and isinstance(curr_issues[idx], dict)
+    ]
+
+    high_critical_closure: List[Dict[str, Any]] = []
+    for p in prev_issues:
+        if not isinstance(p, dict):
+            continue
+        p_sev = str(p.get("severity") or "medium")
+        if p_sev not in ("high", "critical"):
+            continue
+        p_desc = str(p.get("description") or "").strip()
+        status = "resolved"
+        if any(item.get("description") == p_desc for item in persistent):
+            status = "persistent"
+        elif any(item.get("description") == p_desc for item in uncertain):
+            status = "uncertain"
+        high_critical_closure.append({
+            "category": p.get("category"),
+            "severity": p_sev,
+            "description": p_desc,
+            "status": status,
+        })
+
+    all_closed = all(item["status"] == "resolved" for item in high_critical_closure)
+
+    return {
+        "has_previous_review": True,
+        "previous_finding_count": len(prev_issues),
+        "resolved_count": len(resolved),
+        "persistent_count": len(persistent),
+        "uncertain_count": len(uncertain),
+        "new_count": len(new_issues),
+        "finding_churn": len(resolved) + len(new_issues),
+        "resolved": resolved,
+        "persistent": persistent,
+        "uncertain": uncertain,
+        "new": new_issues,
+        "high_critical_closure": high_critical_closure,
+        "all_high_critical_closed": all_closed,
+    }
 
 
 def _read_json_if_exists(path: Path) -> Any | None:

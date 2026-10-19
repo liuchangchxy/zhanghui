@@ -213,6 +213,11 @@ class DataModulesConfig:
     context_story_skeleton_max_samples: int = 5
     context_story_skeleton_snippet_chars: int = 400
     context_extra_section_budget: int = 800
+    context_max_chars: Optional[int] = field(
+        default_factory=lambda: int(os.environ["WEBNOVEL_CONTEXT_MAX_CHARS"])
+        if os.environ.get("WEBNOVEL_CONTEXT_MAX_CHARS")
+        else 32000
+    )
     context_ranker_enabled: bool = True
     context_ranker_recency_weight: float = 0.7
     context_ranker_frequency_weight: float = 0.3
