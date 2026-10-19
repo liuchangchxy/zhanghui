@@ -58,7 +58,7 @@ def test_reviewer_convergence_first_review():
 
 
 def test_reviewer_convergence_re_review_tracks_resolved_persistent_and_new():
-    """Re-review detects resolved, persistent, uncertain, and new issues, plus closure for high/critical."""
+    """Re-review detects resolved (with explicit evidence), persistent, uncertain, and new issues."""
     prev = ReviewResult(
         chapter=1,
         issues=[
@@ -71,11 +71,6 @@ def test_reviewer_convergence_re_review_tracks_resolved_persistent_and_new():
         draft_fingerprint="fp111",
     )
 
-    # In second draft:
-    # 1. 功法品阶矛盾 is fixed (not in current review) -> resolved (high closure!)
-    # 2. 阵亡角色发言 persists -> persistent (critical still open)
-    # 3. 时间线问题 slightly modified in wording -> uncertain/persistent
-    # 4. A brand new issue is discovered by full re-review
     curr = ReviewResult(
         chapter=1,
         issues=[
@@ -87,11 +82,17 @@ def test_reviewer_convergence_re_review_tracks_resolved_persistent_and_new():
         draft_fingerprint="fp222",
     )
 
-    conv = compute_review_convergence(curr, prev)
+    # Provide revision evidence confirming 功法品阶前后矛盾 was resolved
+    evidence = {
+        "closed_issues": ["功法品阶前后矛盾：前文玄阶中级此处写地阶"],
+        "resolved_targets": ["target-setting-001"],
+    }
+    conv = compute_review_convergence(curr, prev, revision_evidence=evidence)
     assert conv["has_previous_review"] is True
     assert conv["previous_finding_count"] == 4
-    assert conv["resolved_count"] >= 1  # 功法品阶 + ai_flavor resolved
+    assert conv["resolved_count"] == 1  # 功法品阶 has explicit evidence -> resolved
     assert conv["persistent_count"] >= 1  # 已阵亡角色 persistent
+    assert conv["uncertain_count"] >= 1  # ai_flavor disappeared without evidence -> uncertain
     assert conv["new_count"] >= 1  # 主角性格突变 is new
     assert conv["finding_churn"] == conv["resolved_count"] + conv["new_count"]
 
@@ -104,29 +105,177 @@ def test_reviewer_convergence_re_review_tracks_resolved_persistent_and_new():
     assert conv["all_high_critical_closed"] is False
 
 
-def test_reviewer_convergence_all_high_critical_closed():
-    """When all high/critical issues are fixed, all_high_critical_closed is True."""
+def test_reviewer_high_disappears_without_closure_evidence_is_uncertain():
+    """上轮 high 消失但没有 closure 证据 → uncertain, all_high_critical_closed 必须为 False."""
     prev = ReviewResult(
-        chapter=2,
+        chapter=1,
         issues=[
-            ReviewIssue(severity="high", category="continuity", description="上一章重伤本章毫无痕迹"),
+            ReviewIssue(severity="high", category="setting", description="法宝名称前后不一致"),
         ],
         draft_id="d1",
         draft_fingerprint="fp1",
     )
     curr = ReviewResult(
-        chapter=2,
+        chapter=1,
+        issues=[],
+        draft_id="d2",
+        draft_fingerprint="fp2",
+    )
+    conv = compute_review_convergence(curr, prev, revision_evidence=None)
+    assert conv["resolved_count"] == 0
+    assert conv["uncertain_count"] == 1
+    assert conv["uncertain"][0]["uncertain_reason"] == "disappeared_without_closure_evidence"
+    assert conv["high_critical_closure"][0]["status"] == "uncertain"
+    assert conv["all_high_critical_closed"] is False
+
+
+def test_reviewer_critical_reworded_remains_persistent_or_uncertain():
+    """上轮 critical 改写描述但仍存在 → persistent 或 uncertain，不得判定为 resolved."""
+    prev = ReviewResult(
+        chapter=1,
         issues=[
-            ReviewIssue(severity="low", category="pacing", description="本章节奏略显平缓"),
+            ReviewIssue(severity="critical", category="logic", description="宗门护山大阵已在第2章完全破损，本章再次凭空生效开启防御"),
+        ],
+        draft_id="d1",
+        draft_fingerprint="fp1",
+    )
+    # Reworded description in current draft
+    curr = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="critical", category="logic", description="护山大阵此前已被敌军毁坏，此处剧情主角又开启护山阵法抵挡强敌"),
         ],
         draft_id="d2",
         draft_fingerprint="fp2",
     )
-    conv = compute_review_convergence(curr, prev)
+    conv = compute_review_convergence(curr, prev, revision_evidence=None)
+    assert conv["resolved_count"] == 0
+    assert conv["high_critical_closure"][0]["status"] in ("persistent", "uncertain")
+    assert conv["high_critical_closure"][0]["status"] != "resolved"
+    assert conv["all_high_critical_closed"] is False
+
+
+def test_reviewer_high_with_explicit_closure_evidence_is_resolved():
+    """上轮 high 有明确修复证据 → resolved，且全部 closure 后 all_high_critical_closed 为 True."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="logic", description="时间锚点冲突：三日前发生的事写成昨日"),
+        ],
+        draft_id="d1",
+        draft_fingerprint="fp1",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[],
+        draft_id="d2",
+        draft_fingerprint="fp2",
+    )
+    evidence = {
+        "closed_issues": ["时间锚点冲突：三日前发生的事写成昨日"],
+        "resolved_targets": ["target-time-001"],
+    }
+    conv = compute_review_convergence(curr, prev, revision_evidence=evidence)
     assert conv["resolved_count"] == 1
-    assert conv["new_count"] == 1
-    assert conv["persistent_count"] == 0
+    assert conv["uncertain_count"] == 0
+    assert conv["high_critical_closure"][0]["status"] == "resolved"
     assert conv["all_high_critical_closed"] is True
+
+
+def test_reviewer_new_finding_is_marked_new():
+    """本轮新增 high → new."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="low", category="pacing", description="节奏偏快"),
+        ],
+        draft_id="d1",
+        draft_fingerprint="fp1",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="continuity", description="全新发现的设定崩塌漏洞"),
+        ],
+        draft_id="d2",
+        draft_fingerprint="fp2",
+    )
+    conv = compute_review_convergence(curr, prev, revision_evidence=None)
+    assert conv["new_count"] == 1
+    assert any("全新发现的设定崩塌漏洞" in desc for desc in conv["new"])
+
+
+def test_reviewer_finding_category_or_location_change_not_falsely_resolved():
+    """同一 finding 改变位置或 category，不应仅凭字符串差异宣告解决."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="logic", location="第3段", description="主角身中剧毒但毫无中毒虚弱描写"),
+        ],
+        draft_id="d1",
+        draft_fingerprint="fp1",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="character", location="第25行", description="主角身中剧毒但毫无中毒虚弱描写"),
+        ],
+        draft_id="d2",
+        draft_fingerprint="fp2",
+    )
+    conv = compute_review_convergence(curr, prev, revision_evidence=None)
+    assert conv["resolved_count"] == 0
+    assert conv["persistent_count"] == 1
+    assert conv["high_critical_closure"][0]["status"] == "persistent"
+    assert conv["all_high_critical_closed"] is False
+
+
+def test_reviewer_same_draft_repeat_review_not_counted_as_new_revision():
+    """同一 Draft 的重复审查不得错误计为新一轮修订."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="setting", description="功法品阶错误"),
+        ],
+        draft_id="draft-same-123",
+        draft_fingerprint="fp-same-123",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="setting", description="功法品阶错误"),
+        ],
+        draft_id="draft-same-123",
+        draft_fingerprint="fp-same-123",
+    )
+    conv = compute_review_convergence(curr, prev, revision_evidence=None)
+    assert conv["is_same_draft_repeat_review"] is True
+    assert conv["has_previous_review"] is False
+    assert conv["all_high_critical_closed"] is False
+
+
+def test_reviewer_different_draft_identity_full_re_review_preserved():
+    """不同 Draft identity 必须完整重新审查全部 8 个维度."""
+    prev = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="high", category="setting", description="功法品阶错误"),
+        ],
+        draft_id="draft-v1",
+        draft_fingerprint="fp-v1",
+    )
+    curr = ReviewResult(
+        chapter=1,
+        issues=[
+            ReviewIssue(severity="medium", category="pacing", description="过场偏长"),
+            ReviewIssue(severity="low", category="dialogue", description="口吻过于书面"),
+        ],
+        draft_id="draft-v2",
+        draft_fingerprint="fp-v2",
+    )
+    conv = compute_review_convergence(curr, prev, revision_evidence=None)
+    assert conv["has_previous_review"] is True
+    assert conv["new_count"] == 2
 
 
 def test_reviewer_result_to_metrics_preserves_penalties_and_includes_convergence():
@@ -297,33 +446,89 @@ def test_governed_canon_entity_deduplication(tmp_path):
 # Group 4: Creative Chapter Progress Obligation Tests
 # =========================================================================== #
 
-def test_chapter_progress_obligation_normal_chapter():
-    """Normal progression chapter receives positive state change requirement."""
+def test_chapter_progress_obligation_normal_chapter_with_keyword_peidian():
+    """普通章节包含'铺垫'一词，仍应承担推进义务."""
     ob = derive_chapter_progress_obligation(
         chapter=5,
-        directive={"goal": "击败黑风寨二当家，夺取破障丹"},
-        chapter_meta={"core_event": "黑风寨激战"},
-        outline="林动单枪匹马杀入黑风寨，经过苦战击溃二当家，缴获战利品。",
+        directive={"goal": "夜袭敌营斩杀敌将"},
+        chapter_meta={"core_event": "黑风寨夜袭"},
+        outline="林动在客栈暗中布置符文法阵，为后续大决战铺垫，随后趁夜杀入敌营斩杀头目。",
     )
     assert ob["obligation_type"] == "progression"
     assert ob["is_setup_or_transition"] is False
     assert "实质变化" in ob["description"]
     assert "严禁仅以'准备做某事'空转结束" in ob["description"]
-    assert "action" in ob["allowed_progress_dimensions"]
 
 
-def test_chapter_progress_obligation_setup_transition_chapter():
-    """Explicit setup/transition chapter allows preparation as valid goal without forcing premature climax."""
-    for keyword in ("过渡章", "休整整备", "战前铺垫", "setup and gather supplies"):
-        ob = derive_chapter_progress_obligation(
-            chapter=6,
-            directive={"goal": f"战后休整与物资整备 ({keyword})"},
-            chapter_meta={"core_event": "清点战利品并疗伤"},
-            outline="林动在密室疗伤，研究新获得的石符奥秘，为前往大荒宗做准备。",
-        )
-        assert ob["obligation_type"] == "setup_or_transition"
-        assert ob["is_setup_or_transition"] is True
-        assert "准备与蓄势本身可作为有效目标" in ob["description"]
+def test_chapter_progress_obligation_normal_chapter_with_keyword_mouhua():
+    """普通章节包含'谋划'情节，仍应承担推进义务."""
+    ob = derive_chapter_progress_obligation(
+        chapter=6,
+        directive={"goal": "谋划营救并突破包围圈"},
+        chapter_meta={"core_event": "谋划突破"},
+        outline="在密室内谋划营救路线，突围杀出重围，击溃合围之敌。",
+    )
+    assert ob["obligation_type"] == "progression"
+    assert ob["is_setup_or_transition"] is False
+    assert "实质变化" in ob["description"]
+
+
+def test_chapter_progress_obligation_explicit_setup_or_transition():
+    """明确标记为 setup/transition 的章节，允许准备阶段闭环."""
+    # 1. Via directive chapter_type
+    ob1 = derive_chapter_progress_obligation(
+        chapter=7,
+        directive={"chapter_type": "过渡章", "goal": "战后休整与物资整备"},
+        chapter_meta={"core_event": "清点战利品"},
+        outline="林动在密室疗伤，研究新获得的石符奥秘，为前往大荒宗做准备。",
+    )
+    assert ob1["obligation_type"] == "setup_or_transition"
+    assert ob1["is_setup_or_transition"] is True
+    assert "准备与蓄势本身可作为有效目标" in ob1["description"]
+
+    # 2. Via beat_position "Setup"
+    ob2 = derive_chapter_progress_obligation(
+        chapter=8,
+        directive={"beat_position": "Setup", "goal": "熟悉新境界与环境"},
+        chapter_meta={},
+        outline="适应暴涨的灵力，熟悉内门环境。",
+    )
+    assert ob2["obligation_type"] == "setup_or_transition"
+    assert ob2["is_setup_or_transition"] is True
+
+
+def test_chapter_progress_obligation_missing_chapter_type_defaults_to_progression():
+    """缺少章节类型时，不能错误豁免，必须默认保留推进义务."""
+    ob = derive_chapter_progress_obligation(
+        chapter=9,
+        directive={},
+        chapter_meta={},
+        outline="",
+    )
+    assert ob["obligation_type"] == "progression"
+    assert ob["is_setup_or_transition"] is False
+    assert "实质变化" in ob["description"]
+
+
+def test_chapter_progress_obligation_conflict_follows_outline_authority():
+    """章节目标与结构化章节类型冲突时，遵循现有权威规则（章纲 directive 权威优先）."""
+    # Directive structured chapter_type is "战斗推进", while goal mentions "休整铺垫"
+    ob_combat = derive_chapter_progress_obligation(
+        chapter=10,
+        directive={"chapter_type": "战斗推进", "goal": "在客栈休整铺垫"},
+        chapter_meta={},
+    )
+    assert ob_combat["obligation_type"] == "progression"
+    assert ob_combat["is_setup_or_transition"] is False
+
+    # Directive structured chapter_type is "过渡章", while goal mentions "击溃敌将"
+    ob_transition = derive_chapter_progress_obligation(
+        chapter=11,
+        directive={"chapter_type": "过渡章", "goal": "击溃敌将并渡河"},
+        chapter_meta={},
+    )
+    assert ob_transition["obligation_type"] == "setup_or_transition"
+    assert ob_transition["is_setup_or_transition"] is True
 
 
 def test_writer_package_prompt_renders_progress_obligation(tmp_path):

@@ -252,7 +252,21 @@ def build_review_artifacts(
             pass
 
     if prev_review is not None:
-        result.convergence = compute_review_convergence(result, prev_review)
+        rev_evidence = None
+        for cand_ev in (
+            runtime_dir / "revision_audit.json",
+            runtime_dir / f"revision_plan_{chapter:04d}.json",
+            runtime_dir / "verify_minimal_edit.json",
+        ):
+            if cand_ev.is_file():
+                try:
+                    ev_data = json.loads(cand_ev.read_text(encoding="utf-8"))
+                    if isinstance(ev_data, dict):
+                        rev_evidence = ev_data
+                        break
+                except Exception:
+                    pass
+        result.convergence = compute_review_convergence(result, prev_review, revision_evidence=rev_evidence)
 
     metrics = result.to_metrics_dict(report_file=report_file)
     normalized_review = result.to_dict()

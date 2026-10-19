@@ -68,22 +68,55 @@ def derive_chapter_progress_obligation(
     outline: str = "",
 ) -> dict[str, Any]:
     """
-    Derive chapter progress obligation (Issue #50 task D).
+    Derive chapter progress obligation (Issue #50 task D, PR #51 Blocker A).
     Distinguishes "preparing to do something" vs "actually progressing something this chapter".
     Advisory-only Intent/Craft guidance; not a hard gate.
+
+    Authority & Classification rules:
+    1. Prioritize explicit structured chapter type / chapter role / beat_position fields:
+       - 1st priority: directive (from chapter outline, authoritative for intent)
+       - 2nd priority: chapter_meta (from state.json / effective intent)
+    2. The classification depends on the chapter's overall positioning, NOT accidental
+       narrative keywords (e.g. '铺垫', '休整', '谋划') occurring in outline prose or goals.
+    3. In the absence of an explicit setup/transition declaration, DEFAULT to normal chapter
+       progression obligation. Missing chapter type must not erroneously exempt progression.
+    4. Explicit setup/transition chapters allow preparation/momentum gathering to be a valid goal.
+    5. In case of conflict between goal and structured chapter type, the structured chapter type
+       from directive governs.
     """
     directive = directive or {}
     chapter_meta = chapter_meta or {}
     goal = str(directive.get("goal") or chapter_meta.get("goal") or "")
-    core_event = str(directive.get("core_event") or chapter_meta.get("core_event") or "")
 
-    combined_text = f"{goal} {core_event} {outline}".lower()
-    setup_keywords = ("setup", "transition", "过渡", "铺垫", "整备", "休整", "谋划", "蓄势")
-    is_setup_or_transition = any(kw in combined_text for kw in setup_keywords)
+    # 1. Authority resolution: inspect structured fields in authoritative directive first, then chapter_meta
+    explicit_type = ""
+    for source in (directive, chapter_meta):
+        for key in ("chapter_type", "chapter_role", "type", "role", "beat_position"):
+            val = source.get(key)
+            if val and isinstance(val, str) and val.strip():
+                explicit_type = val.strip()
+                break
+        if explicit_type:
+            break
+
+    # 2. Check if the explicit chapter type declares setup/transition.
+    norm_type = explicit_type.lower()
+    setup_or_transition_tokens = (
+        "setup",
+        "transition",
+        "过渡",
+        "铺垫",
+        "整备",
+        "休整",
+        "蓄势",
+    )
+    is_setup_or_transition = False
+    if norm_type:
+        is_setup_or_transition = any(token in norm_type for token in setup_or_transition_tokens)
 
     if is_setup_or_transition:
         desc = (
-            "本章性质判定为【过渡/铺垫/整备章】：准备与蓄势本身可作为有效目标，"
+            f"本章整体定位明确为【过渡/铺垫/整备章】（定位声明：{explicit_type}）：准备与蓄势本身可作为有效目标，"
             "但本章结束前仍须完成准备阶段的关键节点闭环，不得无限期拖延。"
         )
         obligation_type = "setup_or_transition"
@@ -100,6 +133,7 @@ def derive_chapter_progress_obligation(
         "chapter": chapter,
         "obligation_type": obligation_type,
         "is_setup_or_transition": is_setup_or_transition,
+        "explicit_type": explicit_type or None,
         "description": desc,
         "allowed_progress_dimensions": [
             "action",       # 行动推进

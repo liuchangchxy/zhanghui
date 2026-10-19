@@ -253,16 +253,21 @@ def parse_review_output(chapter: int, raw: Dict[str, Any]) -> ReviewResult:
 def compute_review_convergence(
     current: ReviewResult | Dict[str, Any],
     previous: Optional[ReviewResult | Dict[str, Any]],
+    revision_evidence: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Compute review convergence telemetry between previous and current review (Issue #50 task C).
+    """Compute review convergence telemetry between previous and current review (Issue #50 task C, PR #51 Blocker B).
 
     Categorizes findings into:
-    - resolved: issues in previous review that no longer appear in current review
+    - resolved: issues in previous review with explicit closure evidence proving resolution
     - persistent: issues in previous review that continue to appear in current review
-    - uncertain: issues with ambiguous or partial match
+    - uncertain: issues with ambiguous/partial match, or disappeared without explicit closure evidence
     - new: issues in current review that were not present in previous review
 
-    Tracks explicit closure for previous high/critical issues.
+    Tracks explicit closure for previous high/critical issues:
+    - Text similarity alone cannot prove an issue is resolved.
+    - When a high/critical issue disappears without explicit closure evidence, it is classified as 'uncertain'.
+    - all_high_critical_closed can only be True when all previous high/critical issues have explicit closure evidence.
+    - Repeated reviews of the identical draft cannot be counted as a new revision round.
     """
     curr_dict = current.to_dict() if hasattr(current, "to_dict") else dict(current or {})
     prev_dict = (previous.to_dict() if hasattr(previous, "to_dict") else dict(previous or {})) if previous else None
@@ -285,7 +290,84 @@ def compute_review_convergence(
             "all_high_critical_closed": True,
         }
 
+    # Same draft repeat review protection:
+    # A repeat review of the identical draft cannot be counted as a revision round.
+    curr_id = str(curr_dict.get("draft_id") or "").strip()
+    curr_fp = str(curr_dict.get("draft_fingerprint") or "").strip()
+    prev_id = str(prev_dict.get("draft_id") or "").strip()
+    prev_fp = str(prev_dict.get("draft_fingerprint") or "").strip()
+    if (curr_id and curr_id == prev_id) and (curr_fp and curr_fp == prev_fp):
+        return {
+            "has_previous_review": False,
+            "is_same_draft_repeat_review": True,
+            "previous_finding_count": len(prev_dict.get("issues") or []),
+            "resolved_count": 0,
+            "persistent_count": 0,
+            "uncertain_count": 0,
+            "new_count": len(curr_issues),
+            "finding_churn": 0,
+            "resolved": [],
+            "persistent": [],
+            "uncertain": [],
+            "new": [str(i.get("description", "")) for i in curr_issues if isinstance(i, dict)],
+            "high_critical_closure": [],
+            "all_high_critical_closed": False,
+            "note": "Identical draft repeated review is not a new revision round.",
+        }
+
     prev_issues = prev_dict.get("issues") or []
+
+    # Collect explicit closure evidence from revision_evidence parameter or curr_dict
+    rev_ev = dict(revision_evidence or {})
+    if not rev_ev and isinstance(curr_dict.get("revision_evidence"), dict):
+        rev_ev = dict(curr_dict["revision_evidence"])
+
+    ev_resolved_targets: set[str] = set()
+    ev_closed_issues: set[str] = set()
+    ev_notes: Dict[str, str] = {}
+
+    for item in rev_ev.get("resolved_targets") or []:
+        if item:
+            ev_resolved_targets.add(str(item).strip())
+    for item in rev_ev.get("closed_issues") or rev_ev.get("resolved_issues") or []:
+        if isinstance(item, str) and item.strip():
+            ev_closed_issues.add(item.strip())
+        elif isinstance(item, dict):
+            desc = str(item.get("description") or item.get("issue_id") or item.get("gate_id") or "").strip()
+            if desc:
+                ev_closed_issues.add(desc)
+                if item.get("evidence"):
+                    ev_notes[desc] = str(item.get("evidence"))
+    if isinstance(rev_ev.get("closure_evidence"), dict):
+        for k, v in rev_ev["closure_evidence"].items():
+            ev_closed_issues.add(str(k).strip())
+            ev_notes[str(k).strip()] = str(v)
+    for r in rev_ev.get("results") or []:
+        if isinstance(r, dict) and r.get("changed") and r.get("target_id"):
+            ev_resolved_targets.add(str(r["target_id"]).strip())
+
+    def _find_closure_evidence(issue_dict: dict, index: int) -> Optional[str]:
+        iid = str(issue_dict.get("issue_id") or issue_dict.get("id") or issue_dict.get("constraint_id") or "").strip()
+        if iid and (iid in ev_resolved_targets or iid in ev_closed_issues):
+            return ev_notes.get(iid) or f"verified_by_revision_target:{iid}"
+
+        synth_id = f"issue-{index:03d}"
+        for t in ev_resolved_targets:
+            if t.startswith(synth_id):
+                return f"verified_by_revision_target:{t}"
+
+        desc = str(issue_dict.get("description") or "").strip()
+        if desc and desc in ev_closed_issues:
+            return ev_notes.get(desc) or f"verified_by_closed_issue:{desc}"
+
+        gid = str(issue_dict.get("gate_id") or "").strip()
+        if gid and gid in ev_closed_issues:
+            return ev_notes.get(gid) or f"verified_by_gate_id:{gid}"
+
+        if issue_dict.get("closure_evidence"):
+            return str(issue_dict["closure_evidence"])
+
+        return None
 
     resolved: List[Dict[str, Any]] = []
     persistent: List[Dict[str, Any]] = []
@@ -300,6 +382,7 @@ def compute_review_convergence(
         p_loc = str(p.get("location") or "")
         p_sev = str(p.get("severity") or "medium")
         p_gate = str(p.get("gate_id") or "")
+        p_id = str(p.get("issue_id") or p.get("id") or p.get("constraint_id") or "")
 
         best_match_idx = -1
         best_match_score = 0.0
@@ -311,16 +394,23 @@ def compute_review_convergence(
             c_cat = str(c.get("category") or "other")
             c_loc = str(c.get("location") or "")
             c_gate = str(c.get("gate_id") or "")
+            c_id = str(c.get("issue_id") or c.get("id") or c.get("constraint_id") or "")
 
             score = 0.0
-            if p_gate and c_gate and p_gate == c_gate and not p_gate.startswith("story_craft.heuristic"):
+            if p_id and c_id and p_id == c_id:
                 score = 1.0
-            elif p_cat == c_cat:
+            elif p_gate and c_gate and p_gate == c_gate and not p_gate.startswith("story_craft.heuristic"):
+                score = 1.0
+            else:
                 sim = difflib.SequenceMatcher(None, p_desc, c_desc).ratio()
-                loc_match = 0.2 if p_loc and c_loc and p_loc == c_loc else 0.0
                 if p_desc and c_desc and (p_desc in c_desc or c_desc in p_desc):
                     sim = max(sim, 0.85)
-                score = sim + loc_match
+                bonus = 0.0
+                if p_cat == c_cat:
+                    bonus += 0.1
+                if p_loc and c_loc and p_loc == c_loc:
+                    bonus += 0.1
+                score = min(1.0, sim + bonus)
 
             if score > best_match_score:
                 best_match_score = score
@@ -332,15 +422,32 @@ def compute_review_convergence(
             "description": p_desc,
             "location": p_loc,
         }
+        if p_id:
+            info["issue_id"] = p_id
+        if p_gate:
+            info["gate_id"] = p_gate
 
-        if best_match_score >= 0.7:
+        evidence_str = _find_closure_evidence(p, p_idx)
+
+        if best_match_score >= 0.70:
             matched_curr_indices.add(best_match_idx)
+            info["match_score"] = round(best_match_score, 3)
+            info["matched_current_description"] = curr_issues[best_match_idx].get("description")
             persistent.append(info)
-        elif best_match_score >= 0.4:
+        elif best_match_score >= 0.40:
             matched_curr_indices.add(best_match_idx)
+            info["match_score"] = round(best_match_score, 3)
+            info["matched_current_description"] = curr_issues[best_match_idx].get("description")
+            info["uncertain_reason"] = "partial_or_reworded_match"
             uncertain.append(info)
         else:
-            resolved.append(info)
+            # Finding was not observed in current review.
+            if evidence_str:
+                info["closure_evidence"] = evidence_str
+                resolved.append(info)
+            else:
+                info["uncertain_reason"] = "disappeared_without_closure_evidence"
+                uncertain.append(info)
 
     new_issues = [
         str(curr_issues[idx].get("description", ""))
@@ -349,26 +456,41 @@ def compute_review_convergence(
     ]
 
     high_critical_closure: List[Dict[str, Any]] = []
-    for p in prev_issues:
+    for p_idx, p in enumerate(prev_issues):
         if not isinstance(p, dict):
             continue
         p_sev = str(p.get("severity") or "medium")
         if p_sev not in ("high", "critical"):
             continue
         p_desc = str(p.get("description") or "").strip()
-        status = "resolved"
-        if any(item.get("description") == p_desc for item in persistent):
+        p_id = str(p.get("issue_id") or p.get("id") or "")
+
+        status = "uncertain"
+        closure_ev = None
+        if any((item.get("description") == p_desc or (p_id and item.get("issue_id") == p_id)) for item in persistent):
             status = "persistent"
-        elif any(item.get("description") == p_desc for item in uncertain):
+        elif any((item.get("description") == p_desc or (p_id and item.get("issue_id") == p_id)) for item in resolved):
+            status = "resolved"
+            match_res = next((item for item in resolved if item.get("description") == p_desc or (p_id and item.get("issue_id") == p_id)), None)
+            if match_res:
+                closure_ev = match_res.get("closure_evidence")
+        else:
             status = "uncertain"
-        high_critical_closure.append({
+
+        entry = {
             "category": p.get("category"),
             "severity": p_sev,
             "description": p_desc,
             "status": status,
-        })
+        }
+        if closure_ev:
+            entry["closure_evidence"] = closure_ev
+        high_critical_closure.append(entry)
 
-    all_closed = all(item["status"] == "resolved" for item in high_critical_closure)
+    if not high_critical_closure:
+        all_closed = True
+    else:
+        all_closed = all(item["status"] == "resolved" for item in high_critical_closure)
 
     return {
         "has_previous_review": True,

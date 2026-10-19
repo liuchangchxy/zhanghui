@@ -62,11 +62,16 @@ OUTLINE_TO_META: Dict[str, str] = {
     "cen": "CEN",
     "must_cover_nodes": "must_cover",
     "forbidden_zones": "forbidden",
+    "chapter_type": "chapter_type",
+    "chapter_role": "chapter_role",
 }
 
 # narrative intent fields the outline states directly; kept in the *effective* view only
 # (they are not chapter_meta allowlist fields, so they are never written into state.json)
-OUTLINE_NARRATIVE_KEYS = ("goal", "conflict", "cost", "hook", "chapter_change", "chapter_end_open_question")
+OUTLINE_NARRATIVE_KEYS = (
+    "goal", "conflict", "cost", "hook", "chapter_change", "chapter_end_open_question",
+    "chapter_type", "chapter_role",
+)
 
 
 # The outline template lets the planner write a *pointer* instead of a value
