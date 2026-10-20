@@ -53,6 +53,83 @@ LOC_UNRESOLVED = "unresolved"
 
 _STYLE_CATEGORIES = {"ai_flavor", "pacing", "beat_compliance", "foreshadow_compliance"}
 
+# --------------------------------------------------------------------------- #
+# Finding ownership
+# --------------------------------------------------------------------------- #
+# Not every finding can be fixed by editing prose. A missing
+# `do_not_copy_check.json` is a pipeline artifact problem, an unlinked foreshadow loop is
+# ledger bookkeeping, and a rhythm-curve advisory is a heuristic opinion — feeding any of
+# them to a prose editor makes the model polish the same sentences round after round while
+# the actual cause sits untouched. Each finding is therefore routed to exactly one owner,
+# and only `PROSE_EDIT` findings enter the automatic revision plan.
+OWNER_PROSE_EDIT = "PROSE_EDIT"
+OWNER_ARTIFACT_REPAIR = "ARTIFACT_REPAIR"
+OWNER_GOVERNANCE_REPAIR = "GOVERNANCE_REPAIR"
+OWNER_ADVISORY = "ADVISORY"
+
+OWNER_REPAIR_HINTS = {
+    OWNER_ARTIFACT_REPAIR: "重新生成/补齐缺失的产物文件（例如重跑 review 主流程生成 do_not_copy_check.json），不要改正文。",
+    OWNER_GOVERNANCE_REPAIR: "在账本/治理数据层修复（伏笔登记、loop 关联、元数据补全），不要改正文。",
+    OWNER_ADVISORY: "仅记录建议；如需采纳请显式 `--include-advisory`，不要为了清零 advisory 反复改写正文。",
+}
+
+_CRAFT_CATEGORIES = {"beat_compliance", "foreshadow_compliance", "pacing"}
+
+# Findings that name a *generated artifact* rather than a prose defect.
+_ARTIFACT_REF_RE = re.compile(
+    r"(do_not_copy_check\.json|[a-z_]+_(?:result|check|audit|report)\.json|\*_result\.json)",
+    re.IGNORECASE,
+)
+_ARTIFACT_MISSING_RE = re.compile(
+    r"(不存在|缺失|未找到|无法读取|格式错误|missing|not found|invalid json|unreadable)",
+    re.IGNORECASE,
+)
+
+# Findings that are bookkeeping/ledger metadata rather than prose.
+_GOVERNANCE_RE = re.compile(
+    r"(legacy_unlinked|loop_id|伏笔元数据|元数据|账本|ledger|未关联|未绑定|未登记|"
+    r"registration|bookkeeping)",
+    re.IGNORECASE,
+)
+
+
+def classify_finding_owner(issue: Dict[str, Any]) -> str:
+    """Route one Reviewer finding to the layer that can actually fix it.
+
+    Only `PROSE_EDIT` findings belong in a targeted prose revision. Everything else is
+    reported with its owner and a repair hint, so the loop converges on the real cause
+    instead of rewriting the same paragraph again.
+    """
+    if not isinstance(issue, dict):
+        return OWNER_ADVISORY
+
+    category = str(issue.get("category") or "other")
+    authority = str(issue.get("authority") or "")
+    gate_id = str(issue.get("gate_id") or "")
+    description = str(issue.get("description") or "")
+    evidence = str(issue.get("evidence") or "")
+    fix_hint = str(issue.get("fix_hint") or "")
+    text = " ".join((description, evidence, fix_hint))
+
+    # Artifact-level problems: the finding is about a file the pipeline was supposed to
+    # produce, so no amount of prose editing can make it disappear.
+    if _ARTIFACT_REF_RE.search(text) and _ARTIFACT_MISSING_RE.search(text):
+        return OWNER_ARTIFACT_REPAIR
+
+    # Ledger / metadata bookkeeping (e.g. a foreshadow loop that cannot be linked to an id).
+    if _GOVERNANCE_RE.search(text):
+        return OWNER_GOVERNANCE_REPAIR
+
+    # Craft & methodology heuristics are advisory by construction.
+    if (
+        authority == "CRAFT_HEURISTIC"
+        or gate_id.startswith("story_craft.")
+        or category in _CRAFT_CATEGORIES
+    ):
+        return OWNER_ADVISORY
+
+    return OWNER_PROSE_EDIT
+
 _SECTION_HEADING_RE = re.compile(r"^##\s+(§\d+)\b", re.MULTILINE)
 _PARAGRAPH_REF_RE = re.compile(r"第\s*(\d+)\s*(?:[-—~至]\s*(\d+)\s*)?段")
 _LINE_REF_RE = re.compile(r"第\s*(\d+)\s*(?:[-—~至]\s*(\d+)\s*)?行")
@@ -81,6 +158,12 @@ class RevisionBindingError(RevisionApplyError):
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
+
+
+def _prose_subject_sha256(text: str) -> str:
+    from .reconciliation import prose_subject_sha256
+
+    return prose_subject_sha256(text)
 
 
 # --------------------------------------------------------------------------- #
@@ -113,11 +196,18 @@ def resolve_active_draft_identity(project_root: str | Path, chapter: int) -> Dic
         return {"available": False, "reason": f"unreadable_active_draft: {exc}", "path": str(path)}
     if not isinstance(payload, dict):
         return {"available": False, "reason": "malformed_active_draft", "path": str(path)}
+    prose = str(payload.get("prose") or "")
+    subject_fp = str(payload.get("review_subject_fingerprint") or "")
+    if not subject_fp and prose:
+        # Drafts ingested before the review-subject fingerprint existed: derive it from the
+        # stored prose rather than reporting the identity as unavailable.
+        subject_fp = _prose_subject_sha256(prose)
     return {
         "available": True,
         "path": str(path),
         "draft_id": str(payload.get("draft_id") or ""),
         "draft_fingerprint": str(payload.get("draft_fingerprint") or ""),
+        "review_subject_fingerprint": subject_fp,
     }
 
 
@@ -147,16 +237,19 @@ def check_draft_version(plan: Dict[str, Any], draft_text: str) -> None:
         )
 
 
+_REVIEW_IDENTITY_KEYS = ("draft_id", "draft_fingerprint", "review_subject_fingerprint")
+
+
 def review_result_identity(reviewer_json: Dict[str, Any]) -> Dict[str, str]:
     """Pull a declared draft identity out of a reviewer result, if it carries one."""
     identity: Dict[str, str] = {}
-    for key in ("draft_id", "draft_fingerprint"):
+    for key in _REVIEW_IDENTITY_KEYS:
         value = reviewer_json.get(key)
         if isinstance(value, str) and value.strip():
             identity[key] = value.strip()
     nested = reviewer_json.get("draft")
     if isinstance(nested, dict):
-        for key in ("draft_id", "draft_fingerprint"):
+        for key in _REVIEW_IDENTITY_KEYS:
             value = nested.get(key)
             if isinstance(value, str) and value.strip() and key not in identity:
                 identity[key] = value.strip()
@@ -269,6 +362,8 @@ class RevisionTarget:
     resolvable: bool = True
     file_line_start: int = 0
     file_line_end: int = 0
+    # Which layer owns this finding. Only PROSE_EDIT targets are meant to be rewritten here.
+    owner: str = OWNER_PROSE_EDIT
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -277,6 +372,7 @@ class RevisionTarget:
             "category": self.category,
             "blocking": self.blocking,
             "kind": self.kind,
+            "owner": self.owner,
             "location_raw": self.location_raw,
             "locator": self.locator,
             "start": self.start,
@@ -362,6 +458,19 @@ def classify_issue_kind(issue: Dict[str, Any]) -> str:
     if category in {"continuity", "setting", "character", "timeline", "logic"}:
         return KIND_LOCAL_FACT
     return KIND_LOCAL_FACT
+
+
+def _deferred_entry(issue: Dict[str, Any], owner: str) -> Dict[str, Any]:
+    """A finding that must NOT enter the prose revision loop, with the layer that owns it."""
+    return {
+        "owner": owner,
+        "category": str(issue.get("category") or "other"),
+        "severity": str(issue.get("severity") or "medium"),
+        "blocking": bool(issue.get("blocking")),
+        "location": str(issue.get("location") or ""),
+        "description": str(issue.get("description") or ""),
+        "repair_hint": OWNER_REPAIR_HINTS.get(owner, ""),
+    }
 
 
 def _issue_id(issue: Dict[str, Any], index: int) -> str:
@@ -681,16 +790,24 @@ def build_revision_plan(
     chapter: Optional[int] = None,
     draft_id: str = "",
     draft_fingerprint: str = "",
-    include_advisory: bool = True,
+    include_advisory: bool = False,
+    blocking_only: bool = False,
     rejected: bool = False,
     active_draft: Optional[Dict[str, Any]] = None,
     require_review_binding: bool = True,
 ) -> Dict[str, Any]:
     """Turn Reviewer output into a targeted revision plan.
 
-    `include_advisory=True` (default) keeps non-blocking findings: most ordinary Reviewer
-    findings are advice, and dropping them was why the old contract produced an empty plan
-    and pushed users towards a full re-draft.
+    Scope of the plan is *ownership*, not severity. Every finding is routed by
+    `classify_finding_owner`; only `PROSE_EDIT` findings become targets, because only they
+    can be fixed by editing the prose. Artifact problems, ledger bookkeeping and craft
+    advisories are returned in `deferred` with their owner and a repair hint — the previous
+    contract put all of them in the plan, which is why an unfixable finding such as a
+    missing `do_not_copy_check.json` kept the edit loop spinning without ever closing.
+
+    `include_advisory=True` is an explicit opt-in to also plan the craft advisories; it is
+    off by default because a plain `ALLOW_WITH_ADVISORY` review does not mean the chapter
+    must be rewritten.
 
     Version protection: the plan is bound to the *content* of the draft it was built from, and
     to the active draft identity when one is available. `require_review_binding=True` refuses a
@@ -724,12 +841,25 @@ def build_revision_plan(
             )
 
     declared = review_result_identity(reviewer_json)
+    draft_subject_sha = _prose_subject_sha256(draft_text)
     review_binding: Dict[str, Any] = {
         "declared": dict(declared),
         "verified": False,
         "mode": "unbound",
+        "subject_fingerprint": draft_subject_sha,
     }
-    if declared.get("draft_fingerprint"):
+    if declared.get("review_subject_fingerprint"):
+        # The Reviewer read this exact prose. A `<chapter_changes>` fix since then changes the
+        # full-draft hash but not one reviewed character, so the review is still about the
+        # prose in front of us — that is the whole point of binding on the subject.
+        if declared["review_subject_fingerprint"] != draft_subject_sha:
+            raise RevisionBindingError(
+                "审查结果声明的 review_subject_fingerprint 与当前草稿正文不一致："
+                f"review={declared['review_subject_fingerprint'][:12]} draft={draft_subject_sha[:12]}。"
+                "这是把旧审查用在（已变更的）新草稿上；请对新草稿重新运行 Reviewer。"
+            )
+        review_binding.update({"verified": True, "mode": "declared_review_subject"})
+    elif declared.get("draft_fingerprint"):
         if declared["draft_fingerprint"] != draft_sha:
             raise RevisionBindingError(
                 "审查结果声明的 draft_fingerprint 与当前草稿不一致："
@@ -762,17 +892,26 @@ def build_revision_plan(
         except (TypeError, ValueError):
             resolved_chapter = 0
 
-    selected = []
+    selected: List[Dict[str, Any]] = []
+    deferred: List[Dict[str, Any]] = []
     for issue in issues:
         if not isinstance(issue, dict):
             continue
-        if not include_advisory and not issue.get("blocking"):
+        owner = classify_finding_owner(issue)
+        if owner == OWNER_ADVISORY and not include_advisory:
+            deferred.append(_deferred_entry(issue, owner))
             continue
-        selected.append(issue)
+        if owner not in (OWNER_PROSE_EDIT, OWNER_ADVISORY):
+            deferred.append(_deferred_entry(issue, owner))
+            continue
+        if blocking_only and not issue.get("blocking"):
+            continue
+        selected.append({**issue, "_owner": owner})
 
     targets: List[RevisionTarget] = []
     for index, issue in enumerate(selected):
         target = locate_issue(draft_text, issue, index=index)
+        target.owner = str(issue.get("_owner") or OWNER_PROSE_EDIT)
         if rejected and target.kind != KIND_CANON_HISTORY:
             target.kind = KIND_CANON_HISTORY
         targets.append(target)
@@ -789,6 +928,7 @@ def build_revision_plan(
         "include_advisory": include_advisory,
         "targets": [t.to_dict() for t in targets],
         "editable_spans": [{"start": s, "end": e} for s, e in spans],
+        "deferred": deferred,
         "summary": {
             "total": len(targets),
             "blocking": sum(1 for t in targets if t.blocking),
@@ -801,6 +941,15 @@ def build_revision_plan(
             "by_kind": {
                 kind: sum(1 for t in targets if t.kind == kind)
                 for kind in (KIND_STYLE_ONLY, KIND_LOCAL_FACT, KIND_STRUCTURAL, KIND_CANON_HISTORY)
+            },
+            "deferred": len(deferred),
+            "deferred_by_owner": {
+                owner: sum(1 for item in deferred if item.get("owner") == owner)
+                for owner in (
+                    OWNER_ARTIFACT_REPAIR,
+                    OWNER_GOVERNANCE_REPAIR,
+                    OWNER_ADVISORY,
+                )
             },
         },
     }
@@ -963,8 +1112,15 @@ def verify_minimal_edit(
         "boundary_ok": not out_of_scope,
         "resolved_targets": resolved,
         "untouched_targets": untouched,
+        # Full-draft hashes: artifact provenance for the exact files compared.
         "before_sha256": sha256_text(before_text),
         "after_sha256": sha256_text(after_text),
+        # Prose-only hashes: the review subject on either side of the revision. These are what
+        # closure evidence is bound to, so a `<chapter_changes>` fix inside the same revision
+        # does not make a genuinely verified closure look unverifiable.
+        "before_prose_sha256": _prose_subject_sha256(before_text),
+        "after_prose_sha256": _prose_subject_sha256(after_text),
+        "revision_round": plan.get("round") or plan.get("revision_round"),
     }
     result["ok"] = (
         result["boundary_ok"] and not version_error and (not result["changed"] or bool(resolved))
@@ -1000,15 +1156,27 @@ def format_plan_text(plan: Dict[str, Any]) -> str:
         ),
         f"  kinds={summary.get('by_kind')}",
     ]
+    if summary.get("deferred"):
+        lines.append(
+            f"  deferred={summary.get('deferred')} (不由正文修订处理) "
+            f"{summary.get('deferred_by_owner')}"
+        )
     for target in plan.get("targets") or []:
         marker = "!" if target.get("blocking") else " "
         where = f"L{target.get('line_start')}-{target.get('line_end')}" if target.get("line_start") else "-"
         lines.append(
             f" [{marker}] {target.get('issue_id')} {target.get('severity')}/{target.get('category')} "
-            f"{target.get('kind')} via {target.get('locator')} {where}"
+            f"{target.get('kind')} owner={target.get('owner')} via {target.get('locator')} {where}"
         )
         if target.get("fix_hint"):
             lines.append(f"      fix: {target['fix_hint']}")
         if target.get("ambiguity"):
             lines.append(f"      ambiguity: {target['ambiguity']}（不会自动替换，请人工指定位置）")
+    for item in plan.get("deferred") or []:
+        lines.append(
+            f" [deferred:{item.get('owner')}] {item.get('severity')}/{item.get('category')} "
+            f"{item.get('location')} {item.get('description')}"
+        )
+        if item.get("repair_hint"):
+            lines.append(f"      repair: {item['repair_hint']}")
     return "\n".join(lines)

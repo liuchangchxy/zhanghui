@@ -461,9 +461,12 @@ def test_skill_md_enforces_draft_review_commit_convergence():
     # Runtime draft ingestion
     assert "runtime ingest-draft" in text
 
-    # Targeted polish invalidation rule
+    # Targeted polish invalidation rule. The binding key is the reviewed prose
+    # (`review_subject_fingerprint`), not the whole draft: a `<chapter_changes>` fix must not
+    # force a full re-review, and a prose change must.
     assert "Targeted Polish Invalidation Rule" in text
-    assert "旧草稿的审查结果彻底失效" in text
+    assert "审查失效判据" in text
+    assert "review_subject_fingerprint" in text
 
     # Runtime commit & publication gate decoupled
     assert "runtime commit" in text

@@ -1,5 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""Skill-contract smoke checks.
+
+What these evals can and cannot prove
+-------------------------------------
+Most cases here assert that a SKILL.md *contains* certain strings, and a few assert relative
+text order. That is a cheap smoke test for "the instruction is still written down", and it is
+all it is:
+
+* passing does **not** prove the running chain takes the path the Skill describes — a string
+  in a Markdown file cannot observe behaviour;
+* it can also block a correct rewrite that says the same thing differently, so a failure here
+  is a prompt to check whether the Skill changed meaning, not proof that it broke.
+
+The signals that must actually hold (draft/review identity binding, advisory-vs-hard gate
+separation, the length contract, guard classification, closure evidence) are covered as
+CLI/Runtime behaviour tests in `tests/unit/test_stage2_repair_regression.py` and
+`.claude/plugins/zhanghui/scripts/tests/test_guard_command_contract.py`. Keep this file small
+and treat it as an entry-point reminder, not as the specification.
+"""
 from __future__ import annotations
 
 import argparse

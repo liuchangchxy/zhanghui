@@ -7,7 +7,9 @@
 #
 # Usage:
 #   bin/install-plugin.sh          # Register marketplace and install/enable zhanghui
-#   bin/install-plugin.sh --check  # Verify active installation points to canonical repo
+#   bin/install-plugin.sh --check  # Verify the active installation loads the canonical repo
+#                                  #   exit 0 = verified, 1 = wrong source, 3 = SKIPPED (no claude CLI)
+#   bin/install-plugin.sh --digest # Print the canonical source tree digest
 #
 set -euo pipefail
 
@@ -20,22 +22,49 @@ if [ ! -d "${CANONICAL_PLUGIN}" ]; then
     exit 1
 fi
 
+# Source digest of the canonical plugin tree. Version strings cannot distinguish two
+# different trees that both call themselves 6.5.0 — which is exactly how a stale cache copy
+# was loaded while `--check` reported success. The digest is what makes the check able to
+# answer "is the *code* I am about to rely on actually the code in this repo?".
+source_digest() {
+    ( cd "${CANONICAL_PLUGIN}" && find . -type f \
+        ! -path './6.4.0/*' ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 \
+        | LC_ALL=C sort -z | xargs -0 shasum -a 256 2>/dev/null | shasum -a 256 | cut -d' ' -f1 )
+}
+
 if [ "${1:-}" = "--check" ]; then
     echo "Verifying active Claude Code plugin installation for zhanghui..."
     if ! command -v claude >/dev/null 2>&1; then
-        echo "WARN: 'claude' CLI not in PATH; skipping live check."
-        exit 0
+        # NOT a pass. This path verifies nothing, and the previous `exit 0` let callers read
+        # "skipped" as "verified". Report SKIPPED and fail so the caller has to decide.
+        echo "SKIPPED: 'claude' CLI not in PATH — no live check was performed." >&2
+        echo "         Install the Claude Code CLI, or re-run without --check." >&2
+        exit 3
     fi
     LIST_OUT="$(claude plugin list 2>&1 || true)"
-    if echo "${LIST_OUT}" | grep -qE "Read[[:space:]]*from:[[:space:]]*${CANONICAL_PLUGIN}"; then
-        echo "✓ Active plugin 'zhanghui@zhanghui' is read directly from canonical repo: ${CANONICAL_PLUGIN}"
-        exit 0
-    else
+    if ! echo "${LIST_OUT}" | grep -qE "Read[[:space:]]*from:[[:space:]]*${CANONICAL_PLUGIN}"; then
         echo "ERROR: Active plugin is NOT pointing to canonical repo!" >&2
         echo "Current claude plugin list:" >&2
         echo "${LIST_OUT}" >&2
+        echo "" >&2
+        echo "Fix: bin/install-plugin.sh   (re-register the marketplace and reinstall)" >&2
         exit 1
     fi
+    echo "✓ Active plugin 'zhanghui@zhanghui' is read directly from canonical repo: ${CANONICAL_PLUGIN}"
+    echo "  canonical source digest: $(source_digest)"
+    VERSION_OUT="$(claude plugin list 2>&1 | grep -iE 'zhanghui' || true)"
+    echo "  reported entry: ${VERSION_OUT:-<none>}"
+    echo ""
+    echo "NOTE: a matching version string is NOT evidence of a matching source tree."
+    echo "      The 'Read from' path above is the load source; compare the digest against"
+    echo "      'bin/install-plugin.sh --digest' if you need to prove the bytes."
+    exit 0
+fi
+
+if [ "${1:-}" = "--digest" ]; then
+    echo "canonical plugin tree: ${CANONICAL_PLUGIN}"
+    echo "digest: $(source_digest)"
+    exit 0
 fi
 
 echo "=== Zhanghui Plugin Installation / Sync ==="

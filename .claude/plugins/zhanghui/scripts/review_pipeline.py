@@ -92,6 +92,27 @@ def render_review_report(payload: Dict[str, Any]) -> str:
         f"- 阻断数：{result.get('blocking_count', 0)}",
         f"- 结论：{'需修复后重审' if result.get('has_blocking') else '无阻断问题'}",
     ]
+    review_mode = str(result.get("review_mode") or "full")
+    skipped = list(metrics.get("skipped_dimensions") or [])
+    lines.append(
+        f"- 审查模式：{review_mode}"
+        + (f"（未检查维度：{', '.join(skipped)}——skipped 不等于 pass）" if skipped else "（8 维全覆盖）")
+    )
+    defect_score = metrics.get("review_defect_score", metrics.get("overall_score"))
+    if defect_score is not None:
+        lines.append(
+            f"- 问题扣分指标（review_defect_score）：{defect_score} / 100"
+            "（由问题严重度扣分得出；100 仅表示本轮未检出缺陷，不代表文学质量或篇幅达标）"
+        )
+    convergence = result.get("convergence") or {}
+    if convergence.get("has_previous_review"):
+        lines.append(
+            "- 收敛（对比上一轮）："
+            f"resolved={convergence.get('resolved_count', 0)} "
+            f"persistent={convergence.get('persistent_count', 0)} "
+            f"uncertain={convergence.get('uncertain_count', 0)} "
+            f"new={convergence.get('new_count', 0)}"
+        )
     summary = str(result.get("summary") or "").strip()
     if summary:
         lines.append(f"- 摘要：{summary}")
@@ -146,15 +167,27 @@ def write_review_report(project_root: Path, report_file: str, payload: Dict[str,
 def _build_review_metrics_record(metrics: Dict[str, Any]):
     from data_modules.index_manager import ReviewMetrics
 
+    def _count(key: str) -> int:
+        try:
+            return int(metrics.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+
     return ReviewMetrics(
         start_chapter=int(metrics["start_chapter"]),
         end_chapter=int(metrics["end_chapter"]),
-        overall_score=float(metrics.get("overall_score", 0.0)),
+        overall_score=float(metrics.get("review_defect_score", metrics.get("overall_score", 0.0))),
         dimension_scores=dict(metrics.get("dimension_scores", {})),
         severity_counts=dict(metrics.get("severity_counts", {})),
         critical_issues=list(metrics.get("critical_issues", [])),
         report_file=str(metrics.get("report_file", "")),
         notes=str(metrics.get("notes", "")),
+        previous_finding_count=_count("previous_finding_count"),
+        resolved_count=_count("resolved_count"),
+        persistent_count=_count("persistent_count"),
+        uncertain_count=_count("uncertain_count"),
+        new_count=_count("new_count"),
+        finding_churn=_count("finding_churn"),
     )
 
 
@@ -176,6 +209,7 @@ def _bind_review_draft_identity(project_root: Path, chapter: int, result) -> Dic
     declared = {
         "draft_id": str(result.draft_id or ""),
         "draft_fingerprint": str(result.draft_fingerprint or ""),
+        "review_subject_fingerprint": str(result.review_subject_fingerprint or ""),
     }
     if not active.get("available"):
         return {
@@ -188,6 +222,33 @@ def _bind_review_draft_identity(project_root: Path, chapter: int, result) -> Dic
 
     active_id = str(active.get("draft_id") or "")
     active_fp = str(active.get("draft_fingerprint") or "")
+    active_subject_fp = str(active.get("review_subject_fingerprint") or "")
+
+    if declared["review_subject_fingerprint"]:
+        # Subject-bound review: the prose is the contract. Re-ingesting an unchanged prose
+        # mints a new draft_id, and a `<chapter_changes>` fix mints a new full fingerprint —
+        # neither changes a reviewed character, so neither invalidates this review.
+        if (
+            active_subject_fp
+            and declared["review_subject_fingerprint"] != active_subject_fp
+        ):
+            raise ReviewDraftIdentityError(
+                "审查结果声明的 review_subject_fingerprint 与当前在编草稿正文不一致："
+                f"review={declared['review_subject_fingerprint'][:12]} "
+                f"active={active_subject_fp[:12]}。"
+                "这是旧审查被用于新草稿，拒绝登记；请对新草稿重新运行 Reviewer。"
+            )
+        result.draft_identity_source = result.draft_identity_source or "reviewer"
+        return {
+            "available": True,
+            "verified": True,
+            "stamped": False,
+            "mode": "declared_review_subject",
+            "draft_id": active_id,
+            "draft_fingerprint": active_fp,
+            "review_subject_fingerprint": active_subject_fp,
+            "declared": declared,
+        }
 
     if declared["draft_fingerprint"] and declared["draft_fingerprint"] != active_fp:
         raise ReviewDraftIdentityError(
@@ -203,24 +264,30 @@ def _bind_review_draft_identity(project_root: Path, chapter: int, result) -> Dic
 
     if declared["draft_fingerprint"] or declared["draft_id"]:
         result.draft_identity_source = result.draft_identity_source or "reviewer"
+        result.review_subject_fingerprint = active_subject_fp or None
         return {
             "available": True,
             "verified": True,
             "stamped": False,
+            "mode": "declared_draft_identity",
             "draft_id": active_id,
             "draft_fingerprint": active_fp,
+            "review_subject_fingerprint": active_subject_fp,
             "declared": declared,
         }
 
     result.draft_id = active_id or None
     result.draft_fingerprint = active_fp or None
+    result.review_subject_fingerprint = active_subject_fp or None
     result.draft_identity_source = "review-pipeline"
     return {
         "available": True,
         "verified": True,
         "stamped": True,
+        "mode": "stamped_from_active_draft",
         "draft_id": active_id,
         "draft_fingerprint": active_fp,
+        "review_subject_fingerprint": active_subject_fp,
         "declared": declared,
     }
 
@@ -238,50 +305,79 @@ def build_review_artifacts(
     anti_patterns_added = append_ai_flavor_anti_patterns(project_root, result)
     # Review convergence tracking (Issue #50 task C)
     runtime_dir = project_root / ".webnovel" / "runtime" / f"chapter_{chapter:03d}"
+    tmp_dir = project_root / ".webnovel" / "tmp"
     last_review_file = runtime_dir / "last_review.json"
+
     prev_review = None
+    prev_review_status = "no_previous_review"
     if last_review_file.is_file():
         try:
             prev_data = json.loads(last_review_file.read_text(encoding="utf-8"))
-            if isinstance(prev_data, dict):
-                prev_id = prev_data.get("draft_id")
-                prev_fp = prev_data.get("draft_fingerprint")
-                if (prev_id and prev_id != result.draft_id) or (prev_fp and prev_fp != result.draft_fingerprint):
-                    prev_review = prev_data
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError) as exc:
+            # Reading the previous review is observational: a corrupt cache must not fail the
+            # run, but it must not be indistinguishable from "there was no previous review"
+            # either — the convergence telemetry would silently report a clean first round.
+            prev_review_status = f"unavailable: {exc}"
+            prev_data = None
+        if isinstance(prev_data, dict):
+            prev_subject = str(prev_data.get("review_subject_fingerprint") or "")
+            curr_subject = str(result.review_subject_fingerprint or "")
+            same_subject = bool(prev_subject and curr_subject and prev_subject == curr_subject)
+            if not same_subject:
+                prev_review = prev_data
+                prev_review_status = "loaded"
 
+    convergence_evidence_path = ""
     if prev_review is not None:
         rev_evidence = None
+        # The revision artifacts live in `.webnovel/tmp/` (what the Skill writes); the runtime
+        # dir is checked too for hosts that stage them there. Looking only in the runtime dir
+        # meant closure evidence was effectively never found.
         for cand_ev in (
-            runtime_dir / "revision_audit.json",
-            runtime_dir / f"revision_plan_{chapter:04d}.json",
+            tmp_dir / "verify_minimal_edit.json",
+            tmp_dir / f"revision_plan_{chapter:04d}.json",
+            tmp_dir / "revision_audit.json",
             runtime_dir / "verify_minimal_edit.json",
+            runtime_dir / f"revision_plan_{chapter:04d}.json",
+            runtime_dir / "revision_audit.json",
         ):
-            if cand_ev.is_file():
-                try:
-                    ev_data = json.loads(cand_ev.read_text(encoding="utf-8"))
-                    if isinstance(ev_data, dict):
-                        rev_evidence = ev_data
-                        break
-                except Exception:
-                    pass
+            if not cand_ev.is_file():
+                continue
+            try:
+                ev_data = json.loads(cand_ev.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(ev_data, dict):
+                rev_evidence = ev_data
+                convergence_evidence_path = str(cand_ev)
+                break
         result.convergence = compute_review_convergence(result, prev_review, revision_evidence=rev_evidence)
+        result.convergence["revision_evidence_path"] = convergence_evidence_path
+        result.convergence["revision_evidence_found"] = rev_evidence is not None
+    else:
+        result.convergence = compute_review_convergence(result, None)
+    result.convergence["previous_review_status"] = prev_review_status
 
     metrics = result.to_metrics_dict(report_file=report_file)
     normalized_review = result.to_dict()
     review_results_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(review_results_path, normalized_review, use_lock=False, backup=False)
 
-    try:
-        runtime_dir.mkdir(parents=True, exist_ok=True)
-        atomic_write_json(last_review_file, normalized_review, use_lock=False, backup=False)
-        if result.draft_id:
-            draft_reviews_dir = runtime_dir / "draft_reviews"
-            draft_reviews_dir.mkdir(parents=True, exist_ok=True)
-            atomic_write_json(draft_reviews_dir / f"{result.draft_id}.review.json", normalized_review, use_lock=False, backup=False)
-    except Exception:
-        pass
+    # These two writes are the convergence authority, not decoration: `last_review.json` is
+    # what the next round diffs against and `draft_reviews/<draft_id>.review.json` is the
+    # per-draft attestation. Swallowing their failures produced a CLI that reported success
+    # while the evidence needed to interpret the next round was never written.
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(last_review_file, normalized_review, use_lock=False, backup=False)
+    if result.draft_id:
+        draft_reviews_dir = runtime_dir / "draft_reviews"
+        draft_reviews_dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(
+            draft_reviews_dir / f"{result.draft_id}.review.json",
+            normalized_review,
+            use_lock=False,
+            backup=False,
+        )
 
     return {
         "chapter": chapter,

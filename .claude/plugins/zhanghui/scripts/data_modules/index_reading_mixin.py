@@ -142,8 +142,12 @@ class IndexReadingMixin:
                 """
                 INSERT INTO review_metrics
                 (start_chapter, end_chapter, overall_score, dimension_scores,
-                 severity_counts, critical_issues, report_file, notes, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                 severity_counts, critical_issues, report_file, notes,
+                 previous_finding_count, resolved_count, persistent_count,
+                 uncertain_count, new_count, finding_churn,
+                 created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(start_chapter, end_chapter)
                 DO UPDATE SET
                     overall_score = excluded.overall_score,
@@ -152,6 +156,12 @@ class IndexReadingMixin:
                     critical_issues = excluded.critical_issues,
                     report_file = excluded.report_file,
                     notes = excluded.notes,
+                    previous_finding_count = excluded.previous_finding_count,
+                    resolved_count = excluded.resolved_count,
+                    persistent_count = excluded.persistent_count,
+                    uncertain_count = excluded.uncertain_count,
+                    new_count = excluded.new_count,
+                    finding_churn = excluded.finding_churn,
                     updated_at = CURRENT_TIMESTAMP
             """,
                 (
@@ -163,6 +173,12 @@ class IndexReadingMixin:
                     json.dumps(metrics.critical_issues, ensure_ascii=False),
                     metrics.report_file,
                     metrics.notes,
+                    int(getattr(metrics, "previous_finding_count", 0) or 0),
+                    int(getattr(metrics, "resolved_count", 0) or 0),
+                    int(getattr(metrics, "persistent_count", 0) or 0),
+                    int(getattr(metrics, "uncertain_count", 0) or 0),
+                    int(getattr(metrics, "new_count", 0) or 0),
+                    int(getattr(metrics, "finding_churn", 0) or 0),
                 ),
             )
             conn.commit()

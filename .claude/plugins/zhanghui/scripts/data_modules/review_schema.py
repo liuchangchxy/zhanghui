@@ -98,6 +98,16 @@ class ReviewResult:
     # without it, a stale review could be reused on a different draft with nothing noticing.
     draft_id: Optional[str] = None
     draft_fingerprint: Optional[str] = None
+    # SHA-256 of the prose the Reviewer actually read (the `<chapter_changes>` container
+    # excluded). This — not the full-draft hash — is what makes a review still valid: a
+    # proposal-block fix rewrites `draft_fingerprint` while the reviewed prose is byte
+    # identical, and re-running the Reviewer for that buys nothing.
+    review_subject_fingerprint: Optional[str] = None
+    # `full` (8 dimensions) or `core` (setting / continuity / character only). Fast Write
+    # uses `core`; the value is carried through so a narrowed review is visible downstream
+    # instead of being indistinguishable from a full one.
+    review_mode: str = "full"
+    dimension_results: List[Dict[str, Any]] = field(default_factory=list)
     draft_identity_source: str = ""
     convergence: Optional[Dict[str, Any]] = None
 
@@ -140,10 +150,23 @@ class ReviewResult:
             scores[category] = _clamp_score(scores[category] - _issue_penalty(issue))
         return scores
 
+    @property
+    def skipped_dimensions(self) -> List[str]:
+        """Dimensions the Reviewer explicitly did not check (empty for a full review)."""
+        return [
+            str(item.get("dimension"))
+            for item in self.dimension_results
+            if isinstance(item, dict) and str(item.get("conclusion") or "").strip() == "skipped"
+        ]
+
     def _build_notes(self, categories: List[str]) -> str:
         parts: List[str] = []
         if self.summary:
             parts.append(self.summary)
+        parts.append(f"review_mode={self.review_mode or 'full'}")
+        skipped = self.skipped_dimensions
+        if skipped:
+            parts.append("skipped_dimensions=" + ",".join(skipped))
         parts.append(f"issues={self.issues_count}")
         parts.append(f"blocking={self.blocking_count}")
         if categories:
@@ -151,6 +174,14 @@ class ReviewResult:
         return " | ".join(parts)
 
     def _calculate_overall_score(self) -> float:
+        """Defect-penalty score: `100 - sum(severity penalties)`, floored at 0.
+
+        Read this as "how much was deducted for detected defects", NOT as a literary quality
+        grade. `issues == 0 -> 100` means *no defect was detected*, which is not the same as
+        "this chapter is good" — a short, flat chapter with nothing verifiably wrong also
+        scores 100. The published name is `review_defect_score`; `overall_score` is kept as
+        the legacy column/JSON key so existing trend queries and dashboards keep working.
+        """
         score = 100.0
         for issue in self.issues:
             score -= _issue_penalty(issue)
@@ -169,6 +200,11 @@ class ReviewResult:
             payload["draft_id"] = self.draft_id
         if self.draft_fingerprint:
             payload["draft_fingerprint"] = self.draft_fingerprint
+        if self.review_subject_fingerprint:
+            payload["review_subject_fingerprint"] = self.review_subject_fingerprint
+        payload["review_mode"] = self.review_mode or "full"
+        if self.dimension_results:
+            payload["dimension_results"] = self.dimension_results
         if self.draft_identity_source:
             payload["draft_identity_source"] = self.draft_identity_source
         if self.convergence:
@@ -178,11 +214,16 @@ class ReviewResult:
     def to_metrics_dict(self, report_file: str = "") -> Dict[str, Any]:
         categories = self.categories
         severity_counts = self.severity_counts
+        defect_score = self._calculate_overall_score()
         metrics = {
             "chapter": self.chapter,
             "start_chapter": self.chapter,
             "end_chapter": self.chapter,
-            "overall_score": self._calculate_overall_score(),
+            # `review_defect_score` is the honest name for this number; `overall_score` is the
+            # legacy alias kept for the `review_metrics` column and existing trend readers.
+            "review_defect_score": defect_score,
+            "score_semantics": "defect_penalty_only: 100 means no defect was detected, not literary quality",
+            "overall_score": defect_score,
             "dimension_scores": self._build_dimension_scores(),
             "severity_counts": severity_counts,
             "critical_issues": self.critical_issues,
@@ -191,16 +232,22 @@ class ReviewResult:
             "issues_count": self.issues_count,
             "blocking_count": self.blocking_count,
             "categories": categories,
+            "review_mode": self.review_mode or "full",
+            "skipped_dimensions": self.skipped_dimensions,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
         }
+        convergence = self.convergence or {}
         if self.convergence:
             metrics["convergence"] = self.convergence
-            metrics["previous_finding_count"] = self.convergence.get("previous_finding_count", 0)
-            metrics["resolved_count"] = self.convergence.get("resolved_count", 0)
-            metrics["persistent_count"] = self.convergence.get("persistent_count", 0)
-            metrics["uncertain_count"] = self.convergence.get("uncertain_count", 0)
-            metrics["new_count"] = self.convergence.get("new_count", 0)
-            metrics["finding_churn"] = self.convergence.get("finding_churn", 0)
+        # Always emitted, including "no previous review" rounds: a missing key and a zero are
+        # different facts, and the persisted row has to be able to tell them apart.
+        metrics["has_previous_review"] = bool(convergence.get("has_previous_review", False))
+        metrics["previous_finding_count"] = int(convergence.get("previous_finding_count", 0) or 0)
+        metrics["resolved_count"] = int(convergence.get("resolved_count", 0) or 0)
+        metrics["persistent_count"] = int(convergence.get("persistent_count", 0) or 0)
+        metrics["uncertain_count"] = int(convergence.get("uncertain_count", 0) or 0)
+        metrics["new_count"] = int(convergence.get("new_count", 0) or 0)
+        metrics["finding_churn"] = int(convergence.get("finding_churn", 0) or 0)
         return metrics
 
 
@@ -241,12 +288,24 @@ def parse_review_output(chapter: int, raw: Dict[str, Any]) -> ReviewResult:
     nested_draft = raw.get("draft") if isinstance(raw.get("draft"), dict) else {}
     draft_id = raw.get("draft_id") or nested_draft.get("draft_id")
     draft_fingerprint = raw.get("draft_fingerprint") or nested_draft.get("draft_fingerprint")
+    review_subject_fingerprint = (
+        raw.get("review_subject_fingerprint") or nested_draft.get("review_subject_fingerprint")
+    )
+    dimension_results = raw.get("dimension_results")
+    if not isinstance(dimension_results, list):
+        dimension_results = []
+    review_mode = str(raw.get("review_mode") or nested_draft.get("review_mode") or "").strip() or "full"
     return ReviewResult(
         chapter=chapter,
         issues=issues,
         summary=str(raw.get("summary", "")),
         draft_id=str(draft_id).strip() if draft_id else None,
         draft_fingerprint=str(draft_fingerprint).strip() if draft_fingerprint else None,
+        review_subject_fingerprint=(
+            str(review_subject_fingerprint).strip() if review_subject_fingerprint else None
+        ),
+        review_mode=review_mode,
+        dimension_results=[item for item in dimension_results if isinstance(item, dict)],
         draft_identity_source=str(raw.get("draft_identity_source") or "").strip(),
         convergence=raw.get("convergence"),
     )
@@ -259,16 +318,23 @@ def _validate_revision_evidence(
     prev_id: str,
     prev_fp: str,
     curr_round: Any = None,
+    curr_subject_fp: str = "",
+    prev_subject_fp: str = "",
 ) -> Tuple[bool, str, set[str], Dict[str, str]]:
     """Validate that revision evidence represents an authentic, verified closure.
 
     Invariants:
     1. changed=True alone is NEVER resolution evidence.
-    2. resolved strictly requires explicit post-revision verification results (ok=True / verified=True).
-    3. Evidence must bind to current Draft identity (as target/after) and previous Draft (as source/before),
-       as well as revision round when present.
-    4. Mismatched draft, failed verification, missing evidence, or inability to associate finding ID
-       strictly falls back to uncertain.
+    2. resolved strictly requires an explicit positive verification result (ok=True /
+       verified=True / an accepted status). A non-empty `resolved_targets` list is *not* a
+       verification stamp — it only names what the run claims to have touched, and treating it
+       as proof let "the issue vanished, and here is a list" pass as a verified closure.
+    3. Evidence must bind to current Draft identity (as target/after) and previous Draft (as
+       source/before), as well as revision round when present. Binding prefers the prose-only
+       review-subject hashes when both sides carry them, because that is what a review is
+       actually about.
+    4. Mismatched draft, failed verification, missing evidence, or inability to associate
+       finding ID strictly falls back to uncertain.
     """
     if not rev_ev or not isinstance(rev_ev, dict):
         return False, "missing_evidence", set(), {}
@@ -298,11 +364,6 @@ def _validate_revision_evidence(
         is_ok is True
         or rev_ev.get("verified") is True
         or rev_ev.get("status") in ("verified", "verified_resolved", "ok", "success")
-        or bool(rev_ev.get("resolved_targets"))
-        or bool(rev_ev.get("verified_targets"))
-        or bool(rev_ev.get("closed_issues"))
-        or bool(rev_ev.get("verified_issues"))
-        or bool(rev_ev.get("closure_evidence"))
     )
     if not has_verification_stamp:
         return False, "evidence_not_verified", set(), {}
@@ -312,29 +373,53 @@ def _validate_revision_evidence(
     if target_id and curr_id and target_id != curr_id:
         return False, f"target_draft_id_mismatch:{target_id}_vs_{curr_id}", set(), {}
 
-    target_fp = str(
-        rev_ev.get("target_draft_fingerprint")
-        or rev_ev.get("after_draft_fingerprint")
-        or rev_ev.get("after_sha256")
-        or ""
+    target_subject_fp = str(
+        rev_ev.get("target_prose_sha256") or rev_ev.get("after_prose_sha256") or ""
     ).strip()
-    if target_fp and curr_fp and target_fp != curr_fp:
-        return False, f"target_draft_fingerprint_mismatch:{target_fp[:8]}_vs_{curr_fp[:8]}", set(), {}
+    if target_subject_fp and curr_subject_fp:
+        if target_subject_fp != curr_subject_fp:
+            return (
+                False,
+                f"target_prose_fingerprint_mismatch:{target_subject_fp[:8]}_vs_{curr_subject_fp[:8]}",
+                set(),
+                {},
+            )
+    else:
+        target_fp = str(
+            rev_ev.get("target_draft_fingerprint")
+            or rev_ev.get("after_draft_fingerprint")
+            or rev_ev.get("after_sha256")
+            or ""
+        ).strip()
+        if target_fp and curr_fp and target_fp != curr_fp:
+            return False, f"target_draft_fingerprint_mismatch:{target_fp[:8]}_vs_{curr_fp[:8]}", set(), {}
 
     # 3. Draft identity binding (Source / Previous Draft)
     source_id = str(rev_ev.get("source_draft_id") or rev_ev.get("before_draft_id") or "").strip()
     if source_id and prev_id and source_id != prev_id:
         return False, f"source_draft_id_mismatch:{source_id}_vs_{prev_id}", set(), {}
 
-    source_fp = str(
-        rev_ev.get("source_draft_fingerprint")
-        or rev_ev.get("before_draft_fingerprint")
-        or rev_ev.get("before_sha256")
-        or rev_ev.get("plan_draft_sha256")
-        or ""
+    source_subject_fp = str(
+        rev_ev.get("source_prose_sha256") or rev_ev.get("before_prose_sha256") or ""
     ).strip()
-    if source_fp and prev_fp and source_fp != prev_fp:
-        return False, f"source_draft_fingerprint_mismatch:{source_fp[:8]}_vs_{prev_fp[:8]}", set(), {}
+    if source_subject_fp and prev_subject_fp:
+        if source_subject_fp != prev_subject_fp:
+            return (
+                False,
+                f"source_prose_fingerprint_mismatch:{source_subject_fp[:8]}_vs_{prev_subject_fp[:8]}",
+                set(),
+                {},
+            )
+    else:
+        source_fp = str(
+            rev_ev.get("source_draft_fingerprint")
+            or rev_ev.get("before_draft_fingerprint")
+            or rev_ev.get("before_sha256")
+            or rev_ev.get("plan_draft_sha256")
+            or ""
+        ).strip()
+        if source_fp and prev_fp and source_fp != prev_fp:
+            return False, f"source_draft_fingerprint_mismatch:{source_fp[:8]}_vs_{prev_fp[:8]}", set(), {}
 
     # 4. Revision round binding
     ev_round = rev_ev.get("round") or rev_ev.get("revision_round")
@@ -422,7 +507,15 @@ def compute_review_convergence(
     curr_fp = str(curr_dict.get("draft_fingerprint") or "").strip()
     prev_id = str(prev_dict.get("draft_id") or "").strip()
     prev_fp = str(prev_dict.get("draft_fingerprint") or "").strip()
-    if (curr_id and curr_id == prev_id) and (curr_fp and curr_fp == prev_fp):
+    curr_subject_fp = str(curr_dict.get("review_subject_fingerprint") or "").strip()
+    prev_subject_fp = str(prev_dict.get("review_subject_fingerprint") or "").strip()
+    if curr_subject_fp and prev_subject_fp:
+        # A repeat review of the same prose is not a new revision round, even when the draft
+        # was re-ingested in between and therefore carries a fresh draft_id.
+        same_draft_repeat = curr_subject_fp == prev_subject_fp
+    else:
+        same_draft_repeat = bool(curr_id and curr_id == prev_id) and bool(curr_fp and curr_fp == prev_fp)
+    if same_draft_repeat:
         return {
             "has_previous_review": False,
             "is_same_draft_repeat_review": True,
@@ -450,7 +543,14 @@ def compute_review_convergence(
 
     curr_round = curr_dict.get("round") or curr_dict.get("revision_round") or prev_dict.get("round") or prev_dict.get("revision_round")
     evidence_valid, ev_reject_reason, ev_resolved_targets, ev_notes = _validate_revision_evidence(
-        rev_ev, curr_id, curr_fp, prev_id, prev_fp, curr_round
+        rev_ev,
+        curr_id,
+        curr_fp,
+        prev_id,
+        prev_fp,
+        curr_round,
+        curr_subject_fp=curr_subject_fp,
+        prev_subject_fp=prev_subject_fp,
     )
 
     def _find_closure_evidence(issue_dict: dict, index: int) -> Optional[str]:

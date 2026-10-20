@@ -1,5 +1,13 @@
 # Phase 7 compatibility contract
 
+> **历史规范（HISTORICAL）** — 本文档描述 Phase 7 当时的状态，**不是现行发布指南**。
+> 文中的版本号（`6.4.0`）是 Phase 7 编写时的值；当前插件版本以
+> `.claude/plugins/zhanghui/.claude-plugin/plugin.json` 为准（现为 `6.5.0`），
+> 发布流程见 `scripts/sync_plugin_version.py` 与 `bin/install-plugin.sh`。
+> 需要"当前行为"的权威说明时，读 SKILL.md 与源码，不要引用本文的版本号。
+> 保留本文是因为"版本号不能证明加载源"这条结论仍然有效，且 `bin/install-plugin.sh --check`
+> 现在会额外打印 canonical 源码树摘要（`--digest`）供比对。
+
 ## Version axes
 
 These values describe different things and must be checked independently:

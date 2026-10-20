@@ -10,7 +10,7 @@ allowed-tools: Read Write Edit Grep Bash Agent
 
 以高吞吐流程快速产出可发布章节：
 - **跳过非必需环节**：跳过 Step 2B（文风适配）与 Step 4（定向润色）；
-- **保留必要审查与治理门禁**：运行 Step 3 最小核心客观审查（consistency、continuity、ooc），杜绝跳过审查引发的提交拒收与伪造审查风险；
+- **保留必要审查与治理门禁**：运行 Step 3 的核心 3 维客观审查（统一 Reviewer 的 `mode=core`：setting、continuity、character），杜绝跳过审查引发的提交拒收与伪造审查风险；
 - **严格遵守事务权威**：工作草稿严格隔离，草稿由 `runtime ingest-draft` 登记，经 `runtime commit` 事实提交 accepted 后，由 `runtime publish-draft` 剥离协议发布 100% 纯正文到 `正文/` 目录；
 - **严禁双重权威**：不得发明第二套 commit 或 publication 绕过机制。
 
@@ -25,6 +25,12 @@ allowed-tools: Read Write Edit Grep Bash Agent
 - 第一次写新项目（先跑 `/webnovel-write` 摸清边界）
 - 重大高潮、卷末高光或复杂多线交汇章（建议使用 `/webnovel-write`，开启完整审查与文风调优）
 - 用户明确要求"严格全维审查"或"深度润色"
+
+> **共享命令契约**：本文件内联的 `runtime ingest-draft` / `runtime reviewer-context` /
+> `review-pipeline` / `revise verify` / `runtime commit` / `runtime publish-draft` 命令，
+> 其**唯一权威副本**是 `../../references/draft-review-lifecycle.md`（含"何时必须重审"的判据表）。
+> 改动任何一条命令时，先改该文件再同步本文件；`tests/unit/test_stage2_repair_regression.py`
+> 会在三个生命周期 Skill 的副本不一致时失败。
 
 ## 执行流程
 
@@ -96,15 +102,24 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
 
 快车道跳过 2B 风格微调，直接进入 Step 3。
 
-### Step 3：快车道审查（核心 3 维度客观审查）
+### Step 3：快车道审查（统一 Reviewer 的 `mode=core`）
 
 **审查必要性与闭环约束**：
 - `ChapterCommitService` 与 `runtime commit` 将 `review_result` 作为必需语义产物（`required_artifacts: ["review_result"]`），且闸门决策依赖审查 findings。
 - 若完全跳过审查，提交将因缺失关键产物被拒收；严禁主流程内联伪造审查结论，亦严禁绕过审查建立第二套 commit 机制。
-- **快车道优化**：为确保速度，快车道跳过耗时的人工多轮审查与条件审查（`reader-pull`、`high-point`、`pacing`），仅执行 3 个核心客观检查器：
-  - `consistency-checker`（设定一致性）
-  - `continuity-checker`（叙事连贯与前情衔接）
-  - `ooc-checker`（角色行为与性格一致性）
+- **快车道的"核心 3 维"是统一 Reviewer 的一个真实模式，不是另一个 agent**：调用同一个
+  `zhanghui:reviewer`，传 `mode: "core"`。它只检查 3 个维度：
+  - `setting`（设定一致性）
+  - `continuity`（叙事连贯与前情衔接）
+  - `character`（角色行为与性格一致性）
+
+  其余 5 维（`timeline` / `logic` / `beat_compliance` / `foreshadow_compliance` /
+  `do_not_copy_violation`）在 `dimension_results` 中标记为 `skipped`，并写入
+  `review_mode=core` 与 `skipped_dimensions`，**在审查报告与 metrics 中可见**。
+  `skipped` 表示"没查过"，绝不等于 `pass`。
+
+  > 这是**明确的覆盖收窄**，不是"跳过审查"的性能话术。若本章是高潮章 / 卷末章 / 复杂多线
+  > 交汇章，或用户要求严格全维审查，请改用 `/webnovel-write`。
 
 **执行流程**：
 1. 预先获取受治理审查上下文：
@@ -125,6 +140,8 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
    - `scripts_dir`: `"${SCRIPTS_DIR}"`
    - `draft_id`: `"{draft_id}"`
    - `draft_fingerprint`: `"{draft_fingerprint}"`
+   - `review_subject_fingerprint`: `"{review_subject_fingerprint}"`
+   - `mode`: `"core"`（快车道只跑核心 3 维；见上）
 3. 审查结果落盘到 `${PROJECT_ROOT}/.webnovel/tmp/review_results.json`。
 4. 审查指标落库（参数必须严格遵守 CLI 契约：`--chapter` + `--review-results` + `--save-metrics`）：
    ```bash
@@ -165,10 +182,11 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
 ### 草稿变更后的身份同步规则（Post-Ingest Mutation & Identity Sync）
 
 **核心契约**：
-草稿一旦在 Step 2A 通过 `runtime ingest-draft` 登记，其内容与 `draft_fingerprint` 即完成绑定。若在 Step 4.5 因 `changes_gate` 修复重写了 `<chapter_changes>` 块，或在 Step 4.6 针对 anti-slop 执行了文本清理，导致工作草稿文件发生**任何内容或协议变更**：
+审查的有效性由**审查对象**决定——即剔除 `<chapter_changes>` 容器的纯正文的 SHA-256
+（`review_subject_fingerprint`）。`draft_id` / `draft_fingerprint` 是全量产物指纹，只用于 provenance。
 
-1. **重新登记草稿（Re-Ingestion）**：
-   工作草稿变化后，旧 `draft_id` 与已登记草稿立即失效。必须重新调用 `runtime ingest-draft`：
+1. **重新登记草稿（Re-Ingestion，正文或提案任一变化都要做）**：
+   工作草稿变化后必须重新调用 `runtime ingest-draft`（`runtime commit` 从登记草稿读取提案）：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime ingest-draft \
      --chapter {chapter_num} \
@@ -176,27 +194,32 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
      --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --format json
    ```
-   获取全新的 `{new_draft_id}` 与 `{new_draft_fingerprint}`。
-2. **Reviewer 原始结果所有权与重新审查（Reviewer Re-invocation & Ownership Protection）**：
-   - **所有权绝对禁令**：Reviewer Agent 独占拥有 `review_results.json` 的生成权威；**严禁主流程直接手工修改或就地替换 Reviewer Agent 原始审查产物中的 `draft_id` / `draft_fingerprint`**。
-   - **权威重审**：新 `draft_id` 产生后，必须复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder），使用 `Agent` 工具重新调用 `zhanghui:reviewer`：
-     ```
-     Use the Agent tool to run `zhanghui:reviewer`
-     ```
-     输入参数传入新草稿身份：
-     - `chapter`: `{chapter_num}`
-     - `chapter_file`: `"${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"`
-     - `reviewer_context_file`: `"${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"`
-     - `draft_id`: `"{new_draft_id}"`
-     - `draft_fingerprint`: `"{new_draft_fingerprint}"`
-     由 Reviewer Agent 重新生成与新草稿严格绑定的全新 `review_results.json`。
-   - **指标入库**：使用全新的审查结果重新执行 `review-pipeline`：
+   获取全新的 `{new_draft_id}` / `{new_draft_fingerprint}` / `{new_review_subject_fingerprint}`。
+2. **按审查对象指纹决定是否重审**：
+   - **`review_subject_fingerprint` 未变化**（典型：只重写了 `<chapter_changes>` 块，或 anti-slop
+     清理没有改动正文）→ **不重审**。既有 `review_results.json` 依然有效，只需重新运行
+     `review-pipeline --save-metrics` 把它登记到新草稿身份上：
      ```bash
      python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline \
        --chapter {chapter_num} \
        --review-results "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
        --save-metrics
      ```
+   - **`review_subject_fingerprint` 已变化**（正文真的改了）→ 旧审查彻底失效，必须重审：
+     - **所有权绝对禁令**：Reviewer Agent 独占拥有 `review_results.json` 的生成权威；
+       **严禁主流程直接手工修改或就地替换 Reviewer Agent 原始审查产物中的草稿身份字段**。
+     - **权威重审**：复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder），
+       使用 `Agent` 工具重新调用 `zhanghui:reviewer`，输入参数传入新草稿身份：
+       - `chapter`: `{chapter_num}`
+       - `chapter_file`: `"${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"`
+       - `reviewer_context_file`: `"${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"`
+       - `draft_id`: `"{new_draft_id}"`
+       - `draft_fingerprint`: `"{new_draft_fingerprint}"`
+       - `review_subject_fingerprint`: `"{new_review_subject_fingerprint}"`
+       - `mode`: `"core"`
+     - 随后同样用 `review-pipeline --save-metrics` 入库。
+   - 无论哪条路径，`<chapter_changes>` 的变更都仍必须走 Step 4.5 的 `changes_gate` 校验：
+     **"正文没变"不豁免对账校验**。
 3. **重新执行提取与对账（Re-Extraction & Reconciliation）**：
    在 Step 5 清理旧临时文件，重新从当前工作草稿拆分正文与 proposal，重新执行 Data Agent 提取与 `reconcile_changes.py`，产出与新草稿严格同源的 `reconciliation_result.json`。
 4. **提交最终草稿（Final Commit）**：

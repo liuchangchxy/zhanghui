@@ -41,7 +41,12 @@ from .context_manager import ContextManager
 from .durable_projection import discover_validated_chapter_commits
 from .gate_finding_adapters import adapt_changes_gate_result, adapt_legacy_artifacts
 from .projections import retry_projection
-from .reconciliation import reconcile_changes, split_chapter_and_changes
+from .reconciliation import (
+    prose_only_text,
+    prose_subject_sha256,
+    reconcile_changes,
+    split_chapter_and_changes,
+)
 from .runtime_contract_builder import RuntimeContractBuilder
 from .chapter_intent_sync import (
     chapter_is_accepted,
@@ -530,6 +535,7 @@ class DraftIngestResult:
     status: str
     draft_id: Optional[str] = None
     draft_fingerprint: Optional[str] = None
+    review_subject_fingerprint: Optional[str] = None
     package_fingerprint: Optional[str] = None
     next_required_action: Optional[str] = None
     required_artifacts: list[str] = field(default_factory=list)
@@ -575,6 +581,7 @@ class ChapterStatusResult:
     draft_status: str
     draft_id: Optional[str] = None
     draft_fingerprint: Optional[str] = None
+    review_subject_fingerprint: Optional[str] = None
     has_writer_package: bool = False
     is_writer_package_stale: bool = False
     package_fingerprint: Optional[str] = None
@@ -865,6 +872,19 @@ class ChapterRuntime:
             next_required_action=next_action,
         )
 
+    @staticmethod
+    def _plan_consistency_unavailable(reason: str) -> dict[str, Any]:
+        return {
+            "rule": "plan.consistency_unavailable",
+            "severity": "warning",
+            "message": (
+                "规划一致性检查未能执行，本次没有可用的规划 advisory——"
+                f"这不等同于规划无问题。原因：{reason}"
+            ),
+            "reason": reason,
+            "advisory_only": True,
+        }
+
     def _plan_consistency_advisories(self, chapter: int) -> list[dict[str, Any]]:
         """Surface planning-stage consistency findings for this chapter.
 
@@ -874,14 +894,16 @@ class ChapterRuntime:
         """
         try:
             from .plan_consistency import run_plan_consistency
-        except ImportError:  # pragma: no cover
-            return []
+        except ImportError as exc:  # pragma: no cover
+            return [self._plan_consistency_unavailable(f"import_failed: {exc}")]
 
         volume = volume_num_for_chapter_from_state(self.project_root, chapter) or 1
         try:
             report = run_plan_consistency(self.project_root, volume=volume)
-        except Exception:  # pragma: no cover - planning checks must never block prepare
-            return []
+        except Exception as exc:  # pragma: no cover - planning checks must never block prepare
+            # Still advisory (a planning heuristic must never block prepare), but an empty
+            # list is indistinguishable from "planning is clean". Say which one it is.
+            return [self._plan_consistency_unavailable(f"{type(exc).__name__}: {exc}")]
 
         out: list[dict[str, Any]] = []
         for item in report.get("advisories") or []:
@@ -1424,18 +1446,23 @@ class ChapterRuntime:
         # Convergence context for re-review (Issue #50 task C)
         runtime_dir = self._chapter_runtime_dir(chapter)
         prev_review = None
+        prev_review_status = "no_previous_review"
         for cand in (
             runtime_dir / "last_review.json",
             self.project_root / ".webnovel" / "tmp" / "review_results.json",
         ):
-            if cand.is_file():
-                try:
-                    data = json.loads(cand.read_text(encoding="utf-8"))
-                    if isinstance(data, dict) and int(data.get("chapter", 0)) == chapter:
-                        prev_review = data
-                        break
-                except Exception:
-                    pass
+            if not cand.is_file():
+                continue
+            try:
+                data = json.loads(cand.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                prev_review_status = f"unreadable:{cand.name}:{exc}"
+                continue
+            if isinstance(data, dict) and int(data.get("chapter", 0)) == chapter:
+                prev_review = data
+                prev_review_status = "loaded"
+                break
+            prev_review_status = f"chapter_mismatch:{cand.name}"
 
         convergence_context: dict[str, Any]
         if prev_review and isinstance(prev_review.get("issues"), list):
@@ -1453,6 +1480,7 @@ class ChapterRuntime:
             ]
             convergence_context = {
                 "has_previous_review": True,
+                "previous_review_status": prev_review_status,
                 "previous_draft_id": prev_review.get("draft_id"),
                 "previous_draft_fingerprint": prev_review.get("draft_fingerprint"),
                 "previous_finding_count": len(prev_issues),
@@ -1476,6 +1504,7 @@ class ChapterRuntime:
         else:
             convergence_context = {
                 "has_previous_review": False,
+                "previous_review_status": prev_review_status,
                 "previous_finding_count": 0,
                 "previous_findings": [],
                 "high_or_critical_findings": [],
@@ -1596,6 +1625,11 @@ class ChapterRuntime:
 
         draft_id = f"draft-{chapter:03d}-{uuid.uuid4().hex[:8]}"
         draft_fp = hashlib.sha256(prose.encode("utf-8")).hexdigest()
+        # Review validity is a function of the prose the Reviewer reads, not of the whole
+        # working draft: a `<chapter_changes>` reconciliation fix changes `draft_fingerprint`
+        # without changing a single reviewed character. Both hashes are recorded — the full
+        # one as artifact provenance, this one as the review subject.
+        review_subject_fp = prose_subject_sha256(prose)
         created_at = datetime.now(timezone.utc).isoformat()
 
         draft_payload = {
@@ -1605,6 +1639,7 @@ class ChapterRuntime:
             "package_brief_fingerprint": saved_brief_fp,
             "is_writer_ready": True,
             "draft_fingerprint": draft_fp,
+            "review_subject_fingerprint": review_subject_fp,
             "created_at": created_at,
             "metadata": metadata or {},
             "prose": prose,
@@ -1628,6 +1663,7 @@ class ChapterRuntime:
             status="draft_ingested",
             draft_id=draft_id,
             draft_fingerprint=draft_fp,
+            review_subject_fingerprint=review_subject_fp,
             package_fingerprint=package_fingerprint,
             next_required_action="review_and_extract",
             required_artifacts=[
@@ -1648,11 +1684,15 @@ class ChapterRuntime:
         draft_status = "none"
         draft_id = None
         draft_fp = None
+        draft_subject_fp = None
         if draft_file.is_file():
             draft_data = read_json_if_exists(draft_file) or {}
             draft_status = "ingested"
             draft_id = draft_data.get("draft_id")
             draft_fp = draft_data.get("draft_fingerprint")
+            draft_subject_fp = draft_data.get("review_subject_fingerprint") or prose_subject_sha256(
+                str(draft_data.get("prose") or "")
+            )
 
         has_pkg = pkg_file.is_file()
         is_stale = False
@@ -1684,6 +1724,7 @@ class ChapterRuntime:
             draft_status=draft_status,
             draft_id=draft_id,
             draft_fingerprint=draft_fp,
+            review_subject_fingerprint=draft_subject_fp,
             has_writer_package=has_pkg,
             is_writer_package_stale=is_stale,
             package_fingerprint=pkg_fp,
@@ -1965,22 +2006,40 @@ class ChapterRuntime:
 
         # 3.5 Review <-> draft identity consistency.
         #
-        # A review result that declares which draft it reviewed must be about the draft being
+        # A review result that declares what it reviewed must be about the prose being
         # committed. Without this, a review produced for an earlier draft version could be
         # replayed against a newer one — the exact "旧审查被静默用于新草稿" failure mode.
-        # Reviews that declare nothing keep working (the field is optional for compatibility),
-        # but a *declared contradiction* is a hard reject.
+        #
+        # The binding key is the *review subject* (prose with the `<chapter_changes>`
+        # container removed), because that is what the Reviewer read. A reconciliation fix to
+        # the proposal block changes the full draft hash without changing one reviewed
+        # character; re-running the Reviewer for that was pure waste (836 s over three
+        # chapters). The full-draft hash and draft_id are still compared whenever the review
+        # does not declare a subject fingerprint, so nothing is silently loosened for older
+        # review artifacts. Reviews that declare nothing keep working (the field is optional
+        # for compatibility), but a *declared contradiction* is a hard reject.
         if isinstance(rev, dict):
             declared_fp = str(rev.get("draft_fingerprint") or "").strip()
+            declared_subject_fp = str(rev.get("review_subject_fingerprint") or "").strip()
             declared_id = str(rev.get("draft_id") or "").strip()
             actual_fp = hashlib.sha256(str(resolved_prose).encode("utf-8")).hexdigest()
+            actual_subject_fp = prose_subject_sha256(str(resolved_prose))
             mismatches: list[str] = []
-            if declared_fp and declared_fp != actual_fp:
-                mismatches.append(
-                    f"draft_fingerprint declared={declared_fp[:12]} actual={actual_fp[:12]}"
-                )
-            if declared_id and draft_id and declared_id != str(draft_id):
-                mismatches.append(f"draft_id declared={declared_id} committing={draft_id}")
+            if declared_subject_fp:
+                # Subject-bound review: the prose is the contract. draft_id is allowed to
+                # differ because re-ingesting an unchanged prose legitimately mints a new id.
+                if declared_subject_fp != actual_subject_fp:
+                    mismatches.append(
+                        "review_subject_fingerprint "
+                        f"declared={declared_subject_fp[:12]} actual={actual_subject_fp[:12]}"
+                    )
+            else:
+                if declared_fp and declared_fp != actual_fp:
+                    mismatches.append(
+                        f"draft_fingerprint declared={declared_fp[:12]} actual={actual_fp[:12]}"
+                    )
+                if declared_id and draft_id and declared_id != str(draft_id):
+                    mismatches.append(f"draft_id declared={declared_id} committing={draft_id}")
             if mismatches:
                 return ChapterCommitOutcomeResult(
                     ok=False,

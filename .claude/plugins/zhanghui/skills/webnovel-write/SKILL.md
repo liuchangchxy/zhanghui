@@ -10,6 +10,14 @@ allowed-tools: Read Write Edit Grep Bash Agent
 
 - 以稳定流程产出可发布章节：优先使用 `正文/第{NNNN}章-{title_safe}.md`，无标题时回退 `正文/第{NNNN}章.md`。
 - 默认章节字数目标：2000-2500（用户或大纲明确覆盖时从其约定）。
+  **这个默认值是 advisory**：偏离只在 `write-gate --stage precommit` 的 `warnings` 里提示，
+  不阻断提交（实测第5章 1973 字仍可 accepted）。
+  确需**硬性篇幅合同**时显式声明，届时由确定性门禁阻断：
+  - 章节级：`.story-system/chapters/chapter_{NNN}.json` 的
+    `chapter_directive.length_contract = {"min_chars": 2000, "max_chars": 3000, "hard": true}`；
+  - 项目级：`.webnovel/state.json` 的 `project_info.chapter_length_contract`（同上结构）。
+  只有 `"hard": true` 才阻断；只写区间不写 `hard` 仍是 advisory。字数按**汉字**计（CJK 表意文字），
+  不含标点、空白与拉丁字母。
 - 保证审查、润色、数据回写完整闭环，避免"写完即丢上下文"。
 - 输出直接可被后续章节消费的结构化数据：`review_metrics`、`summaries`、`chapter_meta`。
 
@@ -48,6 +56,12 @@ allowed-tools: Read Write Edit Grep Bash Agent
 - **禁止自创模式**：`--fast` / `--minimal` 只允许按上方定义裁剪步骤，不允许自创混合模式、"半步"或"简化版"。
 - **禁止自审替代**：Step 3 审查必须由 Task 子代理执行，主流程不得内联伪造审查结论。
 - **禁止源码探测**：脚本调用方式以本文档与 data-agent 文档中的命令示例为准，命令失败时查日志定位问题，不去翻源码学习调用方式。
+
+> **共享命令契约**：本文件内联的 `runtime ingest-draft` / `runtime reviewer-context` /
+> `review-pipeline` / `revise verify` / `runtime commit` / `runtime publish-draft` 命令，
+> 其**唯一权威副本**是 `../../references/draft-review-lifecycle.md`（含"何时必须重审"的判据表）。
+> 改动任何一条命令时，先改该文件再同步本文件；`tests/unit/test_stage2_repair_regression.py`
+> 会在三个生命周期 Skill 的副本不一致时失败。
 
 ## 引用加载等级（strict, lazy）
 
@@ -509,29 +523,22 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
   - `scripts_dir`: `"${SCRIPTS_DIR}"`
   - `draft_id`: `"{draft_id}"`
   - `draft_fingerprint`: `"{draft_fingerprint}"`
-- 审查对象为当前工作草稿 `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`，审查结果严格绑定当前的 `draft_id` 与 `draft_fingerprint`。
+  - `review_subject_fingerprint`: `"{review_subject_fingerprint}"`（从 `runtime ingest-draft` / `runtime status` 的返回里取）
+- 审查对象为当前工作草稿 `${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md`，
+  审查结果严格绑定当前的 `draft_id`、`draft_fingerprint` 与 `review_subject_fingerprint`。
 - 权威分级与审查依据约束：
   1. **Canon 事实权威 (`canon_authority`)**：已确认的世界观、角色状态与账本事实，用于事实一致性检查；
   2. **创作意图与规划 (`creative_intent` / `chapter_planning`)**：包含本章核心目标（goal）、计划核心事件（core_event）、章末钩子（hook 与 hook_type）、规划禁区（forbidden_zones）与检查清单（blocking_rules），用于审查意图落实与规划执行偏差；
   3. **工艺与写作指引 (`craft_constraints` / `advisory_constraints`)**：Story Craft（节奏曲线张力、限时锁、Scene-Sequel、人物弧光）及 writing_guidance。**这些属于启发式工艺指引，严格作为 advisory finding 处理，不得输出 `blocking=true`，不得升级为 blocking hard gate**；
   4. **硬性审查约束 (Hard Constraints) 边界**：普通章节规划的 forbidden_zones 与 blocking_rules 不得仅凭字段名升级为 hard gate authority；所有 raw findings 均严格输出 `blocking=false`，最终 gate action 由既有 shared policy 与 ChapterCommitService 独占裁决。
 - 禁止主流程伪造审查结论。
-- 可并行发起审查，统一汇总 `issues/severity/overall_score`。
-- 默认使用 `auto` 路由：根据"本章执行合同 + 正文信号 + 大纲标签"动态选择审查器。
-
-核心审查器（始终执行）：
-- `consistency-checker`
-- `continuity-checker`
-- `ooc-checker`
-
-条件审查器（`auto` 命中时执行）：
-- `reader-pull-checker`
-- `high-point-checker`
-- `pacing-checker`
-
-模式说明：
-- 标准/`--fast`：核心 3 个 + auto 命中的条件审查器
-- `--minimal`：只跑核心 3 个（忽略条件审查器）
+- 只有**一个**审查入口：`zhanghui:reviewer`。它每次固定检查 8 个维度
+  （setting / timeline / continuity / character / logic / beat_compliance /
+  foreshadow_compliance / do_not_copy_violation），并在 `dimension_results` 里逐维给出结论。
+- 不存在独立的 `consistency-checker` / `continuity-checker` / `ooc-checker` /
+  `reader-pull-checker` / `high-point-checker` / `pacing-checker` 子代理；不要尝试调用它们。
+- 需要"只跑核心维度"时，用 `zhanghui:reviewer` 的 `--minimal` 语义（见 reviewer agent 契约），
+  不要另起一套 checker。
 
 审查指标落库（必做）：
 ```bash
@@ -589,9 +596,18 @@ cat "${SKILL_ROOT}/references/writing/typesetting.md"
      --draft-id "{draft_id}" --draft-fingerprint "{draft_fingerprint}" \
      --output "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" --format text
    ```
+   （默认只纳入 `PROSE_EDIT` 目标；需要连 Craft advisory 一起改时才追加 `--include-advisory`。）
    计划逐条给出：定位方式（行号 / 段落号 / 原文引用）、命中的最小可编辑区间、修复指令、
-   以及 `kind`（`STYLE_ONLY` / `LOCAL_FACT` / `STRUCTURAL` / `CANON_HISTORY`）。
-   `advisory`（非阻断）问题默认一并纳入；`unresolved` / `ambiguous` 条目**不会自动替换**，需人工指定位置。
+   以及 `kind`（`STYLE_ONLY` / `LOCAL_FACT` / `STRUCTURAL` / `CANON_HISTORY`）与 `owner`。
+   `unresolved` / `ambiguous` 条目**不会自动替换**，需人工指定位置。
+
+   **纳入范围按 owner 判定，不按"非阻断就一并改"**：计划只把 `owner=PROSE_EDIT` 的问题
+   变成可修订目标。其余问题进 `plan.deferred` 并带 `repair_hint`，**不进入正文修订循环**：
+   - `ARTIFACT_REPAIR`：产物文件缺失/不可读（如 `do_not_copy_check.json`）→ 重跑对应产物生成，不改正文；
+   - `GOVERNANCE_REPAIR`：伏笔登记 / loop 关联 / 账本元数据 → 在治理数据层修，不改正文；
+   - `ADVISORY`：Craft 启发式（节拍、伏笔时限、节奏曲线、hook_type）→ 仅记录建议。
+   `plan.summary.deferred_by_owner` 给出各类计数，请在报告中如实呈现。
+   确需把 advisory 也纳入时，显式加 `--include-advisory`；不要为了清零 advisory 反复改写正文。
 2. **先诊断**：运行 `prose diagnose --file ...`，列出真实病灶，不得无病呻吟或整篇机械改写。
 3. 主流程按计划改写**对应句段**，把替换写成：
    `[{"target_id": "<issue_id>", "new_text": "<改写后的该段原文>"}]`
@@ -619,9 +635,13 @@ cat "${SKILL_ROOT}/references/writing/typesetting.md"
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise verify \
      --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
-     --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json"
+     --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" \
+     --output "${PROJECT_ROOT}/.webnovel/runtime/chapter_{chapter_padded}/verify_minimal_edit.json"
    ```
-   退出码非 0 或出现 `out_of_scope_changes` → 改动越界，回退重做；`untouched_targets` 列出本轮没修到的条目。
+
+   `--output` **必传**：该报告是下一轮 `review-pipeline` 判定"上一轮问题是否真的闭环"的
+   closure 证据。不落盘时，即使问题确实修好了，收敛统计也只能记为 `uncertain`（因为
+   校验器找不到证据文件）。   退出码非 0 或出现 `out_of_scope_changes` → 改动越界，回退重做；`untouched_targets` 列出本轮没修到的条目。
    退出码 `4` 表示**版本/来源不匹配**（计划不是为当前草稿生成的，或审查没有绑定当前草稿），
    必须重新 `revise plan`，不得改用手工定位。
 
@@ -667,14 +687,26 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
      3. 重新调用 `runtime ingest-draft`：
         ```bash
         python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime ingest-draft \
-          --package-fingerprint {package_fingerprint} \
+          --chapter {chapter_num} \
+          --package-fingerprint "${PACKAGE_FINGERPRINT}" \
           --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
           --format json
         ```
-        获取全新的 `draft_id` 与 `draft_fingerprint`；
-     4. **旧草稿的审查结果彻底失效**：严禁沿用旧 `draft_id` 对应的 review_results；
-     5. 重新调用 `zhanghui:reviewer` 对新草稿进行完整审查（继续传入 `reviewer_context_{chapter_padded}.json` 作为审查依据），产出与新 `draft_id` 绑定的全新 `review_results.json`，并调用 `review-pipeline --save-metrics` 刷新 metrics；
-     6. 只有完成新草稿审查并绑定新 `draft_id` 后，方可进入 Step 4.5。
+        获取全新的 `draft_id` / `draft_fingerprint` / `review_subject_fingerprint`；
+     4. **按审查对象指纹决定要不要重审**（这是唯一判据，见下方「审查失效判据」）：
+        - `review_subject_fingerprint` **未变化** → 正文一个字符都没变，**不重审**。沿用既有
+          `review_results.json`，只需重新运行 `review-pipeline --save-metrics` 把该审查登记到新草稿身份上；
+        - `review_subject_fingerprint` **已变化** → 正文确实变了，旧审查彻底失效，必须重新调用
+          `zhanghui:reviewer`（继续传入 `reviewer_context_{chapter_padded}.json`）产出与新草稿绑定的
+          全新 `review_results.json`，再 `review-pipeline --save-metrics`；
+     5. 只有第 4 步完成后，方可进入 Step 4.5。
+
+> **审查失效判据（`review_subject_fingerprint`）**：审查的有效性由**审查对象**决定——即剔除了
+> `<chapter_changes>` 容器的纯正文的 SHA-256。`draft_id` 与 `draft_fingerprint` 是全量产物指纹，
+> 只用于 provenance：重新登记一份**正文未变**的草稿会得到新的 `draft_id` / `draft_fingerprint`，
+> 但那不构成重审理由。只有 `review_subject_fingerprint` 变化才重审。
+> 反之，`<chapter_changes>` 的变更仍然必须走它自己的确定性校验（Step 4.5 `changes_gate` +
+> Step 5 `reconcile_changes.py`），**"正文没变"绝不豁免对账校验**。
 
 **收敛策略（不设隐藏分数线）**：
 - 哪些问题阻断由正式 Gate 判断；非阻断（advisory）问题记录建议后继续，不追求把分数刷到某个阈值。
@@ -682,6 +714,21 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 - 大面积剧情冲突（`kind=STRUCTURAL`，计划里标为章级范围）→ 允许按 ledger 的「重新起草」路径整章重写，
   但必须在报告中写明理由。
 - `kind=CANON_HISTORY`（本章已 accepted）→ 禁止常规修订，只能走 Canon Correction。
+
+**自动修订预算（最多两轮，硬边界）**：
+
+自动"改写→重审"的预算为 **初审 + 至多一次定向修订 + 复审**，即 Step 3/Step 4 之间的自动往返
+**最多 2 轮**。达到预算后必须停止自动打磨，不得暗自继续循环：
+
+| 情形 | 达到预算后的动作 |
+|---|---|
+| 仍有 `owner=PROSE_EDIT` 问题但无 hard gate 阻断 | **停止自动修订**，在报告中列出未处理问题与理由，进入 Step 4.5 |
+| 有 hard gate 阻断（shared policy / ChapterCommitService 判定） | **不得**因预算耗尽而放行；走既有拒收/显式人工恢复路径，由 ledger 续跑接管 |
+| 只剩 `deferred`（ARTIFACT_REPAIR / GOVERNANCE_REPAIR / ADVISORY） | **不属于正文修订预算**，按 `repair_hint` 在对应层处理或记录，不重写正文 |
+
+> "最多一次定向修订"是**产品策略**，不是已由实验证明的最优次数；验收应同时看漏检缺陷与质量，
+> 不能只看耗时。但"无上限自动循环"已被实测证伪：20 轮 Review 的 hard blocking 全部为 0，
+> 其中 4 轮完全冗余（836 s），13 轮属于有价值但非必须。
 
 输出：
 - 最终工作草稿（通过则为润色正文，回退则为原工作草稿）
@@ -705,7 +752,13 @@ python3 ${CLAUDE_PLUGIN_ROOT}/scripts/changes_gate.py \
 **判定逻辑**：
 - `passed=true`：进入 Step 5（data-agent）。
 - `passed=false`：读取 `failures` 列表，把每条规则的报错反馈给主流程 LLM，要求**只重写 `<chapter_changes>` 块**（不改正文）。最多 2 次。
-- **重写后身份同步规则**：若重写了 `<chapter_changes>` 块导致工作草稿发生变更，旧草稿身份与其审查产物彻底失效。严禁主流程手工篡改 `review_results.json` 中的草稿身份。必须重新调用 `runtime ingest-draft` 登记草稿以获得最新 `draft_id`，复用既有 `reviewer_context` 重新调用 `zhanghui:reviewer` 产出与新草稿绑定的全新审查结果并刷新 metrics，确保后续 Step 5 提取、对账产物及最终 `runtime commit` 严格基于同一有效草稿身份。若未修改则沿用现有 `draft_id`，不得无意义重复登记或重审。
+- **重写后身份同步规则（只重登记，不重审）**：重写 `<chapter_changes>` 块只改变提案块，不改变
+  正文。此时必须重新调用 `runtime ingest-draft` 登记草稿（`runtime commit` 从登记草稿读取提案），
+  但由于 `review_subject_fingerprint` 未变，**既有审查依然有效**：重新运行
+  `review-pipeline --chapter {chapter_num} --review-results ... --save-metrics` 把该审查登记到新草稿
+  身份上即可，**不要重新调用 `zhanghui:reviewer`**。严禁主流程手工篡改 `review_results.json` 中的
+  草稿身份字段——重登记 + `review-pipeline` 重绑定才是可核验的路径。
+  若工作草稿完全未变，则沿用现有 `draft_id`，不得无意义重复登记。
 - 2 次仍未通过：记录到 `.webnovel/tmp/changes_gate_failures.jsonl`，人工介入后由 ledger 续跑接管。
 
 **调 changes_gate.py R4b**（advisory 子规则，不阻塞）：
@@ -881,9 +934,11 @@ Step 5 失败隔离规则：
 - `data_agent_timing.jsonl`：Data Agent 内部各子步骤耗时。
 - 当外层总耗时远大于内层 timing 之和时，默认先归因为 agent 启动与环境探测开销，不误判为正文或数据处理慢。
 
-#### Step 5.4：提交前必需产物完整性校验（Pre-Commit Artifact Integrity Gate）
+#### Step 5.4：提交前必需产物完整性**预检**（Early Diagnostic，非独立门禁）
 
-在调用 `runtime commit` 前，必须检查 5 份必需产物完整存在且非空；缺少任一份产物严禁调用 commit：
+5 份必需产物是否齐备，**唯一权威判定**在 `write-gate precommit`（Step 5.4.5，内部调用
+`artifact_validator`）与 `ChapterCommitService`。本节只是一次**提前诊断**，目的是在跑完整闸门前
+就给出人话错误信息，而不是第二套并行门禁：
 
 ```bash
 for art in review_results.json fulfillment_result.json disambiguation_result.json extraction_result.json reconciliation_result.json; do
@@ -896,6 +951,8 @@ done
 
 约束：
 - 5 份产物文件（`review_results.json`、`fulfillment_result.json`、`disambiguation_result.json`、`extraction_result.json`、`reconciliation_result.json`）必须全部存在且大于 0 字节。
+- 本节**只做存在性/非空预检**，不重复 schema 校验：产物内容是否合法由 Step 5.4.5 与
+  `ChapterCommitService` 裁决。若二者结论不一致，以闸门/服务为准，不要去改本节的判断逻辑。
 - 严禁在 WriterPackage 封口后、commit 执行前调用修改 `.story-system/` 合同的写命令（合同刷新已统一在 Step 1A 执行，并在 commit accepted 时由 `ChapterCommitService` 自动原子更新），确保 `contracts_fp` 指纹严格有效、无合同漂移。
 - 任何产物缺失或空文件立即阻断提交，排查对应上游 Agent 产物生成，不强行发起 commit。
 

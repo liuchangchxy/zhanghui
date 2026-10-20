@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -31,16 +32,40 @@ class IndexProjectionWriter:
         with canonical_projection_write_scope(self.project_root):
             return self._apply_accepted_commit(commit_payload)
 
-    def _sync_canonical_state_entities(self, manager: IndexManager) -> int:
+    def _sync_canonical_state_entities(self, manager: IndexManager) -> tuple[int, dict]:
+        """Backfill entities from the mutable project files, reporting what was consumed.
+
+        `state.json` and `MASTER_SETTING.json` are *external, mutable* inputs: rebuilding the
+        same durable commit's projection reads whatever they contain at rebuild time. That
+        dependency is real and pre-existing; what was wrong is that it was invisible — a
+        parse failure returned 0 and the projection reported success either way.
+
+        So this records the exact bytes consumed (`inputs[].sha256`) and any failure
+        (`errors[]`) alongside the count, and the projection result carries it. The
+        dependency is now auditable instead of hidden, without changing which files are
+        authoritative.
+        """
+        report: dict[str, Any] = {"inputs": [], "errors": [], "synced": 0}
         state_path = self.project_root / ".webnovel" / "state.json"
         if not state_path.is_file():
-            return 0
+            report["state_json"] = "absent"
+            return 0, report
         try:
-            state_data = json.loads(state_path.read_text(encoding="utf-8"))
-        except Exception:
-            return 0
+            raw_state = state_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            report["errors"].append({"path": str(state_path), "error": f"unreadable: {exc}"})
+            return 0, report
+        try:
+            state_data = json.loads(raw_state)
+        except json.JSONDecodeError as exc:
+            report["errors"].append({"path": str(state_path), "error": f"invalid_json: {exc}"})
+            return 0, report
+        report["inputs"].append(
+            {"path": str(state_path), "sha256": hashlib.sha256(raw_state.encode("utf-8")).hexdigest()}
+        )
         if not isinstance(state_data, dict):
-            return 0
+            report["errors"].append({"path": str(state_path), "error": "not_a_json_object"})
+            return 0, report
         synced = 0
 
         # Synchronize protagonist from protagonist_state if present
@@ -126,7 +151,14 @@ class IndexProjectionWriter:
         master_path = self.project_root / ".story-system" / "MASTER_SETTING.json"
         if master_path.is_file():
             try:
-                m_data = json.loads(master_path.read_text(encoding="utf-8"))
+                raw_master = master_path.read_text(encoding="utf-8")
+                m_data = json.loads(raw_master)
+                report["inputs"].append(
+                    {
+                        "path": str(master_path),
+                        "sha256": hashlib.sha256(raw_master.encode("utf-8")).hexdigest(),
+                    }
+                )
                 for ent in m_data.get("entities", []) or []:
                     if isinstance(ent, dict):
                         n = str(ent.get("name") or ent.get("id") or ent.get("canonical_name") or "").strip()
@@ -156,17 +188,22 @@ class IndexProjectionWriter:
                             tier="装饰", desc="", current={}, first_appearance=0, last_appearance=0, is_protagonist=False
                         ))
                         synced += 1
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError, AttributeError, TypeError) as exc:
+                # Recorded rather than swallowed: a master-setting parse failure means the
+                # projection silently synced fewer entities than the file implies.
+                report["errors"].append(
+                    {"path": str(master_path), "error": f"{type(exc).__name__}: {exc}"}
+                )
 
-        return synced
+        report["synced"] = synced
+        return synced, report
 
     def _apply_accepted_commit(self, commit_payload: dict) -> dict:
         manager = IndexManager(DataModulesConfig.from_project_root(self.project_root))
         applied_count = 0
 
         # Synchronize canonical state entities from state.json (Canonical authority > derived projection)
-        synced_canon = self._sync_canonical_state_entities(manager)
+        synced_canon, canon_report = self._sync_canonical_state_entities(manager)
         applied_count += synced_canon
 
         chapter_applied = self._upsert_chapter(manager, commit_payload)
@@ -197,6 +234,10 @@ class IndexProjectionWriter:
             "appearances": appearances_count,
             "state_changes": state_changes_count,
             "entity_deltas": entity_delta_count,
+            # Which mutable external files this projection read, and whether reading them
+            # worked. Rebuilding the same commit under different state.json content can
+            # produce a different index — this is the record that makes that traceable.
+            "canonical_sync": canon_report,
         }
 
     def _upsert_chapter(self, manager: IndexManager, commit_payload: dict) -> bool:

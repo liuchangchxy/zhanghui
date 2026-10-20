@@ -22,7 +22,7 @@ zhanghui/
 │   │   └── deslop/                3 份 anti-slop 参考文档
 │   └── skills/
 │       ├── webnovel-write/skill.md    改造：注入 Step 4.5 + 4.6
-│       ├── webnovel-fast-write/       新增：跳过 reviewer 的快车道
+│       ├── webnovel-fast-write/       新增：快车道（跳过 2B/4，审查走统一 reviewer 的 mode=core）
 │       └── webnovel-deslop-check/     新增：写后独立扫描
 ├── docs/
 │   └── superpowers/
@@ -43,10 +43,14 @@ bin/install-plugin.sh
 
 - 该命令会自动配置 Claude Code 从本地 canonical 源码加载 `zhanghui@zhanghui`。
 - 修改代码后直接在 Claude Code 生效，无需任何手动 whitelist 同步。
-- 检查当前安装源：
+- 检查当前安装源（退出码 `0`=已核实、`1`=指向非 canonical、`3`=SKIPPED，即 `claude` CLI 不在 PATH，
+  本次**没有**做任何核实）：
   ```bash
   bin/install-plugin.sh --check
+  bin/install-plugin.sh --digest   # 打印 canonical 源码树摘要，用于比对实际加载的字节
   ```
+  > **版本号不能证明加载源**：同名版本号可能对应不同的源码树（曾出现插件名义上 6.5.0、
+  > 实际加载旧 cache 的情况）。以 `--check` 的 "Read from" 路径为准。
 
 ## 文档
 
@@ -79,7 +83,7 @@ ls .webnovel/observability/ 2>/dev/null
 | Skill | 跳过什么 | 保留什么 |
 |---|---|---|
 | `/webnovel-write` | 无（完整流程） | 全部 |
-| `/webnovel-fast-write` | Step 2B 风格转译 + Step 3 reviewer + Step 4 polish | Step 4.5 CHANGES + 4.6 anti-slop |
+| `/webnovel-fast-write` | Step 2B 风格转译 + Step 4 polish | Step 3 审查（统一 reviewer，`mode=core`：只查 setting/continuity/character，其余 5 维标记 `skipped`）+ Step 4.5 CHANGES + 4.6 anti-slop |
 | `/webnovel-deslop-check` | 写流程 | 仅扫描任意已有章节 |
 | `/webnovel-resume` | 无 | workflow 断点恢复（用 `run-ledger` 子命令）|
 | `/webnovel-style-profile` | 无 | 文风指纹 + 漂移检测（≥ 3 章时建基线）|
