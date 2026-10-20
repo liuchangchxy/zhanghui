@@ -271,15 +271,15 @@ def test_classify_finding_owner(issue, expected):
             },
             OWNER_PROSE_EDIT,
         ),
-        # The same holds when the explanation names a pipeline file. `category` is the
-        # contract: the Reviewer files a genuinely missing artifact under
-        # `do_not_copy_violation` (reviewer.md §10), so a prose category here means the
-        # finding is about the prose.
+        # Conflict sample 1b — naming a pipeline file is not the same as reporting it
+        # missing. A prose finding may legitimately cite a check result, and that alone must
+        # not take it out of the plan.
         (
             {
                 "category": "continuity",
-                "description": "上一章摘要缺失，无法核对本章的呼应。",
-                "evidence": "summary_result.json missing",
+                "description": "正文第4段的意象与 do_not_copy_check.json 里记录的原文意象不符。",
+                "evidence": "do_not_copy_check.json 与正文第4段",
+                "fix_hint": "以对标书禁抄检查为准改正文。",
             },
             OWNER_PROSE_EDIT,
         ),
@@ -315,6 +315,60 @@ def _plan_for(issues, **kwargs):
         require_review_binding=False,
         **kwargs,
     )
+
+
+@pytest.mark.parametrize(
+    "issue, expected",
+    [
+        # A named *missing* artifact outranks the category: the file the finding is about
+        # does not exist, and no category can make it appear. Editing the prose cannot fix
+        # a missing summary, so this must not become a revision target.
+        (
+            {
+                "category": "continuity",
+                "description": "上一章摘要缺失，无法核对本章的呼应。",
+                "evidence": "summary_result.json missing",
+            },
+            OWNER_ARTIFACT_REPAIR,
+        ),
+        (
+            {
+                "category": "setting",
+                "description": "无法读取 do_not_copy_check.json（文件不存在或格式错误）。",
+                "evidence": "do_not_copy_check.json missing or invalid JSON",
+            },
+            OWNER_ARTIFACT_REPAIR,
+        ),
+        # …but the artifact wording must be a *report about the file*, not vocabulary. A
+        # setting finding that says something is missing from the prose stays a prose edit.
+        (
+            {
+                "category": "setting",
+                "description": "设定元数据里记录的宗门缺失于正文，第2段没有交代他的来历。",
+                "evidence": "设定集/宗门.md 有记载，正文第2段没有",
+                "fix_hint": "补写正文交代。",
+            },
+            OWNER_PROSE_EDIT,
+        ),
+    ],
+)
+def test_named_missing_artifact_outranks_the_category(issue, expected):
+    assert classify_finding_owner(issue) == expected
+
+
+def test_missing_artifact_is_not_a_revision_target():
+    """The mis-routing must not just change a label — it must keep it out of the plan."""
+    plan = _plan_for([
+        {
+            "category": "continuity",
+            "description": "上一章摘要缺失，无法核对本章的呼应。",
+            "evidence": "summary_result.json missing",
+            "location": "第1段",
+        },
+    ])
+    assert plan["summary"]["total"] == 0
+    assert [item["owner"] for item in plan["deferred"]] == [OWNER_ARTIFACT_REPAIR]
+    assert plan["deferred"][0]["repair_hint"]
 
 
 def test_prose_finding_that_mentions_metadata_still_gets_revised():

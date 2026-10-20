@@ -94,8 +94,8 @@ _PROSE_GATE_IDS = frozenset({
     "canon.contradiction", "user.constraint", "fulfillment.missed_nodes",
 })
 
-# Free-text hints at a *non-prose* owner. These are only consulted where structured identity
-# is silent or already says "not prose" — never to move a prose finding out of the plan.
+# Free-text hints at a *non-prose* owner. The two are not equally strong, which is why they
+# do not share a precedence — see `classify_finding_owner`.
 #
 # Findings that name a *generated artifact* rather than a prose defect.
 _ARTIFACT_REF_RE = re.compile(
@@ -130,16 +130,25 @@ def _prose_identity(category: str, gate_id: str) -> bool:
     return category in _PROSE_CATEGORIES or gate_id in _PROSE_GATE_IDS
 
 
-def _textual_owner(text: str) -> Optional[str]:
-    """Non-prose owner hinted at by the finding's free text, or None when it says nothing."""
-    # Artifact-level problems: the finding is about a file the pipeline was supposed to
-    # produce, so no amount of prose editing can make it disappear.
-    if _ARTIFACT_REF_RE.search(text) and _ARTIFACT_MISSING_RE.search(text):
-        return OWNER_ARTIFACT_REPAIR
-    # Ledger / metadata bookkeeping (e.g. a foreshadow loop that cannot be linked to an id).
-    if _GOVERNANCE_RE.search(text):
-        return OWNER_GOVERNANCE_REPAIR
-    return None
+def _names_missing_artifact(text: str) -> bool:
+    """True when the finding names a pipeline artifact *and* says it is missing.
+
+    The conjunction is what makes this specific enough to outrank `category`: a finding that
+    names a file the pipeline was supposed to produce and reports that it is not there is a
+    statement about the pipeline. Merely mentioning a file is not enough — the same sentence
+    can be a prose finding that cites a check result.
+    """
+    return bool(_ARTIFACT_REF_RE.search(text) and _ARTIFACT_MISSING_RE.search(text))
+
+
+def _ledger_vocabulary(text: str) -> bool:
+    """True when the finding's wording is ledger/metadata vocabulary.
+
+    This is a *topic* signal, not a subject signal: "设定元数据记录他是左撇子，正文写成右手"
+    is a prose finding that happens to use the word 元数据. So it may only pick the owner for
+    findings whose structured identity is silent or already non-prose.
+    """
+    return bool(_GOVERNANCE_RE.search(text))
 
 
 def classify_finding_owner(issue: Dict[str, Any]) -> str:
@@ -149,19 +158,24 @@ def classify_finding_owner(issue: Dict[str, Any]) -> str:
     reported with its owner and a repair hint, so the loop converges on the real cause
     instead of rewriting the same paragraph again.
 
-    Ownership is decided by *structured* identity first — `authority`, `checker_id`,
-    `gate_id`, `category` are machine-checked values that say who produced the finding —
-    and only then by the free text, which is model-written prose:
+    Structured identity — `authority`, `checker_id`, `gate_id`, `category`, all
+    machine-checked values that say who produced the finding — decides first, with one
+    explicit exception for a named missing artifact. The free text is model-written prose,
+    and the two hints it can carry are deliberately not treated as equally strong:
 
-    1. A finding with Craft identity is advisory by contract. Its explanation may still name
-       a concrete non-prose repair target (a missing artifact, an unlinked ledger row), which
-       is more useful than a bare "advisory" while staying out of the prose plan.
-    2. A finding whose structured identity is prose (`category=setting|timeline|continuity|
+    1. A finding that names a pipeline artifact *and* reports it missing is about that file.
+       No `category` can make an absent file appear, so this is routed to the artifact owner
+       even when the reviewer filed it under a prose category (`continuity` + "上一章摘要缺失
+       summary_result.json missing" is a missing artifact, not a prose defect).
+    2. A finding with Craft identity is advisory by contract. Its explanation may still name
+       a concrete non-prose repair target (an unlinked ledger row), which is more useful than
+       a bare "advisory" while staying out of the prose plan.
+    3. A finding whose structured identity is prose (`category=setting|timeline|continuity|
        character|logic|ai_flavor`, or a prose gate) *is* a prose edit, whatever words its
-       explanation uses. Text matching used to run first, so a setting finding that happened
-       to say "元数据" was filed as governance and dropped out of the revision plan — the one
-       thing that must not happen, because the prose was the actual defect.
-    3. With no structured identity at all (legacy reviews, hand-written findings) the text is
+       explanation uses. Ledger vocabulary used to run before these checks, so a setting
+       finding that happened to say "元数据" was filed as governance and dropped out of the
+       revision plan — the one thing that must not happen, because the prose was the defect.
+    4. With no structured identity at all (legacy reviews, hand-written findings) the text is
        the only signal there is.
     """
     if not isinstance(issue, dict):
@@ -177,13 +191,16 @@ def classify_finding_owner(issue: Dict[str, Any]) -> str:
         str(issue.get("fix_hint") or ""),
     ))
 
+    if _names_missing_artifact(text):
+        return OWNER_ARTIFACT_REPAIR
+
     if _craft_identity(category, authority, gate_id, checker_id):
-        return _textual_owner(text) or OWNER_ADVISORY
+        return OWNER_GOVERNANCE_REPAIR if _ledger_vocabulary(text) else OWNER_ADVISORY
 
     if _prose_identity(category, gate_id):
         return OWNER_PROSE_EDIT
 
-    return _textual_owner(text) or OWNER_PROSE_EDIT
+    return OWNER_GOVERNANCE_REPAIR if _ledger_vocabulary(text) else OWNER_PROSE_EDIT
 
 _SECTION_HEADING_RE = re.compile(r"^##\s+(§\d+)\b", re.MULTILINE)
 _PARAGRAPH_REF_RE = re.compile(r"第\s*(\d+)\s*(?:[-—~至]\s*(\d+)\s*)?段")
