@@ -201,12 +201,22 @@ class ReviewMetrics:
 
     start_chapter: int
     end_chapter: int
+    # Defect-penalty score (`100 - penalties`), NOT a literary quality grade. Kept under the
+    # historical name so existing trend queries and dashboards keep working.
     overall_score: float = 0.0
     dimension_scores: Dict[str, float] = field(default_factory=dict)
     severity_counts: Dict[str, int] = field(default_factory=dict)
     critical_issues: List[str] = field(default_factory=list)
     report_file: str = ""
     notes: str = ""
+    # Convergence telemetry. These were computed but never persisted, so "did the revision
+    # actually close anything?" was unanswerable from the database after the fact.
+    previous_finding_count: int = 0
+    resolved_count: int = 0
+    persistent_count: int = 0
+    uncertain_count: int = 0
+    new_count: int = 0
+    finding_churn: int = 0
 
 
 
@@ -569,6 +579,12 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
                     critical_issues TEXT,
                     report_file TEXT,
                     notes TEXT,
+                    previous_finding_count INTEGER DEFAULT 0,
+                    resolved_count INTEGER DEFAULT 0,
+                    persistent_count INTEGER DEFAULT 0,
+                    uncertain_count INTEGER DEFAULT 0,
+                    new_count INTEGER DEFAULT 0,
+                    finding_churn INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (start_chapter, end_chapter)
@@ -577,6 +593,23 @@ class IndexManager(IndexChapterMixin, IndexEntityMixin, IndexDebtMixin, IndexRea
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_review_metrics_end ON review_metrics(end_chapter)"
             )
+            # Convergence columns were added after the table shipped; existing project
+            # databases need them backfilled in place.
+            existing_cols = {
+                row[1] for row in cursor.execute("PRAGMA table_info(review_metrics)").fetchall()
+            }
+            for col in (
+                "previous_finding_count",
+                "resolved_count",
+                "persistent_count",
+                "uncertain_count",
+                "new_count",
+                "finding_churn",
+            ):
+                if col not in existing_cols:
+                    cursor.execute(
+                        f"ALTER TABLE review_metrics ADD COLUMN {col} INTEGER DEFAULT 0"
+                    )
 
             # RAG 查询日志
             cursor.execute("""
@@ -1406,12 +1439,18 @@ def main():
         metrics = ReviewMetrics(
             start_chapter=data["start_chapter"],
             end_chapter=data["end_chapter"],
-            overall_score=data.get("overall_score", 0.0),
+            overall_score=data.get("overall_score", data.get("review_defect_score", 0.0)),
             dimension_scores=data.get("dimension_scores", {}),
             severity_counts=data.get("severity_counts", {}),
             critical_issues=data.get("critical_issues", []),
             report_file=data.get("report_file", ""),
             notes=data.get("notes", ""),
+            previous_finding_count=int(data.get("previous_finding_count", 0) or 0),
+            resolved_count=int(data.get("resolved_count", 0) or 0),
+            persistent_count=int(data.get("persistent_count", 0) or 0),
+            uncertain_count=int(data.get("uncertain_count", 0) or 0),
+            new_count=int(data.get("new_count", 0) or 0),
+            finding_churn=int(data.get("finding_churn", 0) or 0),
         )
         manager.save_review_metrics(metrics)
         emit_success(

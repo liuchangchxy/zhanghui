@@ -116,7 +116,7 @@ def test_plan_locates_paragraph_and_quote_without_section_headings():
     assert "§" not in DRAFT  # the prose has no §N structure at all
 
     targets = plan["targets"]
-    assert [t["locator"] for t in targets] == ["paragraph", "quote", "chapter"]
+    assert [t["locator"] for t in targets] == ["paragraph", "quote"]
     assert targets[0]["line_start"] == 3
     assert targets[0]["file_line_start"] == 4
     assert targets[0]["before_text"] == "他数了第三遍，还是七行，可是前面写的是八行。"
@@ -124,11 +124,18 @@ def test_plan_locates_paragraph_and_quote_without_section_headings():
     assert targets[0]["blocking"] is True
     assert targets[1]["anchor_quote"] == "不是打印的，是手写的"
     assert plan["summary"]["blocking"] == 1
-    assert plan["summary"]["advisory"] == 2
+    # `summary.advisory` counts planned targets that are not blocking — here the non-blocking
+    # logic finding, which *is* prose-editable and therefore stays in the plan.
+    assert plan["summary"]["advisory"] == 1
     assert plan["summary"]["unresolved"] == 0
     # chapter-scope findings must not become editable spans
     assert len(plan["editable_spans"]) == 2
-    assert plan["summary"]["chapter_scope"] == 1
+    # The 定时锁逾期 finding is a Craft heuristic: it is reported with its owner and a repair
+    # hint instead of being handed to a prose editor that cannot fix it.
+    deferred = plan["deferred"]
+    assert [item["owner"] for item in deferred] == ["ADVISORY"]
+    assert deferred[0]["repair_hint"]
+    assert plan["summary"]["deferred_by_owner"]["ADVISORY"] == 1
 
 
 DUAL_REF_DRAFT = "\n".join(
@@ -212,16 +219,28 @@ def test_plan_refuses_to_guess_when_line_and_paragraph_disagree_without_evidence
     assert plan["editable_spans"] == []
 
 
-def test_plan_keeps_advisory_findings_by_default_and_can_drop_them():
-    """The old contract only accepted blocking=True findings, which is why ordinary review
-    advice produced an empty plan."""
+def test_plan_defers_advisory_findings_and_includes_them_only_on_request():
+    """Scope is decided by *ownership*, not by "non-blocking means rewrite it".
+
+    The old contract put every non-blocking finding into the plan, so an unfixable Craft
+    advisory kept the edit loop spinning. Now only `PROSE_EDIT` findings are planned; a
+    Craft advisory is deferred with its owner unless the caller explicitly opts in.
+    """
     from data_modules.revision_planner import build_revision_plan
 
-    with_advisory = build_revision_plan(DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft())
-    assert with_advisory["summary"]["advisory"] == 2
+    default = build_revision_plan(DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft())
+    assert default["summary"]["total"] == 2
+    assert default["summary"]["deferred"] == 1
+    assert [item["owner"] for item in default["deferred"]] == ["ADVISORY"]
+
+    opted_in = build_revision_plan(
+        DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft(), include_advisory=True
+    )
+    assert opted_in["summary"]["total"] == 3
+    assert opted_in["summary"]["deferred"] == 0
 
     blocking_only = build_revision_plan(
-        DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft(), include_advisory=False
+        DRAFT, _bound_reviewer_json(), chapter=2, active_draft=_active_draft(), blocking_only=True
     )
     assert blocking_only["summary"]["total"] == 1
     assert blocking_only["summary"]["blocking"] == 1

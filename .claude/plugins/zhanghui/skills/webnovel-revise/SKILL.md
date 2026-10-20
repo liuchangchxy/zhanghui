@@ -14,6 +14,12 @@ allowed-tools: Read Write Edit Grep Bash Agent
 - **重新受控验收**：修订完成后刷新 `<chapter_changes>`、通过 `runtime ingest-draft` 重新登记草稿、重跑审查并落库指标；
 - **唯一发布路径**：经 `runtime commit` 提交 accepted 后，唯一通过 `runtime publish-draft` 发布纯正文。
 
+> **共享命令契约**：本文件内联的 `runtime ingest-draft` / `runtime reviewer-context` /
+> `review-pipeline` / `revise verify` / `runtime commit` / `runtime publish-draft` 命令，
+> 其**唯一权威副本**是 `../../references/draft-review-lifecycle.md`（含"何时必须重审"的判据表）。
+> 改动任何一条命令时，先改该文件再同步本文件；`tests/unit/test_stage2_repair_regression.py`
+> 会在三个生命周期 Skill 的副本不一致时失败。
+
 ## 状态机边界与适用范围（核心契约）
 
 ### 1. 不可变提交权威守护（Immutable Commit Contract）
@@ -126,9 +132,13 @@ allowed-tools: Read Write Edit Grep Bash Agent
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise verify \
      --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
-     --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json"
+     --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" \
+     --output "${PROJECT_ROOT}/.webnovel/runtime/chapter_{chapter_padded}/verify_minimal_edit.json"
    ```
-   - `out_of_scope_changes` 非空 → 改动越界，回退重做，不得带着越界改动进入重审。
+
+   `--output` **必传**：该报告是下一轮 `review-pipeline` 判定"上一轮问题是否真的闭环"的
+   closure 证据。不落盘时，即使问题确实修好了，收敛统计也只能记为 `uncertain`（因为
+   校验器找不到证据文件）。   - `out_of_scope_changes` 非空 → 改动越界，回退重做，不得带着越界改动进入重审。
    - `untouched_targets` 列出本轮没有真正改到的条目，需要回到第 3 步补做。
    - `changed=false`（正文没变）→ **不登记新草稿、不重跑审查、不重新初始化全书或整卷规划**，
      沿用当前 `draft_id` 与既有审查结论。
@@ -204,6 +214,7 @@ allowed-tools: Read Write Edit Grep Bash Agent
    - `reviewer_context_file`: `"${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"`
    - `draft_id`: `"{new_draft_id}"`
    - `draft_fingerprint`: `"{new_draft_fingerprint}"`
+   - `review_subject_fingerprint`: `"{new_review_subject_fingerprint}"`
 3. 落盘并更新审查指标（严格遵守 CLI 参数契约：`--chapter` + `--review-results` + `--save-metrics`）：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" review-pipeline \
@@ -219,12 +230,21 @@ allowed-tools: Read Write Edit Grep Bash Agent
      --json
    ```
 5. **草稿变更后的身份同步与 Reviewer 所有权规则（Post-Ingest Mutation & Reviewer Re-invocation）**：
-   若 `changes_gate` 校验未通过并对 `<chapter_changes>` 进行了重写或修改，导致工作草稿发生任何内容变化：
-   - **重新登记草稿**：必须重新调用 `runtime ingest-draft` 登记，获取更新后的 `{new_draft_id}` 与 `{new_draft_fingerprint}`；
-   - **Reviewer 原始结果所有权**：严禁主流程手工篡改或就地修改 `review_results.json` 中的 `draft_id` 或指纹。必须复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder）重新调用 `zhanghui:reviewer`，传入新 `{new_draft_id}` 与 `{new_draft_fingerprint}`，由 Reviewer Agent 权威生成与新草稿绑定的全新审查结果，并重新运行 `review-pipeline --chapter {chapter_num} --review-results ... --save-metrics`；
-   - **重新提取与对账**：Step 5 依据最新工作草稿重新拆分正文与 proposal，重新执行 Data Agent 提取与 `reconcile_changes.py`；
+   若 `changes_gate` 校验未通过并对 `<chapter_changes>` 进行了重写或修改，导致工作草稿发生变化，
+   先按**审查对象指纹**判断该变化是否触及正文：
+   - **重新登记草稿**：必须重新调用 `runtime ingest-draft` 登记，获取更新后的 `{new_draft_id}` /
+     `{new_draft_fingerprint}` / `{new_review_subject_fingerprint}`（`runtime commit` 从登记草稿读取提案）；
+   - **`review_subject_fingerprint` 未变化**（只改了提案块）→ **不重审**。既有审查依然有效，只需重新运行
+     `review-pipeline --chapter {chapter_num} --review-results ... --save-metrics` 把它登记到新草稿身份上。
+     重新调用 Reviewer 属于无意义重复（实测三章共 836 s 的纯冗余成本）；
+   - **`review_subject_fingerprint` 已变化** → 旧审查失效。**严禁主流程手工篡改或就地修改
+     `review_results.json` 中的草稿身份字段**；必须复用既有 `reviewer_context_{chapter_padded}.json`
+     （无需重建 Context Builder）重新调用 `zhanghui:reviewer`，传入新草稿身份，由 Reviewer Agent 权威
+     生成与新草稿绑定的全新审查结果，并重新运行 `review-pipeline --save-metrics`；
+   - **重新提取与对账**：Step 5 依据最新工作草稿重新拆分正文与 proposal，重新执行 Data Agent 提取与
+     `reconcile_changes.py`；提案块变更是对账层的输入变化，**不因"正文没变"而豁免**；
    - **最终提交**：`runtime commit` 必须且仅能传入最终的 `{new_draft_id}`；
-   - **未变直通**：若草稿未变更，则沿用 Step 3 登记的草稿身份与既有审查产物，不得无意义重复调用。
+   - **未变直通**：若草稿完全未变更，则沿用 Step 3 登记的草稿身份与既有审查产物，不得无意义重复调用。
 
 ### Step 5：提取、对账与事实提交
 

@@ -243,3 +243,55 @@ def test_disable_env_short_circuits(monkeypatch):
         env={**__import__("os").environ, "WEBNOVEL_DISABLE_RUNTIME_GUARD_HOOK": "1"},
     )
     assert proc.returncode == 0
+
+
+# --------------------------------------------------------------------------- #
+# G01: compound commands are classified per segment
+# --------------------------------------------------------------------------- #
+# The old compound branch ran a whole-line substring heuristic: `python3` plus a protected
+# path *anywhere* in the line was a write, so a legal read-only pipeline that merely named
+# the index database was denied. Stage 2 hit this 15 times. These tests pin both halves:
+# read-only fragments pass, and a write anywhere in the line still fails.
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        # read-only official script piped into a pager / filter
+        f'python3 -X utf8 /plugin/scripts/changes_gate.py --db {_project("p")}/{INDEX_DB} --json | head -50',
+        f'python3 -X utf8 /plugin/scripts/changes_gate.py --db {_project("p")}/{INDEX_DB} --json | python3 -m json.tool',
+        # read-only fragment chained with another harmless fragment
+        f'python3 /plugin/scripts/changes_gate.py --db {_project("p")}/{INDEX_DB} --json ; echo done',
+        f'ls {_project("p")}/{INDEX_DB} && echo ok',
+        # plain reads that name a protected file
+        f'cat {_project("p")}/{INDEX_DB} | head',
+        f'grep -c x {_project("p")}/{INDEX_DB} | wc -l',
+        f'cat {_project("p")}/{COMMITS} | python3 -m json.tool',
+        # a protected path inside a command substitution that only reads it
+        f'echo $(cat {_project("p")}/{INDEX_DB}) {REDIRECT} /tmp/out.txt',
+        # separator inside a quoted string is not a separator
+        f"echo 'a | b' {REDIRECT} /tmp/notes.txt",
+    ],
+)
+def test_allows_readonly_segments_of_compound_commands(command):
+    assert _run(command) == 0
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        f'echo hi {REDIRECT} {_project("p")}/{INDEX_DB}',
+        f'echo hi {REDIRECT}{REDIRECT} {_project("p")}/{INDEX_DB}',
+        f'cat /tmp/x 2{REDIRECT} {_project("p")}/{INDEX_DB}',
+        f'cat /tmp/x | tee {_project("p")}/{INDEX_DB}',
+        f'cp /tmp/x.json {_project("p")}/{INDEX_DB}',
+        f'ls {_project("p")} ; rm -f {_project("p")}/{INDEX_DB}',
+        # a write hidden inside a command substitution
+        f'echo $(rm {_project("p")}/{INDEX_DB})',
+        # an unrecognised script naming a protected path is still treated as a write
+        f'python3 /tmp/my_fix.py {_project("p")}/{INDEX_DB}',
+        f'python3 /plugin/scripts/webnovel.py projections rebuild --chapter 1 {REDIRECT} {_project("p")}/{COMMITS}',
+    ],
+)
+def test_denies_writes_anywhere_in_compound_commands(command):
+    assert _run(command) == 2

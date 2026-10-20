@@ -5,11 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 try:
-    from chapter_paths import find_chapter_file
+    from chapter_paths import find_chapter_file, working_chapter_draft_path
 except ImportError:  # pragma: no cover
-    from scripts.chapter_paths import find_chapter_file
+    from scripts.chapter_paths import find_chapter_file, working_chapter_draft_path
 
 from ..artifact_validator import validate_commit_artifact_files
+from ..reconciliation import prose_only_text
 from ..project_phase import (
     COMMIT_ARTIFACT_FILES,
     PHASE_INIT_READY,
@@ -20,6 +21,7 @@ from ..project_phase import (
     resolve_project_phase,
 )
 from . import gate_report, issue
+from .length_contract import check_chapter_length
 
 
 BLOCKED_PRECOMMIT_PHASES = {
@@ -78,6 +80,39 @@ def run_precommit_gate(project_root: Path, chapter: int) -> dict:
             )
         )
 
+    # Deterministic chapter-length contract. Advisory for the documented default target;
+    # blocking only when a contract explicitly declares `"hard": true`.
+    length_report: dict = {}
+    # Measure the chapter being submitted *now*, not a previously published file: during
+    # precommit the working draft is the in-flight text.
+    working_draft = working_chapter_draft_path(project_root, chapter)
+    length_subject = working_draft if working_draft.is_file() else chapter_file
+    if length_subject is not None:
+        chapter_text = length_subject.read_text(encoding="utf-8")
+        length_report = check_chapter_length(project_root, chapter, prose_only_text(chapter_text))
+        for item in length_report.get("errors") or []:
+            errors.append(
+                issue(
+                    str(item.get("type") or "chapter_length_contract_violation"),
+                    message=str(item.get("message") or ""),
+                    path=str(length_subject),
+                    impact=str(item.get("impact") or ""),
+                    repair=str(item.get("repair") or ""),
+                    details=item.get("details") or {},
+                )
+            )
+        for item in length_report.get("warnings") or []:
+            warnings.append(
+                issue(
+                    str(item.get("type") or "chapter_length_off_target"),
+                    message=str(item.get("message") or ""),
+                    severity="warning",
+                    path=str(length_subject),
+                    impact=str(item.get("impact") or ""),
+                    details=item.get("details") or {},
+                )
+            )
+
     paths = _artifact_paths(project_root)
     artifact_report = validate_commit_artifact_files(
         review_result=paths["review_result"],
@@ -118,5 +153,6 @@ def run_precommit_gate(project_root: Path, chapter: int) -> dict:
             "phase": snapshot.to_dict(),
             "chapter_file": str(chapter_file) if chapter_file else "",
             "artifact_report": artifact_report,
+            "chapter_length": length_report,
         },
     )

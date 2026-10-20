@@ -124,7 +124,9 @@ class StateProjectionWriter:
                 progress["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         strand_applied = self._apply_strand_tracker(state, chapter, commit_payload)
-        foreshadow_applied = self._apply_foreshadowing(state, chapter, commit_payload)
+        foreshadow_applied, foreshadow_report = self._apply_foreshadowing(
+            state, chapter, commit_payload
+        )
 
         return {
             "applied": applied_count > 0 or chapter > 0,
@@ -132,6 +134,12 @@ class StateProjectionWriter:
             "applied_count": applied_count,
             "strand_tracker": strand_applied,
             "foreshadowing": foreshadow_applied,
+            # How much unlinked legacy history is riding along in `plot_threads.foreshadowing`.
+            # The rows are preserved on purpose (they may be real, unpayed foreshadowing), but
+            # the count has to be visible: `legacy_unlinked` is read-only history, not a
+            # current obligation, and silently accumulating it is how it drifted into the
+            # active chain in the first place.
+            "foreshadowing_report": foreshadow_report,
         }
 
     def _locked_state(self):
@@ -269,10 +277,10 @@ class StateProjectionWriter:
                     protagonist_state.setdefault("name", canonical)
         return ids
 
-    def _apply_foreshadowing(self, state: dict, chapter: int, commit_payload: dict) -> int:
+    def _apply_foreshadowing(self, state: dict, chapter: int, commit_payload: dict) -> tuple[int, dict]:
         """Project open-loop lifecycle by canonical create event identity."""
         if chapter <= 0:
-            return 0
+            return 0, {"reason": "invalid_chapter"}
         loop_events = [
             event
             for event in extraction_list(commit_payload, "accepted_events")
@@ -281,7 +289,7 @@ class StateProjectionWriter:
             in ("open_loop_created", "open_loop_closed")
         ]
         if not loop_events:
-            return 0
+            return 0, {"reason": "no_loop_events"}
 
         plot_threads = state.get("plot_threads")
         if not isinstance(plot_threads, dict):
@@ -372,7 +380,13 @@ class StateProjectionWriter:
         after_rows = legacy_rows + projected_rows
         rows[:] = after_rows
         after = json.dumps(rows, ensure_ascii=False, sort_keys=True)
-        return int(before != after)
+        report = {
+            "reason": "projected",
+            "projected_rows": len(projected_rows),
+            "legacy_unlinked_rows": len(legacy_rows),
+            "active_rows": sum(1 for row in projected_rows if row.get("status") == "active"),
+        }
+        return int(before != after), report
 
     def _apply_strand_tracker(self, state: dict, chapter: int, commit_payload: dict) -> bool:
         strand = self._dominant_strand(commit_payload)

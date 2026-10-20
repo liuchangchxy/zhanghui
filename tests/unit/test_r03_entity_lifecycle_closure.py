@@ -370,8 +370,15 @@ def test_index_projection_writer_syncs_state_json_and_master_setting_canon(tmp_p
 
     from data_modules.story_system_mode import canonical_projection_write_scope
     with canonical_projection_write_scope(tmp_path):
-        synced = writer._sync_canonical_state_entities(manager)
+        synced, sync_report = writer._sync_canonical_state_entities(manager)
     assert synced >= 5
+    # The external files this projection depends on must be named, with their bytes hashed,
+    # so "the same commit projected differently" is traceable instead of invisible.
+    recorded = {item["path"] for item in sync_report["inputs"]}
+    assert str(state_file) in recorded
+    assert str(story_sys / "MASTER_SETTING.json") in recorded
+    assert all(len(item["sha256"]) == 64 for item in sync_report["inputs"])
+    assert sync_report["errors"] == []
     assert manager.get_entity("梅叔") is not None
     assert manager.get_entity("林越") is not None
     assert manager.get_entity("临汐城") is not None

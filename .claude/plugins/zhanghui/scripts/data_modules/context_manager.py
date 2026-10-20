@@ -458,6 +458,15 @@ class ContextManager:
             },
         }
 
+    # Loop statuses that must never be presented as something the author still owes the
+    # reader. `legacy_unlinked` rows are history the projection could not link to a loop id;
+    # they are kept in state for provenance, but treating them as open obligations is the
+    # documented A03 risk (an unlinked fragment reappearing as a "must pay off" item).
+    _NON_OBLIGATION_LOOP_STATUSES = frozenset({"legacy_unlinked", "resolved", "paid_off", "closed"})
+    # Last fallback filter outcome, so "we dropped N non-obligation rows" is readable instead
+    # of being indistinguishable from "there were no rows".
+    _last_loop_filter: Dict[str, int] = {}
+
     def _load_urgent_loops(self, state: Dict[str, Any]) -> List[Dict[str, Any]]:
         try:
             from .memory_contract_adapter import MemoryContractAdapter
@@ -468,9 +477,22 @@ class ContextManager:
         except Exception as exc:
             logger.warning("failed to load open_loops from MemoryContractAdapter: %s", exc)
         raw = state.get("open_loops") or (state.get("plot_threads") or {}).get("foreshadowing") or []
-        if isinstance(raw, list):
-            return [dict(x) if isinstance(x, dict) else {"content": str(x)} for x in raw[:3]]
-        return []
+        if not isinstance(raw, list):
+            return []
+        candidates: List[Dict[str, Any]] = []
+        skipped = 0
+        for item in raw:
+            row = dict(item) if isinstance(item, dict) else {"content": str(item)}
+            status = str(row.get("status") or "active").strip().lower()
+            if status in self._NON_OBLIGATION_LOOP_STATUSES:
+                skipped += 1
+                continue
+            candidates.append(row)
+        if skipped:
+            # Best-effort telemetry: the fallback silently dropping rows would otherwise be
+            # indistinguishable from "there were none".
+            self._last_loop_filter = {"skipped_non_obligation": skipped, "kept": len(candidates)}
+        return candidates[:3]
 
     def _load_reader_signal(self, chapter: int) -> Dict[str, Any]:
         if not getattr(self.config, "context_reader_signal_enabled", True):

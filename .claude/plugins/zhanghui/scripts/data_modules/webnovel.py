@@ -821,7 +821,8 @@ def cmd_revise(args: argparse.Namespace) -> int:
                 chapter=args.chapter,
                 draft_id=args.draft_id or "",
                 draft_fingerprint=getattr(args, "draft_fingerprint", "") or "",
-                include_advisory=not args.blocking_only,
+                include_advisory=bool(getattr(args, "include_advisory", False)),
+                blocking_only=bool(args.blocking_only),
                 active_draft=active_draft,
                 require_review_binding=not getattr(args, "allow_unbound_review", False),
             )
@@ -896,6 +897,16 @@ def cmd_revise(args: argparse.Namespace) -> int:
             after_path.read_text(encoding="utf-8"),
             load_plan(plan_path),
         )
+        # Persist the report so `review-pipeline` can consume it as convergence closure
+        # evidence. Without this the verification only ever existed on stdout, and the
+        # closure validator looked for a file that nothing wrote — which is why every
+        # genuinely fixed finding still came back as "uncertain".
+        output_path = getattr(args, "output", "") or ""
+        if output_path:
+            from security_utils import atomic_write_json
+
+            report["report_file"] = output_path
+            atomic_write_json(Path(output_path), report, use_lock=False, backup=False)
         if args.format == "json":
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:
@@ -1866,7 +1877,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_revise_plan.add_argument("--draft-id", default="", help="当前 draft_id（可选，用于绑定计划）")
     p_revise_plan.add_argument("--draft-fingerprint", default="", help="当前 draft_fingerprint（可选）")
     p_revise_plan.add_argument(
-        "--blocking-only", action="store_true", help="只保留 blocking 问题（默认包含 advisory）"
+        "--blocking-only", action="store_true", help="只保留 blocking 问题"
+    )
+    p_revise_plan.add_argument(
+        "--include-advisory",
+        action="store_true",
+        help=(
+            "显式把 Craft advisory 也纳入修订计划（默认只纳入可由正文修订处理的 PROSE_EDIT 问题；"
+            "普通 ALLOW_WITH_ADVISORY 不等于必须重写正文）"
+        ),
     )
     p_revise_plan.add_argument("--output", default="", help="计划 JSON 输出路径")
     p_revise_plan.add_argument(
@@ -1895,6 +1914,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_revise_verify.add_argument("--before-file", required=True, help="修改前草稿路径")
     p_revise_verify.add_argument("--after-file", required=True, help="修改后草稿路径")
     p_revise_verify.add_argument("--plan", required=True, help="修订计划 JSON 路径")
+    p_revise_verify.add_argument(
+        "--output",
+        default="",
+        help=(
+            "把边界校验报告落盘（供 review-pipeline 作为收敛 closure 证据读取）；"
+            "不传则只打印到 stdout"
+        ),
+    )
     p_revise_verify.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_revise_verify.set_defaults(func=cmd_revise)
 

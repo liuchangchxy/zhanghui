@@ -119,7 +119,10 @@ cd .claude/plugins/zhanghui/scripts && python3 -m pytest tests/ -v
 
 ## 已知待办
 
-- `tests/test_run_behavior_evals.py` 当前 3 项失败（`skill_init_contract` / `skill_review_contract` / `write_blocks_before_commit`）——SKILL.md 内容与评测契约漂移，待修
+- `tests/test_run_behavior_evals.py` 当前通过（2026-10-20 复测）。历史上曾因 SKILL.md 与评测契约漂移
+  有 3 项失败（`skill_init_contract` / `skill_review_contract` / `write_blocks_before_commit`），已修复；
+  该评测的多数断言仍是**字符串/文本顺序**检查，只能证明文案存在、不能证明运行链真的走了那条路径。
+  关键信令的验收见 `tests/unit/test_stage2_repair_regression.py`（CLI/Runtime 行为测试）。
 - plugin 名 `zhanghui` 含下划线，非 kebab-case——Claude Code 可用，但上架 Claude.ai 目录要求 kebab-case
 
 ## 许可与来源

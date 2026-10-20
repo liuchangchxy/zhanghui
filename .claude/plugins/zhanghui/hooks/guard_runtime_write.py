@@ -15,9 +15,15 @@ The replacement keeps the same protection surface but classifies commands explic
     write-gate / projections retry|replay)    -> allow
   * direct writes to protected files (redirect, rm/cp/mv/tee/dd onto them, Editor
     tools pointed at them)                    -> deny
-  * compound commands (pipes / `;` / `&&` / redirection / `$( )`) -> conservative
-    substring heuristic, so a legal fragment cannot smuggle a write that follows it
+  * compound commands (pipes / `;` / `&&` / redirection / `$( )`) -> split into segments
+    and classify each one, plus every redirection target and command substitution
   * anything else                             -> allow (unchanged legacy surface)
+
+Compound commands used to fall back to a whole-string substring heuristic. That heuristic
+matched `python3` plus a protected path *anywhere* in the line, so a legal read-only
+pipeline that merely named the index database while piping to `head` was denied — 15 times
+in one Stage-2 run. Splitting on unquoted shell separators and classifying each segment
+keeps every protected write denied while letting read-only fragments through.
 
 This is a guardrail against accidental self-inflicted damage, not a sandbox: it does not
 resolve environment variables and does not attempt to model arbitrary shell semantics.
@@ -83,10 +89,21 @@ _INPLACE_WRITE_COMMANDS = frozenset(
     {"rm", "unlink", "mv", "cp", "dd", "truncate", "tee", "install", "ln", "shred"}
 )
 
-# Shell metacharacters that make a command "compound". For these we fall back to the
-# conservative substring heuristic so that a legal fragment cannot whitelist a write
-# glued onto it.
+# Shell metacharacters that make a command "compound".
 _COMPOUND_RE = re.compile(r"[|;&<>`\n\r]|\$\(")
+
+# Top-level command separators. Split on these (outside quotes) to get one command per
+# segment; each segment is then classified with the single-command rules.
+_SEGMENT_SPLIT_RE = re.compile(r"\|\||&&|\||;|&|\n|\r")
+
+# Redirection targets: `> f`, `>> f`, `2> f`, `&> f`, and the attached `>f` / `2>f` forms.
+_REDIRECT_RE = re.compile(r"(?:^|[^0-9&\w])(?:&>>?|\d*>>?)\s*([^\s|;&<>]+)")
+
+# Command substitution: `$(...)` and backticks. The inner command is classified too, so a
+# write cannot hide inside one.
+_CMD_SUBST_RE = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
+
+_MAX_SUBST_DEPTH = 3
 
 # NOTE: `>` / `>>` deliberately carry no leading word boundary — `echo x > db` has a space
 # before the redirect, and anchoring on a word boundary silently missed it, so a plain
@@ -178,6 +195,124 @@ def _looks_like_direct_projection_write(command: str) -> bool:
 
 def _is_compound(command: str) -> bool:
     return bool(_COMPOUND_RE.search(command))
+
+
+def _split_segments(command: str) -> list[str]:
+    """Split a command line on top-level separators, ignoring separators inside quotes.
+
+    Not a shell parser: quoting and backslash escapes are honoured so that a separator
+    inside a string literal does not split a segment, which is all the classification
+    below needs.
+    """
+    segments: list[str] = []
+    current: list[str] = []
+    quote = ""
+    index = 0
+    length = len(command)
+    while index < length:
+        char = command[index]
+        if quote:
+            current.append(char)
+            if char == "\\" and quote == '"' and index + 1 < length:
+                current.append(command[index + 1])
+                index += 2
+                continue
+            if char == quote:
+                quote = ""
+            index += 1
+            continue
+        if char in ("'", '"'):
+            quote = char
+            current.append(char)
+            index += 1
+            continue
+        match = _SEGMENT_SPLIT_RE.match(command, index)
+        if match:
+            segments.append("".join(current))
+            current = []
+            index = match.end()
+            continue
+        current.append(char)
+        index += 1
+    segments.append("".join(current))
+    return [segment for segment in (s.strip() for s in segments) if segment]
+
+
+def _redirect_targets(segment: str) -> list[str]:
+    """Paths written to by redirection in one segment (quotes stripped)."""
+    targets: list[str] = []
+    for match in _REDIRECT_RE.finditer(segment):
+        target = match.group(1).strip().strip("'\"")
+        if target:
+            targets.append(target)
+    return targets
+
+
+def _command_substitutions(segment: str) -> list[str]:
+    """Inner command lines of `$( )` / backtick substitutions in one segment."""
+    inner: list[str] = []
+    for match in _CMD_SUBST_RE.finditer(segment):
+        body = match.group(1) if match.group(1) is not None else match.group(2)
+        if body and body.strip():
+            inner.append(body.strip())
+    return inner
+
+
+def _classify_segment(segment: str, depth: int) -> str:
+    """Classify one already-split command, recursing into command substitutions."""
+    if not segment:
+        return "unknown"
+
+    if any(_is_protected_path(target) for target in _redirect_targets(segment)):
+        return "direct_write"
+
+    if depth < _MAX_SUBST_DEPTH:
+        for inner in _command_substitutions(segment):
+            if _classify_segment(inner, depth + 1) == "direct_write":
+                return "direct_write"
+
+    tokens = _strip_command_prefix(_tokenize(segment))
+    if not tokens:
+        return "unknown"
+
+    if _writes_protected_target(tokens):
+        return "direct_write"
+
+    script = _script_basename(tokens)
+    if script in OFFICIAL_READONLY_SCRIPTS:
+        return "official_readonly"
+    if script in RUNTIME_ENTRY_SCRIPTS:
+        return "official_runtime"
+
+    # Unrecognised command. If it names a protected file we cannot prove it only reads it,
+    # so the conservative heuristic still applies — but only to *this* segment, never to
+    # the whole compound line. Substitutions and redirections are blanked first: their
+    # contents were already classified above, and leaving them in would make the `>` of an
+    # unrelated `> out.txt` look like a write onto the protected path named inside `$( )`.
+    residual = _REDIRECT_RE.sub(" ", _CMD_SUBST_RE.sub(" ", segment))
+    if _looks_like_direct_projection_write(residual):
+        return "direct_write"
+    return "unknown"
+
+
+def _classify_compound(command: str) -> str:
+    """Classify a compound command segment by segment.
+
+    A legal fragment must not whitelist a write glued onto it: the decision is
+    "direct_write" as soon as *any* segment (or redirection target, or command
+    substitution) is one. Read-only fragments are simply not writes.
+    """
+    segments = _split_segments(command)
+    if not segments:
+        return "unknown"
+    decisions = [_classify_segment(segment, 0) for segment in segments]
+    if "direct_write" in decisions:
+        return "direct_write"
+    if "official_runtime" in decisions:
+        return "official_runtime"
+    if "official_readonly" in decisions:
+        return "official_readonly"
+    return "unknown"
 
 
 def _tokenize(command: str) -> list[str]:
@@ -301,9 +436,7 @@ def classify_command(command: str) -> str:
         return "unknown"
 
     if _is_compound(command):
-        if _looks_like_direct_projection_write(command):
-            return "direct_write"
-        return "unknown"
+        return _classify_compound(command)
 
     tokens = _strip_command_prefix(_tokenize(command))
     if not tokens:

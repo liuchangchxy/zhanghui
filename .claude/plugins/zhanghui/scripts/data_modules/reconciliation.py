@@ -86,6 +86,32 @@ def split_chapter_and_changes(chapter_text: str) -> tuple[str, dict[str, Any]]:
     return document.prose_only, validate_proposed_changes(document.proposed_changes)
 
 
+def prose_only_text(chapter_text: str) -> str:
+    """Best-effort prose-only projection of a chapter file (never raises).
+
+    This is the text the Reviewer actually reads. Unlike `split_chapter_and_changes` it does
+    not require a valid proposal: a missing or malformed `<chapter_changes>` container yields
+    the raw text, so callers that *hash* the result always get a stable value instead of an
+    exception. Use `split_chapter_and_changes` when the parsed proposal itself is required.
+    """
+    try:
+        return _changes_document(chapter_text).prose_only
+    except Exception:
+        return chapter_text
+
+
+def prose_subject_sha256(chapter_text: str) -> str:
+    """SHA-256 of the prose the Reviewer consumes, with the CHANGES container excluded.
+
+    The full-draft hash (`draft_fingerprint`) changes when *any* byte of the working draft
+    changes, including a `<chapter_changes>` reconciliation fix that leaves the prose
+    untouched. Reviewing is a function of the prose plus the governed review context, not of
+    the proposal block, so review validity is bound to this value instead. The full-draft
+    hash is still recorded alongside it as artifact provenance.
+    """
+    return hashlib.sha256(prose_only_text(chapter_text).encode("utf-8")).hexdigest()
+
+
 def _proposal_facts(proposed: dict[str, Any]) -> list[dict[str, Any]]:
     facts = []
     for index, item in enumerate(proposed["character_state_changes"]):
