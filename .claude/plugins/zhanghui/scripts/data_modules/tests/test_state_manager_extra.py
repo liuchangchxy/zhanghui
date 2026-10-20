@@ -757,3 +757,40 @@ def test_save_state_timeout(monkeypatch, temp_project):
     monkeypatch.setattr(sm.filelock, "FileLock", FakeLock)
     with pytest.raises(RuntimeError):
         manager.save_state()
+
+
+def test_requested_sqlite_sync_that_cannot_import_is_not_reported_as_success(temp_project, monkeypatch):
+    """`sqlite_sync_ok: true` has to mean the sync actually happened.
+
+    A failed `SQLStateManager` import used to be swallowed, leaving `_sql_state_manager` as
+    None, and `_sync_to_sqlite` treated that as success. A caller that asked for SQLite sync
+    was then told it succeeded while nothing was written — and the SQLite-side pending buffer
+    was cleared as if it had been.
+    """
+    monkeypatch.setitem(sys.modules, "data_modules.sql_state_manager", None)
+
+    manager = StateManager(temp_project)
+    assert manager._enable_sqlite_sync is True
+    assert manager._sql_state_manager is None
+    assert manager._sync_to_sqlite() is False
+
+    manager.add_entity(EntityState(id="linfan", name="林凡", type="角色", tier="核心"))
+    result = manager.save_state()
+    assert result["saved"] is True
+    assert result["sqlite_sync_ok"] is False
+    assert "sql_state_manager" in result["sqlite_sync_error"]
+    # the un-synced work is kept for a retry instead of being dropped
+    assert manager._pending_entity_patches
+
+
+def test_explicitly_disabled_sqlite_sync_is_still_a_success(temp_project, monkeypatch):
+    """Turning SQLite sync off on purpose is not a failure."""
+    monkeypatch.setitem(sys.modules, "data_modules.sql_state_manager", None)
+
+    manager = StateManager(temp_project, enable_sqlite_sync=False)
+    assert manager._sync_to_sqlite() is True
+
+    manager.add_entity(EntityState(id="linfan", name="林凡", type="角色", tier="核心"))
+    result = manager.save_state()
+    assert result["sqlite_sync_ok"] is True
+    assert "sqlite_sync_error" not in result

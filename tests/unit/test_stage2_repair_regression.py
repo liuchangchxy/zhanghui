@@ -217,6 +217,8 @@ def test_resolve_active_draft_identity_reports_subject_fingerprint(tmp_path: Pat
             OWNER_ARTIFACT_REPAIR,
         ),
         (
+            # Craft identity is structural, so the ledger vocabulary in the explanation may
+            # only refine *which* non-prose layer owns the finding.
             {
                 "category": "foreshadow_compliance",
                 "description": "FS-002 伏笔元数据未关联 loop_id",
@@ -246,6 +248,64 @@ def test_classify_finding_owner(issue, expected):
     assert classify_finding_owner(issue) == expected
 
 
+@pytest.mark.parametrize(
+    "issue, expected",
+    [
+        # Conflict sample 1 — a prose finding that talks about metadata. The text patterns
+        # used to run *before* the category checks, so this was filed as GOVERNANCE_REPAIR,
+        # excluded from the plan, and the actual defect (the prose) was never revised.
+        (
+            {
+                "category": "setting",
+                "description": "设定元数据记录他是左撇子，正文第4段却写他右手持刀。",
+                "evidence": "设定集/角色.md 与正文第4段冲突",
+                "fix_hint": "以设定为准，改正文。",
+            },
+            OWNER_PROSE_EDIT,
+        ),
+        (
+            {
+                "category": "character",
+                "description": "人物关系账本里他和老周是仇人，正文写成了旧友。",
+                "evidence": "state.json 人物关系 vs 正文第2段",
+            },
+            OWNER_PROSE_EDIT,
+        ),
+        # Conflict sample 1b — naming a pipeline file is not the same as reporting it
+        # missing. A prose finding may legitimately cite a check result, and that alone must
+        # not take it out of the plan.
+        (
+            {
+                "category": "continuity",
+                "description": "正文第4段的意象与 do_not_copy_check.json 里记录的原文意象不符。",
+                "evidence": "do_not_copy_check.json 与正文第4段",
+                "fix_hint": "以对标书禁抄检查为准改正文。",
+            },
+            OWNER_PROSE_EDIT,
+        ),
+        # Conflict sample 2 — no structured identity at all: the text is the only signal, so
+        # the artifact/ledger hints still decide.
+        (
+            {
+                "category": "other",
+                "description": "伏笔账本里这条记录未关联 loop_id",
+            },
+            OWNER_GOVERNANCE_REPAIR,
+        ),
+        (
+            {
+                "category": "other",
+                "description": "无法读取 do_not_copy_check.json（文件不存在）",
+            },
+            OWNER_ARTIFACT_REPAIR,
+        ),
+    ],
+)
+def test_classify_finding_owner_never_reroutes_prose_by_text(issue, expected):
+    """Structured identity decides ownership; free text may only refine a non-prose owner."""
+    assert classify_finding_owner(issue) == expected
+
+
 def _plan_for(issues, **kwargs):
     text = PROSE + "\n" + _changes_block()
     return build_revision_plan(
@@ -255,6 +315,76 @@ def _plan_for(issues, **kwargs):
         require_review_binding=False,
         **kwargs,
     )
+
+
+@pytest.mark.parametrize(
+    "issue, expected",
+    [
+        # A named *missing* artifact outranks the category: the file the finding is about
+        # does not exist, and no category can make it appear. Editing the prose cannot fix
+        # a missing summary, so this must not become a revision target.
+        (
+            {
+                "category": "continuity",
+                "description": "上一章摘要缺失，无法核对本章的呼应。",
+                "evidence": "summary_result.json missing",
+            },
+            OWNER_ARTIFACT_REPAIR,
+        ),
+        (
+            {
+                "category": "setting",
+                "description": "无法读取 do_not_copy_check.json（文件不存在或格式错误）。",
+                "evidence": "do_not_copy_check.json missing or invalid JSON",
+            },
+            OWNER_ARTIFACT_REPAIR,
+        ),
+        # …but the artifact wording must be a *report about the file*, not vocabulary. A
+        # setting finding that says something is missing from the prose stays a prose edit.
+        (
+            {
+                "category": "setting",
+                "description": "设定元数据里记录的宗门缺失于正文，第2段没有交代他的来历。",
+                "evidence": "设定集/宗门.md 有记载，正文第2段没有",
+                "fix_hint": "补写正文交代。",
+            },
+            OWNER_PROSE_EDIT,
+        ),
+    ],
+)
+def test_named_missing_artifact_outranks_the_category(issue, expected):
+    assert classify_finding_owner(issue) == expected
+
+
+def test_missing_artifact_is_not_a_revision_target():
+    """The mis-routing must not just change a label — it must keep it out of the plan."""
+    plan = _plan_for([
+        {
+            "category": "continuity",
+            "description": "上一章摘要缺失，无法核对本章的呼应。",
+            "evidence": "summary_result.json missing",
+            "location": "第1段",
+        },
+    ])
+    assert plan["summary"]["total"] == 0
+    assert [item["owner"] for item in plan["deferred"]] == [OWNER_ARTIFACT_REPAIR]
+    assert plan["deferred"][0]["repair_hint"]
+
+
+def test_prose_finding_that_mentions_metadata_still_gets_revised():
+    """The mis-routing must not just change a label — it must keep the finding in the plan."""
+    plan = _plan_for([
+        {
+            "category": "setting",
+            "description": "设定元数据记录他是左撇子，正文第4段却写他右手持刀。",
+            "location": "第1段",
+            "evidence": "设定集/角色.md 与正文第4段冲突",
+            "fix_hint": "以设定为准，改正文。",
+        },
+    ])
+    assert plan["summary"]["deferred"] == 0
+    assert plan["summary"]["deferred_by_owner"][OWNER_GOVERNANCE_REPAIR] == 0
+    assert [target["owner"] for target in plan["targets"]] == [OWNER_PROSE_EDIT]
 
 
 def test_plan_defers_findings_that_prose_editing_cannot_fix():

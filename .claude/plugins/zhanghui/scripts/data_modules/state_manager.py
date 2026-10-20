@@ -130,12 +130,20 @@ class StateManager:
         # v5.1 引入: SQLite 同步
         self._enable_sqlite_sync = enable_sqlite_sync
         self._sql_state_manager = None
+        # 「显式关闭同步」与「请求了同步但依赖不可用」是两种不同的状态。后者必须对调用方可见，
+        # 否则一次没有发生过的同步会被报告成成功（见 _sync_to_sqlite）。
+        self._sqlite_sync_unavailable_reason = ""
         if enable_sqlite_sync:
             try:
                 from .sql_state_manager import SQLStateManager
                 self._sql_state_manager = SQLStateManager(self.config)
-            except ImportError:
-                pass  # SQLStateManager 不可用时静默降级
+            except ImportError as exc:
+                self._sqlite_sync_unavailable_reason = f"{type(exc).__name__}: {exc}"
+                logger.warning(
+                    "SQLite 同步已请求但 SQLStateManager 不可用（%s）：本次写入不会同步到 SQLite。"
+                    "若确实只需要 JSON 模式，请显式传 enable_sqlite_sync=False。",
+                    exc,
+                )
 
         # 待写入的增量（锁内重读 + 合并 + 写入）
         self._pending_entity_patches: Dict[tuple[str, str], _EntityPatch] = {}
@@ -430,7 +438,11 @@ class StateManager:
                 else:
                     self._restore_sqlite_pending(sqlite_pending_snapshot)
 
-                return {"saved": True, "sqlite_sync_ok": sqlite_sync_ok}
+                result = {"saved": True, "sqlite_sync_ok": sqlite_sync_ok}
+                if not sqlite_sync_ok and self._sqlite_sync_unavailable_reason:
+                    # 说清失败原因：依赖不可用与写入失败需要不同的补救动作。
+                    result["sqlite_sync_error"] = self._sqlite_sync_unavailable_reason
+                return result
 
         except filelock.Timeout:
             raise RuntimeError("无法获取 state.json 文件锁，请稍后重试")
@@ -524,7 +536,9 @@ class StateManager:
         """同步待处理数据到 SQLite（v5.1 引入，v5.4 沿用）"""
         self._reject_pending_canon_write()
         if not self._sql_state_manager:
-            return True
+            # 显式关闭同步不是失败；请求了同步却拿不到 SQLStateManager 则是失败。返回 True 会
+            # 让调用方以为数据已经落进 SQLite，并让 SQLite 侧 pending 被当成已同步清空。
+            return not self._enable_sqlite_sync
 
         # 方式1: 通过 process_chapter_result 收集的数据
         sqlite_data = self._pending_sqlite_data

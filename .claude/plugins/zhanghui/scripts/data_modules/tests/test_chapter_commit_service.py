@@ -943,3 +943,110 @@ def test_projection_failure_does_not_mutate_durable_commit(tmp_path, monkeypatch
     durable_after_retry = json.loads(commit_path.read_text(encoding="utf-8"))
     assert retried["projection_status"]["state"] == "done"
     assert commit_hash(durable_after_retry) == original_hash
+
+
+# --------------------------------------------------------------------------- #
+# Recovery failures must stay diagnosable
+# --------------------------------------------------------------------------- #
+
+
+def _workflow_events(tmp_path, chapter=3):
+    root = tmp_path / ".story-system/reviews/gate-decisions" / f"chapter_{chapter:03d}/workflow-events"
+    return [json.loads(path.read_text(encoding="utf-8")) for path in root.glob("*.json")]
+
+
+def test_recovery_records_why_the_rebuild_raised(tmp_path, monkeypatch):
+    """A raised rebuild error must not be flattened into `schema_valid: false, ok: false`.
+
+    That event is the only record of what happened; without the exception type and message
+    the operator is asked to make an accountable choice and told nothing about why.
+    """
+    service = ChapterCommitService(tmp_path)
+
+    def explode(_root):
+        raise RuntimeError("index.db is locked")
+
+    import data_modules.projection_rebuild as rebuild_module
+    monkeypatch.setattr(rebuild_module, "rebuild_projections", explode)
+    recover = _gate_finding(
+        FindingCategory.PROJECTION_HEALTH, FindingAuthority.SYSTEM_INTEGRITY, key="recover-raises",
+        evidence=[EvidenceRef(kind="recovery_required", identity={"projection": "state"})],
+    )
+
+    result = _evaluate(service, [recover], "attempt-recover-raises", refresh_findings=lambda _report: [])
+
+    failed = [event for event in _workflow_events(tmp_path) if event["event_type"] == "recovery_failed"]
+    assert len(failed) == 1
+    assert failed[0]["result"]["schema_valid"] is False
+    assert failed[0]["result"]["diagnostic"] == {
+        "exception_type": "RuntimeError", "message": "index.db is locked",
+    }
+    assert result.action == WorkflowAction.REQUIRE_HUMAN
+
+    # The finding the human is asked to rule on carries the same explanation, so the choice
+    # is presented with its cause attached rather than as a bare "a decision is required".
+    observation = ChapterCommitService._recovery_observation_finding(
+        3, "attempt-recover-raises", None, False,
+        diagnostic={"exception_type": "RuntimeError", "message": "index.db is locked"},
+    )
+    assert observation.evidence[0].identity == {
+        "recovery_result": "ambiguous",
+        "diagnostic": {"exception_type": "RuntimeError", "message": "index.db is locked"},
+    }
+
+
+def test_recovery_records_why_findings_could_not_be_refreshed(tmp_path, monkeypatch):
+    """A broken refresher is still an ambiguous condition — but a *recorded* one."""
+    service = ChapterCommitService(tmp_path)
+    report = {
+        "schema_version": "webnovel-projections/v1", "action": "rebuild", "ok": True,
+        "error": None, "results": [{"chapter": 1, "ok": True}], "chapters": [1],
+    }
+    import data_modules.projection_rebuild as rebuild_module
+    monkeypatch.setattr(rebuild_module, "rebuild_projections", lambda _root: report)
+
+    def broken_refresh(_report):
+        raise ValueError("reviewer unavailable")
+
+    recover = _gate_finding(
+        FindingCategory.PROJECTION_HEALTH, FindingAuthority.SYSTEM_INTEGRITY, key="recover-refresh-raises",
+        evidence=[EvidenceRef(kind="recovery_required", identity={"projection": "state"})],
+    )
+
+    result = _evaluate(service, [recover], "attempt-recover-refresh-raises", refresh_findings=broken_refresh)
+
+    assert result.action == WorkflowAction.REQUIRE_HUMAN
+    events = _workflow_events(tmp_path)
+    succeeded = [event for event in events if event["event_type"] == "recovery_succeeded"]
+    assert len(succeeded) == 1
+    assert succeeded[0]["result"]["refresh"] == {
+        "available": False,
+        "diagnostic": {"exception_type": "ValueError", "message": "reviewer unavailable"},
+    }
+
+
+def test_projection_log_failure_is_reported_without_failing_the_commit(tmp_path, monkeypatch, caplog):
+    """The run log is telemetry: losing it must be visible, not fatal and not silent."""
+    import logging
+
+    import data_modules.projection_log as projection_log
+
+    service = ChapterCommitService(tmp_path)
+    payload = build_commit_with_reconciliation(service,
+        chapter=14,
+        review_result={"blocking_count": 0},
+        fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation_result={"pending": []},
+        extraction_result={"state_deltas": [], "entity_deltas": [], "accepted_events": []},
+    )
+
+    def explode(*_args, **_kwargs):
+        raise OSError("log volume read-only")
+
+    monkeypatch.setattr(projection_log, "append_projection_run", explode)
+
+    with caplog.at_level(logging.WARNING, logger="data_modules.chapter_commit_service"):
+        projected = service.apply_projections(payload)
+
+    assert projected["meta"]["status"] == "accepted"
+    assert "log volume read-only" in caplog.text
