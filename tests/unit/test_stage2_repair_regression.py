@@ -217,6 +217,8 @@ def test_resolve_active_draft_identity_reports_subject_fingerprint(tmp_path: Pat
             OWNER_ARTIFACT_REPAIR,
         ),
         (
+            # Craft identity is structural, so the ledger vocabulary in the explanation may
+            # only refine *which* non-prose layer owns the finding.
             {
                 "category": "foreshadow_compliance",
                 "description": "FS-002 伏笔元数据未关联 loop_id",
@@ -246,6 +248,64 @@ def test_classify_finding_owner(issue, expected):
     assert classify_finding_owner(issue) == expected
 
 
+@pytest.mark.parametrize(
+    "issue, expected",
+    [
+        # Conflict sample 1 — a prose finding that talks about metadata. The text patterns
+        # used to run *before* the category checks, so this was filed as GOVERNANCE_REPAIR,
+        # excluded from the plan, and the actual defect (the prose) was never revised.
+        (
+            {
+                "category": "setting",
+                "description": "设定元数据记录他是左撇子，正文第4段却写他右手持刀。",
+                "evidence": "设定集/角色.md 与正文第4段冲突",
+                "fix_hint": "以设定为准，改正文。",
+            },
+            OWNER_PROSE_EDIT,
+        ),
+        (
+            {
+                "category": "character",
+                "description": "人物关系账本里他和老周是仇人，正文写成了旧友。",
+                "evidence": "state.json 人物关系 vs 正文第2段",
+            },
+            OWNER_PROSE_EDIT,
+        ),
+        # The same holds when the explanation names a pipeline file. `category` is the
+        # contract: the Reviewer files a genuinely missing artifact under
+        # `do_not_copy_violation` (reviewer.md §10), so a prose category here means the
+        # finding is about the prose.
+        (
+            {
+                "category": "continuity",
+                "description": "上一章摘要缺失，无法核对本章的呼应。",
+                "evidence": "summary_result.json missing",
+            },
+            OWNER_PROSE_EDIT,
+        ),
+        # Conflict sample 2 — no structured identity at all: the text is the only signal, so
+        # the artifact/ledger hints still decide.
+        (
+            {
+                "category": "other",
+                "description": "伏笔账本里这条记录未关联 loop_id",
+            },
+            OWNER_GOVERNANCE_REPAIR,
+        ),
+        (
+            {
+                "category": "other",
+                "description": "无法读取 do_not_copy_check.json（文件不存在）",
+            },
+            OWNER_ARTIFACT_REPAIR,
+        ),
+    ],
+)
+def test_classify_finding_owner_never_reroutes_prose_by_text(issue, expected):
+    """Structured identity decides ownership; free text may only refine a non-prose owner."""
+    assert classify_finding_owner(issue) == expected
+
+
 def _plan_for(issues, **kwargs):
     text = PROSE + "\n" + _changes_block()
     return build_revision_plan(
@@ -255,6 +315,22 @@ def _plan_for(issues, **kwargs):
         require_review_binding=False,
         **kwargs,
     )
+
+
+def test_prose_finding_that_mentions_metadata_still_gets_revised():
+    """The mis-routing must not just change a label — it must keep the finding in the plan."""
+    plan = _plan_for([
+        {
+            "category": "setting",
+            "description": "设定元数据记录他是左撇子，正文第4段却写他右手持刀。",
+            "location": "第1段",
+            "evidence": "设定集/角色.md 与正文第4段冲突",
+            "fix_hint": "以设定为准，改正文。",
+        },
+    ])
+    assert plan["summary"]["deferred"] == 0
+    assert plan["summary"]["deferred_by_owner"][OWNER_GOVERNANCE_REPAIR] == 0
+    assert [target["owner"] for target in plan["targets"]] == [OWNER_PROSE_EDIT]
 
 
 def test_plan_defers_findings_that_prose_editing_cannot_fix():

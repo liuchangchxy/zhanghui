@@ -102,6 +102,40 @@ def test_enforce_context_budget_trims_compressible_sections(tmp_path: Path):
     assert "intent" not in budget["sections_trimmed"]
 
 
+def test_context_budget_counts_the_report_it_appends(tmp_path: Path):
+    """`after_chars`/`enforced` describe the JSON the caller gets — report included.
+
+    The budget report was attached *after* the size was measured, so a payload that fit only
+    without its own bookkeeping could still claim `enforced: true`. Here the body fits under
+    the limit on its own and only the report pushes it over.
+    """
+    manager = _manager(tmp_path)
+    payload = {"canon": [{"content": "已确认的设定事实。" * 20}]}
+    body = len(json.dumps(payload, ensure_ascii=False, default=str))
+
+    result = manager._enforce_context_budget(payload, 3, body + 1)
+
+    budget = result["meta"]["context_budget"]
+    actual = len(json.dumps(result, ensure_ascii=False, default=str))
+    assert actual > body + 1  # the report alone put it over the limit
+    assert budget["after_chars"] == actual
+    assert budget["enforced"] is False
+    assert budget["shortfall_chars"] == actual - (body + 1)
+    assert budget["budget_scope"] == "complete_payload_json"
+
+
+@pytest.mark.parametrize("limit", [200, 800, 1500, 4000, 5000])
+def test_context_budget_telemetry_matches_the_returned_payload(tmp_path: Path, limit: int):
+    manager = _manager(tmp_path)
+    result = manager._enforce_context_budget(_payload(), 3, limit)
+
+    budget = result["meta"]["context_budget"]
+    actual = len(json.dumps(result, ensure_ascii=False, default=str))
+    assert budget["after_chars"] == actual
+    assert budget["enforced"] is (actual <= limit)
+    assert budget["shortfall_chars"] == max(0, actual - limit)
+
+
 def test_enforce_context_budget_reports_shortfall_instead_of_truncating_facts(tmp_path: Path):
     manager = _manager(tmp_path)
     payload = _payload()

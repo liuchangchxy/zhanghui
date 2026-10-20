@@ -202,6 +202,26 @@ class ContextManager:
         before = self._payload_chars(payload)
         applied: list[str] = []
 
+        # `limit` is a budget on the JSON the caller receives, so the report below is attached
+        # *before* the ladder runs and counts against it. Measuring first and appending after
+        # let a payload that only fit without its own bookkeeping claim `enforced: true`.
+        payload.setdefault("meta", {})
+        report: Dict[str, Any] = {
+            "budget_scope": "complete_payload_json",
+            "limit": limit,
+            "before_chars": before,
+            "after_chars": before,
+            "section_chars": {},
+            "enforced": before <= limit,
+            "sections_trimmed": applied,
+            "shortfall_chars": max(0, before - limit),
+            "note": (
+                "Canon / Intent / Constraints 不参与裁剪；若压缩阶梯用尽仍超预算，"
+                "这里如实报告 shortfall，而不是截断已接受的事实。"
+            ),
+        }
+        payload["meta"]["context_budget"] = report
+
         if before > limit:
             for section in self._BUDGET_LADDER:
                 if self._payload_chars(payload) <= limit:
@@ -209,28 +229,33 @@ class ContextManager:
                 if self._trim_section(payload, section):
                     applied.append(section)
 
-        after = self._payload_chars(payload)
-        section_chars: Dict[str, int] = {}
-        for k, v in payload.items():
-            if k == "meta":
-                continue
-            section_chars[k] = self._payload_chars({k: v})
-
-        payload.setdefault("meta", {})
-        payload["meta"]["context_budget"] = {
-            "limit": limit,
-            "before_chars": before,
-            "after_chars": after,
-            "section_chars": section_chars,
-            "enforced": after <= limit,
-            "sections_trimmed": applied,
-            "shortfall_chars": max(0, after - limit),
-            "note": (
-                "Canon / Intent / Constraints 不参与裁剪；若压缩阶梯用尽仍超预算，"
-                "这里如实报告 shortfall，而不是截断已接受的事实。"
-            ),
+        report["section_chars"] = {
+            k: self._payload_chars({k: v}) for k, v in payload.items() if k != "meta"
         }
+        self._settle_context_budget_report(payload, report, limit)
         return payload
+
+    def _settle_context_budget_report(self, payload: Dict[str, Any], report: Dict[str, Any], limit: int) -> None:
+        """Report the size of the payload *as returned*, this report included.
+
+        `after_chars` counts the JSON the caller receives, and the report is part of that
+        JSON — the number is therefore self-referential and has to be settled instead of
+        measured once. Each round only changes the digit width of three integers, so this
+        converges immediately in practice; the loop is what makes that explicit rather than
+        assumed.
+        """
+        size = self._payload_chars(payload)
+        for _ in range(5):
+            report["after_chars"] = size
+            report["enforced"] = size <= limit
+            report["shortfall_chars"] = max(0, size - limit)
+            measured = self._payload_chars(payload)
+            if measured == size:
+                return
+            size = measured
+        report["after_chars"] = size
+        report["enforced"] = size <= limit
+        report["shortfall_chars"] = max(0, size - limit)
 
     def _trim_section(self, payload: Dict[str, Any], section: str) -> bool:
         """Halve one compressible section. Returns True when something was actually removed."""

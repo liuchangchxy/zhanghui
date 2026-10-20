@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Literal
@@ -41,6 +42,20 @@ from .gate_findings import (
     GateDecisionSet, WorkflowAction, fingerprint_policy_inputs,
 )
 from .gate_severity_policy import GateSeverityPolicy
+
+
+logger = logging.getLogger(__name__)
+
+
+def _exception_diagnostic(exc: BaseException) -> Dict[str, str]:
+    """Type and short message of a caught exception, for a persisted diagnostic field.
+
+    An exception *class* is never veto evidence, but the persisted record still has to say
+    why a step failed. Without this the recovery event can only report
+    `schema_valid: false, ok: false`, and the operator asked to choose is told that recovery
+    failed without being told how.
+    """
+    return {"exception_type": type(exc).__name__, "message": str(exc)[:300]}
 
 
 @dataclass(frozen=True)
@@ -142,23 +157,24 @@ class ChapterCommitService:
                 chapter, event_id, attempt_id=attempt_id, event_type="recovery_pending", status="started",
                 finding_ids=[d.finding_id for d in decisions.decisions if d.finding_id],
             )
+            rebuild_diagnostic: Dict[str, str] | None = None
             try:
                 from .projection_rebuild import rebuild_projections
                 rebuild_result = rebuild_projections(self.project_root)
-            except Exception:
+            except Exception as exc:
                 # Exception classes are not veto evidence. The next policy attempt
-                # receives a structured ambiguous recovery outcome instead.
+                # receives a structured ambiguous recovery outcome instead — with the
+                # exception type and message kept, so the failure stays diagnosable.
                 rebuild_result = None
+                rebuild_diagnostic = _exception_diagnostic(exc)
             succeeded = self._verified_rebuild_success(rebuild_result)
             status = "recovery_succeeded" if succeeded else "recovery_failed"
-            event_result = self._recovery_event_result(rebuild_result)
-            event_path = store.append_workflow_event(
-                chapter, f"{attempt_id}.{status}", attempt_id=attempt_id,
-                event_type=status, status="verified" if succeeded else "unverified",
-                result=event_result,
-                finding_ids=[d.finding_id for d in decisions.decisions if d.finding_id],
-            )
+
+            # The refresh runs before the event is written: the event is the only part of this
+            # attempt that is persisted (findings themselves are not), so a refresh that
+            # failed has to be recorded there or it is recorded nowhere.
             refresh_failed = refresh_findings is None
+            refresh_diagnostic: Dict[str, str] | None = None
             if refresh_failed:
                 refreshed = []
             else:
@@ -166,18 +182,40 @@ class ChapterCommitService:
                     refreshed = refresh_findings(rebuild_result)
                     if not isinstance(refreshed, list) or any(not isinstance(item, DetectedFinding) for item in refreshed):
                         raise TypeError("finding refresher returned a non-normalized result")
-                except Exception:
+                except Exception as exc:
                     # An unavailable checker is an ambiguous workflow condition, not
-                    # a hard failure inferred from the exception class.
+                    # a hard failure inferred from the exception class — but the
+                    # reason is recorded rather than collapsed into an empty list.
                     refreshed = []
                     refresh_failed = True
-            refreshed.append(self._recovery_observation_finding(chapter, attempt_id, rebuild_result, succeeded))
+                    refresh_diagnostic = _exception_diagnostic(exc)
+            refresh_state: Dict[str, Any] | None = None
             if refresh_failed:
+                refresh_state = {"available": False}
+                if refresh_diagnostic:
+                    refresh_state["diagnostic"] = refresh_diagnostic
+
+            event_result = self._recovery_event_result(
+                rebuild_result, diagnostic=rebuild_diagnostic, refresh=refresh_state,
+            )
+            event_path = store.append_workflow_event(
+                chapter, f"{attempt_id}.{status}", attempt_id=attempt_id,
+                event_type=status, status="verified" if succeeded else "unverified",
+                result=event_result,
+                finding_ids=[d.finding_id for d in decisions.decisions if d.finding_id],
+            )
+            refreshed.append(self._recovery_observation_finding(
+                chapter, attempt_id, rebuild_result, succeeded, diagnostic=rebuild_diagnostic,
+            ))
+            if refresh_failed:
+                refresh_evidence: Dict[str, Any] = {"refresh_available": False}
+                if refresh_diagnostic:
+                    refresh_evidence["diagnostic"] = refresh_diagnostic
                 refreshed.append(DetectedFinding(
                     gate_id="workflow.refresh_findings", stable_subject_key=f"{attempt_id}:refresh-findings",
                     category=FindingCategory.WORKFLOW, authority=FindingAuthority.SYSTEM_INTEGRITY,
                     scope={"chapter": chapter, "workflow": "projection-recovery"},
-                    evidence=[EvidenceRef(kind="accountable_choice_required", identity={"refresh_available": False})],
+                    evidence=[EvidenceRef(kind="accountable_choice_required", identity=refresh_evidence)],
                     checker_id="chapter_commit_service", checker_version="v1",
                 ))
             next_attempt = f"{attempt_id}.recovery-1"
@@ -259,19 +297,30 @@ class ChapterCommitService:
         )
 
     @staticmethod
-    def _recovery_event_result(result: Any) -> dict[str, Any]:
+    def _recovery_event_result(result: Any, diagnostic: Dict[str, Any] | None = None,
+                               refresh: Dict[str, Any] | None = None) -> dict[str, Any]:
         if not isinstance(result, dict) or result.get("schema_version") != "webnovel-projections/v1":
-            return {"schema_valid": False, "ok": False}
-        error = result.get("error") if isinstance(result.get("error"), dict) else None
-        return {
-            "schema_valid": True,
-            "ok": result.get("ok") is True,
-            "action": result.get("action"),
-            "error": {"projection": error.get("projection"), "chapter": error.get("chapter")} if error else None,
-        }
+            event: dict[str, Any] = {"schema_valid": False, "ok": False}
+        else:
+            error = result.get("error") if isinstance(result.get("error"), dict) else None
+            event = {
+                "schema_valid": True,
+                "ok": result.get("ok") is True,
+                "action": result.get("action"),
+                "error": {"projection": error.get("projection"), "chapter": error.get("chapter")} if error else None,
+            }
+        if diagnostic:
+            # The rebuild raised instead of returning a report. Recording only
+            # `schema_valid: false, ok: false` threw away the one thing that explains the
+            # failure: what actually went wrong.
+            event["diagnostic"] = diagnostic
+        if refresh is not None:
+            event["refresh"] = refresh
+        return event
 
     @classmethod
-    def _recovery_observation_finding(cls, chapter: int, attempt_id: str, result: Any, succeeded: bool) -> DetectedFinding:
+    def _recovery_observation_finding(cls, chapter: int, attempt_id: str, result: Any, succeeded: bool,
+                                      diagnostic: Dict[str, Any] | None = None) -> DetectedFinding:
         scope = {"chapter": chapter, "workflow": "projection-recovery"}
         evidence: list[EvidenceRef]
         category = FindingCategory.PROJECTION_HEALTH
@@ -291,7 +340,12 @@ class ChapterCommitService:
             else:
                 category = FindingCategory.WORKFLOW
                 authority = FindingAuthority.SYSTEM_INTEGRITY
-                evidence = [EvidenceRef(kind="accountable_choice_required", identity={"recovery_result": "ambiguous"})]
+                ambiguous: Dict[str, Any] = {"recovery_result": "ambiguous"}
+                if diagnostic:
+                    # This is the finding the human is asked to rule on; it has to say why
+                    # recovery failed, not just that a choice is needed.
+                    ambiguous["diagnostic"] = diagnostic
+                evidence = [EvidenceRef(kind="accountable_choice_required", identity=ambiguous)]
         return DetectedFinding(
             gate_id="projection.recovery_result", stable_subject_key=f"{attempt_id}:recovery-result",
             category=category, authority=authority, scope=scope, evidence=evidence,
@@ -587,8 +641,12 @@ class ChapterCommitService:
                 writer_results,
                 commit_path=commit_path,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            # The projection run log is operational telemetry, not the authority for the
+            # commit: losing it must not fail a commit that already succeeded. It must not
+            # be invisible either — an unwritable log is how "the projections ran but there
+            # is no record of it" becomes unexplainable later.
+            logger.warning("projection run log not written (%s): %s", commit_path, exc)
         return payload
 
     def apply_projections(
@@ -677,8 +735,10 @@ class ChapterCommitService:
                                   {name: {"status": "done", "result": {"applied": True}}
                                    for name in EventProjectionRouter.PROJECTION_ORDER},
                                   commit_path=self._commit_path(payload))
-        except Exception:
-            pass
+        except Exception as exc:
+            # Same contract as the writer path above: the publication already happened, so a
+            # telemetry write failure is reported, never escalated into a failed commit.
+            logger.warning("projection run log not written (%s): %s", self._commit_path(payload), exc)
         return payload
 
     def _commit_path(self, payload: Dict[str, Any]) -> Path:
