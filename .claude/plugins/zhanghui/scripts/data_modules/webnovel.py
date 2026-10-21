@@ -308,7 +308,7 @@ def cmd_projections(args: argparse.Namespace) -> int:
 
 
 def cmd_runtime(args: argparse.Namespace) -> int:
-    from .chapter_runtime import ChapterRuntime
+    from .chapter_runtime import ChapterRuntime, AutoRevisionBudgetExhausted
     root = _resolve_root(args.project_root)
     runtime = ChapterRuntime(root)
 
@@ -342,13 +342,32 @@ def cmd_runtime(args: argparse.Namespace) -> int:
             return 1
 
     if action == "reviewer-context":
+        enforce_budget = bool(getattr(args, "enforce_auto_budget", False)) and not bool(
+            getattr(args, "allow_over_budget", False)
+        )
         try:
-            ctx = runtime.get_reviewer_context(chapter=args.chapter, max_chars=getattr(args, "max_chars", None))
+            ctx = runtime.get_reviewer_context(
+                chapter=args.chapter,
+                max_chars=getattr(args, "max_chars", None),
+                enforce_auto_budget=enforce_budget,
+            )
             if args.format == "json":
                 print(json.dumps(ctx, ensure_ascii=False, indent=2))
             else:
                 print(f"OK reviewer-context chapter {args.chapter}")
             return 0
+        except AutoRevisionBudgetExhausted as exc:
+            payload = {
+                "ok": False,
+                "error_code": "AUTO_REVISION_BUDGET_EXHAUSTED",
+                "error": str(exc),
+                "auto_revision_budget": exc.budget,
+            }
+            if args.format == "json":
+                print(json.dumps(payload, ensure_ascii=False, indent=2))
+            else:
+                print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
         except Exception as exc:
             if args.format == "json":
                 print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2))
@@ -1738,6 +1757,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_rt_rev = runtime_sub.add_parser("reviewer-context", help="获取 Reviewer 审查所需的受治理意图与 Craft 约束")
     p_rt_rev.add_argument("--chapter", type=int, required=True, help="章节号")
     p_rt_rev.add_argument("--max-chars", type=int, default=None, help="上下文最大字符限额预算")
+    p_rt_rev.add_argument(
+        "--enforce-auto-budget",
+        action="store_true",
+        help="按 Step 4 自动修订预算（初审 + 至多一次定向修订 + 复审）计数；超预算时以退出码 2 拒绝（自动写章流程使用）",
+    )
+    p_rt_rev.add_argument(
+        "--allow-over-budget",
+        action="store_true",
+        help="显式越过自动修订预算（仅供 hard gate 阻断 / 人工恢复路径使用）",
+    )
     p_rt_rev.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_rev.set_defaults(func=cmd_runtime)
 

@@ -509,8 +509,12 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 ```bash
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime reviewer-context \
   --chapter {chapter_num} \
+  --enforce-auto-budget \
   --format json > "${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"
 ```
+- `--enforce-auto-budget` 让 Runtime 按 Step 4 的自动修订预算计数。退出码 `2`
+  （`AUTO_REVISION_BUDGET_EXHAUSTED`）表示本章的自动审查轮次已用满：**停止自动打磨**，
+  进入 Step 4.5，不要调用 reviewer。仅 hard gate 阻断 / 人工恢复才可加 `--allow-over-budget`。
 
 调用约束：
 - 必须用 `Agent` 工具按注册名 `zhanghui:reviewer` 调用审查 subagent：
@@ -638,12 +642,16 @@ cat "${SKILL_ROOT}/references/writing/typesetting.md"
      --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
      --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" \
-     --output "${PROJECT_ROOT}/.webnovel/runtime/chapter_{chapter_padded}/verify_minimal_edit.json"
+     --output "${PROJECT_ROOT}/.webnovel/tmp/verify_minimal_edit.json"
    ```
 
-   `--output` **必传**：该报告是下一轮 `review-pipeline` 判定"上一轮问题是否真的闭环"的
-   closure 证据。不落盘时，即使问题确实修好了，收敛统计也只能记为 `uncertain`（因为
-   校验器找不到证据文件）。   退出码非 0 或出现 `out_of_scope_changes` → 改动越界，回退重做；`untouched_targets` 列出本轮没修到的条目。
+   `--output` **必传**，且**必须落在 `review-pipeline` 会读的位置**：它按顺序找
+   `.webnovel/tmp/verify_minimal_edit.json`、`.webnovel/tmp/revision_plan_{chapter_padded}.json`、
+   `.webnovel/tmp/revision_audit.json`，再找 `.webnovel/runtime/chapter_<三位章号>/` 下的同名文件。
+   该报告是下一轮 `review-pipeline` 判定"上一轮问题是否真的闭环"的 closure 证据。落错位置或不落盘时，
+   即使问题确实修好了，收敛统计也只能记为 `uncertain`（`evidence_not_verified`）——
+   2026-10-21 第 4 章就写进了 Runtime 不读的目录，5 个已修好的问题全被记成 `uncertain`。
+   退出码非 0 或出现 `out_of_scope_changes` → 改动越界，回退重做；`untouched_targets` 列出本轮没修到的条目。
    退出码 `4` 表示**版本/来源不匹配**（计划不是为当前草稿生成的，或审查没有绑定当前草稿），
    必须重新 `revise plan`，不得改用手工定位。
 
@@ -669,6 +677,9 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
   改动必须完全落在计划命中的 `LOCAL_FACT` 区间内，且声明里的 `draft_sha256` 必须等于当前正文，
   否则一律 `ROLLEDBACK`。章节整体重写、把事实篡改伪装成纠错，都会被这条挡住。
 - 合法性不来自「声明」，而来自「声明 + 强制重审」：事实纠错**必须**绑定新 Draft 并重新审查。
+- **本节的重审要求以自动修订预算为前提**（见下方「自动修订预算」）：只有在预算内产生的新草稿才走
+  下面的后置动作。预算耗尽后**不得**再产生新的自动修订轮次——因此也不存在需要重审的新草稿。
+  确需继续修复时走 hard gate 阻断 / 人工恢复路径，并显式传 `--allow-over-budget`。
 
 **事实纠错后置动作（`PENDING_REREVIEW` 时必做，缺一不可）**：
 1. 采用候选正文覆盖工作草稿，重刷 `<chapter_changes>`；
@@ -702,6 +713,10 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
           `zhanghui:reviewer`（继续传入 `reviewer_context_{chapter_padded}.json`）产出与新草稿绑定的
           全新 `review_results.json`，再 `review-pipeline --save-metrics`；
      5. 只有第 4 步完成后，方可进入 Step 4.5。
+   - **预算门**：第 4 步的重审要求只在自动修订预算未耗尽时适用。第 4 步之前必须先重新拉取
+     `runtime reviewer-context --enforce-auto-budget`；若它以退出码 `2`
+     （`AUTO_REVISION_BUDGET_EXHAUSTED`）拒绝，说明本轮修订已经是预算外的第 3 轮以上，
+     此时**不得**再改正文、不得再调用 reviewer——把未处理问题写进报告并进入 Step 4.5。
 
 > **审查失效判据（`review_subject_fingerprint`）**：审查的有效性由**审查对象**决定——即剔除了
 > `<chapter_changes>` 容器的纯正文的 SHA-256。`draft_id` 与 `draft_fingerprint` 是全量产物指纹，
@@ -727,10 +742,26 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 | 仍有 `owner=PROSE_EDIT` 问题但无 hard gate 阻断 | **停止自动修订**，在报告中列出未处理问题与理由，进入 Step 4.5 |
 | 有 hard gate 阻断（shared policy / ChapterCommitService 判定） | **不得**因预算耗尽而放行；走既有拒收/显式人工恢复路径，由 ledger 续跑接管 |
 | 只剩 `deferred`（ARTIFACT_REPAIR / GOVERNANCE_REPAIR / ADVISORY） | **不属于正文修订预算**，按 `repair_hint` 在对应层处理或记录，不重写正文 |
+| `kind=STRUCTURAL` 整章重新起草 / ledger 续跑 | 属于**新的自动打磨尝试**：显式 `--allow-over-budget`，并在报告中写明重新起草的理由 |
+
+**该预算由 Runtime 计数并强制**，不再只是文字约定：
+
+- 本流程每次拉取审查上下文都带 `--enforce-auto-budget`（见 Step 3）。Runtime 在
+  `.webnovel/runtime/chapter_<三位章号>/auto_revision_budget.json` 记录已用的自动审查轮数。
+- 第 1、2 轮正常返回，并在上下文里带 `auto_revision_budget`（含 `rounds_used` / `rounds_remaining`）；
+  第 3 轮起命令以**退出码 2** 拒绝，`error_code=AUTO_REVISION_BUDGET_EXHAUSTED`，
+  **不产出审查上下文**。
+- 收到退出码 2 时：**停止自动打磨**，把剩余问题写进报告，直接进入 Step 4.5。
+  不得绕过该检查自己重跑 reviewer，也不得改用无 flag 的命令"补一份上下文"。
+- 唯一例外是 hard gate 阻断 / 人工恢复：显式加 `--allow-over-budget`，并在报告中写明越界理由。
+- 人工触发的 `/webnovel-review` 与 `/webnovel-revise` 不带该 flag，不消耗也不受该预算约束。
 
 > "最多一次定向修订"是**产品策略**，不是已由实验证明的最优次数；验收应同时看漏检缺陷与质量，
 > 不能只看耗时。但"无上限自动循环"已被实测证伪：20 轮 Review 的 hard blocking 全部为 0，
 > 其中 4 轮完全冗余（836 s），13 轮属于有价值但非必须。
+> 2026-10-21 第 4 章 Full Write 再次证伪：初审 + 复审 2 轮已把 blocking 全部收敛，主模型仍自行
+> 加跑到第 4 轮（超出预算的 2 轮共 730.9 s，占 1,090 s 的 67%），最终章节仍以
+> `ALLOW_WITH_ADVISORY` 正常提交——预算外轮次没有改变任何准入门禁结论。
 
 输出：
 - 最终工作草稿（通过则为润色正文，回退则为原工作草稿）

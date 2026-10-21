@@ -76,7 +76,9 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime status --chapter {chapter_num} --format json | python3 -c 'import sys, json; print(json.load(sys.stdin)["package_fingerprint"])')"
 ```
 **封口与指纹契约**：
-- Creative Brief 经 `runtime attach-creative-brief` 签名封口，原子落盘 `.webnovel/runtime/chapter_{chapter_padded}/writer_package.json`；
+- Creative Brief 经 `runtime attach-creative-brief` 签名封口，原子落盘到该章的 Runtime 目录
+  `.webnovel/runtime/chapter_<三位章号>/writer_package.json`（**注意是三位章号**，如第 4 章为
+  `chapter_004`；`chapter_padded` 是四位章号，只用于 `.webnovel/tmp/` 下的文件名）；
 - Canonical Writer Prompt 经 `--format prompt` 渲染输出，直接保存为草稿起草唯一输入；
 - `PACKAGE_FINGERPRINT` 经 `runtime status --format json` 提取（Runtime 校验 `has_writer_package=true` 且 `is_writer_package_stale=false`）；
 - 严禁二次封口、严禁手动计算或伪造指纹、严禁重新拼装 Writer Prompt。
@@ -127,8 +129,12 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime reviewer-context \
      --chapter {chapter_num} \
+     --enforce-auto-budget \
      --format json > "${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"
    ```
+   `--enforce-auto-budget` 让 Runtime 按自动修订预算（初审 + 至多一次定向修订 + 复审，共 2 轮）计数；
+   退出码 `2`（`AUTO_REVISION_BUDGET_EXHAUSTED`）表示预算已用满，**停止自动打磨**并直接进入提交，
+   不得再加修订轮次。仅 hard gate 阻断 / 人工恢复可加 `--allow-over-budget`。
 2. 使用 `Agent` 工具调用 `zhanghui:reviewer`：
    ```
    Use the Agent tool to run `zhanghui:reviewer`

@@ -66,6 +66,29 @@ from .story_system_engine import StorySystemEngine
 from .write_gates import run_write_gate
 
 
+# Automatic "revise -> re-review" budget (webnovel-write SKILL.md, Step 4).
+# The contract is "初审 + 至多一次定向修订 + 复审", i.e. at most two review rounds.
+# It used to exist only as prose: the 2026-10-21 chapter-4 Full Write ran four review
+# rounds (1,090 s) because nothing counted them and the orchestrator decided a
+# non-blocking medium finding was "worth a tiny fix" after the budget was spent.
+AUTO_REVISION_MAX_ROUNDS = 2
+AUTO_REVISION_BUDGET_SCHEMA = "auto-revision-budget/v1"
+
+
+class AutoRevisionBudgetExhausted(RuntimeError):
+    """Raised when an automatic write loop asks for a review past its budget."""
+
+    def __init__(self, chapter: int, budget: dict[str, Any]) -> None:
+        self.chapter = chapter
+        self.budget = budget
+        super().__init__(
+            f"自动修订预算已耗尽：第 {chapter} 章已用满 "
+            f"{budget.get('max_rounds')} 轮审查（初审 + 至多一次定向修订 + 复审）。"
+            f"停止自动打磨：把剩余的 PROSE_EDIT / deferred 问题写进报告并进入 Step 4.5；"
+            f"只有 hard gate 阻断或人工恢复才可用 --allow-over-budget 显式越过。"
+        )
+
+
 def derive_chapter_progress_obligation(
     chapter: int,
     directive: Optional[dict[str, Any]] = None,
@@ -1413,7 +1436,67 @@ class ChapterRuntime:
             raise ValueError("creative_brief must be a non-empty string to seal writer package")
         return self.get_writer_package(chapter=chapter, creative_brief=str(creative_brief).strip())
 
-    def get_reviewer_context(self, chapter: int, max_chars: Optional[int] = None) -> dict[str, Any]:
+    def _auto_revision_budget_path(self, chapter: int) -> Path:
+        return self._chapter_runtime_dir(chapter) / "auto_revision_budget.json"
+
+    def _auto_revision_budget(self, chapter: int, enforce: bool) -> dict[str, Any]:
+        """Count automatic review rounds for `chapter` and enforce the Step-4 budget.
+
+        The counter is kept by this command rather than derived from bound reviews:
+        `review-pipeline` is a separate step the orchestrator can skip, and in the
+        2026-10-21 chapter-4 run it was skipped for two of four rounds — so a
+        derived count would have under-counted exactly when the budget was being
+        exceeded. Only calls that opt in (`enforce=True`, the automatic write loops)
+        advance the counter, so a human re-running /webnovel-review or
+        /webnovel-revise does not consume the automatic budget.
+        """
+        path = self._auto_revision_budget_path(chapter)
+        stored = read_json_if_exists(path) or {}
+        used = int(stored.get("rounds_used") or 0)
+
+        if enforce:
+            round_number = used + 1
+            exhausted = round_number > AUTO_REVISION_MAX_ROUNDS
+            budget = {
+                "enforced": True,
+                "max_rounds": AUTO_REVISION_MAX_ROUNDS,
+                "rounds_used": used if exhausted else round_number,
+                "round_being_requested": round_number,
+                "rounds_remaining": max(0, AUTO_REVISION_MAX_ROUNDS - round_number),
+                "exhausted": exhausted,
+            }
+            if exhausted:
+                return budget
+            from security_utils import atomic_write_json
+
+            atomic_write_json(
+                path,
+                {
+                    "schema_version": AUTO_REVISION_BUDGET_SCHEMA,
+                    "chapter": chapter,
+                    "rounds_used": round_number,
+                    "max_rounds": AUTO_REVISION_MAX_ROUNDS,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                backup=False,
+            )
+            return budget
+
+        return {
+            "enforced": False,
+            "max_rounds": AUTO_REVISION_MAX_ROUNDS,
+            "rounds_used": used,
+            "round_being_requested": used + 1,
+            "rounds_remaining": max(0, AUTO_REVISION_MAX_ROUNDS - used),
+            "exhausted": used >= AUTO_REVISION_MAX_ROUNDS,
+        }
+
+    def get_reviewer_context(
+        self,
+        chapter: int,
+        max_chars: Optional[int] = None,
+        enforce_auto_budget: bool = False,
+    ) -> dict[str, Any]:
         """
         Assemble and return governed context specifically needed for chapter review.
         Delivers:
@@ -1424,6 +1507,11 @@ class ChapterRuntime:
         5. 审查合同 (review_contract): 原始章级审查合同
         6. 收敛上下文 (convergence_context): 上轮审查问题跟踪与 closure 核验（Issue #50 task C）
         """
+        # Fail fast: an over-budget automatic review must not pay for (or produce) a context.
+        auto_revision_budget = self._auto_revision_budget(chapter, enforce=enforce_auto_budget)
+        if enforce_auto_budget and auto_revision_budget["exhausted"]:
+            raise AutoRevisionBudgetExhausted(chapter, auto_revision_budget)
+
         gov = self.get_governed_context(chapter, max_chars=max_chars)
         contracts = load_runtime_sources(self.project_root, chapter).contracts
         review_contract = contracts.get("review") or read_json_if_exists(self.paths.review_json(chapter)) or {}
@@ -1541,6 +1629,7 @@ class ChapterRuntime:
             },
             "review_contract": review_contract,
             "convergence_context": convergence_context,
+            "auto_revision_budget": auto_revision_budget,
         }
 
     def ingest_draft(
