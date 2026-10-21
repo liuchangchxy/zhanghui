@@ -295,6 +295,8 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 - `project_root`
 - `storage_path=.webnovel/`
 - `state_file=.webnovel/state.json`
+- `scripts_dir`: `"${SCRIPTS_DIR}"`（**必须显式传入**：subagent 的 Bash 不继承本会话的
+  `export SCRIPTS_DIR`，不传它就会自己去全盘找脚本目录）
 
 按以下字面调用方式触发：
 ```
@@ -877,6 +879,8 @@ sys.exit(main(['apply', '--project-root', '${PROJECT_ROOT}', '--chapter', '${cha
 - `project_root`
 - `storage_path=.webnovel/`
 - `state_file=.webnovel/state.json`
+- `scripts_dir`: `"${SCRIPTS_DIR}"`（**必须显式传入**：subagent 的 Bash 不继承本会话的
+  `export SCRIPTS_DIR`，不传它就会自己去全盘找脚本目录）
 
 按以下字面调用方式触发：
 ```

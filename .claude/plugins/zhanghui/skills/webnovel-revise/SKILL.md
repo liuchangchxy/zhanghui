@@ -256,7 +256,8 @@ allowed-tools: Read Write Edit Grep Bash Agent
      --changes-output "${PROJECT_ROOT}/.webnovel/tmp/proposed_changes.json"
    ```
 2. **调用 Data Agent 重新提取事实**：
-   使用 Agent 工具调用 `zhanghui:data-agent`（只传入 `.webnovel/tmp/data_agent_prose.md`，严禁传入带有 CHANGES 的文件）。
+   使用 Agent 工具调用 `zhanghui:data-agent`（传入 `.webnovel/tmp/data_agent_prose.md` 与 `scripts_dir="${SCRIPTS_DIR}"`，严禁传入带有 CHANGES 的文件）。
+   `scripts_dir` 必须显式传入：subagent 的 Bash 不继承本会话的 `export SCRIPTS_DIR`。
    Data Agent 依据唯一 schema 规范产出 3 份 canonical commit 必需产物到 `${PROJECT_ROOT}/.webnovel/tmp/`：
    - `extraction_result.json`（实体/状态变更、事件、摘要与场景）
    - `fulfillment_result.json`（大纲目标履约结果：planned_nodes, covered_nodes, missed_nodes, extra_nodes）

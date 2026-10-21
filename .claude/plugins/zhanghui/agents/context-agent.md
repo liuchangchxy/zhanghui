@@ -34,6 +34,12 @@ Canon 的优先级：durable commit > matching deterministic projection > summar
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "{project_root}" memory-contract load-context --chapter {NNNN}
 ```
 
+`SCRIPTS_DIR` 取自调用方传入的 `scripts_dir`（见 §5）。它不是子代理 Bash 环境里的变量——
+`SCRIPTS_DIR` / `CLAUDE_PLUGIN_ROOT` 在这里都是未设置的，插件也可能从仓库树而非缓存加载，
+所以子代理**无法自行推断**脚本目录，只能由调用方传入。
+`scripts_dir` 缺失时**直接回报缺失并停止**；**禁止用 `find /` 之类的全盘扫描去找它**——
+命中 Bash 超时只会白白烧掉 120 秒，还什么都拿不到。
+
 或者通过 Runtime 获取结构化 Governed Context：
 
 ```bash
@@ -80,9 +86,11 @@ load-context 已含（不要重复查）：`canon`、`intent`、`craft`、`refer
 ## 5. 输入
 
 ```json
-{"chapter": 100, "project_root": "D:/wk/斗破苍穹", "storage_path": ".webnovel/", "state_file": ".webnovel/state.json"}
+{"chapter": 100, "project_root": "D:/wk/斗破苍穹", "storage_path": ".webnovel/", "state_file": ".webnovel/state.json", "scripts_dir": "D:/plugins/zhanghui/scripts"}
 
 ```
+
+- `scripts_dir`：脚本目录（`webnovel.py` 所在目录）。调用方**必须**传入；缺省时按 §2 的兜底顺序处理。
 
 `state.json` 仅作兼容 / read-model 读取；写前合同以 `.story-system/`（`story_contracts`）为准。
 
