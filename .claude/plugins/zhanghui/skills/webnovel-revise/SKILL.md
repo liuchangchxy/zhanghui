@@ -133,12 +133,14 @@ allowed-tools: Read Write Edit Grep Bash Agent
      --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
      --plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" \
-     --output "${PROJECT_ROOT}/.webnovel/runtime/chapter_{chapter_padded}/verify_minimal_edit.json"
+     --output "${PROJECT_ROOT}/.webnovel/tmp/verify_minimal_edit.json"
    ```
 
-   `--output` **必传**：该报告是下一轮 `review-pipeline` 判定"上一轮问题是否真的闭环"的
-   closure 证据。不落盘时，即使问题确实修好了，收敛统计也只能记为 `uncertain`（因为
-   校验器找不到证据文件）。   - `out_of_scope_changes` 非空 → 改动越界，回退重做，不得带着越界改动进入重审。
+   `--output` **必传**，且**必须落在 `review-pipeline` 会读的位置**（`.webnovel/tmp/verify_minimal_edit.json`
+   或 `.webnovel/runtime/chapter_<三位章号>/verify_minimal_edit.json`）：该报告是下一轮
+   `review-pipeline` 判定"上一轮问题是否真的闭环"的 closure 证据。落错位置或不落盘时，
+   即使问题确实修好了，收敛统计也只能记为 `uncertain`（因为校验器找不到证据文件）。
+   - `out_of_scope_changes` 非空 → 改动越界，回退重做，不得带着越界改动进入重审。
    - `untouched_targets` 列出本轮没有真正改到的条目，需要回到第 3 步补做。
    - `changed=false`（正文没变）→ **不登记新草稿、不重跑审查、不重新初始化全书或整卷规划**，
      沿用当前 `draft_id` 与既有审查结论。
