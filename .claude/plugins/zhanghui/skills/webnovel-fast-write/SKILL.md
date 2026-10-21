@@ -62,7 +62,8 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime governed-context --chapter {chapter_num} --format json
 ```
 
-1. 使用 Agent 工具调用 `zhanghui:context-agent`（传入 `chapter`、`project_root` 等），产出文学创作任务书（Creative Brief）；
+1. 使用 Agent 工具调用 `zhanghui:context-agent`（传入 `chapter`、`project_root`、`scripts_dir` 等），产出文学创作任务书（Creative Brief）；
+   `scripts_dir` 必须显式传入 `${SCRIPTS_DIR}`：subagent 的 Bash 不继承本会话的 `export`。
 2. 调用 `runtime attach-creative-brief` 签名封口，生成唯一 Canonical Writer Prompt，并从同一封口包提取 `package_fingerprint`：
 ```bash
 # 签名封口并将 Canonical Writer Prompt 输出至临时文件供 Writer 消费
@@ -247,7 +248,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
    ```
 
 3. **调用 Data Agent 提取事实与元数据**：
-   使用 Agent 工具调用 `zhanghui:data-agent`（只传入 `.webnovel/tmp/data_agent_prose.md`，严禁传入包含 CHANGES 的文件）。
+   使用 Agent 工具调用 `zhanghui:data-agent`（传入 `.webnovel/tmp/data_agent_prose.md` 与 `scripts_dir="${SCRIPTS_DIR}"`，严禁传入包含 CHANGES 的文件）。
+   `scripts_dir` 必须显式传入：subagent 的 Bash 不继承本会话的 `export SCRIPTS_DIR`。
    Data Agent 依据唯一 schema 规范产出 3 份 canonical commit 必需产物到 `${PROJECT_ROOT}/.webnovel/tmp/`：
    - `extraction_result.json`（实体/状态变更、事件、摘要与场景）
    - `fulfillment_result.json`（大纲目标履约结果：planned_nodes, covered_nodes, missed_nodes, extra_nodes）
