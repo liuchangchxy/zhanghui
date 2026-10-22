@@ -170,12 +170,39 @@ def test_bundled_skills_are_all_loadable():
 
     skills = discover_writing_skills(roots=[PLUGIN_SKILLS_DIR])
     ids = {s["id"] for s in skills}
-    assert {"scene-sequel", "reader-pull", "information-gap", "character-agency", "dialogue-subtext", "voice-style"} <= ids
+    assert {
+        "scene-sequel",
+        "reader-pull",
+        "information-gap",
+        "character-agency",
+        "dialogue-subtext",
+        "voice-style",
+        "emotion-interiority",
+        "pov-distance",
+        "sensory-description",
+    } <= ids
     for skill in skills:
         assert skill["purpose"]
         assert skill["applies_when"]
         assert skill["avoid_when"]
         assert skill["guidance"]
+
+
+def test_voice_style_stays_inside_its_own_boundary():
+    """Emotion, POV and sensory detail belong to their own skills, not voice-style.
+
+    The old body told the Writer "只写身体，不写情绪结论", which forbade interiority
+    outright and overlapped two other skills. Guard the narrowing so it is not undone.
+    """
+    from data_modules.writing_skill_registry import PLUGIN_SKILLS_DIR
+
+    skills = {s["id"]: s for s in discover_writing_skills(roots=[PLUGIN_SKILLS_DIR])}
+    body = skills["voice-style"]["guidance"]
+    assert "只写身体" not in body
+    assert "叙事距离" not in body
+    assert "感官" not in body
+    # The narrowed skill still owns prose-level voice.
+    assert "句" in body and "比喻" in body
 
 
 # --- Selection validation --------------------------------------------------------
