@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -54,6 +55,30 @@ def _clamp_score(value: float) -> float:
 
 def _issue_penalty(issue: "ReviewIssue") -> float:
     return float(SEVERITY_PENALTIES.get(issue.severity, SEVERITY_PENALTIES["medium"]))
+
+
+def finding_fingerprint(issue: Dict[str, Any]) -> str:
+    """Stable identity for one Reviewer finding, independent of its list position.
+
+    The revision planner and convergence telemetry must agree on which finding a revision
+    target closed. A positional `issue-000`, `issue-001` label cannot do that: the planner
+    plans only the findings it can edit, so deferring an advisory or a non-blocking finding
+    shifts every later index, and the same finding gets a different number on each side.
+
+    The fingerprint is derived from the finding's own fields. Both sides call this helper,
+    so the identity survives filtering and reordering.
+    """
+    payload = json.dumps(
+        [issue.get("severity"), issue.get("category"), issue.get("location"), issue.get("description")],
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8]
+
+
+def finding_identity(issue: Dict[str, Any]) -> str:
+    """Synthetic revision-target ID for a finding that carries no Reviewer-supplied ID."""
+    return f"issue-{finding_fingerprint(issue)}"
 
 
 @dataclass
@@ -553,7 +578,7 @@ def compute_review_convergence(
         prev_subject_fp=prev_subject_fp,
     )
 
-    def _find_closure_evidence(issue_dict: dict, index: int) -> Optional[str]:
+    def _find_closure_evidence(issue_dict: dict) -> Optional[str]:
         if not evidence_valid:
             return None
 
@@ -561,10 +586,22 @@ def compute_review_convergence(
         if iid and (iid in ev_resolved_targets):
             return ev_notes.get(iid) or f"verified_by_revision_target:{iid}"
 
-        synth_id = f"issue-{index:03d}"
-        for t in ev_resolved_targets:
-            if t.startswith(synth_id):
-                return f"verified_by_revision_target:{t}"
+        if not iid:
+            # The planner identifies an ID-less finding by its own stable fingerprint, not by
+            # its position in the previous review. Match that identity here; the previous
+            # positional lookup assumed the plan's index equaled the full review index, which
+            # stopped being true as soon as a deferred/non-blocking finding was skipped.
+            fp = finding_fingerprint(issue_dict)
+            target = next(
+                (
+                    t
+                    for t in ev_resolved_targets
+                    if t == finding_identity(issue_dict) or t.rsplit("-", 1)[-1] == fp
+                ),
+                None,
+            )
+            if target:
+                return f"verified_by_revision_target:{target}"
 
         gid = str(issue_dict.get("gate_id") or "").strip()
         if gid and (gid in ev_resolved_targets):
@@ -581,7 +618,7 @@ def compute_review_convergence(
     uncertain: List[Dict[str, Any]] = []
     matched_curr_indices: set[int] = set()
 
-    for p_idx, p in enumerate(prev_issues):
+    for p in prev_issues:
         if not isinstance(p, dict):
             continue
         p_desc = str(p.get("description") or "").strip()
@@ -634,7 +671,7 @@ def compute_review_convergence(
         if p_gate:
             info["gate_id"] = p_gate
 
-        evidence_str = _find_closure_evidence(p, p_idx)
+        evidence_str = _find_closure_evidence(p)
 
         if best_match_score >= 0.70:
             matched_curr_indices.add(best_match_idx)
@@ -668,7 +705,7 @@ def compute_review_convergence(
     ]
 
     high_critical_closure: List[Dict[str, Any]] = []
-    for p_idx, p in enumerate(prev_issues):
+    for p in prev_issues:
         if not isinstance(p, dict):
             continue
         p_sev = str(p.get("severity") or "medium")

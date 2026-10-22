@@ -431,6 +431,47 @@ class IndexEntityMixin:
             )
             return [row["alias"] for row in cursor.fetchall()]
 
+    def retire_entity_identity(self, duplicate_id: str, canonical_id: str) -> bool:
+        """Move a duplicate's aliases to the canonical entity and archive the duplicate.
+
+        Only identity resolution changes: `appearances` / `state_changes` keep the id they
+        were recorded under. Callers must prove the two ids are the same character from
+        canonical state; this method does not compare names.
+        """
+        require_legacy_canon_write_allowed(self.config.project_root)
+        duplicate_id = str(duplicate_id or "").strip()
+        canonical_id = str(canonical_id or "").strip()
+        if not duplicate_id or not canonical_id or duplicate_id == canonical_id:
+            return False
+
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM entities WHERE id = ?", (duplicate_id,))
+            if cursor.fetchone() is None:
+                return False
+            cursor.execute("SELECT id FROM entities WHERE id = ?", (canonical_id,))
+            if cursor.fetchone() is None:
+                return False
+
+            cursor.execute(
+                "SELECT alias, entity_type FROM aliases WHERE entity_id = ?",
+                (duplicate_id,),
+            )
+            for row in cursor.fetchall():
+                self._register_alias_with_cursor(
+                    cursor, row["alias"], canonical_id, row["entity_type"]
+                )
+            cursor.execute("DELETE FROM aliases WHERE entity_id = ?", (duplicate_id,))
+            cursor.execute(
+                """
+                UPDATE entities
+                SET is_archived = 1, is_protagonist = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """,
+                (duplicate_id,),
+            )
+        return True
+
     def remove_alias(self, alias: str, entity_id: str) -> bool:
         """移除别名"""
         require_legacy_canon_write_allowed(self.config.project_root)
