@@ -205,6 +205,23 @@ def test_voice_style_stays_inside_its_own_boundary():
     assert "句" in body and "比喻" in body
 
 
+def test_literary_skills_state_effects_not_execution_steps():
+    """The Writer used to turn these methods into literal prose structure.
+
+    Chapter 5 produced numbered criteria as subheads and a fully spelled-out reasoning
+    chain. The fix is wording: an arrow chain or "第一步/第二" reads as a checklist the
+    Writer must render, so the methods must describe the effect instead.
+    """
+    from data_modules.writing_skill_registry import PLUGIN_SKILLS_DIR
+
+    skills = {s["id"]: s for s in discover_writing_skills(roots=[PLUGIN_SKILLS_DIR])}
+    for skill_id in ("emotion-interiority", "pov-distance", "sensory-description"):
+        body = skills[skill_id]["guidance"]
+        assert "→" not in body, f"{skill_id} still chains steps with arrows"
+        assert "第一步" not in body and "第二步" not in body
+        assert "第一，" not in body and "第二，" not in body
+
+
 # --- Selection validation --------------------------------------------------------
 
 def _catalog(tmp_path, *ids):
