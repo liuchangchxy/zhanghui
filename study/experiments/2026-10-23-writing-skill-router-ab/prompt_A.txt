@@ -1,0 +1,164 @@
+=== 写作任务：第3章 ===
+书名：海港旧信 | 题材：悬疑 | 目标读者： | 卷次：第1卷
+
+## 1. 本章写作意图 (Current Intent)
+- 核心目标：从老周口中问出潮位站停用前后的情况。
+- 本章核心冲突：想追问 vs 每问一句都在把自己变成被观察对象。
+- 主要阻力：老周反复强调“我只负责看站，不负责记录”，拒绝回答任何实质问题。
+- 付出代价：老周把他来废站的事报给了档案科，科长口头警告他别掺和海事的事。
+- 必须覆盖节点：CBN + CEN
+- 本章绝对禁区：不得引入超自然力量或系统, 不得让主角凭直觉跳过证据链, 不得出现无记录支撑的“超期信息”
+- 剧情推进义务 (Progress Obligation)：本章整体定位明确为【过渡/铺垫/整备章】（定位声明：Setup）：准备与蓄势本身可作为有效目标，但本章结束前仍须完成准备阶段的关键节点闭环，不得无限期拖延。
+【本章章纲结构】
+- 节拍位置：Setup
+- CBN：许知远 | 追问老周 | 只得到“不负责记录”
+- CPNs：老周 | 上报档案科 | 许知远被科长警告
+- CEN：许知远 | 返回工位 | 发现调阅驳回记录被删
+- 本章埋设伏笔：FS-001
+【场景设计四问】
+把本章当成一场戏来写，动笔前先回答下面四个问题；答案只能来自本章规划，不得自行加设定。
+1. 这一场主角现在具体想得到什么？
+   从老周口中问出潮位站停用前后的情况。
+2. 什么力量在现场真正阻止他？
+   老周反复强调“我只负责看站，不负责记录”，拒绝回答任何实质问题。
+   阻止力量不一定是人物：可以是制度、时间、证据矛盾、关系冲突或风险。
+3. 主角因此被迫采取什么行动或选择？
+   章纲只写了现场挫折（老周把他来废站的事报给了档案科，科长口头警告他别掺和海事的事。），没有写出主角因此被迫做出的具体行动或选择——请在本场中把它写出来。
+4. 场景结束后，人物/关系/局势/认知中什么已经发生实质变化？
+   他表面认错，实际确认有人在盯着自己的动向。
+   信息发现本身可以构成变化，但不能只是“又知道了一条信息”。
+【追读设计三问】
+本章的追读链只由三件事决定。动笔前先回答问题，再让它们在正文里成立；答案只能来自本章规划与前情，不得自行加设定。
+1. 本章开始时，读者主要期待什么？
+   - 读者现在最想知道：《值班记录本》封底与最后一页之间的夹层里塞着一张对折的纸，摊开后纸上只有一行字：日期 2016年3月17日，编号 临潮07。没有称呼，没有落款，没有多余的字。该编号与铁门旁一小块新…
+   - 读者最想看到本章发生：从老周口中问出潮位站停用前后的情况。
+   - 读者最担心：老周反复强调“我只负责看站，不负责记录”，拒绝回答任何实质问题；最怕主角付出的代价：老周把他来废站的事报给了档案科，科长口头警告他别掺和海事的事。
+2. 本章实际满足、改变或反转了什么期待？
+   - 章纲写明本章的变化：他表面认错，实际确认有人在盯着自己的动向。
+   - 读者必须看见至少一种回报：回答一个问题、完成一次行动、改变一种关系、暴露一个新事实、让人物付出代价、或推翻一种认知。不能只是把问题往后拖。
+   - 这个回报必须来自本章场景里人物真实的行动和代价，不能由叙述者额外补一句。
+3. 因为本章发生的事情，读者现在更想知道/看到什么？
+   - 章纲给的未闭合问题：是谁让老周去报的？还是老周自己想说给谁听？
+   - 新问题必须由本章已经发生的事引出，并且比旧问题更具体，指向下一步行动。如果章纲的钩子与本章实际发生的事接不上，以本章发生的事为准，不要硬加一句悬念。
+边界：不要求每章 cliffhanger、爽点或反转。过渡/铺垫章也要有当章回报（可以是代价、关系变化或一个新事实），但不需要制造本章没有的高潮。
+
+## 2. 治理事实与前情依据 (Governed Canon)
+【登场角色与状态】
+- 许知远（entity_id: xu_zhiyuan）：location.current：旧潮位站；stance.anonymous_letter：未上报；决定先自行核实；decision.query_route：放弃走档案科调阅申请：事由栏无论写实还是编造都会把“许知远查 3·17 事故卷宗”留在系统里，改走地方志办公室与旧报库等公开渠道
+- 老周（entity_id: lao_zhou）
+- 地方志办公室办事员（entity_id: difangzhi_banshiyuan）
+- 梁沐（entity_id: liang_mu）
+【本章相关地点/物品/组织】
+- 组织：临港市港口管理局档案科
+- 地点：旧潮位站
+- 物品：旧潮位站资产清点清单
+- 地点：地方志办公室
+- 地点：旧报库
+- 物品：《临港市志》
+- 组织：市海事局
+【已确认前文事实 (Accepted Canon Facts)】
+- xu_zhiyuan · inventory_status：十三项已全部核完并逐项勾销；第二项水位标尺少一支、第七项备用灯泡实物不在，两项差异说明仍未填；清点单当天未交；第十项通信终端已补记编号 TX-2015-086
+- xu_zhiyuan · procedure_compliance：本日调阅环节未违规：限制查阅卷宗未提交申请，空白申请单原样放回；改用地方志与旧报等公开渠道查证，未在档案系统留下调阅记录
+- xu_zhiyuan · known_evidence：《值班记录本》封底夹层内的对折纸：日期 2016年3月17日、编号 临潮07；未上报、未拍照、未带走原件，仅抄录于本人工作记录背面。另新增：2016 年事故调查卷宗目录卡片（限制查阅、须科级以上授权、归档单位市海事局、卷宗编号含 0317）；《临港市志》大事记 2016 年 3 月 17 日一行事故记载（书名、卷次、页码已抄）；旧报 2016-03-18 第二版右下角简讯（“昨日凌晨”）与 2016-03-24 同位置后续（原因系通信设备故障，均无地点、船名、伤亡、署名）。全部只抄录，未复印、未拍照
+- {"event_type": "open_loop_created", "subject": "niming_xin", "payload": {"content": "《值班记录本》封底与最后一页之间的夹层里塞着一张对折的纸，摊开后纸上只有一行字：日期 2016年3月17日，编号 临潮07。没有称呼，没有落款，没有多余的字。该编号与铁门旁一小块新刷的深灰色编号漆一致。", "loop_type": "悬疑谜题", "unanswered_question": "是谁把一张只有日期与站号的纸，放进一座停用十年的潮位站的值班记录本夹层里？", "urgency": 90, "planted_chapter": 1, "expected_payoff": "第20章揭示寄信人身份与动机"}}
+- {"event_type": "open_loop_created", "subject": "zhiban_jilu_ben", "payload": {"content": "《值班记录本》中间偏后一页的最下面多出一行字：不是打印的，是手写的，墨色比这一页其他字要新，行距也不一样——别的行都贴着横线写，这一行浮在两条横线中间。", "loop_type": "物证异常", "unanswered_question": "这行多出来的笔迹是谁写的、什么时候写上去的？", "urgency": 70, "planted_chapter": 1, "expected_payoff": "第9章笔迹比对认出作者"}}
+- {"event_type": "open_loop_created", "subject": "qingdan_lg_2026_1009", "payload": {"content": "清点清单 LG-2026-1009 共十三项，核到第十项：第二项水位标尺少一支（数量不符），第七项备用灯泡实物不在，两项差异都还没有填差异说明；第十项通信终端因老周禁止触碰而未核；第十一至十三项留待下次。", "loop_type": "物证缺失", "unanswered_question": "对不上的那两项资产去了哪里？老周为什么禁止触碰地面那台通信终端？", "urgency": 40, "planted_chapter": 1}}
+- {"event_type": "world_rule_revealed", "subject": "dang_anke", "payload": {"rule_content": "档案科流程：资产清点遇台账与实物不符须填差异说明，差异说明需要一份可以参照的原始登记；调阅不在本次清点范围内的材料须先走调阅申请；进站与离站都要在钥匙交接册的进出登记栏各签一次。", "rule_category": "组织流程", "scope": "临港市港口管理局档案科、旧潮位站"}}
+- {"from_entity": "xu_zhiyuan", "to_entity": "lao_zhou", "relationship": "放行但限制逗留：“核完就走，别在站里转”，允许搬开两箱记录纸后仍要求放回原位，并站在门口看着他"}
+【场景环境】：旧潮位站
+
+## 3. 创作策划任务书 (Creative Brief)
+## 开篇委托
+
+《海港旧信》第 3 章《只负责看站的人》。一句话目标：从老周口中问出潮位站停用前后的情况，并承受追问带来的暴露。
+
+## 这章的故事
+
+前情：许知远在停用十年的旧潮位站清点资产时，于《值班记录本》夹层发现一张只写日期（2016 年 3 月 17 日）与编号（临潮 07）的对折纸，未上报，决定自行核实。第 2 章他查到事故卷宗标注“限制查阅、须科级以上授权”，判断递申请会在系统里留下“许知远查 3·17 事故卷宗”的记录，遂放弃调阅，改查地方志与旧报，确认该日期对应一起船舶事故；公开记载只说“通信设备故障”，无地点、船名、伤亡。傍晚回站核完清单余项，梁沐说“那批设备是事故之后统一换的”。
+
+本章目标：从老周口中问出潮位站停用前后的情况。
+主要阻力：老周反复强调“我只负责看站，不负责记录”，拒绝回答任何实质问题。
+代价：老周把他来废站的事报给档案科，科长口头警告他别掺和海事的事。
+核心冲突：想追问，但每问一句都在把自己变成被观察对象。
+剧情推进义务：本章是过渡/铺垫章，允许蓄势，但必须完成准备阶段的关键节点闭环，不能只以“准备继续查”结束。
+情节节点：CBN——许知远追问老周，只得到“不负责记录”；CPNs——老周上报档案科，许知远被科长警告；CEN——许知远返回工位，发现调阅驳回记录被删。
+必须覆盖：CBN + CEN。
+本章禁区：不得引入超自然力量或系统；不得让主角凭直觉跳过证据链；不得出现无记录支撑的“超期信息”。
+跨章约束：时间承接第 2 章傍晚之后，次日；地点限旧潮位站、档案科；不得提前揭示寄信人身份。
+
+## 这章的人物
+
+许知远：档案管理员，谨慎、多疑，习惯先看流程再看人。已决定不上报、自行核实，因此每问一句都在权衡会不会留下痕迹。说话短，问句多，不解释动机。
+老周：旧潮位站看护员，守程序，怕担责。嘴上说“只负责看站”，实际知道得比说的多。不正面拒绝，用流程和沉默挡人。
+科长：不出场，只通过口头警告和后续记录的存在施压。
+
+## 怎么写更顺
+
+冷硬克制。短句，具体动作与流程细节承担信息，不靠形容词堆气氛。对白少而硬，答非所问本身就是信息。不写解释性内心独白，让判断藏在动作里。悬疑来自信息差与留痕风险：谁在记录、谁看得到、哪句话会被转述。章首 300 字内给出目标与阻力，段末用具体物件或动作收束。篇幅 2000-2500 字。
+
+## 收在哪里
+
+许知远表面认错，实际确认有人在盯着自己的动向。结尾回到工位，发现那条调阅驳回记录被人删掉，停在“谁删的、为什么现在删”的未完感上。
+
+## 4. 调性、文风与避坑约束 (Constraints & Craft)
+- 核心调性：高压克制
+- 叙事节奏：先立规则后破局
+- 避坑规则 (Anti-patterns)：谜底提前透光; 规则写得像背景板; 处罚没有代价; 规则写得像氛围诗，读者不知道能不能照做，也无法参与推理。; 单纯作死
+【题材创作指引 (悬疑)】：
+**题材特点**：
+- 逻辑完整性优先于爽点密度
+- 信息兑现是核心微兑现（建议保持持续线索推进）
+- LOGIC_INTEGRITY可作为降级钩子强度的合理理由
+【故事工艺约束 (Story Craft Constraints)】
+- 人物弧光指引（许知远）：从【只信纸面证据，怀疑所有人，独来独往；把“归档之后就不会变”当作职业信仰】向【仍然谨慎、仍然多疑，但学会信任人并验证人；承认记录可以被修订，把信仰换成“可复算的才可信”】转变（核心转变：经历三次职业信仰动摇（发现归档被动过 → 发现自己被借名 → 发现记录可被合法修订），从“信任记录”转向“信任可复算的东西”，并在此过程中第一次真正依赖他人）
+
+## 5. 关联前情线索 (Writer Context)
+- 前情摘要：第1章：---
+chapter: 1
+time: "2026年10月9日（周五）09:15–12:15"
+location: "临港市旧潮位站"
+characters: ["许知远", "老周"]
+state_changes: ["许知远: 资产清点核至第十项，未完成归档", "许知远: 违反流程翻阅《值班记录本》", "许知远: 发现夹层匿名信，决定不上报、自行核实"]
+---
+## 剧情摘要
+许知远到停用十年的旧潮位站清点资产，看护员老周以签字和钥匙交接层层设限。十三项核到第十项：水位标尺少一支、备用灯泡不在，通信终端不许碰。为找原始登记，他违反流程翻开《值班记录本》，见一页多出一行墨色较新的手写日期，又在封底夹层摸到只写日期与编号的对折纸；他没上报，恢复现场后签下离站时间 12:15。
+## 伏笔
+- [埋设] FS-006 旧潮位站《值班记录本》上多出一行十年前的笔迹（墨色较新、行距与同页不同）
+- [埋设] FS-009 匿名信只有一行：日期 2016年3月17日 与编号 临潮07，无称呼无落款
+## 承接点
+那封信是谁放进废站的？他没有答案。
+- 紧急伏笔待收：《值班记录本》封底与最后一页之间的夹层里塞着一张对折的纸，摊开后纸上只有一行字：日期 2016年3月17日，编号 临潮07。没有称呼，没有落款，没有多余的字。该编号与铁门旁一小块新刷的深灰色编号漆一致。
+- 紧急伏笔待收：《值班记录本》中间偏后一页的最下面多出一行字：不是打印的，是手写的，墨色比这一页其他字要新，行距也不一样——别的行都贴着横线写，这一行浮在两条横线中间。
+- 紧急伏笔待收：清点清单 LG-2026-1009 共十三项，核到第十项：第二项水位标尺少一支（数量不符），第七项备用灯泡实物不在，两项差异都还没有填差异说明；第十项通信终端因老周禁止触碰而未核；第十一至十三项留待下次。
+【参考依据 (Reference)】
+- [{'path': 'story_craft.foreshadow_chain.0.buried_chapter', 'value': 3}, {'path': 'story_craft.foreshadow_chain.0.payoff_chapter', 'value': None}, {'path': 'story_craft.foreshadow_chain.1.buried_chapter', 'value': 4}, {'path': 'story_craft.foreshadow_chain.1.payoff_chapter', 'value': None}, {'path': 'story_craft.foreshadow_chain.2.buried_chapter', 'value': 5}, {'path': 'story_craft.foreshadow_chain.2.payoff_chapter', 'value': None}, {'path': 'story_craft.foreshadow_chain.3.buried_chapter', 'value': 10}, {'path': 'story_craft.foreshadow_chain.3.payoff_chapter', 'value': None}, {'path': 'story_craft.foreshadow_chain.4.buried_chapter', 'value': 13}, {'path': 'story_craft.foreshadow_chain.4.payoff_chapter', 'value': None}, {'path': 'story_craft.foreshadow_chain.5.buried_chapter', 'value': 1}, {'path': 'story_craft.foreshadow_chain.5.payoff_chapter', 'value': None}, {'path': 'story_craft.foreshadow_chain.6.buried_chapter', 'value': 2}, {'path': 'story_craft.foreshadow_chain.6.payoff_chapter', 'value': None}, {'path': 'story_craft.foreshadow_chain.7.buried_chapter', 'value': 5}, {'path': 'story_craft.foreshadow_chain.7.payoff_chapter', 'value': None}, {'path': 'story_craft.foreshadow_chain.8.buried_chapter', 'value': 1}, {'path': 'story_craft.foreshadow_chain.8.payoff_chapter', 'value': None}, {'path': 'story_craft.timed_locks.0.fulfilled_chapter', 'value': None}, {'path': 'story_craft.timed_locks.1.fulfilled_chapter', 'value': None}, {'path': 'story_craft.timed_locks.2.fulfilled_chapter', 'value': None}, {'path': 'story_craft.timed_locks.3.fulfilled_chapter', 'value': 1}, {'path': 'story_craft.timed_locks.3.fulfilled_evidence', 'value': '日期是 2016 年 3 月 17 日。编号是 临潮07。'}, {'path': 'story_craft.timed_locks.3.fulfilled_evidence_sha256', 'value': 'caf07aaf24d82bf167038f3c2fbee1a178c190b58cd78a55059dc70c019ab7ff'}, {'path': 'story_craft.timed_locks.4.fulfilled_chapter', 'value': None}, {'path': 'story_craft.thematic_echoes.0.id', 'value': 'TE-001'}, {'path': 'story_craft.thematic_echoes.0.echoes.0.chapter', 'value': 5}, {'path': 'story_craft.thematic_echoes.0.echoes.0.manifestation', 'value': '自己经手归档的月报缺页：记录会变，这是他第一次被迫承认'}, {'path': 'story_craft.thematic_echoes.0.echoes.1.chapter', 'value': 12}, {'path': 'story_craft.thematic_echoes.0.echoes.1.manifestation', 'value': 'Midpoint 反转：靠泊记录上的签名是他自己，连“自己的档案”也不可信'}, {'path': 'story_craft.thematic_echoes.0.echoes.2.chapter', 'value': 19}, {'path': 'story_craft.thematic_echoes.0.echoes.2.manifestation', 'value': 'All Is Lost 后重建信仰：他不需要被相信，只需要让公开数据自己说话'}, {'path': 'story_craft.thematic_echoes.0.echoes.3.chapter', 'value': 24}, {'path': 'story_craft.thematic_echoes.0.echoes.3.manifestation', 'value': 'Final Image：他把补页过程完整留痕——区别不在于改不改记录，而在于改得可追溯'}, {'path': 'story_craft.reader_contract.endgame_reserves', 'value': []}, {'path': 'story_craft.derived_views.version', 'value': 1}]
+- {"foreshadow_buried": ["FS-007"]}
+- {"_source": {"authority": "chapter_outline", "outline_digest": "23b9be663b66778b65dc6a3af812acb3e34d41957acead1a67e13a0e671da5e7", "synced_at": "2026-10-21T17:20:22+00:00"}}
+
+## 6. 正文交付协议 (Handoff Protocol)
+1. 输出连贯正文，严格按中文叙事逻辑组织；
+2. 正文末尾必须严格附带合法的 <chapter_changes>...</chapter_changes> 结构化提案块；
+   提案块必须是合法 JSON 对象，包含以下 8 个标准顶级字段：
+   - character_state_changes (对象数组): [{"character_id": "角色名", "new_state": "状态变化", "importance": "normal"}]
+   - new_plot_points (对象数组): [{"context": "情节发展描述", "importance": "normal"}]
+   - foreshadowing_actions (对象数组): 若本章无既有伏笔操作填空数组 []
+   - location_state_changes (对象数组): 若无填 []
+   - faction_state_changes (对象数组): 若无填 []
+   - time_progression (对象或 null): {"time_period": "时间进展描述", "importance": "normal"}
+   - item_transfers (对象数组): 若无填 []
+   - unresolved_questions (对象数组): [{"question": "章末悬念或未决问题"}]
+   注意：各数组元素必须为 JSON 对象（严禁输出纯字符串数组），若无变更请使用空数组 []；
+   【状态变化 vs 首次登场核心契约】：
+   - 新角色/新地点/新物品可以正常出现在正文中；
+   - 首次出现的新实体不属于 state change，后续由 Data Agent 根据最终正文独立提取，并在 ChapterCommit acceptance 后进入正式账本 projection 入库；
+   - 提交前，严禁把尚未入库的新角色/新实体写入 character_state_changes, location_state_changes, faction_state_changes, item_transfers 等状态变更字段（若无已有实体变更，填空数组 []）；
+   - new_plot_points.involved_characters 当前受 R3 门禁约束，只填写 Canon/context 中【已经存在】的角色，严禁填写尚未入库的新角色；
+   - 新角色参与的事件仍完整记录在 new_plot_points 的情节描述（context 或 description）中；
+   - 极短示例：正文首次出现新角色“巡查队长赵崇”与新地点“地下档案修复室”：
+     正确: "character_state_changes": [], "location_state_changes": [], "new_plot_points": [{"context": "林越在矿道遭遇巡查队长赵崇罚没产量", "involved_characters": ["lin_yue"]}]
+     错误: "character_state_changes": [{"character_id": "zhao_chong", ...}], "new_plot_points": [{"involved_characters": ["lin_yue", "zhao_chong"]}]（尚未入库的新角色写入 state change 或 involved_characters 会被 R3 门禁阻断拒绝）；
+   枚举白名单约束（违规将直接被门禁拦截）：
+   - 所有 importance 字段值只能取: "normal", "important", "critical"（严禁使用 "high"/"low"/"medium" 等）；
+   - foreshadowing_actions.action 只能取: "setup", "payoff"；
+   - item_transfers.new_status 只能取: "active", "lost", "destroyed", "sealed"；
+3. 封包验证指纹：3063af5b46ab8f5cd83d9ba97ec8775e205af97b1e1e19f3af250225b6cff5c5

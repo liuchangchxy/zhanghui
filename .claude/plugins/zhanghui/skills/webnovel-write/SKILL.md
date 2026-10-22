@@ -320,6 +320,33 @@ Use the Agent tool to run `zhanghui:context-agent`
   5. 收在哪里（本章回报：谁得到了什么/失去了什么/知道了什么；由此产生的新期待。不要为留钩硬加悬念）
 - **硬边界**：Context Agent 专注于认知决策并输出写作任务书，不负责拼装底层系统/模型 Prompt，也不绕过 Native Writer Package 直接驱动起草。
 
+#### 1B2. Writing Skill Router（本章写作方法选择）
+
+在 Context Agent 产出任务书之后、封口之前，增加一次**轻量**方法选择。它不写正文、不改章纲，只回答“本章真正需要哪些写作技巧”。
+
+1. 把 Context Agent 的任务书写到临时文件（后文 1C 与 Router 共用同一份）：
+
+```bash
+python3 -X utf8 -c "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(sys.argv[2], encoding='utf-8')" \
+  "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt" "{context_agent_creative_brief}"
+```
+
+2. 使用 Agent 工具调用 `zhanghui:writing-skill-router`，传入 `chapter`、`project_root`、`scripts_dir`、
+   `brief_file=${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt`。
+   该 agent 会：
+   - 运行 `writing-skills input`（运行时扫描 `writing-skills/`，无需任何 Python 注册表）；
+   - 选择 2–5 个真正适用的技巧；
+   - 把每个技巧翻译成**本章具体写法**（不出现理论名、字段名、技巧 id）；
+   - 写入 `.webnovel/tmp/writing_skills_{chapter_padded}.json` 并运行 `writing-skills validate` 自检。
+
+3. 校验必须由 Router 完成且 `ok=true`；主流程不手工改写选择文件。若 Router 失败，
+   记录原因后按“无 Skill”继续，不得伪造选择。
+
+**硬要求**：
+- Skill 输出只是写作方法，永远不能覆盖 Canon、作者意图、本章禁区；冲突由 Router 在选择时消解。
+- Writer 只会看到“本章创作方法”编号列表；不得把 `reason`、id、分数、理论名写进正文 prompt。
+- 新增技巧只需放入 `writing-skills/<id>/SKILL.md`，不修改任何 Python 或本流程。
+
 #### 1C. Runtime 封口与唯一 Canonical Writer Prompt 生成（Seal Native Writer Package）
 将 Context Agent 输出的真实写作任务书回传给 Runtime 进行签名封口，生成唯一 Canonical Writer Prompt：
 
@@ -328,7 +355,8 @@ Use the Agent tool to run `zhanghui:context-agent`
 # --format prompt 输出 Canonical Writer Prompt，重定向至临时文件供 Writer 消费
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
   --chapter {chapter_num} \
-  --brief "{context_agent_creative_brief}" \
+  --brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt" \
+  --skills-file "${PROJECT_ROOT}/.webnovel/tmp/writing_skills_{chapter_padded}.json" \
   --scene-design --reader-pull \
   --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
 

@@ -64,12 +64,18 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 
 1. 使用 Agent 工具调用 `zhanghui:context-agent`（传入 `chapter`、`project_root`、`scripts_dir` 等），产出文学创作任务书（Creative Brief）；
    `scripts_dir` 必须显式传入 `${SCRIPTS_DIR}`：subagent 的 Bash 不继承本会话的 `export`。
-2. 调用 `runtime attach-creative-brief` 签名封口，生成唯一 Canonical Writer Prompt，并从同一封口包提取 `package_fingerprint`：
+   把任务书写到 `${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt`。
+2. 使用 Agent 工具调用 `zhanghui:writing-skill-router`（传入 `chapter`、`project_root`、`scripts_dir`、
+   `brief_file`），由它发现 `writing-skills/`、选择 2–5 个适用技巧、翻译成本章写法，并写出
+   `.webnovel/tmp/writing_skills_{chapter_padded}.json`（内部已跑 `writing-skills validate`）。
+   该步骤失败时记录原因并按“无 Skill”继续，不得伪造选择。
+3. 调用 `runtime attach-creative-brief` 签名封口，生成唯一 Canonical Writer Prompt，并从同一封口包提取 `package_fingerprint`：
 ```bash
 # 签名封口并将 Canonical Writer Prompt 输出至临时文件供 Writer 消费
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
   --chapter {chapter_num} \
-  --brief "{context_agent_creative_brief}" \
+  --brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt" \
+  --skills-file "${PROJECT_ROOT}/.webnovel/tmp/writing_skills_{chapter_padded}.json" \
   --scene-design --reader-pull \
   --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
 

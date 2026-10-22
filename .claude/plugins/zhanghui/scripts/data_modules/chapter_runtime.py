@@ -65,6 +65,10 @@ from .story_contracts import (
 )
 from .story_runtime_sources import load_runtime_sources
 from .story_system_engine import StorySystemEngine
+from .writing_skill_registry import (
+    render_writer_skills,
+    selection_fingerprint,
+)
 from .write_gates import run_write_gate
 
 
@@ -493,6 +497,8 @@ class WriterPackage:
     writer_context: dict[str, Any]
     creative_brief: str = ""
     creative_brief_fingerprint: str = ""
+    writing_skills: List[Dict[str, Any]] = field(default_factory=list)
+    writing_skills_fingerprint: str = ""
     meta: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -514,7 +520,12 @@ class WriterPackage:
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
 
-    def to_writer_prompt(self, scene_design: bool = False, reader_pull: bool = False) -> str:
+    def to_writer_prompt(
+        self,
+        scene_design: bool = False,
+        reader_pull: bool = False,
+        writing_skills: bool = False,
+    ) -> str:
         """
         Format the unified, canonical prompt for the Writer model.
         Guarantees input parity across Claude Skill Writer and External Host Writer
@@ -536,6 +547,10 @@ class WriterPackage:
         hook as an instruction) with three creative questions: what the reader expects,
         what this chapter actually pays off, and what the reader now wants. It removes
         parameters rather than adding any; the chapter plan is unchanged.
+
+        `writing_skills=True` appends the router's chapter-specific instructions
+        ("本章创作方法"). Only the translated guidance is rendered — never skill ids,
+        scores, theory names, or the router's reasons.
         """
         if not self.is_writer_ready:
             raise RuntimeError(
@@ -885,6 +900,9 @@ class WriterPackage:
                     for r_text in rendered_refs[:3]:
                         lines.append(f"- {r_text}")
 
+        if writing_skills:
+            lines.extend(render_writer_skills(self.writing_skills or []))
+
         lines.extend([
             "",
             "## 6. 正文交付协议 (Handoff Protocol)",
@@ -996,6 +1014,8 @@ class ChapterStatusResult:
     has_writer_package: bool = False
     is_writer_package_stale: bool = False
     package_fingerprint: Optional[str] = None
+    writing_skill_ids: list[str] = field(default_factory=list)
+    writing_skills_fingerprint: str = ""
     commit_status: str = "none"
     durable_commit_exists: bool = False
     projection_status: dict[str, Any] = field(default_factory=dict)
@@ -1553,6 +1573,7 @@ class ChapterRuntime:
         chapter: int,
         creative_brief: Optional[str] = None,
         creative_brief_fingerprint: Optional[str] = None,
+        writing_skills_fingerprint: Optional[str] = None,
     ) -> str:
         """Deterministic fingerprint computed over chapter, source inputs, and creative brief."""
         source_fps = self.compute_source_fingerprints(chapter)
@@ -1573,6 +1594,8 @@ class ChapterRuntime:
         }
         if brief_fp:
             payload["creative_brief_fingerprint"] = brief_fp
+        if writing_skills_fingerprint:
+            payload["writing_skills_fingerprint"] = writing_skills_fingerprint
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
@@ -1893,6 +1916,7 @@ class ChapterRuntime:
         chapter: int,
         creative_brief: Optional[str] = None,
         max_chars: Optional[int] = None,
+        writing_skills: Optional[List[Dict[str, Any]]] = None,
     ) -> WriterPackage:
         """
         Assemble and return the stable Native Writer Package for the specified chapter.
@@ -1902,7 +1926,9 @@ class ChapterRuntime:
         - future chapter intent is strictly absent
         - reuses native ContextManager as the single factual authority
         - seals creative planning brief when provided (e.g. from Context Agent)
-        - computes deterministic package fingerprint over source and brief fingerprints
+        - seals the router's writing-skill selection when provided (provenance only; the
+          Writer sees the translated chapter guidance, not the skill identities)
+        - computes deterministic package fingerprint over source, brief and skill fingerprints
         """
         gov_ctx = self.get_governed_context(chapter, max_chars=max_chars)
         source_fps = gov_ctx["source_fingerprints"]
@@ -1915,10 +1941,28 @@ class ChapterRuntime:
         final_brief = str(creative_brief or "").strip()
         brief_fp = hashlib.sha256(final_brief.encode("utf-8")).hexdigest() if final_brief else ""
 
+        sealed_skills: List[Dict[str, Any]] = []
+        for item in writing_skills or []:
+            if not isinstance(item, dict):
+                continue
+            skill_id = str(item.get("id") or "").strip()
+            guidance = str(item.get("chapter_guidance") or "").strip()
+            if not skill_id or not guidance:
+                continue
+            sealed_skills.append(
+                {
+                    "id": skill_id,
+                    "chapter_guidance": guidance,
+                    "reason": str(item.get("reason") or "").strip(),
+                }
+            )
+        skills_fp = selection_fingerprint(sealed_skills) if sealed_skills else ""
+
         package_fp = self.compute_package_fingerprint(
             chapter,
             creative_brief=final_brief,
             creative_brief_fingerprint=brief_fp,
+            writing_skills_fingerprint=skills_fp,
         )
 
         meta = {
@@ -1927,6 +1971,8 @@ class ChapterRuntime:
             "native_context_authority": "ContextManager.build_context",
             "creative_planning_authority": "ContextAgent" if final_brief else "none",
             "is_writer_ready": bool(final_brief),
+            "writing_skill_ids": [item["id"] for item in sealed_skills],
+            "writing_skills_fingerprint": skills_fp,
             "context_budget": writer_context.get("context_budget"),
         }
 
@@ -1941,6 +1987,8 @@ class ChapterRuntime:
             writer_context=writer_context,
             creative_brief=final_brief,
             creative_brief_fingerprint=brief_fp,
+            writing_skills=sealed_skills,
+            writing_skills_fingerprint=skills_fp,
             meta=meta,
         )
 
@@ -1949,11 +1997,20 @@ class ChapterRuntime:
         (runtime_dir / "writer_package.json").write_text(package.to_json(), encoding="utf-8")
         return package
 
-    def attach_creative_brief(self, chapter: int, creative_brief: str) -> WriterPackage:
+    def attach_creative_brief(
+        self,
+        chapter: int,
+        creative_brief: str,
+        writing_skills: Optional[List[Dict[str, Any]]] = None,
+    ) -> WriterPackage:
         """Attach an authentic creative brief from Context Agent and seal the Native Writer Package."""
         if not creative_brief or not str(creative_brief).strip():
             raise ValueError("creative_brief must be a non-empty string to seal writer package")
-        return self.get_writer_package(chapter=chapter, creative_brief=str(creative_brief).strip())
+        return self.get_writer_package(
+            chapter=chapter,
+            creative_brief=str(creative_brief).strip(),
+            writing_skills=writing_skills,
+        )
 
     def _auto_revision_budget_path(self, chapter: int) -> Path:
         return self._chapter_runtime_dir(chapter) / "auto_revision_budget.json"
@@ -2194,6 +2251,7 @@ class ChapterRuntime:
 
         saved_pkg = read_json_if_exists(pkg_file) or {}
         saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+        saved_skills_fp = str(saved_pkg.get("writing_skills_fingerprint") or "")
         saved_is_writer_ready = bool(saved_pkg.get("is_writer_ready") or False)
         saved_brief = str(saved_pkg.get("creative_brief") or "").strip()
 
@@ -2210,6 +2268,7 @@ class ChapterRuntime:
         current_fp = self.compute_package_fingerprint(
             chapter,
             creative_brief_fingerprint=saved_brief_fp,
+            writing_skills_fingerprint=saved_skills_fp,
         )
         if package_fingerprint != current_fp:
             base_unsealed_fp = self.compute_package_fingerprint(chapter)
@@ -2305,13 +2364,23 @@ class ChapterRuntime:
         has_pkg = pkg_file.is_file()
         is_stale = False
         pkg_fp = None
+        skill_ids: List[str] = []
+        skills_fp = ""
         if has_pkg:
             pkg_data = read_json_if_exists(pkg_file) or {}
             pkg_fp = pkg_data.get("package_fingerprint")
             saved_brief_fp = str(pkg_data.get("creative_brief_fingerprint") or "")
+            saved_skills_fp = str(pkg_data.get("writing_skills_fingerprint") or "")
+            skills_fp = saved_skills_fp
+            skill_ids = [
+                str(item.get("id"))
+                for item in (pkg_data.get("writing_skills") or [])
+                if isinstance(item, dict) and item.get("id")
+            ]
             current_fp = self.compute_package_fingerprint(
                 chapter,
                 creative_brief_fingerprint=saved_brief_fp,
+                writing_skills_fingerprint=saved_skills_fp,
             )
             is_stale = (pkg_fp != current_fp)
 
@@ -2336,6 +2405,8 @@ class ChapterRuntime:
             has_writer_package=has_pkg,
             is_writer_package_stale=is_stale,
             package_fingerprint=pkg_fp,
+            writing_skill_ids=skill_ids,
+            writing_skills_fingerprint=skills_fp,
             commit_status=commit_status,
             durable_commit_exists=durable_exists,
             projection_status=projection_status,
@@ -2469,6 +2540,7 @@ class ChapterRuntime:
 
             saved_pkg = read_json_if_exists(pkg_file) or {}
             saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+            saved_skills_fp = str(saved_pkg.get("writing_skills_fingerprint") or "")
             saved_is_writer_ready = bool(saved_pkg.get("is_writer_ready") or False)
             if not saved_is_writer_ready or not saved_brief_fp:
                 return ChapterCommitOutcomeResult(
@@ -2509,6 +2581,7 @@ class ChapterRuntime:
             current_pkg_fp = self.compute_package_fingerprint(
                 chapter,
                 creative_brief_fingerprint=saved_brief_fp,
+                writing_skills_fingerprint=saved_skills_fp,
             )
             base_unsealed_fp = self.compute_package_fingerprint(chapter)
             if draft_pkg_fp == base_unsealed_fp or not draft_pkg_fp:
@@ -2550,12 +2623,15 @@ class ChapterRuntime:
             if _internal_package_fingerprint:
                 pkg_file = runtime_dir / "writer_package.json"
                 saved_brief_fp = ""
+                saved_skills_fp = ""
                 if pkg_file.is_file():
                     saved_pkg = read_json_if_exists(pkg_file) or {}
                     saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
+                    saved_skills_fp = str(saved_pkg.get("writing_skills_fingerprint") or "")
                 current_fp = self.compute_package_fingerprint(
                     chapter,
                     creative_brief_fingerprint=saved_brief_fp,
+                    writing_skills_fingerprint=saved_skills_fp,
                 )
                 if _internal_package_fingerprint != current_fp:
                     return ChapterCommitOutcomeResult(

@@ -29,7 +29,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from runtime_compat import enable_windows_utf8_stdio, normalize_windows_path
 from project_locator import (
@@ -307,6 +307,35 @@ def cmd_projections(args: argparse.Namespace) -> int:
     return 0 if report.get("ok") else 1
 
 
+def _load_writing_skill_selection(args: argparse.Namespace, root) -> Optional[List[Dict[str, Any]]]:
+    """Read and validate a router selection; never let an invalid one reach the Writer."""
+    from .writing_skill_registry import (
+        build_router_catalog,
+        discover_writing_skills,
+        validate_selection,
+    )
+
+    raw_text = getattr(args, "skills_json", "") or ""
+    skills_file = getattr(args, "skills_file", "") or ""
+    if not raw_text and skills_file:
+        sf = Path(skills_file)
+        if not sf.is_file():
+            raise ValueError(f"skills file not found: {skills_file}")
+        raw_text = sf.read_text(encoding="utf-8")
+    if not raw_text.strip():
+        return None
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid skills JSON: {exc}") from exc
+
+    catalog = build_router_catalog(discover_writing_skills(project_root=root))
+    result = validate_selection(raw, catalog)
+    if not result["ok"]:
+        raise ValueError("writing-skill selection rejected: " + "; ".join(result["errors"]))
+    return result["selected_skills"]
+
+
 def cmd_runtime(args: argparse.Namespace) -> int:
     from .chapter_runtime import ChapterRuntime, AutoRevisionBudgetExhausted
     root = _resolve_root(args.project_root)
@@ -383,13 +412,19 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                 bf_p = Path(brief_file)
                 if bf_p.is_file():
                     brief = bf_p.read_text(encoding="utf-8")
-            pkg = runtime.get_writer_package(chapter=args.chapter, creative_brief=brief, max_chars=getattr(args, "max_chars", None))
+            pkg = runtime.get_writer_package(
+                chapter=args.chapter,
+                creative_brief=brief,
+                max_chars=getattr(args, "max_chars", None),
+                writing_skills=_load_writing_skill_selection(args, root),
+            )
             if args.format == "json":
                 print(pkg.to_json())
             elif args.format == "prompt":
                 print(pkg.to_writer_prompt(
                     scene_design=bool(getattr(args, "scene_design", False)),
                     reader_pull=bool(getattr(args, "reader_pull", False)),
+                    writing_skills=bool(getattr(args, "skills_file", "") or getattr(args, "skills_json", "")),
                 ))
             else:
                 print(f"OK package chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
@@ -411,13 +446,18 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                     brief = bf_p.read_text(encoding="utf-8")
             if not brief:
                 raise ValueError("Either --brief or --brief-file must be provided and non-empty")
-            pkg = runtime.attach_creative_brief(chapter=args.chapter, creative_brief=brief)
+            pkg = runtime.attach_creative_brief(
+                chapter=args.chapter,
+                creative_brief=brief,
+                writing_skills=_load_writing_skill_selection(args, root),
+            )
             if args.format == "json":
                 print(pkg.to_json())
             elif args.format == "prompt":
                 print(pkg.to_writer_prompt(
                     scene_design=bool(getattr(args, "scene_design", False)),
                     reader_pull=bool(getattr(args, "reader_pull", False)),
+                    writing_skills=bool(getattr(args, "skills_file", "") or getattr(args, "skills_json", "")),
                 ))
             else:
                 print(f"OK attach-creative-brief chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
@@ -520,6 +560,98 @@ def cmd_runtime(args: argparse.Namespace) -> int:
             from .projections import format_projection_report
             print(format_projection_report(report, args.format))
         return 0 if report.get("ok") else 1
+
+    return 2
+
+
+def cmd_writing_skills(args: argparse.Namespace) -> int:
+    """Writing Skills registry: list / router input / selection validation.
+
+    Discovery is a directory scan, so a new ``writing-skills/<id>/SKILL.md`` is
+    available without touching Python. The AI step (skill router) is the caller for
+    `input` and `validate`; this command only assembles evidence and checks the answer.
+    """
+    from .writing_skill_registry import (
+        build_router_catalog,
+        build_router_input,
+        discover_writing_skills,
+        list_with_diagnostics,
+        validate_selection,
+    )
+
+    root = _resolve_root(args.project_root)
+    action = args.writing_skills_action
+
+    if action == "list":
+        report = list_with_diagnostics(project_root=root)
+        payload = {
+            "ok": True,
+            "count": report["count"],
+            "roots": report["roots"],
+            "skills": build_router_catalog(report["skills"]),
+            "skipped": report["skipped"],
+        }
+        if args.format == "json":
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            for skill in payload["skills"]:
+                print(f"{skill['id']}  {skill['name']}  (priority {skill['priority']})")
+                print(f"  适用：{'；'.join(skill['applies_when'])}")
+                print(f"  不适用：{'；'.join(skill['avoid_when'])}")
+            for skip in payload["skipped"]:
+                print(f"SKIP {skip['path']}: {skip['error']}", file=sys.stderr)
+        return 0
+
+    if action == "input":
+        from .chapter_runtime import ChapterRuntime
+
+        brief = getattr(args, "brief", "") or ""
+        brief_file = getattr(args, "brief_file", "") or ""
+        if not brief and brief_file:
+            bf = Path(brief_file)
+            if bf.is_file():
+                brief = bf.read_text(encoding="utf-8")
+        catalog = build_router_catalog(discover_writing_skills(project_root=root))
+        gov = ChapterRuntime(root).get_governed_context(chapter=args.chapter)
+        payload = build_router_input(
+            chapter=args.chapter,
+            story_identity=gov.get("story_identity"),
+            current_intent=gov.get("current_intent"),
+            governed_canon=gov.get("governed_canon"),
+            creative_brief=brief,
+            catalog=catalog,
+            writer_context=gov.get("writer_context"),
+        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+
+    if action == "validate":
+        raw_text = getattr(args, "selection", "") or ""
+        selection_file = getattr(args, "selection_file", "") or ""
+        if not raw_text and selection_file:
+            sf = Path(selection_file)
+            if not sf.is_file():
+                print(json.dumps({"ok": False, "errors": [f"selection file not found: {selection_file}"]}, ensure_ascii=False))
+                return 2
+            raw_text = sf.read_text(encoding="utf-8")
+        try:
+            raw = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            print(json.dumps({"ok": False, "errors": [f"invalid JSON: {exc}"]}, ensure_ascii=False, indent=2))
+            return 2
+        catalog = build_router_catalog(discover_writing_skills(project_root=root))
+        result = validate_selection(raw, catalog)
+        if args.format == "json":
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print("OK" if result["ok"] else "FAILED")
+            for item in result["selected_skills"]:
+                print(f"- {item['id']}: {item['chapter_guidance']}")
+            for err in result["errors"]:
+                print(f"  ERROR: {err}", file=sys.stderr)
+            for warn in result["warnings"]:
+                print(f"  WARN: {warn}", file=sys.stderr)
+        return 0 if result["ok"] else 2
 
     return 2
 
@@ -1781,6 +1913,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_rt_pkg.add_argument("--max-chars", type=int, default=None, help="上下文最大字符限额预算")
     p_rt_pkg.add_argument("--brief", default=None, help="Context Agent 提供的 Creative Brief 文本")
     p_rt_pkg.add_argument("--brief-file", default=None, help="Context Agent 提供的 Creative Brief 文件路径")
+    p_rt_pkg.add_argument("--skills-file", default="", help="Skill Router 选择 JSON 文件（选择后自动渲染本章创作方法）")
+    p_rt_pkg.add_argument("--skills-json", default="", help="Skill Router 选择 JSON 文本（与 --skills-file 二选一）")
     p_rt_pkg.add_argument(
         "--scene-design",
         action="store_true",
@@ -1798,6 +1932,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_rt_brief.add_argument("--chapter", type=int, required=True, help="章节号")
     p_rt_brief.add_argument("--brief", default="", help="Creative Brief 文本")
     p_rt_brief.add_argument("--brief-file", default="", help="Creative Brief 文件路径")
+    p_rt_brief.add_argument("--skills-file", default="", help="Skill Router 选择 JSON 文件（选择后自动渲染本章创作方法）")
+    p_rt_brief.add_argument("--skills-json", default="", help="Skill Router 选择 JSON 文本（与 --skills-file 二选一）")
     p_rt_brief.add_argument(
         "--scene-design",
         action="store_true",
@@ -1847,6 +1983,28 @@ def build_parser() -> argparse.ArgumentParser:
     p_rt_retry.add_argument("--chapter", type=int, required=True, help="章节号")
     p_rt_retry.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_retry.set_defaults(func=cmd_runtime)
+
+    p_wskills = sub.add_parser(
+        "writing-skills",
+        help="Writing Skills 目录：发现 / 组装 Router 输入 / 校验选择（目录扫描，无注册表）",
+    )
+    wskills_sub = p_wskills.add_subparsers(dest="writing_skills_action", required=True)
+    p_ws_list = wskills_sub.add_parser("list", help="列出当前可用的 Writing Skills（含项目级覆盖）")
+    p_ws_list.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_ws_list.set_defaults(func=cmd_writing_skills)
+
+    p_ws_input = wskills_sub.add_parser("input", help="组装本章 Skill Router 的输入（章纲 + 三问/四问 + 任务书 + 目录）")
+    p_ws_input.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_ws_input.add_argument("--brief", default="", help="Context Agent 的 Creative Brief 文本")
+    p_ws_input.add_argument("--brief-file", default="", help="Context Agent 的 Creative Brief 文件")
+    p_ws_input.add_argument("--format", choices=["json"], default="json", help="输出格式")
+    p_ws_input.set_defaults(func=cmd_writing_skills)
+
+    p_ws_validate = wskills_sub.add_parser("validate", help="校验 Router 选择（未知 id / 空指导 / 理论泄漏 / 数量上限）")
+    p_ws_validate.add_argument("--selection", default="", help="Router 选择 JSON 文本")
+    p_ws_validate.add_argument("--selection-file", default="", help="Router 选择 JSON 文件")
+    p_ws_validate.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_ws_validate.set_defaults(func=cmd_writing_skills)
 
     p_prose = sub.add_parser("prose", help="Prose Quality v2 润色与文风安全入口 (Issue #26)")
     prose_sub = p_prose.add_subparsers(dest="prose_action", required=True)
