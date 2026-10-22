@@ -387,7 +387,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
             if args.format == "json":
                 print(pkg.to_json())
             elif args.format == "prompt":
-                print(pkg.to_writer_prompt())
+                print(pkg.to_writer_prompt(scene_design=bool(getattr(args, "scene_design", False))))
             else:
                 print(f"OK package chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
             return 0
@@ -412,7 +412,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
             if args.format == "json":
                 print(pkg.to_json())
             elif args.format == "prompt":
-                print(pkg.to_writer_prompt())
+                print(pkg.to_writer_prompt(scene_design=bool(getattr(args, "scene_design", False))))
             else:
                 print(f"OK attach-creative-brief chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
             return 0
@@ -1775,6 +1775,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_rt_pkg.add_argument("--max-chars", type=int, default=None, help="上下文最大字符限额预算")
     p_rt_pkg.add_argument("--brief", default=None, help="Context Agent 提供的 Creative Brief 文本")
     p_rt_pkg.add_argument("--brief-file", default=None, help="Context Agent 提供的 Creative Brief 文件路径")
+    p_rt_pkg.add_argument(
+        "--scene-design",
+        action="store_true",
+        help="把 Scene-Sequel 字段渲染为四个创作问题（默认渲染为原字段；实验开关，不改变输入数据）",
+    )
     p_rt_pkg.add_argument("--format", choices=["json", "text", "prompt"], default="json", help="输出格式")
     p_rt_pkg.set_defaults(func=cmd_runtime)
 
@@ -1782,6 +1787,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_rt_brief.add_argument("--chapter", type=int, required=True, help="章节号")
     p_rt_brief.add_argument("--brief", default="", help="Creative Brief 文本")
     p_rt_brief.add_argument("--brief-file", default="", help="Creative Brief 文件路径")
+    p_rt_brief.add_argument(
+        "--scene-design",
+        action="store_true",
+        help="把 Scene-Sequel 字段渲染为四个创作问题（默认渲染为原字段；实验开关，不改变输入数据）",
+    )
     p_rt_brief.add_argument("--format", choices=["json", "text", "prompt"], default="json", help="输出格式")
     p_rt_brief.set_defaults(func=cmd_runtime)
 

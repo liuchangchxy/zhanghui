@@ -631,22 +631,30 @@ class ContextManager:
             legacy_profile = dict(legacy_profile)
             legacy_profile["mode"] = "fallback_only"
 
-        primary_genre = str(
-            (
-                ((story_contract.get("master_setting") or {}).get("route") or {}).get("primary_genre")
-                or ""
-            )
-        ).strip()
-        if not primary_genre:
+        route = (story_contract.get("master_setting") or {}).get("route") or {}
+        primary_genre = str(route.get("primary_genre") or "").strip()
+        canonical_genre = str(route.get("canonical_genre") or "").strip()
+        genre_filter = str(route.get("genre_filter") or "").strip()
+        if canonical_genre == "全部":
+            canonical_genre = ""
+
+        # The literary profile describes the work's *canonical* type. `primary_genre` is a
+        # user-facing sub-genre label (e.g. 规则动物园) and must not select the profile:
+        # doing so routed a 悬疑 novel into the rules-mystery profile and handed the Writer
+        # "先立规则后破局 / 规则反噬 / 强钩子" that the book never promised.
+        profile_genre = canonical_genre or genre_filter or primary_genre
+        if not profile_genre:
             return legacy_profile or {}
 
-        runtime_profile = self._load_genre_profile({"project": {"genre": primary_genre}})
+        runtime_profile = self._load_genre_profile({"project": {"genre": profile_genre}})
         runtime_profile = dict(runtime_profile or {})
-        runtime_profile.setdefault("genre", primary_genre)
-        runtime_profile.setdefault("genre_raw", primary_genre)
-        runtime_profile.setdefault("genres", [primary_genre])
-        runtime_profile.setdefault("secondary_genres", [])
-        runtime_profile.setdefault("composite", len(runtime_profile.get("genres") or []) > 1)
+        runtime_profile["genre"] = profile_genre
+        runtime_profile["genre_raw"] = primary_genre or profile_genre
+        runtime_profile["genres"] = [profile_genre]
+        runtime_profile["secondary_genres"] = []
+        runtime_profile["composite"] = False
+        runtime_profile["canonical_genre"] = canonical_genre or genre_filter
+        runtime_profile["primary_genre"] = primary_genre
         runtime_profile.setdefault("reference_hints", [])
         runtime_profile.setdefault("composite_hints", [])
         runtime_profile["mode"] = "contract_first"

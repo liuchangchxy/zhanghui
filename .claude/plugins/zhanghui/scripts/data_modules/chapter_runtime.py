@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from chapter_outline_loader import (
+    extract_outline_residual_notes,
     load_chapter_execution_directive,
     load_chapter_outline,
     load_chapter_plot_structure,
@@ -73,6 +75,197 @@ from .write_gates import run_write_gate
 # non-blocking medium finding was "worth a tiny fix" after the budget was spent.
 AUTO_REVISION_MAX_ROUNDS = 2
 AUTO_REVISION_BUDGET_SCHEMA = "auto-revision-budget/v1"
+
+
+# --------------------------------------------------------------------------- #
+# Writer prompt: chapter structure and scene design
+# --------------------------------------------------------------------------- #
+#
+# The Writer used to receive `outline[:600]`, a fixed character slice. Real chapter
+# outlines are ~900-1,100 characters and put the structured nodes (CBN/CPNs/CEN), the
+# hook type and the chapter prohibitions at the end — exactly what the slice removed.
+# The prompt now renders the parsed fields instead, and keeps only the outline lines that
+# no field consumed (see `extract_outline_residual_notes`).
+
+_SCENE_POINTER_RE = re.compile(
+    r"^\s*(?:见|参见|详见|参考)\s*"
+    r"(?:`|story_craft|第\s*[0-9一二三四五六七八九十]+\s*章|本章|本场|上章|前章|前文|大纲)"
+)
+_SCENE_NEXT_CHAPTER_RE = re.compile(r"(?:→|->|—>)\s*下章")
+
+
+def _usable_scene_value(value: Any) -> str:
+    """Return a plan value that can guide the scene, or "".
+
+    Real outlines contain two kinds of non-content in Scene-Sequel fields: a dangling
+    pointer (`见 story_craft 第2章 reaction 字段`) and a next-chapter hand-off
+    (`… → 下章目标`). Rendering either as this chapter's plan is what made the Sequel look
+    complete while telling the Writer nothing.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if _SCENE_POINTER_RE.match(text) or _SCENE_NEXT_CHAPTER_RE.search(text):
+        return ""
+    return text
+
+
+def _first_text(*values: Any) -> str:
+    for value in values:
+        text = _usable_scene_value(value)
+        if text:
+            return text
+    return ""
+
+
+def build_scene_plan(directive: Dict[str, Any]) -> Dict[str, str]:
+    """Normalize the chapter's Scene-Sequel fields into one usable plan.
+
+    Scene fields fall back to the chapter-level equivalent when the outline only wrote one
+    of them (the official template asks for both). Nothing is invented: an empty value
+    stays empty and the prompt says so.
+    """
+    directive = directive or {}
+    return {
+        "goal": _first_text(directive.get("scene_goal"), directive.get("goal")),
+        "obstacle": _first_text(
+            directive.get("scene_conflict"),
+            directive.get("obstacles"),
+            directive.get("conflict"),
+        ),
+        "setback": _first_text(directive.get("scene_setback"), directive.get("cost")),
+        "resolution": _first_text(
+            directive.get("scene_resolution"),
+            directive.get("chapter_change"),
+            directive.get("conflict"),
+        ),
+        "reaction": _first_text(directive.get("sequel_reaction")),
+        "dilemma": _first_text(directive.get("sequel_dilemma")),
+        "decision": _first_text(directive.get("sequel_decision")),
+    }
+
+
+def _same_text(value: str, *candidates: Any) -> bool:
+    return bool(value) and any(value == str(candidate or "").strip() for candidate in candidates)
+
+
+def render_scene_plan_block(
+    directive: Dict[str, Any],
+    *,
+    as_questions: bool,
+) -> List[str]:
+    """Render the scene plan as the seven Scene-Sequel fields, or as four questions.
+
+    `as_questions=False` is the pre-experiment planning expression: the outline's own
+    vocabulary. `as_questions=True` is the single intervention under test — the same
+    information, re-expressed as four creative decisions the Writer can execute. Neither
+    mode adds story material.
+    """
+    plan = build_scene_plan(directive)
+    directive = directive or {}
+    if not any(plan.values()):
+        # A chapter whose outline carries no scene information gets no empty scaffold.
+        return []
+
+    if as_questions:
+        lines = [
+            "【场景设计四问】",
+            "把本章当成一场戏来写，动笔前先回答下面四个问题；答案只能来自本章规划，不得自行加设定。",
+            "1. 这一场主角现在具体想得到什么？",
+            f"   {plan['goal'] or '（章纲未给出明确目标）'}",
+            "2. 什么力量在现场真正阻止他？",
+            f"   {plan['obstacle'] or '（章纲未给出明确阻力）'}",
+            "   阻止力量不一定是人物：可以是制度、时间、证据矛盾、关系冲突或风险。",
+            "3. 主角因此被迫采取什么行动或选择？",
+        ]
+        if plan["decision"]:
+            lines.append(f"   {plan['decision']}")
+        elif plan["setback"]:
+            lines.append(
+                f"   章纲只写了现场挫折（{plan['setback']}），没有写出主角因此被迫做出的"
+                "具体行动或选择——请在本场中把它写出来。"
+            )
+        else:
+            lines.append("   章纲未给出；请在本场中写出主角被逼出的具体行动或选择。")
+        lines.extend(
+            [
+                "4. 场景结束后，人物/关系/局势/认知中什么已经发生实质变化？",
+                f"   {plan['resolution'] or '（章纲未给出明确变化）'}",
+                "   信息发现本身可以构成变化，但不能只是“又知道了一条信息”。",
+            ]
+        )
+        return lines
+
+    def _label(label: str, value: str, *duplicates: Any) -> str:
+        if value and _same_text(value, *duplicates):
+            return f"- {label}：同本章前述字段"
+        return f"- {label}：{value or '（章纲未提供）'}"
+
+    reaction_note = ""
+    if not plan["reaction"] and str(directive.get("sequel_reaction") or "").strip():
+        reaction_note = "：原字段只写了指针，未提供内容"
+    decision_note = ""
+    if not plan["decision"] and str(directive.get("sequel_decision") or "").strip():
+        decision_note = "：原字段指向下一章目标，不是本章结尾的决定"
+
+    return [
+        "【场景与后续设计 (Scene-Sequel)】",
+        _label("场景目标", plan["goal"], directive.get("goal")),
+        _label("现场阻力", plan["obstacle"], directive.get("obstacles")),
+        _label("场景挫折", plan["setback"], directive.get("cost")),
+        _label("场景结果", plan["resolution"], directive.get("chapter_change")),
+        f"- 后续反应：{plan['reaction']}" if plan["reaction"] else f"- 后续反应：（章纲未提供{reaction_note}）",
+        f"- 后续两难：{plan['dilemma']}" if plan["dilemma"] else "- 后续两难：（章纲未提供）",
+        f"- 后续决定：{plan['decision']}" if plan["decision"] else f"- 后续决定：（章纲未提供{decision_note}）",
+    ]
+
+
+def render_chapter_structure(
+    directive: Dict[str, Any],
+    plot_structure: Dict[str, Any],
+    *,
+    residual_notes: str = "",
+) -> List[str]:
+    """Render the chapter-specific structural fields the Writer needs to execute the plan."""
+    directive = directive or {}
+    plot_structure = plot_structure or {}
+    lines: List[str] = []
+
+    beat = _usable_scene_value(directive.get("beat_position"))
+    if beat:
+        lines.append(f"- 节拍位置：{beat}")
+
+    cbn = _usable_scene_value(directive.get("cbn") or plot_structure.get("cbn"))
+    cpns = directive.get("cpns") or plot_structure.get("cpns") or []
+    cen = _usable_scene_value(directive.get("cen") or plot_structure.get("cen"))
+    if cbn:
+        lines.append(f"- CBN：{cbn}")
+    if cpns:
+        if isinstance(cpns, str):
+            cpns = [cpns]
+        rendered_cpns = "；".join(str(item) for item in cpns if str(item).strip())
+        if rendered_cpns:
+            lines.append(f"- CPNs：{rendered_cpns}")
+    if cen:
+        lines.append(f"- CEN：{cen}")
+
+    def _as_list(value: Any) -> List[str]:
+        if isinstance(value, (list, tuple)):
+            return [str(item).strip() for item in value if str(item).strip()]
+        text = str(value or "").strip()
+        return [text] if text else []
+
+    buried = _as_list(directive.get("foreshadow_buried"))
+    paid = _as_list(directive.get("foreshadow_paid_off"))
+    if buried:
+        lines.append(f"- 本章埋设伏笔：{'、'.join(buried)}")
+    if paid:
+        lines.append(f"- 本章回收伏笔：{'、'.join(paid)}")
+
+    if residual_notes:
+        lines.append(f"- 章纲备注（非结构化原文）：\n{residual_notes}")
+
+    return lines
 
 
 class AutoRevisionBudgetExhausted(RuntimeError):
@@ -208,7 +401,7 @@ class WriterPackage:
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
 
-    def to_writer_prompt(self) -> str:
+    def to_writer_prompt(self, scene_design: bool = False) -> str:
         """
         Format the unified, canonical prompt for the Writer model.
         Guarantees input parity across Claude Skill Writer and External Host Writer
@@ -219,6 +412,11 @@ class WriterPackage:
         4. creative_brief
         5. constraints & craft
         6. relevant writer_context
+
+        `scene_design=True` re-expresses the chapter's Scene-Sequel plan as four creative
+        questions instead of the outline's field names. It changes framing only — the same
+        plan fields feed both renderings — and exists so the scene-layer A/B experiment can
+        hold every other input constant.
         """
         if not self.is_writer_ready:
             raise RuntimeError(
@@ -239,7 +437,8 @@ class WriterPackage:
         vol = story_id.get("current_volume", 1)
 
         goal = directive.get("goal") or ""
-        conflict = directive.get("conflict") or directive.get("obstacles") or ""
+        core_conflict = directive.get("conflict") or ""
+        obstacle = directive.get("obstacles") or core_conflict
         cost = directive.get("cost") or ""
         ending_q = directive.get("ending_question") or directive.get("chapter_end_open_question") or ""
         must_nodes = list(directive.get("must_cover_nodes") or constraints.get("mandatory_nodes") or [])
@@ -265,8 +464,10 @@ class WriterPackage:
                 lines.append(f"- 计划核心事件：{core_event}")
         elif core_event:
             lines.append(f"- 核心事件：{core_event}")
-        if conflict:
-            lines.append(f"- 主要阻力：{conflict}")
+        if core_conflict:
+            lines.append(f"- 本章核心冲突：{core_conflict}")
+        if obstacle and obstacle != core_conflict:
+            lines.append(f"- 主要阻力：{obstacle}")
         if cost:
             lines.append(f"- 付出代价：{cost}")
         hook = ch_meta.get("hook")
@@ -289,47 +490,103 @@ class WriterPackage:
             if ob_desc:
                 lines.append(f"- 剧情推进义务 (Progress Obligation)：{ob_desc}")
         if outline:
-            outline_snippet = outline[:600] + ("..." if len(outline) > 600 else "")
-            lines.append(f"- 大纲参考：\n{outline_snippet}")
+            # Structured fields first; the unparsed remainder is kept verbatim. No fixed
+            # character slice: the old `outline[:600]` cut off CBN/CPNs/CEN, hook_type and
+            # the chapter prohibitions on real ~900-1,100-char outlines.
+            structure_lines = render_chapter_structure(
+                directive,
+                intent.get("plot_structure") or {},
+                residual_notes=extract_outline_residual_notes(outline),
+            )
+            if structure_lines:
+                lines.append("【本章章纲结构】")
+                lines.extend(structure_lines)
+        scene_lines = render_scene_plan_block(directive, as_questions=scene_design)
+        if len(scene_lines) > 1:
+            lines.extend(scene_lines)
 
         lines.extend([
             "",
             "## 2. 治理事实与前情依据 (Governed Canon)",
         ])
-        char_entries = []
+        char_entries: List[str] = []
+        other_entries: List[str] = []
+        rendered_facts: set[tuple[str, str]] = set()
         appearing_chars = canon.get("appearing_characters") or []
         for c in appearing_chars:
             if isinstance(c, dict):
-                c_name = c.get("name") or c.get("id") or "角色"
-                c_status = c.get("current_status") or c.get("status") or ""
-                char_entries.append(f"- {c_name}：当前状态【{c_status}】" if c_status else f"- {c_name}")
-            elif isinstance(c, str):
-                char_entries.append(f"- {c}")
+                c_name = str(c.get("name") or c.get("entity_id") or c.get("id") or "").strip()
+                if not c_name:
+                    # Never fabricate a placeholder: an unresolved entity is a data
+                    # problem, not a character called "角色".
+                    continue
+                c_type = str(c.get("type") or "").strip()
+                entity_id = str(c.get("entity_id") or c.get("id") or "").strip()
+                if c_type and c_type != "角色":
+                    other_entries.append(f"- {c_type}：{c_name}")
+                    continue
+                state_items = [item for item in (c.get("state") or []) if isinstance(item, dict)]
+                state_text = "；".join(
+                    f"{item.get('field')}：{item.get('value')}"
+                    for item in state_items
+                    if str(item.get("value") or "").strip()
+                )
+                for item in state_items:
+                    if entity_id and item.get("field"):
+                        rendered_facts.add((entity_id, str(item["field"])))
+                identity = f"（entity_id: {entity_id}）" if entity_id and entity_id != c_name else ""
+                char_entries.append(
+                    f"- {c_name}{identity}：{state_text}" if state_text else f"- {c_name}{identity}"
+                )
+            elif isinstance(c, str) and c.strip():
+                char_entries.append(f"- {c.strip()}")
 
         entities = canon.get("entities") or (canon.get("context_snapshot") or {}).get("entities") or {}
         if not char_entries and isinstance(entities, dict):
             for c in (entities.get("characters") or [])[:5]:
                 if isinstance(c, dict):
-                    c_name = c.get("name") or c.get("id") or "角色"
+                    c_name = str(c.get("name") or c.get("id") or "").strip()
+                    if not c_name:
+                        continue
                     c_status = c.get("current_status") or c.get("status") or ""
-                    char_entries.append(f"- {c_name}：当前状态【{c_status}】" if c_status else f"- {c_name}")
+                    char_entries.append(f"- {c_name}：{c_status}" if c_status else f"- {c_name}")
 
         if char_entries:
             lines.append("【登场角色与状态】")
             lines.extend(char_entries)
+        if other_entries:
+            lines.append("【本章相关地点/物品/组织】")
+            lines.extend(other_entries)
 
         canon_items = canon.get("canon_items") or []
         if canon_items:
-            lines.append("【已确认前文事实 (Accepted Canon Facts)】")
-            for item in canon_items[:8]:
-                if isinstance(item, dict):
-                    content = item.get("content") or item.get("summary") or item.get("text") or str(item)
-                    lines.append(f"- {content}")
+            rendered_canon: List[str] = []
+            for item in canon_items:
+                if not isinstance(item, dict):
+                    if str(item).strip():
+                        rendered_canon.append(f"- {item}")
+                    continue
+                content = item.get("content")
+                if isinstance(content, dict) and content.get("entity_id") and content.get("field"):
+                    entity_id = str(content["entity_id"])
+                    field = str(content["field"])
+                    if (entity_id, field) in rendered_facts:
+                        # Already shown under the character's state; do not repeat it.
+                        continue
+                    rendered_canon.append(f"- {entity_id} · {field}：{content.get('value')}")
+                elif isinstance(content, dict):
+                    rendered_canon.append(f"- {json.dumps(content, ensure_ascii=False)}")
                 else:
-                    lines.append(f"- {item}")
+                    text = content or item.get("summary") or item.get("text") or str(item)
+                    rendered_canon.append(f"- {text}")
+            if rendered_canon:
+                lines.append("【已确认前文事实 (Accepted Canon Facts)】")
+                lines.extend(rendered_canon[:8])
 
         scene = canon.get("scene") or {}
         loc = scene.get("location") or scene.get("location_context")
+        if isinstance(loc, dict):
+            loc = loc.get("current") or loc.get("name") or loc.get("location") or ""
         if loc:
             lines.append(f"【场景环境】：{loc}")
 
@@ -1189,6 +1446,126 @@ class ChapterRuntime:
             json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
 
+    def _enrich_appearing_characters(
+        self,
+        entries: List[Dict[str, Any]],
+        *,
+        ctx_mgr: ContextManager,
+        state: Dict[str, Any],
+        canon_items: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Attach canonical name, entity type and a minimal current state to appearances.
+
+        `appearances` only stores `entity_id` + chapter counts. Rendering that directly made
+        every entry fall through to the placeholder `- 角色`. Names come from the entity
+        index (the same read-only authority ContextManager uses); state comes from accepted
+        canon facts, capped to a few fields so this stays a scene aid, not a character wiki.
+        """
+        protagonist = state.get("protagonist_state") or {}
+        protagonist_id = str(protagonist.get("entity_id") or "").strip() if isinstance(protagonist, dict) else ""
+        entries = list(entries or [])
+        if protagonist_id and not any(
+            isinstance(entry, dict) and str(entry.get("entity_id") or "") == protagonist_id
+            for entry in entries
+        ):
+            # Appearances are grouped and ordered by recency only, so the protagonist can
+            # fall off the limit on a tie. The Writer must always get the POV character.
+            entries.insert(0, {"entity_id": protagonist_id})
+        if not entries:
+            return []
+        entity_state = state.get("entity_state") or {}
+        state_by_entity: Dict[str, Dict[str, Any]] = {
+            str(key): value for key, value in entity_state.items() if isinstance(value, dict)
+        }
+        if isinstance(protagonist, dict) and protagonist.get("entity_id"):
+            state_by_entity.setdefault(str(protagonist["entity_id"]), protagonist)
+
+        facts_by_entity: Dict[str, Dict[str, Any]] = {}
+        for item in canon_items:
+            content = item.get("content") if isinstance(item, dict) else None
+            if not isinstance(content, dict):
+                continue
+            entity_id = str(content.get("entity_id") or "")
+            field = str(content.get("field") or "")
+            if not entity_id or not field:
+                continue
+            chapter = item.get("chapter") or 0
+            bucket = facts_by_entity.setdefault(entity_id, {})
+            existing = bucket.get(field)
+            if existing is None or int(chapter) >= int(existing.get("chapter") or 0):
+                bucket[field] = {
+                    "value": content.get("value"),
+                    "chapter": chapter,
+                }
+
+        priority = (
+            "location.current",
+            "current_status",
+            "status",
+            "stance",
+            "decision",
+            "known_evidence",
+            "inventory_status",
+            "procedure_compliance",
+            "role",
+            "tier",
+        )
+
+        def _flatten(prefix: str, value: Any, out: Dict[str, Any]) -> None:
+            if isinstance(value, dict):
+                for key, nested in value.items():
+                    _flatten(f"{prefix}.{key}" if prefix else str(key), nested, out)
+            elif value not in (None, "", [], {}):
+                out[prefix] = value
+
+        def _rank(field: str) -> int:
+            for index, wanted in enumerate(priority):
+                if field == wanted or field.startswith(f"{wanted}."):
+                    return index
+            return len(priority)
+
+        enriched: List[Dict[str, Any]] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            entity_id = str(entry.get("entity_id") or entry.get("id") or "").strip()
+            if not entity_id:
+                continue
+            try:
+                entity = ctx_mgr.index_manager.get_entity(entity_id) or {}
+            except Exception:
+                entity = {}
+
+            name = str(entity.get("canonical_name") or entity.get("name") or "").strip()
+            if not name:
+                local_state = state_by_entity.get(entity_id) or {}
+                name = str(local_state.get("name") or "").strip()
+            if not name and str(protagonist.get("entity_id") or "") == entity_id:
+                name = str(protagonist.get("name") or "").strip()
+
+            entity_type = str(entity.get("type") or "").strip()
+            row: Dict[str, Any] = {
+                "entity_id": entity_id,
+                "name": name or entity_id,
+                "type": entity_type,
+                "last_chapter": entry.get("last_chapter"),
+                "total": entry.get("total"),
+            }
+            if entity_type == "角色" or not entity_type:
+                facts = dict(facts_by_entity.get(entity_id) or {})
+                flat_state: Dict[str, Any] = {}
+                _flatten("", state_by_entity.get(entity_id) or {}, flat_state)
+                for field, value in flat_state.items():
+                    facts.setdefault(field, {"value": value, "chapter": None})
+                ordered = sorted(facts.items(), key=lambda kv: (_rank(kv[0]), str(kv[0])))
+                row["state"] = [
+                    {"field": field, "value": str(meta.get("value"))[:180]}
+                    for field, meta in ordered[:3]
+                    if str(meta.get("value") or "").strip()
+                ]
+            enriched.append(row)
+        return enriched
+
     def get_governed_context(self, chapter: int, max_chars: Optional[int] = None) -> dict[str, Any]:
         """
         Extract governed factual context assembled by ContextManager.
@@ -1248,7 +1625,13 @@ class ChapterRuntime:
         )
         current_intent = {
             "chapter": chapter,
-            "outline": core.get("chapter_outline") or load_chapter_outline(self.project_root, chapter, max_chars=None),
+            # ContextManager caps its compatibility copy of the outline (1,500 chars), so
+            # read the chapter's own outline in full here. The Writer prompt parses this;
+            # using the capped copy silently reintroduced the truncation this package is
+            # supposed to remove.
+            "outline": load_chapter_outline(self.project_root, chapter, max_chars=None)
+            or core.get("chapter_outline")
+            or "",
             "directive": merged_directive,
             "plot_structure": plot_structure,
             "chapter_brief": chapter_contract.get("override_allowed") or {},
@@ -1270,7 +1653,12 @@ class ChapterRuntime:
 
         governed_canon = {
             "canon_items": canon_items,
-            "appearing_characters": scene.get("appearing_characters") or [],
+            "appearing_characters": self._enrich_appearing_characters(
+                scene.get("appearing_characters") or [],
+                ctx_mgr=ctx_mgr,
+                state=state,
+                canon_items=canon_items,
+            ),
             "entities": proj_entities,
             "scene": scene,
             "memory": native_ctx.get("memory") or [],

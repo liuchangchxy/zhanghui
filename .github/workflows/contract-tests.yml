@@ -48,6 +48,7 @@ jobs:
             tests/integration/test_semantic_judge_binding.py \
             tests/unit/test_local_revision_and_judge.py \
             tests/unit/test_prose_fact_fix_gate.py \
+            tests/unit/test_writer_information_chain.py \
             tests/unit/test_plugin_release_version_sync.py \
             .claude/plugins/zhanghui/scripts/tests/test_finding_closure_identity.py \
             .claude/plugins/zhanghui/scripts/data_modules/tests/test_protagonist_entity_identity.py \

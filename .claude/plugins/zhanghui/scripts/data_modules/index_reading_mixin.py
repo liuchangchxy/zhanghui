@@ -209,7 +209,11 @@ class IndexReadingMixin:
         if not records:
             return {
                 "count": 0,
-                "overall_avg": 0.0,
+                # `None` means "no review score is known", which is not the same as 0.0
+                # ("the chapter reviewed badly"). Downstream consumers must treat None as
+                # unknown instead of feeding it into a literary judgement.
+                "overall_avg": None,
+                "score_known": False,
                 "dimension_avg": {},
                 "severity_totals": {},
                 "recent_ranges": [],
@@ -247,7 +251,7 @@ class IndexReadingMixin:
                         continue
                     severity_totals[key] = severity_totals.get(key, 0) + count
 
-        overall_avg = round(sum(overall_scores) / len(overall_scores), 2) if overall_scores else 0.0
+        overall_avg = round(sum(overall_scores) / len(overall_scores), 2) if overall_scores else None
         dimension_avg = {
             key: round(dimension_totals[key] / dimension_counts[key], 2)
             for key in dimension_totals
@@ -265,6 +269,7 @@ class IndexReadingMixin:
         return {
             "count": len(records),
             "overall_avg": overall_avg,
+            "score_known": bool(overall_scores),
             "dimension_avg": dimension_avg,
             "severity_totals": severity_totals,
             "recent_ranges": recent_ranges,
