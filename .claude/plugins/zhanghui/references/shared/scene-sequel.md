@@ -42,3 +42,24 @@ purpose: Dwight Swain Scene-Sequel 章内节拍定义
 ## 校验
 
 `story_craft.check_scene_sequel(chapter_meta)` 返回 issue 列表
+
+## 执行形态：四个创作问题
+
+七个字段是**规划检查表**，不是写作指令。Writer 不应该在正文里“填字段”，也不应该
+背术语。规划完成后，把字段翻译成四个问题来执行：
+
+1. **这一场主角现在具体想得到什么？**（scene_goal）
+2. **什么力量在现场真正阻止他？**（scene_conflict）
+   - 阻止力量不一定是反派人物：可以是制度、时间、证据矛盾、关系冲突、风险。
+3. **主角因此被迫采取什么行动或选择？**（scene_setback → sequel_decision）
+4. **场景结束后，人物/关系/局势/认知中什么已经发生实质变化？**（scene_resolution /
+   chapter_change）
+   - 信息发现本身可以构成变化，但不能只是“又知道了一条信息”。
+
+约束：
+
+- 不要求每章大高潮，也不要求每章不可逆灾难。
+- `sequel_reaction` 若只写“见 story_craft 第N章 reaction 字段”，是悬空指针，不构成内容。
+- `sequel_decision` 若指向“下章目标/下章钩子”，不属于本章结尾的决定，不要当作已填。
+- 四问是创作指导，不是 gate、不是 Reviewer 维度、不产生评分。
+

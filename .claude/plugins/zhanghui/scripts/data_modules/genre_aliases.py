@@ -12,6 +12,18 @@ from genre_taxonomy import normalize_genre_label_for_profile
 # Fallback profile keys are a legacy markdown-section namespace, not canonical
 # genre values. User-input aliases live in references/taxonomy/genre-index.csv.
 GENRE_PROFILE_KEY_ALIASES: dict[str, str] = {
+    # Canonical 15-value enum (genre_taxonomy.GENRE_CANONICAL) -> profile namespace.
+    # These were missing, so a canonical genre like 悬疑 fell through to a raw
+    # profile key and never matched genre-profiles.md. Sub-genre aliases below keep
+    # working because the resolver normalizes the label before this lookup.
+    "悬疑": "mystery",
+    "都市": "urban-power",
+    "仙侠": "xianxia",
+    "奇幻": "xianxia",
+    "历史": "history-travel",
+    "游戏": "game-lit",
+    "现言": "romance",
+    "幻言": "romance",
     "修仙": "xianxia",
     "修仙/玄幻": "xianxia",
     "玄幻": "xianxia",

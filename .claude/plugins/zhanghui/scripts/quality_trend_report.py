@@ -99,8 +99,9 @@ def _build_risk_flags(
 ) -> List[str]:
     flags: List[str] = []
 
-    overall_avg = _to_float(review_trend.get("overall_avg"))
-    if overall_avg < 75 and review_trend.get("count", 0) > 0:
+    raw_overall = review_trend.get("overall_avg")
+    overall_avg = None if raw_overall is None else _to_float(raw_overall)
+    if overall_avg is not None and overall_avg < 75 and review_trend.get("count", 0) > 0:
         flags.append(f"审查均分偏低（{overall_avg:.1f}），建议优先回看低分区间。")
 
     severity_totals = review_trend.get("severity_totals") or {}
@@ -137,7 +138,8 @@ def build_quality_report(
     checklist_trend = manager.get_writing_checklist_score_trend(last_n=limit)
 
     now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    overall_avg = _to_float(review_trend.get("overall_avg"))
+    raw_overall = review_trend.get("overall_avg")
+    overall_avg = None if raw_overall is None else _to_float(raw_overall)
     review_count = _to_int(review_trend.get("count"))
     checklist_count = _to_int(checklist_trend.get("count"))
     checklist_score_avg = _to_float(checklist_trend.get("score_avg"))
@@ -157,7 +159,7 @@ def build_quality_report(
     lines.append("## 总览")
     lines.append("")
     lines.append(f"- 审查记录数: {review_count}")
-    lines.append(f"- 审查均分: {overall_avg:.1f}")
+    lines.append(f"- 审查均分: {'未知（无已审记录）' if overall_avg is None else f'{overall_avg:.1f}'}")
     lines.append(f"- 清单评分记录数: {checklist_count}")
     lines.append(f"- 清单平均分: {checklist_score_avg:.1f}")
     lines.append(f"- 清单平均完成率: {_percent(checklist_completion_avg)}")

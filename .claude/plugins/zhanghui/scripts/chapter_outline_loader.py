@@ -434,6 +434,55 @@ def parse_chapter_execution_directive(outline_text: str) -> Dict[str, Any]:
     return directive
 
 
+def extract_outline_residual_notes(outline_text: str) -> str:
+    """Return the chapter-outline lines that no structured field consumed.
+
+    The Writer prompt renders the recognized fields (goal / scene_* / CBN / prohibitions …)
+    structurally. Repeating them inside a free-form outline block would spend context
+    without adding information, so only genuinely unstructured author notes survive here.
+    This intentionally has **no character cap**: the old prompt sliced the outline at 600
+    characters, which silently dropped whatever came last — in practice the CBN/CPNs/CEN
+    nodes, the hook type and the chapter prohibitions.
+    """
+    text = str(outline_text or "")
+    if not text or text.startswith("⚠️"):
+        return ""
+
+    kept: list[str] = []
+    current_field = ""
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            current_field = ""
+            continue
+        if _is_chapter_heading_line(stripped):
+            current_field = ""
+            continue
+        if re.fullmatch(r"[-*_]{3,}", stripped):
+            # Horizontal rule / setext separator, not an author note.
+            continue
+
+        cleaned = _clean_plot_line(stripped)
+        matched = False
+        for label in _DIRECTIVE_FIELD_MAP:
+            if re.match(rf"^{re.escape(label)}\s*[：:]\s*(.*)$", cleaned, re.IGNORECASE):
+                matched = True
+                break
+        if matched:
+            # A recognized field starts here; its continuation lines belong to it.
+            current_field = cleaned
+            continue
+        if _is_structural_label_line(stripped, cleaned):
+            current_field = ""
+            continue
+        if current_field:
+            # Continuation of a recognized field (e.g. a wrapped value).
+            continue
+        kept.append(cleaned)
+
+    return "\n".join(kept).strip()
+
+
 def load_chapter_execution_directive(project_root: Path, chapter_num: int) -> Dict[str, Any]:
     outline_dir = project_root / "大纲"
     split_outline = _find_split_outline_file(outline_dir, chapter_num)

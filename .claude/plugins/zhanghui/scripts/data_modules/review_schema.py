@@ -169,10 +169,16 @@ class ReviewResult:
         ]
 
     def _build_dimension_scores(self) -> Dict[str, float]:
-        scores = {category: 100.0 for category in SCORE_CATEGORIES}
+        # A dimension the Reviewer explicitly skipped was never assessed; publishing it as
+        # 100.0 made "not looked at" indistinguishable from "checked, no defect found".
+        # Absent is the honest representation of unknown.
+        skipped = {str(name) for name in self.skipped_dimensions if str(name).strip()}
+        scores = {category: 100.0 for category in SCORE_CATEGORIES if category not in skipped}
         for issue in self.issues:
-            category = issue.category if issue.category in scores else "other"
-            scores[category] = _clamp_score(scores[category] - _issue_penalty(issue))
+            category = issue.category if issue.category in SCORE_CATEGORIES else "other"
+            if category in skipped:
+                continue
+            scores[category] = _clamp_score(scores.get(category, 100.0) - _issue_penalty(issue))
         return scores
 
     @property

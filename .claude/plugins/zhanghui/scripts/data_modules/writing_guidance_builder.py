@@ -101,13 +101,21 @@ def build_methodology_strategy_card(
     if isinstance(pattern_usage, dict) and pattern_usage:
         dominant_pattern = max(pattern_usage.items(), key=lambda kv: kv[1])[0]
 
-    overall_avg = float(review_trend.get("overall_avg") or 0.0)
+    raw_overall = review_trend.get("overall_avg")
+    # Missing review data is UNKNOWN, not a 0.0 literary grade. Treating it as a number
+    # made the guidance say "quality is very bad" for a book that had never been reviewed.
+    overall_avg = float(raw_overall) if isinstance(raw_overall, (int, float)) else None
+    review_score_known = overall_avg is not None and bool(review_trend.get("score_known", True))
+    if not review_score_known:
+        overall_avg = None
     has_low_range = bool(low_ranges)
     hook_variety = len(hook_usage) if isinstance(hook_usage, dict) else 0
     pattern_variety = len(pattern_usage) if isinstance(pattern_usage, dict) else 0
 
     next_reason_clarity = 70.0 + (4.0 if has_low_range else 8.0)
-    anchor_effectiveness = 68.0 + (6.0 if dominant_hook else 0.0) + (4.0 if overall_avg >= 75 else -4.0)
+    anchor_effectiveness = 68.0 + (6.0 if dominant_hook else 0.0)
+    if overall_avg is not None:
+        anchor_effectiveness += 4.0 if overall_avg >= 75 else -4.0
     rhythm_naturalness = 65.0 + min(10.0, float(hook_variety + pattern_variety) * 2.0)
 
     risk_flags: List[str] = []
@@ -115,16 +123,11 @@ def build_methodology_strategy_card(
         risk_flags.append("low_score_recency")
     if dominant_pattern:
         risk_flags.append("pattern_overuse_watch")
-    if overall_avg > 0 and overall_avg < 75:
+    if overall_avg is not None and overall_avg < 75:
         risk_flags.append("readability_guard")
 
-    stage_mod = chapter % 5
-    if stage_mod in {1, 2}:
-        stage = "build_up"
-    elif stage_mod in {3, 4}:
-        stage = "confront"
-    else:
-        stage = "release"
+    # No `chapter % 5` stage: nothing in the project defines build_up/confront/release as a
+    # property of a chapter number, and it contradicted the outline's own beat_position.
 
     anchor_preset = GENRE_METHOD_ANCHORS.get(
         profile_key,
@@ -139,7 +142,7 @@ def build_methodology_strategy_card(
         "framework": label,
         "pilot": profile_key,
         "genre_profile_key": profile_key,
-        "chapter_stage": stage,
+        "chapter_stage": "",
         "emotion_anchor": {
             "pressure_source": anchor_preset["pressure_source"],
             "release_target": anchor_preset["release_target"],
@@ -174,17 +177,21 @@ def build_methodology_guidance_items(strategy_card: Dict[str, Any]) -> List[str]
     observability = strategy_card.get("observability") or {}
     signals = strategy_card.get("signals") or {}
     risk_flags = list(signals.get("risk_flags") or [])
-    stage = str(strategy_card.get("chapter_stage") or "build_up")
+    stage = str(strategy_card.get("chapter_stage") or "").strip()
     genre_key = str(strategy_card.get("genre_profile_key") or strategy_card.get("pilot") or "general")
 
     stage_text = {
         "build_up": "本章以铺压为主，优先做威胁与代价的可感知铺垫。",
         "confront": "本章以正面对抗为主，确保破局路径清晰可复盘。",
         "release": "本章以释放与余波为主，给出实质收益并引出下一问。",
-    }.get(stage, "本章保持压力-破局-余波的完整链路。")
+    }.get(stage, "")
 
     items = [
-        f"方法论策略（通用/{genre_key}）：{stage_text}",
+        (
+            f"方法论策略（通用/{genre_key}）：{stage_text}"
+            if stage_text
+            else f"方法论策略（通用/{genre_key}）：保持压力-破局-余波的完整链路。"
+        ),
         "长线控制：换图承接旧资产，避免主角进入新地图后能力与资源归零。",
         "机制控制：关键胜利必须写出机制理由与代价，不用纯光环碾压。",
         (

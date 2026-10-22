@@ -1,0 +1,14 @@
+{
+  "experiment": "2026-10-22-scene-layer-ab",
+  "chapter": 3,
+  "book": "海港旧信",
+  "mapping": {
+    "X": "A",
+    "Y": "B"
+  },
+  "note": "A = scene_design=False (Scene-Sequel field labels); B = scene_design=True (four questions). Same sealed package fingerprint 3063af5b46ab8f5cd83d9ba97ec8775e205af97b1e1e19f3af250225b6cff5c5.",
+  "length_cjk": {
+    "A": 2041,
+    "B": 2004
+  }
+}
