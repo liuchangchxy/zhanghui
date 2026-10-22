@@ -220,6 +220,119 @@ def render_scene_plan_block(
     ]
 
 
+_READER_PULL_CONFIG_LINE = re.compile(
+    r"^\s*(?:hook_config|coolpoint_config|micropayoff_config|pacing_config|override_config|"
+    r"preferred_types|preferred_patterns|strength_baseline|chapter_end_required|transition_allowance|"
+    r"density_per_chapter|combo_interval|milestone_interval|min_per_chapter|transition_min|"
+    r"stagnation_threshold|strand_quest_max|strand_fire_gap_max|transition_max_consecutive|"
+    r"allowed_rationale_types|debt_multiplier|payback_window_default)\s*:"
+)
+_SUMMARY_READER_PULL_LINE = re.compile(
+    r"^\s*(?:hook_strength|hook_type|coolpoint_patterns|reading_power)\s*:"
+)
+
+
+def strip_reader_pull_config(text: str) -> str:
+    """Drop the raw genre reader-pull config from a profile excerpt.
+
+    `hook_config` / `coolpoint_config` / `micropayoff_config` / `pacing_config` have no
+    runtime consumer; they used to reach the Writer verbatim as a YAML wall. The prose
+    around them (genre creative notes) is kept.
+    """
+    kept: List[str] = []
+    in_fence = False
+    for line in str(text or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if stripped.startswith("#") or stripped == "---":
+            # Headings and rules only labelled the config block; the prompt already names
+            # the genre in its own header.
+            continue
+        if _READER_PULL_CONFIG_LINE.match(line):
+            continue
+        kept.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip()
+
+
+def strip_summary_reader_pull_fields(text: str) -> str:
+    """Drop reader-pull labels that carry no meaning in a prior-chapter summary."""
+    return "\n".join(
+        line for line in str(text or "").splitlines()
+        if not _SUMMARY_READER_PULL_LINE.match(line)
+    ).strip()
+
+
+def render_reader_pull_block(
+    directive: Dict[str, Any],
+    *,
+    open_loops: Optional[List[Any]] = None,
+) -> List[str]:
+    """Render the chapter's reader-pull chain as three creative questions.
+
+    Replaces the scattered hook/coolpoint/micropayoff/pacing parameters with the only
+    three decisions that matter at draft time: what the reader expects, what the chapter
+    actually pays off or changes, and what the reader now wants because of it. Every
+    answer is drawn from the chapter's own plan and prior open loops; nothing new is
+    invented, and no numeric target is imposed.
+    """
+    directive = directive or {}
+    goal = str(directive.get("goal") or "").strip()
+    obstacle = str(directive.get("obstacles") or directive.get("conflict") or "").strip()
+    cost = str(directive.get("cost") or "").strip()
+    change = str(directive.get("chapter_change") or "").strip()
+    ending_q = str(
+        directive.get("ending_question") or directive.get("chapter_end_open_question") or ""
+    ).strip()
+
+    loop_question = ""
+    for loop in open_loops or []:
+        if isinstance(loop, dict):
+            text = str(
+                loop.get("unanswered_question")
+                or loop.get("hook_text")
+                or loop.get("content")
+                or loop.get("description")
+                or ""
+            ).strip()
+        else:
+            text = str(loop or "").strip()
+        if text:
+            # The projected loop carries the event, not a formulated question. Keep it short
+            # so the Writer reads it as material rather than a second outline.
+            loop_question = text if len(text) <= 90 else text[:90].rstrip("，。；、 ") + "…"
+            break
+
+    obstacle_text = obstacle.rstrip("。；;，, ")
+    fear = obstacle_text or "（章纲未给出明确阻力）"
+    if cost:
+        fear = f"{fear}；最怕主角付出的代价：{cost}"
+
+    return [
+        "【追读设计三问】",
+        "本章的追读链只由三件事决定。动笔前先回答问题，再让它们在正文里成立；"
+        "答案只能来自本章规划与前情，不得自行加设定。",
+        "1. 本章开始时，读者主要期待什么？",
+        f"   - 读者现在最想知道：{loop_question or '（前情没有未闭合问题，本章可以建立一个）'}",
+        f"   - 读者最想看到本章发生：{goal or '（章纲未给出明确目标）'}",
+        f"   - 读者最担心：{fear}",
+        "2. 本章实际满足、改变或反转了什么期待？",
+        f"   - 章纲写明本章的变化：{change or '（章纲未写明；请在本章写出一个读者能看见的变化）'}",
+        "   - 读者必须看见至少一种回报：回答一个问题、完成一次行动、改变一种关系、"
+        "暴露一个新事实、让人物付出代价、或推翻一种认知。不能只是把问题往后拖。",
+        "   - 这个回报必须来自本章场景里人物真实的行动和代价，不能由叙述者额外补一句。",
+        "3. 因为本章发生的事情，读者现在更想知道/看到什么？",
+        f"   - 章纲给的未闭合问题：{ending_q or '（章纲未给出；由本章已经发生的事自然引出）'}",
+        "   - 新问题必须由本章已经发生的事引出，并且比旧问题更具体，指向下一步行动。"
+        "如果章纲的钩子与本章实际发生的事接不上，以本章发生的事为准，不要硬加一句悬念。",
+        "边界：不要求每章 cliffhanger、爽点或反转。过渡/铺垫章也要有当章回报"
+        "（可以是代价、关系变化或一个新事实），但不需要制造本章没有的高潮。",
+    ]
+
+
 def render_chapter_structure(
     directive: Dict[str, Any],
     plot_structure: Dict[str, Any],
@@ -401,7 +514,7 @@ class WriterPackage:
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
 
-    def to_writer_prompt(self, scene_design: bool = False) -> str:
+    def to_writer_prompt(self, scene_design: bool = False, reader_pull: bool = False) -> str:
         """
         Format the unified, canonical prompt for the Writer model.
         Guarantees input parity across Claude Skill Writer and External Host Writer
@@ -417,6 +530,12 @@ class WriterPackage:
         questions instead of the outline's field names. It changes framing only — the same
         plan fields feed both renderings — and exists so the scene-layer A/B experiment can
         hold every other input constant.
+
+        `reader_pull=True` replaces the scattered reader-pull material (raw genre
+        hook/coolpoint/micropayoff/pacing config, bare `hook_strength`, the preset ending
+        hook as an instruction) with three creative questions: what the reader expects,
+        what this chapter actually pays off, and what the reader now wants. It removes
+        parameters rather than adding any; the chapter plan is unchanged.
         """
         if not self.is_writer_ready:
             raise RuntimeError(
@@ -472,14 +591,18 @@ class WriterPackage:
             lines.append(f"- 付出代价：{cost}")
         hook = ch_meta.get("hook")
         hook_type = ch_meta.get("hook_type")
-        if ending_q:
-            lines.append(f"- 章末钩子/未决问题：{ending_q}")
-            if hook and hook != ending_q:
-                lines.append(f"- 预设钩子设计：{hook}（类型：{hook_type or '未指定'}）")
-        elif hook:
-            lines.append(f"- 章末预设钩子：{hook}（类型：{hook_type or '未指定'}）")
-        elif hook_type:
-            lines.append(f"- 章末钩子倾向：{hook_type}")
+        # With reader_pull on, the ending question and preset hook become material for the
+        # third reader-pull question below. Rendering them here as a separate instruction is
+        # what produced the "nothing happened, then add a suspense line" ending.
+        if not reader_pull:
+            if ending_q:
+                lines.append(f"- 章末钩子/未决问题：{ending_q}")
+                if hook and hook != ending_q:
+                    lines.append(f"- 预设钩子设计：{hook}（类型：{hook_type or '未指定'}）")
+            elif hook:
+                lines.append(f"- 章末预设钩子：{hook}（类型：{hook_type or '未指定'}）")
+            elif hook_type:
+                lines.append(f"- 章末钩子倾向：{hook_type}")
         if must_nodes:
             lines.append(f"- 必须覆盖节点：{', '.join(must_nodes)}")
         if prohibitions:
@@ -504,6 +627,13 @@ class WriterPackage:
         scene_lines = render_scene_plan_block(directive, as_questions=scene_design)
         if len(scene_lines) > 1:
             lines.extend(scene_lines)
+        if reader_pull:
+            lines.extend(
+                render_reader_pull_block(
+                    directive,
+                    open_loops=writer_ctx.get("urgent_loops") or [],
+                )
+            )
 
         lines.extend([
             "",
@@ -608,21 +738,18 @@ class WriterPackage:
 
         genre_prof = constraints.get("genre_profile") or {}
         profile_excerpt = str(genre_prof.get("profile_excerpt") or "").strip()
+        if reader_pull:
+            profile_excerpt = strip_reader_pull_config(profile_excerpt)
         if profile_excerpt:
             lines.append(f"【题材创作指引 ({genre_prof.get('genre', genre)})】：\n{profile_excerpt}")
 
-        guidance = constraints.get("writing_guidance") or {}
-        g_items = guidance.get("items") or []
-        if g_items:
-            lines.append("【写作指导 (Writing Guidance)】")
-            for item in g_items[:5]:
-                txt = item.get("text") or item.get("rule") or str(item) if isinstance(item, dict) else str(item)
-                lines.append(f"- {txt}")
-        strategy_card = guidance.get("strategy_card") or {}
-        if isinstance(strategy_card, dict) and (strategy_card.get("pressure_source") or strategy_card.get("release_target")):
-            p_src = strategy_card.get("pressure_source", "")
-            r_tgt = strategy_card.get("release_target", "")
-            lines.append(f"- 叙事策略：施压点【{p_src}】 -> 释放点【{r_tgt}】")
+        # `writing_guidance` and `methodology_strategy` are Context-Agent-facing only and are
+        # intentionally NOT rendered into the Writer prompt. The producer keys
+        # (`guidance_items` / `methodology`) never matched the old renderer's (`items` /
+        # `strategy_card`), so these blocks were dead code. Do not "fix" the key names:
+        # that would push fixed character positions ("章首300字", "每600-900字微兑现") and
+        # invented observability scores into the Writer. The reader-pull block above is the
+        # only reader-facing expression of this layer.
 
         craft_items = constraints.get("craft_items") or []
         rendered_craft = []
@@ -723,6 +850,10 @@ class WriterPackage:
             ])
             for s in recent_sums[:3]:
                 s_text = s.get("summary") if isinstance(s, dict) else str(s)
+                if reader_pull:
+                    # The summary's YAML head used to hand the Writer `hook_strength: strong`
+                    # and a hook-type label for a chapter it had already read.
+                    s_text = strip_summary_reader_pull_fields(s_text)
                 ch_prefix = f"第{s.get('chapter')}章：" if isinstance(s, dict) and s.get("chapter") else ""
                 lines.append(f"- 前情摘要：{ch_prefix}{s_text}")
             for loop in urgent_loops[:3]:

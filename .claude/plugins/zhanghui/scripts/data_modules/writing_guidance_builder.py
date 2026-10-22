@@ -174,30 +174,17 @@ def build_methodology_guidance_items(strategy_card: Dict[str, Any]) -> List[str]
     if not isinstance(strategy_card, dict) or not strategy_card.get("enabled"):
         return []
 
-    observability = strategy_card.get("observability") or {}
     signals = strategy_card.get("signals") or {}
     risk_flags = list(signals.get("risk_flags") or [])
-    stage = str(strategy_card.get("chapter_stage") or "").strip()
     genre_key = str(strategy_card.get("genre_profile_key") or strategy_card.get("pilot") or "general")
 
-    stage_text = {
-        "build_up": "本章以铺压为主，优先做威胁与代价的可感知铺垫。",
-        "confront": "本章以正面对抗为主，确保破局路径清晰可复盘。",
-        "release": "本章以释放与余波为主，给出实质收益并引出下一问。",
-    }.get(stage, "")
-
     items = [
-        (
-            f"方法论策略（通用/{genre_key}）：{stage_text}"
-            if stage_text
-            else f"方法论策略（通用/{genre_key}）：保持压力-破局-余波的完整链路。"
-        ),
+        # No build_up / confront / release stage text: nothing in the project defines those
+        # as a property of a chapter, and `chapter_stage` is intentionally always empty.
+        f"方法论策略（通用/{genre_key}）：保持压力-破局-余波的完整链路。",
         "长线控制：换图承接旧资产，避免主角进入新地图后能力与资源归零。",
         "机制控制：关键胜利必须写出机制理由与代价，不用纯光环碾压。",
-        (
-            "连载互动：保留一个可讨论分歧点，强化下章追更动机。"
-            f"（next_reason={observability.get('next_reason_clarity')}）"
-        ),
+        "连载互动：保留一个可讨论分歧点，强化下章追更动机。",
     ]
 
     if "pattern_overuse_watch" in risk_flags:
@@ -252,14 +239,13 @@ def build_guidance_items(
         )
 
     genre = str(genre_profile.get("genre") or "").strip()
-    refs = genre_profile.get("reference_hints") or []
     if genre:
         guidance.append(f"题材锚定：按“{genre}”叙事主线推进，保持题材读者预期稳定兑现。")
-    if refs:
-        guidance.append(f"题材策略可执行提示：{refs[0]}")
 
-    guidance.append("网文节奏基线：章首300字内给出目标与阻力，章末保留未闭合问题。")
-    guidance.append("兑现密度基线：每600-900字给一次微兑现，并确保本章至少1处可量化变化。")
+    # No fixed character-position or interval "baselines" here. "章首300字内…", "每600-900字
+    # 一次微兑现" and "段末留钩" had no source in the project's theory docs and contradicted
+    # an outline that deliberately marks a chapter as Setup/transition. The Writer-facing
+    # expression of this layer is the reader-pull three questions, not spacing rules.
 
     normalized_genre = to_profile_key(genre)
     genre_hint = GENRE_GUIDANCE_TEXT.get(normalized_genre)
@@ -271,7 +257,15 @@ def build_guidance_items(
         guidance.append(f"复合题材协同：{composite_hints[0]}")
 
     if not guidance:
-        guidance.append("本章执行默认高可读策略：冲突前置、信息后置、段末留钩。")
+        # No fabricated fallback strategy: a chapter with no signals simply has none, and the
+        # checklist below still carries the genre anchor.
+        return {
+            "guidance": [],
+            "low_ranges": low_ranges,
+            "hook_usage": hook_usage,
+            "pattern_usage": pattern_usage,
+            "genre": genre,
+        }
 
     return {
         "guidance": guidance,

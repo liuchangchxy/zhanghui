@@ -13,11 +13,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from data_modules.chapter_runtime import ChapterRuntime
+from data_modules.chapter_runtime import (
+    ChapterRuntime,
+    render_reader_pull_block,
+    strip_reader_pull_config,
+    strip_summary_reader_pull_fields,
+)
 from data_modules.config import DataModulesConfig
 from data_modules.index_manager import IndexManager
 from data_modules.review_schema import ReviewResult
-from data_modules.writing_guidance_builder import build_methodology_strategy_card
+from data_modules.writing_guidance_builder import (
+    build_guidance_items,
+    build_methodology_strategy_card,
+)
 
 
 def _base_project(tmp_path: Path, *, genre: str = "悬疑") -> Path:
@@ -258,3 +266,165 @@ def test_skipped_review_dimensions_are_absent_not_100():
     scores = result.to_metrics_dict()["dimension_scores"]
     assert "pacing" not in scores
     assert scores.get("continuity") == 100.0  # reviewed, no defect detected
+
+
+# --- Reader Pull layer -------------------------------------------------------------
+#
+# The 2026-10-22 reader-pull inventory found that the Writer prompt carried a wall of
+# genre parameters (hook_config / coolpoint_config / micropayoff_config / pacing_config),
+# a bare `hook_strength: strong`, and a preset ending hook as an instruction — but no
+# statement of what the chapter was supposed to pay off. `reader_pull=True` replaces that
+# material with three questions and adds no story facts.
+
+def test_reader_pull_prompt_replaces_genre_config_with_three_questions(tmp_path):
+    root = _base_project(tmp_path)
+    (root / "大纲" / "第1卷-详细大纲.md").write_text(
+        _outline_with_structure_after_600_chars(), encoding="utf-8"
+    )
+    pkg = ChapterRuntime(root).get_writer_package(1, creative_brief="【任务书】")
+
+    new = pkg.to_writer_prompt(scene_design=True, reader_pull=True)
+
+    assert "【追读设计三问】" in new
+    assert "1. 本章开始时，读者主要期待什么？" in new
+    assert "2. 本章实际满足、改变或反转了什么期待？" in new
+    assert "3. 因为本章发生的事情，读者现在更想知道/看到什么？" in new
+
+    # The plan is the only material source.
+    assert "从老周口中问出潮位站停用前后的情况。" in new
+    assert "他表面认错，实际确认有人在盯着自己的动向。" in new
+
+    # Parameters and mechanical spacing rules are gone.
+    for token in (
+        "hook_config",
+        "micropayoff_config",
+        "coolpoint_config",
+        "pacing_config",
+        "strength_baseline",
+        "debt_multiplier",
+        "hook_strength",
+        "预设钩子设计",
+        "每600-900",
+        "章首300",
+    ):
+        assert token not in new, token
+
+    # The genre's own creative notes survive; only the config block is stripped.
+    assert "题材创作指引" in new
+    assert "逻辑完整性优先于爽点密度" in new
+
+
+def test_legacy_prompt_keeps_config_so_the_ab_control_is_reproducible(tmp_path):
+    root = _base_project(tmp_path)
+    (root / "大纲" / "第1卷-详细大纲.md").write_text(
+        _outline_with_structure_after_600_chars(), encoding="utf-8"
+    )
+    pkg = ChapterRuntime(root).get_writer_package(1, creative_brief="【任务书】")
+
+    legacy = pkg.to_writer_prompt(scene_design=True)
+
+    assert "hook_config" in legacy
+    assert "【追读设计三问】" not in legacy
+
+
+def test_reader_pull_block_marks_missing_material_instead_of_inventing_it():
+    lines = render_reader_pull_block({}, open_loops=[])
+    text = "\n".join(lines)
+
+    assert "（章纲未给出明确目标）" in text
+    assert "（章纲未写明；请在本章写出一个读者能看见的变化）" in text
+    # No fabricated expectation, payoff, or new question.
+    assert "读者现在最想知道：（前情没有未闭合问题，本章可以建立一个）" in text
+
+
+def test_reader_pull_material_comes_from_open_loops_and_cost():
+    lines = render_reader_pull_block(
+        {
+            "goal": "问出停用前后的情况",
+            "obstacles": "老周拒绝回答。",
+            "cost": "科长口头警告",
+            "chapter_change": "确认有人盯着自己",
+            "chapter_end_open_question": "是谁让老周去报的？",
+        },
+        open_loops=[{"content": "夹层里的纸只写了日期与编号" * 20}],
+    )
+    text = "\n".join(lines)
+
+    assert "老周拒绝回答；最怕主角付出的代价：科长口头警告" in text
+    assert "确认有人盯着自己" in text
+    assert "是谁让老周去报的？" in text
+    # Long projected loop content is trimmed, not pasted whole.
+    assert "…" in text
+
+
+def test_genre_config_stripper_keeps_prose_and_drops_parameters():
+    excerpt = """### 2.4 悬疑/推理 (mystery)
+
+```yaml
+id: mystery
+hook_config:
+  preferred_types: [悬念钩]
+  strength_baseline: medium
+micropayoff_config:
+  min_per_chapter: 1
+```
+
+**题材特点**：
+- 逻辑完整性优先于爽点密度
+"""
+    stripped = strip_reader_pull_config(excerpt)
+
+    assert "hook_config" not in stripped
+    assert "strength_baseline" not in stripped
+    assert "min_per_chapter" not in stripped
+    assert "id: mystery" not in stripped
+    assert "逻辑完整性优先于爽点密度" in stripped
+
+
+def test_summary_stripper_removes_only_reader_pull_labels():
+    summary = """---
+chapter: 2
+time: "10月10日"
+hook_type: "悬念式"
+hook_strength: "strong"
+---
+两人在站里对峙。"""
+    stripped = strip_summary_reader_pull_fields(summary)
+
+    assert "hook_strength" not in stripped
+    assert "hook_type" not in stripped
+    assert "chapter: 2" in stripped
+    assert "两人在站里对峙。" in stripped
+
+
+def test_writing_guidance_no_longer_imposes_fixed_character_positions():
+    result = build_guidance_items(
+        chapter=3,
+        reader_signal={},
+        genre_profile={"genre": "悬疑"},
+        low_score_threshold=75.0,
+        hook_diversify_enabled=True,
+    )
+    text = " ".join(result["guidance"])
+
+    assert "章首300字" not in text
+    assert "600-900" not in text
+    assert "段末留钩" not in text
+    assert "题材策略可执行提示" not in text
+
+
+def test_both_write_skills_enable_scene_and_reader_pull_for_the_writer():
+    """The standard write paths must render the Scene four questions and the Reader Pull三问.
+
+    Leaving the flags off silently falls back to the legacy genre-config rendering, which is
+    kept only so the A/B control stays reproducible (see study/experiments/2026-10-22-reader-pull-ab/).
+    """
+    plugin_root = Path(__file__).resolve().parent.parent.parent / ".claude" / "plugins" / "zhanghui"
+    for skill in ("webnovel-write", "webnovel-fast-write"):
+        text = (plugin_root / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+        assert "runtime attach-creative-brief" in text, skill
+        # 同一技能里可能先在正文里提到命令名，只取真正的命令行（含 --chapter 参数）
+        segments = [seg.split("```", 1)[0] for seg in text.split("runtime attach-creative-brief")[1:]]
+        brief_cmd = next(seg for seg in segments if "--chapter {chapter_num}" in seg)
+        assert "--scene-design" in brief_cmd, f"{skill}: missing --scene-design"
+        assert "--reader-pull" in brief_cmd, f"{skill}: missing --reader-pull"
