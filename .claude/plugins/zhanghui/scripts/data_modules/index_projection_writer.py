@@ -32,6 +32,31 @@ class IndexProjectionWriter:
         with canonical_projection_write_scope(self.project_root):
             return self._apply_accepted_commit(commit_payload)
 
+    @staticmethod
+    def _retire_legacy_protagonist_row(manager: IndexManager, name: str, canonical_id: str) -> bool:
+        """Retire the display-name-keyed protagonist row left by the old sync.
+
+        The old projection created that row from `protagonist_state.name` even when
+        `entity_id` was present, so older projects can carry two protagonist rows. The
+        duplicate is repaired only when it *declares the same canonical id* in its own
+        `current_json` — name similarity alone is never treated as identity, so a different
+        character that happens to share a name is left alone.
+        """
+        if not name or not canonical_id or name == canonical_id:
+            return False
+        canonical = manager.get_entity(canonical_id)
+        legacy = manager.get_entity(name)
+        if not canonical or not legacy or str(legacy.get("id")) != name:
+            return False
+        if legacy.get("is_archived") or not canonical.get("is_protagonist"):
+            return False
+        body = legacy.get("current_json")
+        if not isinstance(body, dict):
+            return False
+        if str(body.get("entity_id") or "").strip() != canonical_id:
+            return False
+        return manager.retire_entity_identity(name, canonical_id)
+
     def _sync_canonical_state_entities(self, manager: IndexManager) -> tuple[int, dict]:
         """Backfill entities from the mutable project files, reporting what was consumed.
 
@@ -68,19 +93,26 @@ class IndexProjectionWriter:
             return 0, report
         synced = 0
 
-        # Synchronize protagonist from protagonist_state if present
+        # Synchronize protagonist from protagonist_state if present.
+        #
+        # The entity identity is `protagonist_state.entity_id`, not the display name. Using
+        # the name meant a project whose canonical id was `xu_zhiyuan` also got a second
+        # entity literally keyed `许知远`, both marked protagonist. The data agent then saw
+        # two core entities for one character and emitted disambiguation pending on every
+        # chapter, which blocked precommit until a human picked a side.
         protagonist_state = state_data.get("protagonist_state") or {}
         if isinstance(protagonist_state, dict):
-            p_name = protagonist_state.get("name")
-            if isinstance(p_name, str) and p_name.strip():
-                p_name = p_name.strip()
-                if not manager.get_entity(p_name):
+            p_name = str(protagonist_state.get("name") or "").strip()
+            p_id = str(protagonist_state.get("entity_id") or "").strip()
+            canonical_id = p_id or p_name
+            if canonical_id:
+                if not manager.get_entity(canonical_id):
                     from .index_manager import EntityMeta
                     manager.upsert_entity(
                         EntityMeta(
-                            id=p_name,
+                            id=canonical_id,
                             type="角色",
-                            canonical_name=p_name,
+                            canonical_name=p_name or canonical_id,
                             tier="主角",
                             desc=str(protagonist_state.get("current_realm") or "").strip(),
                             current=protagonist_state,
@@ -90,6 +122,12 @@ class IndexProjectionWriter:
                         )
                     )
                     synced += 1
+                if p_id and p_name and p_id != p_name:
+                    if self._retire_legacy_protagonist_row(manager, p_name, p_id):
+                        report["retired_duplicates"] = [
+                            *(report.get("retired_duplicates") or []),
+                            {"id": p_name, "merged_into": p_id},
+                        ]
 
         entity_state = state_data.get("entity_state") or {}
         if isinstance(entity_state, dict):

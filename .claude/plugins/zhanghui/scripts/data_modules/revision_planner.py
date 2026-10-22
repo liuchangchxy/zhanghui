@@ -545,17 +545,21 @@ def _deferred_entry(issue: Dict[str, Any], owner: str) -> Dict[str, Any]:
     }
 
 
-def _issue_id(issue: Dict[str, Any], index: int) -> str:
+def _issue_id(issue: Dict[str, Any], index: int = 0) -> str:
+    """Revision-target ID for one finding.
+
+    A Reviewer-supplied ID is authoritative. Otherwise the ID is the finding's own stable
+    fingerprint: `index` is deliberately ignored. The plan only contains findings that can be
+    fixed in prose, so any deferred advisory or non-blocking finding would shift the index
+    and give the same finding a different ID than convergence computes.
+    """
     for key in ("issue_id", "id", "constraint_id"):
         value = issue.get(key)
         if value:
             return str(value)
-    payload = json.dumps(
-        [issue.get("severity"), issue.get("category"), issue.get("location"), issue.get("description")],
-        ensure_ascii=False,
-        sort_keys=True,
-    )
-    return f"issue-{index:03d}-{sha256_text(payload)[:8]}"
+    from .review_schema import finding_identity
+
+    return finding_identity(issue)
 
 
 def _span_for_paragraphs(
