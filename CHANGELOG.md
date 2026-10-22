@@ -2,6 +2,32 @@
 
 > 变更日志。新条目加在最上面。
 
+## 2026-10-23 — Writing Skill Router
+
+### 新增
+
+- **`writing-skills/` 本地写作方法库**：目录即注册表。`writing-skills/<id>/SKILL.md` 用少量
+  frontmatter（`id` / `name` / `purpose` / `applies_when` / `avoid_when` / `priority`）描述一种方法，
+  正文存理论。新增/删除 Skill 不需要改任何 Python。
+- **`writing_skill_registry.py`**：运行时扫描（插件内置 + 项目级 `.webnovel/writing-skills/`，
+  同 id 项目覆盖内置）、选择校验（未知 id / 空指导 / 理论泄漏 / 5 个上限）、Writer 渲染。
+- **`zhanghui:writing-skill-router` agent**：每章选择 2–5 个真正适用的技巧，并翻译成当前章节
+  的具体写法；输出 `{selected_skills:[{id, reason, chapter_guidance}]}` 并通过
+  `writing-skills validate` 自检。
+- **CLI**：`writing-skills list` / `input` / `validate`；`runtime package` 与
+  `runtime attach-creative-brief` 新增 `--skills-file` / `--skills-json`。
+- **Writer 输出**：仅在 `writing_skills=True` 时追加“本章创作方法”编号列表，只含翻译后的指导，
+  不含 id、reason、分数或理论名。选择指纹绑定进 `package_fingerprint`，`runtime status`
+  暴露 `writing_skill_ids` 作为最小 provenance。
+- **第一批 6 个 Skill**：`scene-sequel`、`reader-pull`、`information-gap`、`character-agency`、
+  `dialogue-subtext`、`voice-style`，全部从仓库既有材料提炼，未引入外部理论。
+
+### 实验
+
+- `study/experiments/2026-10-23-writing-skill-router-ab/`：四类章节选择分化 + 热插拔验证 +
+  第 3 章单变量 A/B。两名盲评评委均选 B → `WRITING_SKILL_ROUTER_SUPPORTED`。
+  Prompt +1,573 bytes（+7.4%）；“规则太多”与“生硬执行技巧”两项 B 反而更低。
+
 ## 2026-10-17 — 6.5.0 正常用户验收返修
 
 ### 修复
