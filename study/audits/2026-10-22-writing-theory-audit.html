@@ -1,0 +1,1486 @@
+<title>章回写作机制审计</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700;900&display=swap">
+<style>
+/* Layout: 阅读型审计报告，桌面为窄目录 + 正文双栏，900px 以下单栏。 */
+:root {
+  --paper: #f1f3ee;
+  --panel: #fafbf7;
+  --panel-2: #e9ece5;
+  --ink: #1b1f1c;
+  --muted: #5d655e;
+  --faint: #858d85;
+  --line: #d3d8cf;
+  --line-strong: #b7beb4;
+  --accent: #8a3427;
+  --accent-soft: #f0e0dc;
+  --teal: #2c5c60;
+  --teal-soft: #dfebea;
+  --amber: #77550f;
+  --amber-soft: #f2e8d0;
+  --red: #9e352d;
+  --red-soft: #f3dcd8;
+  --purple: #57466f;
+  --purple-soft: #e7e0ee;
+  --green: #2c6147;
+  --green-soft: #dfede5;
+  --grey-soft: #e6e9e2;
+  --font-display: "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #151917;
+    --panel: #1c211e;
+    --panel-2: #242a26;
+    --ink: #e7eae3;
+    --muted: #a8b0a7;
+    --faint: #7e877e;
+    --line: #333a34;
+    --line-strong: #4a534b;
+    --accent: #d77a69;
+    --accent-soft: #3a2521;
+    --teal: #7fb7b4;
+    --teal-soft: #1f3231;
+    --amber: #d0a950;
+    --amber-soft: #332b18;
+    --red: #e08479;
+    --red-soft: #3b2320;
+    --purple: #b5a2cf;
+    --purple-soft: #2c2438;
+    --green: #86b99a;
+    --green-soft: #1e3228;
+    --grey-soft: #272d28;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #151917;
+  --panel: #1c211e;
+  --panel-2: #242a26;
+  --ink: #e7eae3;
+  --muted: #a8b0a7;
+  --faint: #7e877e;
+  --line: #333a34;
+  --line-strong: #4a534b;
+  --accent: #d77a69;
+  --accent-soft: #3a2521;
+  --teal: #7fb7b4;
+  --teal-soft: #1f3231;
+  --amber: #d0a950;
+  --amber-soft: #332b18;
+  --red: #e08479;
+  --red-soft: #3b2320;
+  --purple: #b5a2cf;
+  --purple-soft: #2c2438;
+  --green: #86b99a;
+  --green-soft: #1e3228;
+  --grey-soft: #272d28;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.75;
+  letter-spacing: 0.01em;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: antialiased;
+}
+.shell {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-block: 36px 84px;
+}
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+code {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.08em 0.32em;
+  overflow-wrap: anywhere;
+}
+p { margin: 0 0 1em; }
+strong { font-weight: 700; }
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 700; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.15rem, 5vw, 3.6rem); line-height: 1.18; letter-spacing: -0.01em; }
+h2 { font-size: clamp(1.45rem, 3vw, 2rem); line-height: 1.35; }
+h3 { font-size: 1.16rem; line-height: 1.5; }
+h4 { font-size: 1rem; line-height: 1.55; }
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.masthead {
+  border-top: 4px solid var(--ink);
+  border-bottom: 1px solid var(--line-strong);
+  padding-block: 22px 28px;
+  display: grid;
+  gap: 20px;
+}
+.masthead .topline {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px 24px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+.dek {
+  max-width: 48em;
+  font-family: var(--font-display);
+  font-size: clamp(1.02rem, 1.8vw, 1.22rem);
+  line-height: 1.75;
+  color: var(--ink);
+}
+.meta-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+.meta-strip div {
+  background: var(--panel);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.meta-strip dt {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.meta-strip dd { margin: 0; font-size: 0.84rem; line-height: 1.5; }
+@media (max-width: 760px) {
+  .meta-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.layout {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 52px;
+  margin-top: 46px;
+}
+.toc {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+.toc .toc-title {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  color: var(--faint);
+  text-transform: uppercase;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+}
+.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+.toc li { counter-increment: toc; margin-bottom: 7px; }
+.toc a {
+  color: var(--muted);
+  text-decoration: none;
+  display: block;
+  padding-left: 24px;
+  position: relative;
+}
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--faint);
+}
+.toc a:hover { color: var(--accent); }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; gap: 30px; }
+  .toc { position: static; border: 1px solid var(--line); background: var(--panel); padding: 14px 16px; }
+  .toc ol { columns: 2; column-gap: 18px; }
+}
+@media (max-width: 520px) {
+  .toc ol { columns: 1; }
+}
+main { min-width: 0; }
+section { scroll-margin-top: 24px; margin-bottom: 58px; }
+.section-head {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 14px;
+  align-items: start;
+  border-top: 2px solid var(--ink);
+  padding-top: 14px;
+  margin-bottom: 22px;
+}
+.section-num {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  padding-top: 0.55em;
+}
+.section-head p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  max-width: 46em;
+}
+.lede { font-size: 1.02rem; }
+.callout {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  padding: 20px 22px;
+  margin: 22px 0;
+}
+.callout h3 { margin-bottom: 8px; }
+.callout p:last-child { margin-bottom: 0; }
+.note {
+  background: var(--panel-2);
+  border: 1px dashed var(--line-strong);
+  padding: 14px 16px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin: 18px 0;
+}
+.note strong { color: var(--ink); }
+.tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  color: var(--muted);
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.tag.obs { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 45%, transparent); background: var(--teal-soft); }
+.tag.inf { color: var(--purple); border-color: color-mix(in srgb, var(--purple) 45%, transparent); background: var(--purple-soft); }
+.tag.hi { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); background: var(--green-soft); }
+.tag.mid { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); background: var(--amber-soft); }
+.tag.lo { color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent); background: var(--red-soft); }
+.chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.v-effective { background: var(--green-soft); color: var(--green); }
+.v-partial { background: var(--teal-soft); color: var(--teal); }
+.v-ineffective { background: var(--amber-soft); color: var(--amber); }
+.v-notreached, .v-notimpl { background: var(--grey-soft); color: var(--muted); }
+.v-conflicting { background: var(--purple-soft); color: var(--purple); }
+.v-counter { background: var(--red-soft); color: var(--red); }
+.v-undet { background: var(--panel-2); color: var(--faint); border: 1px dashed var(--line-strong); }
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  margin: 18px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--line);
+}
+th {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--panel-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+tr:last-child td { border-bottom: 0; }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table-note { font-size: 0.78rem; color: var(--muted); margin-top: -8px; }
+.master-table { min-width: 880px; }
+.master-table td:nth-child(1) { width: 15%; font-weight: 600; }
+.master-table td:nth-child(2) { width: 20%; }
+.master-table td:nth-child(3) { width: 21%; }
+.master-table td:nth-child(4) { width: 24%; }
+.master-table td:nth-child(5) { width: 13%; }
+.master-table td:nth-child(6) { width: 7%; }
+
+.flow { margin: 22px 0; border: 1px solid var(--line); background: var(--panel); }
+.flow-step {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px 18px 16px 14px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.flow-step:last-child { border-bottom: 0; }
+.flow-step::before {
+  content: "";
+  position: absolute;
+  left: 36px;
+  top: 46px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--line-strong);
+}
+.flow-step:last-child::before { display: none; }
+.flow-num {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  display: grid;
+  place-items: center;
+  position: relative;
+  z-index: 1;
+  margin-top: 2px;
+}
+.flow-body { min-width: 0; }
+.flow-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin-bottom: 4px;
+}
+.flow-title h3 { font-size: 1rem; }
+.actor {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.actor.runtime { background: var(--grey-soft); color: var(--muted); }
+.actor.agent { background: var(--teal-soft); color: var(--teal); }
+.actor.writer { background: var(--accent-soft); color: var(--accent); }
+.actor.gate { background: var(--amber-soft); color: var(--amber); }
+.flow-body p { margin: 0 0 5px; font-size: 0.88rem; }
+.flow-body .why { color: var(--muted); font-size: 0.82rem; }
+.io {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.io span {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.stack {
+  display: flex;
+  height: 44px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  margin: 18px 0 8px;
+}
+.stack div { min-width: 2px; }
+.s-brief { background: var(--accent); }
+.s-intent { background: var(--teal); }
+.s-canon { background: var(--faint); }
+.s-craft { background: var(--amber); }
+.s-context { background: var(--purple); }
+.s-handoff { background: var(--red); }
+.legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 14px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.legend span { display: flex; align-items: baseline; gap: 6px; }
+.legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+@media (max-width: 560px) {
+  .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.metrics { display: grid; gap: 14px; margin: 18px 0; }
+.metric-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 70px;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.8rem;
+}
+.metric-row .label { color: var(--muted); }
+.metric-track { background: var(--panel-2); height: 18px; border-radius: 2px; overflow: hidden; }
+.metric-fill { height: 100%; background: var(--teal); }
+.metric-fill.alt { background: var(--accent); }
+.metric-row .value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink); }
+@media (max-width: 560px) {
+  .metric-row { grid-template-columns: 1fr 56px; }
+  .metric-row .label { grid-column: 1 / -1; }
+}
+
+.cause {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-left: 5px solid var(--accent);
+  padding: 20px 22px;
+  margin-bottom: 18px;
+}
+.cause.c2 { border-left-color: var(--red); }
+.cause.c3 { border-left-color: var(--amber); }
+.cause.c4 { border-left-color: var(--purple); }
+.cause.c5 { border-left-color: var(--teal); }
+.cause-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.cause-rank {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+.cause-grid {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 7px 14px;
+  font-size: 0.88rem;
+}
+.cause-grid dt {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  padding-top: 3px;
+}
+.cause-grid dd { margin: 0; min-width: 0; }
+@media (max-width: 520px) {
+  .cause-grid { grid-template-columns: 1fr; gap: 2px; }
+  .cause-grid dd { margin-bottom: 8px; }
+}
+
+.decisions { counter-reset: dec; display: grid; gap: 14px; margin: 20px 0; }
+.decision {
+  counter-increment: dec;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 18px 20px 18px 54px;
+  position: relative;
+}
+.decision::before {
+  content: counter(dec, decimal-leading-zero);
+  position: absolute;
+  left: 18px;
+  top: 19px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+.decision h3 { font-size: 1rem; margin-bottom: 6px; }
+.decision p { font-size: 0.88rem; margin-bottom: 6px; }
+.decision p:last-child { margin-bottom: 0; }
+.decision .verify { color: var(--muted); font-size: 0.82rem; }
+
+.qa { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.qa-item { border-bottom: 1px solid var(--line); padding: 16px 0; display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 12px; }
+.qa-q {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--accent);
+  padding-top: 4px;
+}
+.qa-item h3 { font-size: 1rem; margin-bottom: 5px; }
+.qa-item p { font-size: 0.9rem; margin-bottom: 5px; }
+.qa-item p:last-child { margin-bottom: 0; }
+
+ul.clean { margin: 0 0 1em; padding-left: 1.2em; }
+ul.clean li { margin-bottom: 0.45em; }
+.small { font-size: 0.82rem; color: var(--muted); }
+.footer {
+  border-top: 2px solid var(--ink);
+  padding-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--faint);
+  letter-spacing: 0.04em;
+}
+.paths { font-size: 0.78rem; line-height: 1.6; }
+.paths code { font-size: 0.72rem; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+</style>
+
+<div class="shell">
+  <header class="masthead">
+    <div class="topline">
+      <span>内部审计 · 只读 · 不实施</span>
+      <span>2026-10-22</span>
+      <span>范围：章回插件 / 写作理论 / 真实产物</span>
+    </div>
+    <div>
+      <div class="kicker">Chat 16 · 写作理论溯源与文学质量诊断</div>
+      <h1>章回写作机制审计</h1>
+    </div>
+    <p class="dek">这不是一次“多加几条理论”的建议。它要回答一个更窄的问题：章回导入的写作理论，究竟在哪一层生效、在哪一层失效，以及为什么产物在“一致性”上像一台机器，在“想让人翻下一章”上却不像一本小说。</p>
+    <dl class="meta-strip">
+      <div><dt>证据基线</dt><dd>Stage 3 盲评 3 章<br>Stage 1 lite 3 书 × 10 章<br>Stage 2 30 章运行记录</dd></div>
+      <div><dt>真实产物</dt><dd>《重返巅峰》三章<br>《海港旧信》第 1–2 章<br>Writer 包 / 审查 / 修订全链</dd></div>
+      <div><dt>方法</dt><dd>设计文档 + Git 史 + 源码 + Prompt + 正文 + 盲评交叉核对</dd></div>
+      <div><dt>本轮边界</dt><dd>未改代码、未建 PR、未跑 Benchmark、未执行 Full Write</dd></div>
+    </dl>
+  </header>
+
+  <div class="layout">
+    <nav class="toc" aria-label="目录">
+      <div class="toc-title">Contents</div>
+      <ol>
+        <li><a href="#verdict">先给结论</a></li>
+        <li><a href="#evidence">证据口径</a></li>
+        <li><a href="#flow">现在如何写一章</a></li>
+        <li><a href="#provenance">理论从哪来</a></li>
+        <li><a href="#matrix">理论有效性总表</a></li>
+        <li><a href="#gap">文学差距在哪里</a></li>
+        <li><a href="#causes">根因排序</a></li>
+        <li><a href="#route">最小改进路线</a></li>
+        <li><a href="#closing">收口七问</a></li>
+        <li><a href="#appendix">证据索引</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="verdict">
+        <div class="section-head">
+          <div class="section-num">00</div>
+          <div>
+            <h2>先给结论</h2>
+            <p>六条判断，按证据强度排序。每一条都能在后文找到对应产物或代码行；不能落到证据的，已标为推断。</p>
+          </div>
+        </div>
+
+        <div class="callout">
+          <h3>一、稳定可复现的差距是“阅读吸引力”，不是“文学质量”</h3>
+          <p>Stage 3 的三章盲评里，章回的文学质量均值 <strong>4.333</strong>，高于 Jarvis 的 <strong>4.167</strong>；人物/世界一致性 <strong>4.167</strong> 对 <strong>3.833</strong>；跨章连续性 <strong>4.083</strong> 对 <strong>4.000</strong>。唯一稳定落后的是阅读吸引力：<strong>2.750</strong> 对 <strong>3.833</strong>，两两比较都落后约 1.5 分。评委给的理由是具体的：“整章停在登录之前”“近乎静止”“把心理写得细但耗在自我盘问上”。</p>
+          <p class="small">证据：<code>zhanghui-benchmark/runs/return-to-peak-001/STAGE3-REPORT.md</code> 第五节。n=3，评委与 Writer 同为 <code>deepseek-v4.1-flash</code>，阅读吸引力存在 −1.5 / −1.67 / −0.17 的位置偏差，只能当方向性信号，不能当稳定排名。</p>
+        </div>
+
+        <div class="callout">
+          <h3>二、章回不是“理论不够”，而是理论被放在了错误的层</h3>
+          <p><strong>计划层过度机械化</strong>：15-beat 被逐章硬映射，前四章分别是 Opening Image、Theme Stated、Setup、Catalyst；另有一条 <code>chapter % 5</code> 的节奏循环，把第 1、2 章固定判为 <code>build_up</code>，指导语直接写“本章以铺压为主”。<strong>起草层关键机制没到达</strong>：Scene-Sequel 的 Sequel 字段被 600 字大纲截断切掉，爽点、信息释放、节奏曲线根本没有进入 Writer Prompt。<strong>审查层只验事实</strong>：八个维度全是设定、时间线、连贯、角色、逻辑、节拍、伏笔、禁抄，明确“不评价文笔质量”“不建议情节改动”。</p>
+          <p>所以答案不是“过度”或“不足”二选一，而是<strong>分阶段两者都有</strong>：计划阶段过度约束，起草阶段使用不足，审查与修订阶段结构性缺位。</p>
+        </div>
+
+        <div class="callout">
+          <h3>三、Stage 1 lite 的 3:0 是真实产物，但不能当作“文笔比较”</h3>
+          <p>该 run 的硬测试里章回 <strong>0/12</strong>，四个两两维度全部 0–3 落败。但打开稿件会发现：章回写的是“陆衍 / 074 号沉河案 / 残痕视界系统”，而种子要求的是“林越 / 临汐城 / 白塔事故”。三本书共用同一份 <code>immutable_seed</code>，只有章回完全脱离了它。这不是文笔输，而是<strong>作者意图与种子设定的整体丢失</strong>。该 run 应作为“运行完整性缺陷”记录，不能用来证明 Jarvis 文笔更好。</p>
+          <p class="small">证据：<code>runs/pilot-tide-archive-001/stage1-benchmark-lite-001/</code> 的 <code>final/stage1-benchmark-lite-summary.txt</code>、<code>reblind/private-map.json</code>、<code>hard-tests/BOOK-X9P/result.json</code> 与三份 manuscript 的 <code>immutable_seed</code>。</p>
+        </div>
+
+        <div class="callout">
+          <h3>四、“静止”是计划出来的，不是 Writer 临时写坏的</h3>
+          <p>《重返巅峰》第 1 章的卷级节拍表把该章定为 Opening Image，并明确写“反派层级：无（仅环境/内心）”，目标是“做一个决定”，还禁止游戏战斗、禁止韩澈出场、禁止金手指。Writer 忠实执行了这个设计。《海港旧信》第 2 章同样如此：卷级节拍是 Theme Stated，正文是三段查资料，唯一的推进维度是“信息”。</p>
+          <p>规划不是没有约束，而是<strong>约束的方向错了</strong>：它约束“不要发生什么”，却没有约束“这一章必须让谁付出什么代价”。</p>
+        </div>
+
+        <div class="callout">
+          <h3>五、审查与修订闭环结构上看不见文学问题</h3>
+          <p>Reviewer 只查 8 个事实维度，所有 raw findings 强制 <code>blocking=false</code>；craft 类问题一律 <code>ADVISORY</code>，修订计划只收 <code>PROSE_EDIT</code>。第 2 章的 5 条发现里，0 阻断、0 高优，唯一像文学问题的“Sequel 决断拍缺失”被明确 deferred；实际进入修订的 4 条全是事实一致性。分数是“100 减去缺陷罚分”，文档自己写着“100 表示没有检测到缺陷，不是文学质量”。</p>
+          <p>于是系统可以在一个“近乎静止”的章节上给出 78 分，并报告“无阻断”。这不是审查器不努力，而是它的职责定义里根本没有“这一章好不好看”。</p>
+        </div>
+
+        <div class="callout">
+          <h3>六、主责在规划层与度量层，不在 Writer</h3>
+          <p>Writer 拿到的盲评文学分是三家里最高的，文字也确实是《海港旧信》里最扎实的部分。它的问题是被放进了一个“不许有对手、不许有代价、只许推进信息”的章节任务书里。把责任推给 Writer，会掩盖真正的机制问题：<strong>章节没有被要求成为一个戏剧单位</strong>。</p>
+        </div>
+      </section>
+
+      <section id="evidence">
+        <div class="section-head">
+          <div class="section-num">01</div>
+          <div>
+            <h2>证据口径</h2>
+            <p>先说明哪些证据能支持什么结论。这一节决定了后文的置信度标注。</p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>证据</th><th>能证明</th><th>不能证明</th><th>使用方式</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>Stage 3 盲评</strong><br><span class="small">3 章，双序，位置平衡</span></td>
+                <td>三系统在“文学质量 / 阅读吸引力 / 一致性 / 连续性 / 意图遵循”上的方向性差异；评委给出的具体文本理由。</td>
+                <td>稳定排名。n=3；评委与 Writer 同模型；阅读吸引力位置偏差与效应量同量级。</td>
+                <td>作为“追读落后”的主证据；文学分只作参照，不作胜负结论。</td>
+              </tr>
+              <tr>
+                <td><strong>Stage 1 lite</strong><br><span class="small">3 书 × 10 章，硬测试 12 题</span></td>
+                <td>章回在该 run 中完全脱离种子；硬事实题 0/12；两两比较 0–3。</td>
+                <td>文笔优劣。章回稿件是另一本书，比较对象已经不同。</td>
+                <td>作为“运行完整性 / 种子遵循”缺陷记录；不进入文学质量结论。</td>
+              </tr>
+              <tr>
+                <td><strong>Stage 2 30 章</strong><br><span class="small">章回 1/30 即 HALT</span></td>
+                <td>长程运行在规范化事实冲突上会停；Jarvis 与 ANG 能跑完 30 章。</td>
+                <td>文学质量差异。章回没有产出 30 章可比较文本。</td>
+                <td>作为“工程稳定性 / 长程成本”背景，不作为文学诊断主证据。</td>
+              </tr>
+              <tr>
+                <td><strong>真实章节与运行产物</strong><br><span class="small">Writer Prompt、正文、review、revision plan、judge</span></td>
+                <td>Writer 实际看到了什么；审查实际报了什么；修订实际改了什么。</td>
+                <td>“如果换一种写法会更好”的反事实。需要控制实验。</td>
+                <td>本报告最主要的一手证据。</td>
+              </tr>
+              <tr>
+                <td><strong>代码与设计文档</strong><br><span class="small">2026-08-14 设计稿、Git 史、当前实现</span></td>
+                <td>理论原本要解决什么；哪些被保留、降级、删除或只停留在文档。</td>
+                <td>作者的真实意图之外的因果。历史文档可能已过期。</td>
+                <td>用于溯源与“设计 → 实现”的偏差定位。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note">
+          <strong>事实与推断的分界。</strong>“正文里没有对话 / 没有当页对手 / 某一章是三段查资料”是观测；“这导致读者不想翻下一页”是推断。后文凡出现因果判断，都会标 <span class="tag inf">推断</span> 与置信度；没有控制实验的地方，不把推断写成事实。
+        </div>
+      </section>
+
+      <section id="flow">
+        <div class="section-head">
+          <div class="section-num">02</div>
+          <div>
+            <h2>现在如何写一章</h2>
+            <p>从用户输入到正式正文。每一步都标了执行者、输入输出、生效的理论，以及“为什么当初这样设计”。</p>
+          </div>
+        </div>
+
+        <p class="lede">主链路在 <code>skills/webnovel-write/SKILL.md</code>。核心设计是“单一只读包”：Context Agent 产出一份创作任务书，Runtime 把它封进 WriterPackage，Writer 只允许读这一份渲染后的 Prompt，禁止再拼装或追加零散提示。这个设计解决了早期“多来源提示互相打架”的问题，也带来一个副作用：<strong>包里有什么，Writer 就只能看见什么；包里被截断的，Writer 永远看不见。</strong></p>
+
+        <div class="flow">
+          <div class="flow-step">
+            <div class="flow-num">0</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>入口与前置检查</h3><span class="actor runtime">Skill / runtime</span></div>
+              <p>用户执行 <code>/zhanghui:write</code>。Step 0 检查项目状态、目标章、前章是否 accepted、运行时是否可写。</p>
+              <p class="why">为什么：防止在未提交的前章上继续写，避免“正文在跑、账本没跟上”。</p>
+              <div class="io"><span>输入：章号 / 项目根</span><span>输出：可写状态</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">1A</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>运行时合同与治理上下文</h3><span class="actor runtime">story-system</span></div>
+              <p><code>story-system --persist --emit-runtime-contracts</code> → <code>write-gate prewrite</code> → <code>runtime prepare</code> → <code>runtime governed-context</code>。产出 Canon、Intent、Craft、Reader Signal、genre profile、writing guidance。</p>
+              <p class="why">为什么：把“可写事实”和“创作意图”分开，先冻结事实，再让创作层引用。问题在于，这一层同时把节奏、题材、审查趋势等启发式也算了进来，而它们的质量参差不齐。</p>
+              <div class="io"><span>输出：governed_context.json</span><span>输出：prewrite 校验</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">1B</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>Context Agent 写创作任务书</h3><span class="actor agent">context-agent</span></div>
+              <p>消费 CANON / INTENT / CRAFT / REFERENCE，产出五段式 Creative Brief：本章要发生什么、人物怎么动、场景怎么走、信息怎么放、章末怎么收。</p>
+              <p class="why">为什么：把“研究”与“写作”分离，让 Writer 不必自己翻档案，减少事实漂移。副作用是任务的“戏剧设计”也被前置固化：Brief 写得越细，Writer 越没有空间把一章变成一个真正的场景。</p>
+              <div class="io"><span>输出：creative_brief</span><span>实际大小：9,983 B（ch1）→ 13,302 B（ch2）</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">1C</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>封包与渲染唯一的 Writer Prompt</h3><span class="actor runtime">runtime attach-creative-brief</span></div>
+              <p>把 Brief 封进 WriterPackage，调用 <code>to_writer_prompt()</code> 渲染六层：Story Identity、Current Intent、Governed Canon、Creative Brief、Constraints &amp; Craft、Writer Context，末尾附 Handoff Protocol。</p>
+              <p class="why">为什么：保证 Claude Skill Writer 与外部 Host Writer 看到逐字相同的输入，避免“同一个项目两种写法”。</p>
+              <div class="io"><span>输出：writer_prompt_000N.txt</span><span>海港旧信 ch2：28,991 B</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">2A</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>Writer 起草</h3><span class="actor writer">Writer</span></div>
+              <p>只读 <code>writer_prompt_000N.txt</code>，输出正文 + <code>&lt;chapter_changes&gt;</code> 结构化提案块。Skill 明确“禁止并步 / 跳步 / 自创模式”“严禁重新拼装 Writer Prompt”。</p>
+              <p class="why">为什么：把创作收束为单次生成，减少多轮拼接带来的事实漂移。代价是：如果 Prompt 里的章节设计是静止的，Writer 只能把静止写得很好。</p>
+              <div class="io"><span>输出：draft 正文</span><span>输出：chapter_changes</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">2B</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>文风适配、正文校验、语义判定</h3><span class="actor gate">style adapter + judge</span></div>
+              <p>风格适配与 <code>prose validate</code> 之后，Semantic Judge 比较 before/after，输出 <code>STYLE_ONLY_SAFE</code> / <code>SEMANTIC_CHANGE_PROPOSED</code> / <code>UNCERTAIN</code>。</p>
+              <p class="why">为什么：润色最容易悄悄改事实，语义判定是为了在“去 AI 味”与“别改设定”之间设一道闸。</p>
+              <p class="small">观测：海港旧信 ch2 的 judge  verdict 为 <code>STYLE_ONLY_SAFE</code>，<code>changes=[]</code>，Step 2B 实际近乎空操作；ch1 则出现整段编号与时间被改写、再由 Step 4 回退的情况。判定由 Writer 同模型的宿主执行，属于自审。</p>
+              <div class="io"><span>输出：candidate prose</span><span>输出：judge verdict</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">3</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>Reviewer 事实审查</h3><span class="actor agent">reviewer</span></div>
+              <p>只查 8 个维度：setting / timeline / continuity / character / logic / beat_compliance / foreshadow_compliance / do_not_copy_violation。所有 raw findings <code>blocking=false</code>；明确“不评价文笔质量”“不建议情节改动”。</p>
+              <p class="why">为什么：早期 Reviewer 曾因“文笔不好”“这里该加反转”这类主观判断制造大量无法收敛的争论，2026-10-08 的 <code>67bb4c2</code> 把 craft / style 全部降为 advisory，Reviewer 被重新定义成“章节事实审查员”。这是自觉的设计选择，不是遗漏。</p>
+              <div class="io"><span>输出：review_results.json</span><span>输出：dimension_results</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">4</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>修订计划与局部改写</h3><span class="actor gate">revision planner</span></div>
+              <p><code>revise plan</code> 按 owner 分流：只有 <code>PROSE_EDIT</code> 进入正文；<code>ARTIFACT_REPAIR</code> / <code>GOVERNANCE_REPAIR</code> 走账本；craft 类一律 <code>ADVISORY</code>，提示“仅记录建议”。自动修订预算最多 2 轮。</p>
+              <p class="why">为什么：保护 Canon，避免为了“清零 advisory”反复改写正文。预算收缩的直接证据是 2026-10-21 第 4 章 Full Write：额外 2 轮花掉 730.9 s，占总墙钟 67%，而 gate 结果没有变化。</p>
+              <div class="io"><span>输出：revision_plan.json</span><span>输出：revised prose</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">4.5</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>changes gate 与 anti-slop advisory</h3><span class="actor gate">changes_gate</span></div>
+              <p>核对 <code>chapter_changes</code> 与正文是否一致；anti-slop 双引擎只做 advisory 扫描，不阻断。</p>
+              <p class="why">为什么：状态变更必须可追溯；去 AI 味是风格问题，不应升级为事实阻断。</p>
+              <div class="io"><span>输出：changes 校验</span><span>输出：anti-slop 报告</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">5</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>Data Agent、对账、ChapterCommit</h3><span class="actor agent">data-agent</span></div>
+              <p>从最终正文提取事实，生成 commit artifacts，对账后提交。未落库 <code>review_metrics</code> 不得进入 Step 5。</p>
+              <p class="why">为什么：正文是唯一事实源，账本必须从正文反推，而不是从计划复制。</p>
+              <div class="io"><span>输出：commit</span><span>输出：index / projection</span></div>
+            </div>
+          </div>
+
+          <div class="flow-step">
+            <div class="flow-num">5.5</div>
+            <div class="flow-body">
+              <div class="flow-title"><h3>发布与备份</h3><span class="actor runtime">publish + backup</span></div>
+              <p>正式发布门禁通过后写入 accepted 正文，生成备份。</p>
+              <div class="io"><span>输出：accepted 章节</span><span>输出：backup</span></div>
+            </div>
+          </div>
+        </div>
+
+        <h3 style="margin-top:34px">Writer 真正看到了什么</h3>
+        <p>以《海港旧信》第 2 章的 <code>writer_prompt_0002.txt</code> 为例，28,991 字节的构成如下。创作任务书接近一半，交付协议与上下文线索合计超过四分之一，真正的事实与意图只占不到两成。</p>
+
+        <div class="stack" role="img" aria-label="Writer Prompt 字节构成：意图 8.9%，Canon 9.9%，创作任务书 45.9%，约束与工艺 7.2%，Writer Context 17.8%，交付协议 10.0%">
+          <div class="s-intent" style="width:8.9%"></div>
+          <div class="s-canon" style="width:9.9%"></div>
+          <div class="s-brief" style="width:45.9%"></div>
+          <div class="s-craft" style="width:7.2%"></div>
+          <div class="s-context" style="width:17.8%"></div>
+          <div class="s-handoff" style="width:10.0%"></div>
+        </div>
+        <div class="legend">
+          <span><i class="s-intent"></i>本章写作意图 8.9%</span>
+          <span><i class="s-canon"></i>治理事实 9.9%</span>
+          <span><i class="s-brief"></i>创作任务书 45.9%</span>
+          <span><i class="s-craft"></i>约束与工艺 7.2%</span>
+          <span><i class="s-context"></i>前情线索 17.8%</span>
+          <span><i class="s-handoff"></i>正文交付协议 10.0%</span>
+        </div>
+        <p class="table-note">字节数由本轮只读统计得出，按 Prompt 的六个一级标题切分。占比不等于注意力占比，但它决定了 Writer 必须先读完什么。</p>
+
+        <div class="table-wrap" style="margin-top:22px">
+          <table>
+            <thead><tr><th>层</th><th>本应提供</th><th>实际缺陷</th><th>后果</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Current Intent</strong></td><td>核心目标、阻力、代价、钩子、必须节点</td><td>大纲被截断为前 600 字，<code>sequel_dilemma</code> / <code>sequel_decision</code> 永远落在截断之外。</td><td>Scene-Sequel 只剩 Scene；人物在场景结束后没有“消化与决断”。</td></tr>
+              <tr><td><strong>Governed Canon</strong></td><td>登场角色、当前状态、已确认事实</td><td><code>appearing_characters</code> 只有 <code>entity_id</code>，渲染代码找不到 <code>name</code> / <code>id</code>，于是输出 8 行“- 角色”；<code>canon_items</code> 的 <code>content</code> 是字典，直接以 Python repr 打印。</td><td>Writer 拿到的是“角色”占位符和 <code>{'entity_id': 'xu_zhiyuan', ...}</code>，不是可用的人物状态。</td></tr>
+              <tr><td><strong>Constraints &amp; Craft</strong></td><td>题材指引、节奏策略、工艺建议</td><td>项目正典题材是“悬疑”，但 <code>primary_genre</code> 写的是“规则动物园”，解析成了 <code>rules-mystery</code>（规则怪谈）；<code>chapter % 5</code> 把第 2 章判成 <code>build_up</code>，指导语为“本章以铺压为主”。</td><td>一本现实向悬疑，被塞进了规则怪谈的“规则先于解释、代价先于胜利”和“先铺压”的创作策略。</td></tr>
+              <tr><td><strong>Writer Context</strong></td><td>前情摘要、紧急伏笔、参考依据</td><td>直接 dump <code>story_craft.foreshadow_chain.N.*</code> 路径；33 条参考项只渲染 3 条。</td><td>上下文占比不小，但可读的有效信息密度低。</td></tr>
+              <tr><td><strong>Handoff Protocol</strong></td><td>8 字段 CHANGES 协议、枚举、R3 规则</td><td>约 2.9 KB，占 10%，包含大量“不要写什么”的格式约束。</td><td>写作注意力被格式合规分走；这是为账本服务的，不是为小说服务的。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note">
+          <strong>设计意图不等于执行效果。</strong>“单一只读包”在工程上是对的：它消除了多来源冲突，让每次生成可复现。但它同时把“计划的质量”放大成了“正文的上限”。当计划把一章定义成“无对手的铺垫”，Writer 的忠实反而成了缺点。
+        </div>
+      </section>
+
+      <section id="provenance">
+        <div class="section-head">
+          <div class="section-num">03</div>
+          <div>
+            <h2>理论从哪来，后来变成了什么</h2>
+            <p>不是通用写作理论清单，而是这个仓库真实发生过的导入、强制、降级与失修。</p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>时间</th><th>提交 / 文档</th><th>发生了什么</th><th>对文学机制的影响</th></tr></thead>
+            <tbody>
+              <tr><td class="num">2026-08-14</td><td><code>a085978</code></td><td>新增 <code>story-craft-engine</code> 设计稿：Tier 1 八机制、Tier 2/3 备选、Tier 4 明确拒绝。</td><td>理论被一次性大量导入，但设计稿本身已区分“v1 必做 / v2 以后 / 只做参考”。</td></tr>
+              <tr><td class="num">2026-08-14</td><td><code>42ae0fb</code></td><td>设计稿自审修订，澄清 v1/v2 与深度限制。</td><td>说明作者当时就知道“不能全上”，但后续实现仍偏向把 Tier 1 全部变成必填。</td></tr>
+              <tr><td class="num">2026-08-14</td><td><code>79d534c</code></td><td>新增 8 篇 <code>references/shared/</code> 参考文档。</td><td>理论从“文档”进入“可被 Skill 引用的规则库”。</td></tr>
+              <tr><td class="num">2026-08-14</td><td><code>8ad588a</code></td><td>Plan Step 4.5：强制生成 15-beat 卷级节拍表。</td><td>Save the Cat 从参考变成硬规划步骤；卷级结构开始决定章级任务。</td></tr>
+              <tr><td class="num">2026-08-14</td><td><code>7ba848d</code></td><td>Plan Step 7：Scene-Sequel + beat 字段变为必填。</td><td>Dwight Swain 进入章纲；但校验只查字段存在，不查 Sequel 是否真的写进正文。</td></tr>
+              <tr><td class="num">2026-08-14</td><td><code>5ca569a</code> / <code>1541a06</code></td><td>Reviewer 集成 story_craft 检查，扩展到 7 维。</td><td>节拍与伏笔开始被审查，但审查对象是“合规”，不是“好看”。</td></tr>
+              <tr><td class="num">2026-10-08</td><td><code>67bb4c2</code></td><td>“keep craft and style findings advisory”：craft / beat / foreshadow / rhythm / hook / style / anti-slop 全部降为 advisory；<code>review_schema</code> 强制 <code>blocking=false</code>。</td><td><strong>关键转折。</strong>文学相关发现从此不能阻断、不能进入正文修订。系统正式变成“事实审查器 + 风格扫描器”。</td></tr>
+              <tr><td class="num">2026-10-20</td><td><code>30d6539</code> / <code>362e9cf</code></td><td>两轮审计修复，继续修补 advisory 链路。</td><td>没有恢复文学判断，只让 advisory 更稳定。</td></tr>
+              <tr><td class="num">2026-10-21</td><td>Full Write ch4 证据</td><td>额外 2 轮修订 730.9 s，占 1090 s 的 67%，gate 未变；随后把自动修订预算压到 2 轮。</td><td>系统自己承认“多轮审改不等于更好”，但只修了预算，没有改审改的对象。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>这条时间线解释了一个表面矛盾：为什么导入了这么多理论，正文却越来越“稳而平”。因为理论在 8 月被强制进计划，在 10 月又被主动降级出修订。<strong>它只保留了“计划时约束你”，取消了“写完后判断你”。</strong>计划层越来越硬，反馈层越来越软，最后只剩下事实一致性是硬的。</p>
+
+        <h3 style="margin-top:30px">被导入的理论，后来的真实去向</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>理论</th><th>原始设计目标</th><th>今天的真实位置</th></tr></thead>
+            <tbody>
+              <tr><td>Save the Cat 15-beat</td><td>给整卷一个可执行的商业节奏骨架</td><td>Plan Step 4.5 强制生成；<code>check_volume_beat</code> 只查“是否填了”；章级任务由 beat 位置决定。</td></tr>
+              <tr><td>Scene-Sequel</td><td>让每一章有“目标 → 冲突 → 挫折 → 反应 → 两难 → 决断”</td><td>章纲 Step 7 必填；Writer Prompt 的 600 字截断把 Sequel 切掉；Reviewer 能报缺失，但只作 advisory。</td></tr>
+              <tr><td>MRU（Motivation-Reaction Unit）</td><td>把“刺激 → 反应”写成可读的微观节拍</td><td>实现代码 0 处引用；只在设计稿里出现过。</td></tr>
+              <tr><td>Goal / Conflict / Disaster</td><td>每个场景都要有目标、阻力、坏结果</td><td>章纲字段存在；正文没有强制“当页对手”；“信息推进”可以单独满足推进义务。</td></tr>
+              <tr><td>人物欲望 / 动机 / 弧光</td><td>让主角的选择有内在根据</td><td><code>character_arc</code> 写入 state，Writer Prompt 会渲染；但它是卷级静态描述，不是章级动作要求。</td></tr>
+              <tr><td>章节节奏 / 悬念曲线</td><td>控制高压与缓和的分布，防止连续平路</td><td><code>rhythm_curve</code> 有数据结构，<code>record_emotion_peak</code> / <code>increment_chapters_since_peak</code> 没有运行时调用者；两章后 <code>history</code> 仍为空。</td></tr>
+              <tr><td>伏笔 / 草蛇灰线</td><td>埋设、提醒、回收形成可追踪的期待</td><td>9 条伏笔链；Writer 只在 <code>expected_payoff_chapter == 本章</code> 时看到回收项，埋设项通常不出现。</td></tr>
+              <tr><td>限时锁</td><td>用截止章制造紧迫感</td><td>Plan 初始化；Writer 只看 <code>deadline &lt;= 本章 + 1</code> 的 active 锁；<code>fulfill-lock</code> 在流程后段，导致审查时读到旧状态并重复报逾期。</td></tr>
+              <tr><td>Show, don’t tell / 去 AI 味</td><td>让叙述呈现而不是总结</td><td>anti-slop 双引擎 + 风格适配；只在 detector 指标上有效，不进入文学判断。</td></tr>
+              <tr><td>爽点 / 期待管理 / 信息释放 / 追读</td><td>网文最核心的连载动力</td><td>爽点指南存在；<code>reader_contract.expectation_debt</code> 为空；<code>cool_point</code> 只在 status reporter 统计；Writer Prompt 没有“本章爽点/期待债务”层。</td></tr>
+              <tr><td>6 种章末钩子</td><td>每章结尾给一个可复述的下一章理由</td><td><code>hook_type</code> 在章纲与 meta 中存在；Writer Prompt 按条件渲染；Reviewer 不判断钩子强度。</td></tr>
+              <tr><td>Strand Weave（Quest / Fire / Constellation）</td><td>三条线交替，防止单线疲劳</td><td>只在 <code>status_reporter</code> 做统计；不进入 Writer。</td></tr>
+              <tr><td>主题回声</td><td>同一命题在不同章节以不同事件回响</td><td>配置了 4 个回声点（第 5/12/19/24 章）；命中章会渲染，前四章没有。</td></tr>
+              <tr><td>红楼梦 5 谶语 / 章回体留白</td><td>用谶语与留白制造二读空间</td><td>设计稿提及；实现中无独立机制。</td></tr>
+              <tr><td>Truby 7 keys / McKee value ± / Mystery Box / Hero’s Journey / 三幕硬约束</td><td>更丰富的结构工具</td><td>设计稿列为 Tier 2/3 或 Tier 4 拒绝；实现代码 0 引用。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="matrix">
+        <div class="section-head">
+          <div class="section-num">04</div>
+          <div>
+            <h2>理论有效性总表</h2>
+            <p>判定标准只有一条：有没有在真实正文里产生可指认的文学效果。理论名出现在 Prompt 里，不算；Reviewer 给高分，不算。</p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="master-table">
+            <thead>
+              <tr><th>理论</th><th>原始设计目标</th><th>当前实现位置</th><th>实际执行证据</th><th>文学效果</th><th>判定</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>15-beat / Save the Cat</td>
+                <td>给整卷一个商业节奏骨架，让高潮与转折有位置</td>
+                <td>Plan Step 4.5；<code>state.story_craft.volume_beat</code>；<code>check_volume_beat</code></td>
+                <td>《海港旧信》24 章节拍表已填满：ch1 Opening Image、ch2 Theme Stated、ch3 Setup、ch4 Catalyst。《重返巅峰》ch1 明确“反派层级：无”，目标为“做一个决定”。</td>
+                <td>卷级骨架成立；章级被压成“前四章都在准备”，第 1 章没有当页对手。</td>
+                <td><span class="chip v-conflicting">CONFLICTING</span></td>
+              </tr>
+              <tr>
+                <td>Scene-Sequel</td>
+                <td>每章有目标、冲突、挫折，以及反应、两难、决断</td>
+                <td>Plan Step 7 必填；<code>chapter_runtime.py</code> 渲染 Intent</td>
+                <td>章纲字段齐全；Writer Prompt 只取大纲前 600 字，Sequel 字段落在截断外。第 2 章 review 明确报“Sequel 决断拍缺失”，随后 deferred。</td>
+                <td>Scene 被写出来，Sequel 没有到达 Writer；章末只剩钩子台词，没有人物消化。</td>
+                <td><span class="chip v-ineffective">INEFFECTIVE</span></td>
+              </tr>
+              <tr>
+                <td>MRU / Motivation-Reaction</td>
+                <td>用“刺激 → 反应”的微观顺序减少抽象叙述</td>
+                <td>无</td>
+                <td>脚本、Skill、Agent 中 0 处引用；仅设计稿提及。</td>
+                <td>无</td>
+                <td><span class="chip v-notimpl">NOT_IMPLEMENTED</span></td>
+              </tr>
+              <tr>
+                <td>Goal / Conflict / Disaster</td>
+                <td>每个场景都有可指认的目标、阻力与坏结果</td>
+                <td>章纲 <code>scene_goal/conflict/setback/resolution</code>；<code>progress_obligation</code></td>
+                <td>字段存在，但“信息推进”可以单独满足推进义务；第 2 章三段查资料即通过；Reviewer 不检查“当页对手”。</td>
+                <td>目标被写成“查清一个日期”，阻力是制度流程，没有人物对抗与代价。</td>
+                <td><span class="chip v-ineffective">INEFFECTIVE</span></td>
+              </tr>
+              <tr>
+                <td>人物欲望 / 动机 / 弧光</td>
+                <td>让主角的每个选择都能追溯到欲望与恐惧</td>
+                <td><code>story_craft.character_arc</code>；Writer Prompt 的 Story Craft 段</td>
+                <td>许知远的弧光写得很完整：从“信任记录”到“信任可复算的东西”；但它是卷级静态描述，第 2 章的选择没有被弧光约束。</td>
+                <td>人物有设定，没有章级“因为想要 X，所以选择 Y”的可见动作。</td>
+                <td><span class="chip v-undet">UNDETERMINED</span></td>
+              </tr>
+              <tr>
+                <td>节奏曲线 / 悬念分布</td>
+                <td>控制高压与缓和的分布，避免连续平路</td>
+                <td><code>rhythm_curve</code>；<code>record_emotion_peak</code>；<code>increment_chapters_since_peak</code></td>
+                <td>两个更新函数在运行时没有调用者；两章 accepted 后 <code>history=[]</code>、<code>last_emotion_peak_chapter=0</code>。Writer Prompt 的警示分支永远不会触发。</td>
+                <td>无。结构存在，数据永远为空。</td>
+                <td><span class="chip v-notreached">NOT_REACHED</span></td>
+              </tr>
+              <tr>
+                <td>伏笔 / 草蛇灰线</td>
+                <td>埋设、提醒、回收形成可追踪的期待</td>
+                <td><code>foreshadow_chain</code> 9 条；Writer Prompt 仅在回收章渲染</td>
+                <td>第 2 章 Writer 看到的是 <code>story_craft.foreshadow_chain.N.*</code> 原始路径；埋设项没有以可读文本进入任务书。</td>
+                <td>伏笔在账本里存在，在正文里靠 Context Agent 二次解释；机制本身没有减轻 Writer 的负担。</td>
+                <td><span class="chip v-partial">PARTIAL</span></td>
+              </tr>
+              <tr>
+                <td>限时锁</td>
+                <td>用截止章制造紧迫感与可验证的承诺</td>
+                <td>Plan 初始化；<code>check-volume</code> / <code>fulfill-lock</code></td>
+                <td>TL-004 在 review 里被报为 active、逾期，且同一问题重复两条；<code>state.json</code> 后来显示它已在第 1 章 fulfilled。审查读到的是旧状态。</td>
+                <td>没有产生紧迫感，产生了重复的无效 finding。</td>
+                <td><span class="chip v-counter">COUNTERPRODUCTIVE</span></td>
+              </tr>
+              <tr>
+                <td>Show, don’t tell / 去 AI 味</td>
+                <td>让叙述呈现而不是总结，降低机械感</td>
+                <td>anti-slop 双引擎；style adapter；Step 4.6</td>
+                <td><code>summary_ab.json</code> 显示 detector 问题数多数下降（ch1 2→1，ch4 1→0，ch10 2→1）；但这不是盲评文学质量的 A/B。</td>
+                <td>在“可计算的 AI 味指标”上有效；对事件密度、人物 agency、追读没有可证实效果。</td>
+                <td><span class="chip v-effective">EFFECTIVE</span><span class="small">（仅指标）</span></td>
+              </tr>
+              <tr>
+                <td>爽点 / cool points</td>
+                <td>每章给读者一次可感知的收益或反转</td>
+                <td><code>status_reporter</code> 统计；<code>references/shared/cool-points-guide.md</code></td>
+                <td>Writer Prompt 没有爽点层；<code>reader_contract.expectation_debt=[]</code>；第 2 章的“收益”只是抄到一行日期。</td>
+                <td>无</td>
+                <td><span class="chip v-notreached">NOT_REACHED</span></td>
+              </tr>
+              <tr>
+                <td>信息释放 / 期待管理 / 追读</td>
+                <td>控制读者知道什么、还欠读者什么，形成下一章动机</td>
+                <td>无独立机制；<code>reader_contract</code> 字段存在但为空</td>
+                <td>第 2 章章末钩子是梁沐一句“那批设备是事故之后统一换的”，随后继续拧螺丝；没有人物反应与决断。</td>
+                <td>信息被释放了，期待没有被记账，也没有被兑现。</td>
+                <td><span class="chip v-notimpl">NOT_IMPLEMENTED</span></td>
+              </tr>
+              <tr>
+                <td>6 种章末钩子</td>
+                <td>每章结尾给一个可复述的下一章理由</td>
+                <td>章纲 <code>hook_type</code>；<code>chapter_meta.hook</code></td>
+                <td>字段存在；Writer Prompt 按条件渲染；Reviewer 不判断钩子强度，只判断事实。</td>
+                <td>钩子被写出来，但没有被评估“是否真的拉人”。</td>
+                <td><span class="chip v-partial">PARTIAL</span></td>
+              </tr>
+              <tr>
+                <td>Strand Weave</td>
+                <td>三条线交替推进，防止单线疲劳</td>
+                <td><code>status_reporter.analyze_strand_weave</code></td>
+                <td>只在状态报告里统计；Writer 不消费。</td>
+                <td>无</td>
+                <td><span class="chip v-notreached">NOT_REACHED</span></td>
+              </tr>
+              <tr>
+                <td>主题回声</td>
+                <td>同一命题在不同章节以不同事件回响</td>
+                <td><code>thematic_echoes</code>；Writer Prompt 命中章渲染</td>
+                <td>4 个回声点：第 5/12/19/24 章；前四章没有。第 2 章的“记录可以被换掉”只由梁沐一句台词点出。</td>
+                <td>设计成立，但在最需要建立主题的开篇没有密度。</td>
+                <td><span class="chip v-undet">UNDETERMINED</span></td>
+              </tr>
+              <tr>
+                <td>红楼梦 5 谶语</td>
+                <td>用谶语制造二读空间</td>
+                <td>设计稿 Tier 1</td>
+                <td>无独立实现；伏笔链可勉强承载，但没有“谶语”语义。</td>
+                <td>无</td>
+                <td><span class="chip v-notimpl">NOT_IMPLEMENTED</span></td>
+              </tr>
+              <tr>
+                <td>Truby 7 keys</td>
+                <td>用七把钥匙检查故事的内在逻辑</td>
+                <td>设计稿 Tier 2</td>
+                <td>代码 0 引用。</td>
+                <td>无</td>
+                <td><span class="chip v-notimpl">NOT_IMPLEMENTED</span></td>
+              </tr>
+              <tr>
+                <td>McKee value ±</td>
+                <td>每个场景结束时价值电荷要翻转</td>
+                <td>设计稿 Tier 2</td>
+                <td>代码 0 引用。</td>
+                <td>无</td>
+                <td><span class="chip v-notimpl">NOT_IMPLEMENTED</span></td>
+              </tr>
+              <tr>
+                <td>Mystery Box</td>
+                <td>用未知问题驱动持续阅读</td>
+                <td>设计稿 Tier 2</td>
+                <td>代码 0 引用。</td>
+                <td>无</td>
+                <td><span class="chip v-notimpl">NOT_IMPLEMENTED</span></td>
+              </tr>
+              <tr>
+                <td>Hero’s Journey</td>
+                <td>给成长型故事一个跨卷阶段模型</td>
+                <td>设计稿 Tier 3</td>
+                <td>实现中仅 1 处提及，未形成机制。</td>
+                <td>无</td>
+                <td><span class="chip v-notimpl">NOT_IMPLEMENTED</span></td>
+              </tr>
+              <tr>
+                <td>三幕硬约束</td>
+                <td>用幕结构保证冲突升级</td>
+                <td>设计稿 Tier 4，明确拒绝</td>
+                <td>无实现。</td>
+                <td>无。拒绝是合理的，但替代方案没有补上章级冲突。</td>
+                <td><span class="chip v-notimpl">NOT_IMPLEMENTED</span></td>
+              </tr>
+              <tr>
+                <td>3000 字章高光结构</td>
+                <td>10% 钩子 / 50% 发展 / 33% 高潮 / 7% 尾钩</td>
+                <td><code>skills/webnovel-plan/references/outlining/chapter-planning.md</code></td>
+                <td>文档要求“每章是一个小故事，有高潮”；但 Plan Step 7.5 的校验不检查 high point，只检查 beat/Scene 字段。</td>
+                <td>文档与 15-beat 的前四章铺陈直接冲突；实现选择了 15-beat。</td>
+                <td><span class="chip v-conflicting">CONFLICTING</span></td>
+              </tr>
+              <tr>
+                <td>章回体留白</td>
+                <td>用省略与留白让读者参与</td>
+                <td>设计稿提及</td>
+                <td>无独立实现；正文的留白更多来自 Writer 的文风，不是系统机制。</td>
+                <td>不可归因于系统。</td>
+                <td><span class="chip v-notimpl">NOT_IMPLEMENTED</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="table-note">判定口径：EFFECTIVE = 有可指认的执行与效果；PARTIAL = 部分到达、部分失效；INEFFECTIVE = 到达了但没产生目标效果；NOT_REACHED = 有实现但运行时没被喂数据/没进入 Writer；NOT_IMPLEMENTED = 只在文档或设计稿；CONFLICTING = 与另一条生效规则互相抵消；COUNTERPRODUCTIVE = 产生反向噪音；UNDETERMINED = 证据不足。</p>
+
+        <div class="callout" style="margin-top:24px">
+          <h3>盘点结果</h3>
+          <p>22 条被点名的机制里：<strong>1 条在窄指标上有效</strong>（去 AI 味 detector），<strong>2 条部分到达</strong>（伏笔、钩子），<strong>2 条到达但无效</strong>（Scene-Sequel、Goal/Conflict/Disaster），<strong>3 条有实现但运行时没被喂数据</strong>（节奏曲线、爽点、Strand Weave），<strong>9 条只在文档或设计稿</strong>，<strong>2 条互相冲突</strong>（15-beat 与章高光、题材路由），<strong>1 条反向制造噪音</strong>（限时锁），<strong>2 条证据不足</strong>（人物弧光、主题回声）。</p>
+          <p>这不是“理论越多越好”或“理论越多越差”的证明。它证明的是：<strong>理论被导入后，没有被分成“计划工具 / 起草工具 / 评估工具”三层，而是被混成了一层硬约束。</strong></p>
+        </div>
+      </section>
+
+      <section id="gap">
+        <div class="section-head">
+          <div class="section-num">05</div>
+          <div>
+            <h2>文学差距在哪里</h2>
+            <p>用真实正文、审查记录与修订记录说话。先看可观测的文本差异，再看这些差异在流程里是怎么被生产出来的。</p>
+          </div>
+        </div>
+
+        <h3>5.1 同一场景下的两篇第 1 章</h3>
+        <p>《重返巅峰》是同一 seed、同一 Writer 模型、同一章号的三系统对比。章回第 1 章 2,213 个汉字，Jarvis 第 1 章 1,598 个汉字。字数更多，但可指认的事件更少。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>可观测项</th><th>章回《灰色的登录器》</th><th>Jarvis《雨里的护腕》</th></tr></thead>
+            <tbody>
+              <tr><td>汉字数</td><td class="num">2,213</td><td class="num">1,598</td></tr>
+              <tr><td>段落数</td><td class="num">60</td><td class="num">28</td></tr>
+              <tr><td>含对话段落</td><td class="num">7（12%）</td><td class="num">9（32%）</td></tr>
+              <tr><td>当页可指认的对手</td><td>无。章节计划写明“反派层级：无（仅环境/内心）”。</td><td>有。抢单竞争、直播冲突、韩澈的当面对峙。</td></tr>
+              <tr><td>主角的可见行动</td><td>坐着，看网页，回忆，决定登录；章末停在登录之前。</td><td>接单、忍痛、开播、应对弹幕与韩澈、暴露职业与旧怨。</td></tr>
+              <tr><td>具体代价</td><td>“手会老”作为职业焦虑被叙述，但没有在章内付出代价。</td><td>身体疼痛、收入压力、公开身份带来的风险，都在章内发生。</td></tr>
+              <tr><td>章末拉力</td><td>决定登录；读者不知道登录后会怎样。</td><td>倒计时 6 小时 39 分；隐藏规则与“星锐事变”旧怨同时挂起。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="table-note">文本指标由本轮只读统计（汉字、段落、含引号的对话段）。对手、代价、拉力为人工判读，不是自动指标。</p>
+
+        <div class="metrics" aria-label="含对话段落占比对比">
+          <div class="metric-row"><span class="label">章回 ch1 对话段占比</span><div class="metric-track"><div class="metric-fill alt" style="width:12%"></div></div><span class="value">12%</span></div>
+          <div class="metric-row"><span class="label">Jarvis ch1 对话段占比</span><div class="metric-track"><div class="metric-fill" style="width:32%"></div></div><span class="value">32%</span></div>
+          <div class="metric-row"><span class="label">海港旧信 ch2 对话段占比</span><div class="metric-track"><div class="metric-fill" style="width:36%"></div></div><span class="value">36%</span></div>
+        </div>
+
+        <p>对话占比不是文学质量，但它是一个便宜的“场景是否在人与人之间发生”的代理指标。章回第 1 章的 12% 对话，且 7 段里多数是主角与自己的心理问答；Jarvis 的 32% 对话发生在直播、抢单、同行对峙中。**观测上的差异是“事件密度与人物交锋”；推断上的因果是“章回的章节设计不允许这些发生”。** <span class="tag inf">推断</span> <span class="tag hi">高置信</span></p>
+
+        <h3 style="margin-top:30px">5.2 《海港旧信》第 2 章：三段查资料，为什么审查说“没问题”</h3>
+        <p>第 2 章 2,120 个汉字，87 段，31 段含对话（36%），两个 <code>---</code> 场景切换，三个地点：档案科、地方志/旧报库、旧潮位站。表面上看，它比第 1 章“动”得多。但三段的功能完全同构：去一个地方，查一份材料，抄下一个证据，离开。</p>
+        <ul class="clean">
+          <li><strong>场景 1（档案科）：</strong>找目录卡片，发现“限制查阅”，在申请单前停住，没有递进去。阻力是制度，不是人。</li>
+          <li><strong>场景 2（地方志 + 旧报库）：</strong>查到一行事故记载，核对日期，抄下书名、版次、页码。收益是“日期对上了”。</li>
+          <li><strong>场景 3（旧潮位站）：</strong>补核清单，遇到梁沐，问了两句设备，听到“那批设备是事故之后统一换的”。章末没有反应与决断，只有“螺丝刀转半圈，停一下，再转半圈”。</li>
+        </ul>
+        <p>这一章的推进义务在 Writer Prompt 里是这样写的：“行动推进、信息推进、关系推进、状态推进、位置推进或资源推进之一”。<strong>“信息推进”单独就可以过关。</strong>章节计划也确实是这么设计的：卷级节拍第 2 章是 Theme Stated，不是 Catalyst。于是 Writer 忠实地写了一个“主题被点出、但主角没有付出代价”的章节。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>审查项</th><th>实际结果</th><th>说明了什么</th></tr></thead>
+            <tbody>
+              <tr><td>issues / blocking</td><td>5 条，0 阻断，0 高优</td><td>事实层面确实干净。</td></tr>
+              <tr><td>唯一像文学问题的发现</td><td>beat_compliance（medium）：章末 Sequel 反应/决断拍缺失</td><td>被标为 Craft advisory，明确 deferred；理由是“任务书要求钩子台词后只接梁沐继续拧螺丝”。</td></tr>
+              <tr><td>伏笔发现</td><td>TL-004 逾期，重复两条</td><td>审查读到旧状态；同一问题被计两次，制造噪音。</td></tr>
+              <tr><td>维度分</td><td>11 个维度初始 100，只对报出的问题扣分</td><td>“没有报问题”的维度自动满分；分数不是文学评价。</td></tr>
+              <tr><td>总分</td><td>78</td><td>文档明确：100 表示未检测到缺陷，不是文学质量。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><strong>关键机制：</strong>Reviewer 的职责定义里没有“这一章是否好看”。它只能报“Sequel 字段没在正文显化”，而这条又被降为 advisory，不能进修订。于是系统同时完成了两件事：正确地识别了文学问题，又正确地拒绝处理它。</p>
+
+        <h3 style="margin-top:30px">5.3 修订到底改了什么</h3>
+        <p>第 2 章的 <code>revision_plan_0002.json</code> 有 4 个 target，全部是 <code>LOCAL_FACT</code> / <code>PROSE_EDIT</code>：</p>
+        <ul class="clean">
+          <li>梁沐的“那边早停用了，不派工单”与他在本站作业的事实冲突，改为“拆之前最后一轮。别的早停了。”</li>
+          <li>目录卡片缺少日期/编号证据链，补入“卷宗编号里带着 0317”。</li>
+          <li>第十项“补核”缺少正文证据，补一句“把小圈划掉，在旁边打了一个勾”。</li>
+          <li>“入职那年有人跟他说过一句话”指代不明，改为“科里一个老人跟他说过一句，不要问三月那件事”。</li>
+        </ul>
+        <p>这些修改都是真实的、必要的，文本也更准确。但它们全部是<strong>事实一致性修复</strong>，没有一条让章节多一个对手、多一个代价、多一次选择。Semantic Judge 的 verdict 是 <code>STYLE_ONLY_SAFE</code>，<code>changes=[]</code>，说明这次修订在语义层几乎没有动作。对比第 1 章，Step 2B 曾把编号 1→7…13→19、时间 09:15/12:15 改写成 11:40，随后 Step 4 又回退大半。**修订链路是“事实修补器”，不是“文学编辑器”。**</p>
+
+        <h3 style="margin-top:30px">5.4 Stage 3 的审查成本与收益</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>指标</th><th>观测</th><th>解释</th></tr></thead>
+            <tbody>
+              <tr><td>Reviewer 轮数</td><td>第 1 章 5 轮，第 2/3 章各 6 轮</td><td>多轮是常态，不是异常。</td></tr>
+              <tr><td>第 1 章分数</td><td>75 → 76 → 77 → 78 → 82</td><td>有真实收益：结尾因果、时间线、手部动作等被修掉。</td></tr>
+              <tr><td>同一 high 问题</td><td>5 轮全部存在</td><td>审查能反复报，修订不能解决；多轮没有收敛。</td></tr>
+              <tr><td>同文重审</td><td>同一版正文 100，仅改两行 chapter_changes 后 88</td><td>分数对“账本措辞”敏感，对“正文文学性”不敏感。</td></tr>
+              <tr><td>维度键集</td><td>前 4 轮用“爽点密度/设定一致性/节奏控制/人物塑造/连贯性/追读力”，第 5 轮换成 8 个事实维度</td><td>连“追读力”这个维度都在中途消失，说明度量口径本身不稳定。</td></tr>
+              <tr><td>总成本</td><td>3 章 918 次调用、4.4M tokens、约 68 分钟/章</td><td>成本主要花在模型生成与多轮 Reviewer，不是工具。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>这里有一个很关键的观测：<strong>审查分的提升与阅读吸引力的提升不是同一件事。</strong>第 1 章从 75 修到 82，评委仍然说它“近乎静止”。这说明当前闭环优化的目标函数是“缺陷更少”，不是“更想读”。</p>
+
+        <h3 style="margin-top:30px">5.5 Jarvis 具体赢在哪，不赢在哪</h3>
+        <p><span class="tag obs">观测</span> 在 Stage 3 的三章里，Jarvis 的阅读吸引力均值 3.833，章回 2.750；但 Jarvis 的文学质量 4.167，低于章回的 4.333。它不是“文笔更好”，而是“更像一章会发生事情的小说”。可指认的差异集中在五处：</p>
+        <ul class="clean">
+          <li><strong>事件密度：</strong>Jarvis 第 1 章在 1,598 字里完成了接单、忍痛、开播、同行对峙、旧怨暴露、隐藏规则预告；章回在 2,213 字里完成了看网页、回忆、决定登录。</li>
+          <li><strong>人物 agency：</strong>Jarvis 的主角在章内做了多个有代价的选择；章回的主角主要是观察与犹豫。</li>
+          <li><strong>当页冲突：</strong>Jarvis 有韩澈与直播间的即时反馈；章回的冲突是“行业不景气”“手会老”这类背景压力。</li>
+          <li><strong>对话：</strong>Jarvis 32% 的段落含对话，且对话承担信息与冲突；章回 12%，且多为心理自问。</li>
+          <li><strong>章末拉力：</strong>Jarvis 用倒计时与未解释的旧怨挂起两个问题；章回用“决定登录”挂起一个读者还不在乎的问题。</li>
+        </ul>
+        <p><span class="tag inf">推断</span> 这些差异与两套系统的章节设计一致：章回的卷级节拍要求第 1 章做 Opening Image，且明确禁止冲突；Jarvis 没有同等的“第 1 章不许有对手”的约束。**但 Jarvis 内部如何做到这一点，本轮没有审计其源码，不能断言其因果机制。** <span class="tag mid">中置信</span></p>
+
+        <div class="note">
+          <strong>不要把 Stage 1 lite 当作反例。</strong>该 run 的 0–3 是真实的，但章回稿件写成了另一本书。它证明的是“种子遵循/运行完整性”会灾难性失败，不证明“Jarvis 文笔更好”。Stage 2 的 1/30 同理，是 HALT，不是文学比较。
+        </div>
+      </section>
+
+      <section id="causes">
+        <div class="section-head">
+          <div class="section-num">06</div>
+          <div>
+            <h2>根因排序</h2>
+            <p>按“对可读性的实际影响”排序，最多五条。每条都给出机制、真实产物证据、与 Jarvis 的差距、置信度、建议与最小验证。</p>
+          </div>
+        </div>
+
+        <article class="cause">
+          <div class="cause-head">
+            <span class="cause-rank">CAUSE 01</span>
+            <h3>章节没有被要求成为一个戏剧单位</h3>
+          </div>
+          <dl class="cause-grid">
+            <dt>现象</dt><dd>第 1 章可以整章停在登录之前；第 2 章可以是三段查资料；章末可以只有一个钩子台词，没有反应与决断。</dd>
+            <dt>机制</dt><dd>15-beat 把前四章定义为 Opening Image / Theme Stated / Setup / Catalyst；<code>progress_obligation</code> 允许“信息推进”单独过关；Scene-Sequel 的 Sequel 字段在 Writer Prompt 里被截断。</dd>
+            <dt>证据</dt><dd>《重返巅峰》ch1 节拍表“反派层级：无（仅环境/内心）”；《海港旧信》ch2 三段查资料；Writer Prompt 600 字截断（<code>chapter_runtime.py:292</code>）。</dd>
+            <dt>差距</dt><dd>Jarvis ch1 在 1,598 字里完成接单、冲突、开播、旧怨、倒计时；章回在 2,213 字里完成观察与决定。</dd>
+            <dt>置信度</dt><dd><span class="tag hi">高</span> 计划文本与正文一一对应，不是事后解释。</dd>
+            <dt>建议</dt><dd><strong>保留</strong> 15-beat 作为卷级诊断，<strong>删除</strong>“信息推进即可”的单独豁免；把“非声明过渡章必须有 1 个当页对手 + 1 个不可逆代价/选择”设为唯一下一阶段硬约束。</dd>
+            <dt>最小验证</dt><dd>同一章纲、同一 Writer，只改这一条约束，做 2 臂单章 A/B，盲评阅读吸引力；不重跑三章 Benchmark。</dd>
+          </dl>
+        </article>
+
+        <article class="cause c2">
+          <div class="cause-head">
+            <span class="cause-rank">CAUSE 02</span>
+            <h3>审查与修订闭环对文学质量结构性失明</h3>
+          </div>
+          <dl class="cause-grid">
+            <dt>现象</dt><dd>一个“近乎静止”的章节得到 78 分、0 阻断；唯一像文学问题的 Sequel 缺失被 deferred；修订只改事实。</dd>
+            <dt>机制</dt><dd>Reviewer 只查 8 个事实维度，明确“不评价文笔质量”“不建议情节改动”；所有 findings <code>blocking=false</code>；craft 一律 <code>ADVISORY</code>；<code>revision_planner</code> 只把 <code>PROSE_EDIT</code> 放进正文。</dd>
+            <dt>证据</dt><dd><code>agents/reviewer.md:17,187–188</code>；<code>review_results.json</code> 5 条 0 阻断；<code>revision_plan_0002.json</code> 4 条全 PROSE_EDIT、2 条 deferred。</dd>
+            <dt>差距</dt><dd>Jarvis 没有同等的“只验事实”闭环；它的开篇可以承担冲突与人物交锋。章回的闭环会主动把这类问题降级。</dd>
+            <dt>置信度</dt><dd><span class="tag hi">高</span> 职责文本与产物一致。</dd>
+            <dt>建议</dt><dd><strong>不要再把 Reviewer 分数当文学质量</strong>；要么明确它只是事实检查器，要么另设一个不参与 gate 的“文学读稿”步骤。不要给现有 Reviewer 加维度。</dd>
+            <dt>最小验证</dt><dd>用现有 3 章做相关性检查：审查分 vs 盲评阅读吸引力。若相关性接近 0，就确认分数不能作为质量代理；无需新运行。</dd>
+          </dl>
+        </article>
+
+        <article class="cause c3">
+          <div class="cause-head">
+            <span class="cause-rank">CAUSE 03</span>
+            <h3>质量反馈信号为空或反向，并回流到下一章 Prompt</h3>
+          </div>
+          <dl class="cause-grid">
+            <dt>现象</dt><dd>第一章的写作指导写着“最近审查均分 0.0 低于阈值 75.0，建议先保稳：减少跳场、每段补动作结果闭环”；Context Agent 又把“90 分 / 其余满分”读成“不需要更用力”。</dd>
+            <dt>机制</dt><dd><code>overall_avg = float(review_trend.get("overall_avg") or 0.0)</code>；没有审查数据时返回 0.0，触发“低分保稳”分支。未评维度初始 100.0，只对报出的问题扣分。</dd>
+            <dt>证据</dt><dd><code>writing_guidance_builder.py:104–127</code>；<code>review_schema.py:201–204,250</code>；《重返巅峰》ch1 Writer Prompt 的“先保稳”；《海港旧信》ch1 指导中的“90 分/其余满分”。</dd>
+            <dt>差距</dt><dd>Jarvis 的开篇没有“先保稳”的内部指令；章回在第一章就被告知“最近表现很差”，于是选择更保守的写法。</dd>
+            <dt>置信度</dt><dd><span class="tag hi">高</span> 代码分支与 Prompt 文本可直接对应；“保守导致静止”是 <span class="tag inf">推断</span> <span class="tag mid">中</span>。</dd>
+            <dt>建议</dt><dd><strong>无数据 = 无信号</strong>，不要当 0 分；未评维度不要默认 100；不要再把缺陷罚分写进创作任务书作为“质量趋势”。</dd>
+            <dt>最小验证</dt><dd>同一章、同一模型，去掉“先保稳”一行，比较场景跳转数与章末决断拍；n=1 诊断即可。</dd>
+          </dl>
+        </article>
+
+        <article class="cause c4">
+          <div class="cause-head">
+            <span class="cause-rank">CAUSE 04</span>
+            <h3>理论被过度机械化，启发式覆盖了故事</h3>
+          </div>
+          <dl class="cause-grid">
+            <dt>现象</dt><dd>第 2 章被固定判为 <code>build_up</code>，指导语“本章以铺压为主”；一本现实向悬疑被告知“按规则怪谈叙事主线推进”“规则先于解释，代价先于胜利”。</dd>
+            <dt>机制</dt><dd><code>stage_mod = chapter % 5</code>；<code>primary_genre="规则动物园"</code> 被解析成 <code>rules-mystery</code>，覆盖了 <code>canonical_genre="悬疑"</code>；15-beat 被逐章映射成任务。</dd>
+            <dt>证据</dt><dd><code>writing_guidance_builder.py:121–127</code>；<code>.story-system/MASTER_SETTING.json</code> 的 <code>route.primary_genre</code> 与 <code>canonical_genre</code>；<code>governed_context_0002.json</code> 的 guidance 文本。</dd>
+            <dt>差距</dt><dd>Jarvis 没有“章号取模决定节奏”的规则；它的章节节奏由当前事件决定，而不是由章号决定。</dd>
+            <dt>置信度</dt><dd><span class="tag hi">高</span> 代码与配置直接可见。</dd>
+            <dt>建议</dt><dd><strong>删除</strong> <code>chapter % 5</code>；题材解析以 <code>canonical_genre</code> 优先，并为“悬疑”补上 <code>mystery</code> 别名（当前 <code>to_profile_key("悬疑")</code> 返回“悬疑”，不是有效键）；15-beat 只做卷级诊断，不做章级任务分配。</dd>
+            <dt>最小验证</dt><dd>用同一章纲，分别用“规则怪谈”和“悬疑”两套 guidance 生成 brief，人工比较哪一套更贴近本书；n=1。</dd>
+          </dl>
+        </article>
+
+        <article class="cause c5">
+          <div class="cause-head">
+            <span class="cause-rank">CAUSE 05</span>
+            <h3>Writer 实际收到的包被截断、占位与稀释</h3>
+          </div>
+          <dl class="cause-grid">
+            <dt>现象</dt><dd>大纲只保留前 600 字，Sequel 字段永远看不到；登场角色渲染成 8 行“- 角色”；Canon 事实以 Python dict repr 出现；交付协议占 10% 的 Prompt。</dd>
+            <dt>机制</dt><dd><code>outline[:600]</code>；<code>c.get("name") or c.get("id") or "角色"</code>，而数据里只有 <code>entity_id</code>；<code>content</code> 是 dict 却直接 f-string。</dd>
+            <dt>证据</dt><dd><code>chapter_runtime.py:292,303,313,326</code>；<code>writer_prompt_0002.txt</code> 的实际渲染。</dd>
+            <dt>差距</dt><dd>Jarvis 的 Writer 不被要求同时解析 2.9 KB 的账本协议；章回的 Writer 要在格式合规与场景写作之间分注意力。</dd>
+            <dt>置信度</dt><dd><span class="tag hi">高</span> 渲染缺陷可直接复现；“稀释注意力导致文学损失”是 <span class="tag inf">推断</span> <span class="tag mid">中</span>。</dd>
+            <dt>建议</dt><dd><strong>修复渲染</strong>：不截断大纲，<code>entity_id</code> 映射为角色名，Canon 输出“实体 / 字段 / 值”的可读文本，Handoff 协议移到独立文件或按需加载。</dd>
+            <dt>最小验证</dt><dd>同一章、同一模型，用完整大纲 + 可读 Canon 重跑一次 Writer，检查 Sequel 决断拍是否出现；n=1 诊断。</dd>
+          </dl>
+        </article>
+
+        <div class="callout">
+          <h3>责任分配</h3>
+          <p><strong>规划层（Planner + Context Agent）主责</strong>：它决定了这一章有没有对手、有没有代价、有没有决断。<strong>度量闭环（Reviewer + Revision Planner）次责</strong>：它不仅看不见文学问题，还把“缺陷少”包装成“质量高”。<strong>Writer 不是主责</strong>：它的盲评文学分是三家里最高的，文字本身是产物里最强的部分。<strong>修订不是主责</strong>：它被设计成事实修补器，不能要求它做它没有权限做的事。</p>
+        </div>
+      </section>
+
+      <section id="route">
+        <div class="section-head">
+          <div class="section-num">07</div>
+          <div>
+            <h2>最小改进路线</h2>
+            <p>不实施，只冻结方向。三条决策 + 一个可选修复，按优先级排列；每条都给出可验证的最小实验。</p>
+          </div>
+        </div>
+
+        <div class="decisions">
+          <article class="decision">
+            <h3>把“章节戏剧义务”设为唯一下一阶段硬约束</h3>
+            <p>非声明为过渡的章节，必须包含：一个当页可指认的对手（人物、制度的具体执行者、或环境的直接反噬），一个不可逆的代价或选择，以及章末人物对结果的反应与决断。声明为过渡的章节必须显式标注，且每卷不超过一章。</p>
+            <p>取消“信息推进”单独满足 <code>progress_obligation</code> 的资格。信息可以推进，但只能作为行动或关系变化的结果，不能作为唯一变化。</p>
+            <p class="verify"><strong>为什么是这一条：</strong>它同时修掉 Cause 01 和 Cause 05 的一半；不需要新理论，只是把已有的 Goal/Conflict/Disaster 与 Scene-Sequel 真正执行到章级。<strong>最小验证：</strong>同一章纲、同一 Writer，2 臂单章 A/B，盲评阅读吸引力与“章末是否想翻页”；不重跑三章 Benchmark。</p>
+          </article>
+
+          <article class="decision">
+            <h3>把审查分从“质量信号”降级为“事实缺陷计数”</h3>
+            <p>无审查数据时返回“无信号”，不要用 0.0 触发“先保稳”；未评维度不要默认 100；不再把“90 分 / 其余满分”写进 Creative Brief 作为“不需要更用力”的依据。Reviewer 继续只做事实审查，但它的分数不再进入创作指导。</p>
+            <p class="verify"><strong>为什么是这一条：</strong>Cause 03 是当前最便宜、最确定能修的反向信号。它不改变审查职责，只切断错误回流。<strong>最小验证：</strong>用现有 3 章做“审查分 vs 盲评阅读吸引力”的相关性检查；若相关性接近 0，确认分数不能当质量代理。无需新运行。</p>
+          </article>
+
+          <article class="decision">
+            <h3>理论分层：卷级诊断、章级执行、评估分离</h3>
+            <p>15-beat 只用于卷级诊断，不逐章分配任务；删除 <code>chapter % 5</code> 的节奏循环；题材解析以 <code>canonical_genre</code> 优先，并为“悬疑”补上 <code>mystery</code> 别名；停用没有运行时调用者的 <code>rhythm_curve</code> / <code>pacing_history</code> / <code>expectation_debt</code> 计数器，或明确标注“未接线”。</p>
+            <p class="verify"><strong>为什么是这一条：</strong>Cause 04 的错配不是“理论不好”，是“理论被放在了错误的层”。减法比加法更能恢复故事的空间。<strong>最小验证：</strong>同一章纲，分别用当前 guidance 与“去掉取模、canonical genre”的 guidance 生成 brief，人工比较哪一套更像这本书；n=1。</p>
+          </article>
+
+          <article class="decision">
+            <h3>可选但低成本：修 Writer 包的渲染</h3>
+            <p>大纲不截断；<code>entity_id</code> 映射为角色名；Canon 输出“实体 / 字段 / 值”；交付协议独立或按需加载。它不改变创作理论，只让已有的 Scene-Sequel 真正到达 Writer。</p>
+            <p class="verify"><strong>为什么放在最后：</strong>它是明确的工程缺陷，但单独修它不足以让章节“有对手”；它应该与决策 1 一起验证。<strong>最小验证：</strong>同一章、同一模型，完整大纲 + 可读 Canon 重跑一次，检查 Sequel 决断拍是否出现；n=1。</p>
+          </article>
+        </div>
+
+        <h3 style="margin-top:30px">明确不做什么</h3>
+        <ul class="clean">
+          <li>不新增写作理论、不新增 Reviewer 维度、不新增质量检查器。</li>
+          <li>不把“增加 Prompt 长度”当默认解决方案；本轮的所有决策都不增加 Prompt 总长度。</li>
+          <li>不重跑三章 Benchmark、不重跑 Full Write；所有实验都是单章、2 臂、可回退的诊断。</li>
+          <li>不修改 Data Agent、vector projection、ChapterCommit；它们不是本轮根因。</li>
+          <li>不把 Stage 1 lite 的 0–3 当作文笔结论；它是运行完整性缺陷，需单独修。</li>
+        </ul>
+
+        <div class="note">
+          <strong>一个需要单独记录的风险。</strong>Stage 1 lite 中章回稿件完全脱离种子（陆衍 / 074 / 残痕视界），而同一 run 的另两本书都遵循了种子。这不是文学问题，是“生成前 seed 是否真的进入 Writer”的运行完整性问题。它可能来自错误的项目绑定、初始化失败或上下文丢失；本轮没有足够证据定位到具体代码路径。**在修文学机制之前，必须先确认这条链路不会再次发生**，否则任何文学实验都可能测到另一本书。
+        </div>
+      </section>
+
+      <section id="closing">
+        <div class="section-head">
+          <div class="section-num">08</div>
+          <div>
+            <h2>收口七问</h2>
+            <p>用最短的答案回答本轮必须回答的七个问题。展开证据在前文。</p>
+          </div>
+        </div>
+
+        <div class="qa">
+          <div class="qa-item">
+            <div class="qa-q">Q1</div>
+            <div>
+              <h3>章回现在到底怎么“写”一章？</h3>
+              <p>Runtime 先冻结事实与意图，Context Agent 写一份接近一半 Prompt 体量的创作任务书，Runtime 把它封成唯一的 Writer Prompt；Writer 一次性写出正文与账本提案；Reviewer 只查 8 个事实维度；Revision 只修事实；Data Agent 从正文反推账本；提交、发布、备份。整条链路的核心是“单一只读包 + 事实闭环”，不是“场景写作”。</p>
+            </div>
+          </div>
+
+          <div class="qa-item">
+            <div class="qa-q">Q2</div>
+            <div>
+              <h3>导入的理论，真正被用上的有多少？</h3>
+              <p>22 条被点名的机制里，1 条在窄指标上有效，2 条部分到达，2 条到达但无效，3 条有实现但运行时没被喂数据，9 条只在文档或设计稿，2 条互相冲突，1 条反向制造噪音，2 条证据不足。真正进入 Writer 并且改变正文的，主要是 15-beat 的卷级骨架、角色弧光的静态描述、部分伏笔回收与钩子字段。</p>
+            </div>
+          </div>
+
+          <div class="qa-item">
+            <div class="qa-q">Q3</div>
+            <div>
+              <h3>哪些理论有效，哪些无效？</h3>
+              <p><strong>有效但窄：</strong>anti-slop 对可计算的 AI 味指标。<strong>部分有效：</strong>伏笔链、6 种钩子，但只到达“字段”层面。<strong>无效：</strong>Scene-Sequel 的 Sequel 被截断；Goal/Conflict/Disaster 被“信息推进”豁免。<strong>没到达：</strong>节奏曲线、爽点、Strand Weave。<strong>冲突：</strong>15-beat 的前四章铺陈 vs 章级高光；规则怪谈 guidance vs 现实悬疑。<strong>反向：</strong>限时锁在审查时读到旧状态，重复报逾期。</p>
+            </div>
+          </div>
+
+          <div class="qa-item">
+            <div class="qa-q">Q4</div>
+            <div>
+              <h3>是否存在理论冲突或约束过载？</h3>
+              <p>有，而且不止一处。最硬的一处是“卷级 15-beat 要求第 1 章做 Opening Image、前四章做 Setup”与“章级规划文档要求每章都有高潮”直接冲突；实现选择了前者。第二处是“现实向悬疑”的正典题材与“规则怪谈”的题材 profile 冲突，后者来自 <code>primary_genre</code> 的路由覆盖。第三处是“先保稳、减少跳场”的反馈信号与“追读需要变化”的目标冲突。第四处是 2.9 KB 的账本协议与 13 KB 的创作任务书争夺同一份注意力。</p>
+            </div>
+          </div>
+
+          <div class="qa-item">
+            <div class="qa-q">Q5</div>
+            <div>
+              <h3>文学差距的主责在 Writer、Planner、Reviewer 还是 Revision？</h3>
+              <p>主责在 <strong>Planner + Context Agent</strong>：它们把章节设计成“无对手的铺垫”和“信息推进”。次责在 <strong>Reviewer + Revision</strong>：它们结构上看不见文学问题，还把“缺陷少”输出成“质量高”。Writer 不是主责：它的盲评文学分是三家里最高的，文字是产物里最强的部分。Revision 也不是主责：它被权限设计成只能修事实。</p>
+            </div>
+          </div>
+
+          <div class="qa-item">
+            <div class="qa-q">Q6</div>
+            <div>
+              <h3>为什么章回赢一致性，却输文学表达 / 读者偏好？</h3>
+              <p>先修正前提：在 Stage 3 的三章盲评里，章回并没有输文学表达，它输的是<strong>阅读吸引力</strong>。原因是系统只把“一致性”做成了硬目标：Canon、Intent、Reviewer、Revision 全部围绕事实闭环；而“这一章有没有对手、有没有代价、有没有让读者想翻页”没有任何硬约束，甚至在计划层被明确禁止。Writer 被放进一个“不许发生事情”的任务书里，忠实执行，于是文字越干净，章节越静止。Jarvis 的优势不在更华丽的句子，而在章内事件密度、人物 agency、当页冲突与章末拉力；这些是章回的计划层主动放弃的。</p>
+            </div>
+          </div>
+
+          <div class="qa-item">
+            <div class="qa-q">Q7</div>
+            <div>
+              <h3>下一步最该改的一个机制是什么？</h3>
+              <p><strong>章节戏剧义务。</strong>不是新理论，而是把已经导入的 Goal/Conflict/Disaster 与 Scene-Sequel 真正执行到章级：非声明过渡章必须有 1 个当页对手、1 个不可逆代价/选择、章末反应与决断；取消“信息推进”单独过关。它一条就能同时修掉“静止的章节”“被截断的 Sequel”“审查看不见文学问题”三个症状的交汇点。先做单章 2 臂诊断，不重跑 Benchmark，不进入实施。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="appendix">
+        <div class="section-head">
+          <div class="section-num">09</div>
+          <div>
+            <h2>证据索引</h2>
+            <p>本报告引用的关键文件。路径相对项目根或 benchmark 根。</p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>类别</th><th>文件</th><th>用途</th></tr></thead>
+            <tbody>
+              <tr><td>设计</td><td class="paths"><code>docs/superpowers/specs/2026-08-14-story-craft-engine-design.md</code></td><td>Tier 1–4 理论分层与原始目标</td></tr>
+              <tr><td>设计</td><td class="paths"><code>references/shared/15-beat-save-the-cat.md</code>、<code>scene-sequel.md</code>、<code>core-constraints.md</code></td><td>节拍、Scene-Sequel、硬/软约束</td></tr>
+              <tr><td>流程</td><td class="paths"><code>skills/webnovel-write/SKILL.md</code></td><td>Step 0–6 真实链路、自动修订预算</td></tr>
+              <tr><td>流程</td><td class="paths"><code>skills/webnovel-plan/SKILL.md</code>、<code>skills/webnovel-plan/references/outlining/chapter-planning.md</code></td><td>15-beat、Scene-Sequel、章高光结构</td></tr>
+              <tr><td>审查</td><td class="paths"><code>agents/reviewer.md</code></td><td>8 维、blocking=false、不评价文笔</td></tr>
+              <tr><td>审查</td><td class="paths"><code>scripts/data_modules/review_schema.py</code></td><td>缺陷罚分、未评维度 100</td></tr>
+              <tr><td>修订</td><td class="paths"><code>scripts/data_modules/revision_planner.py</code></td><td>PROSE_EDIT / ADVISORY 分流</td></tr>
+              <tr><td>运行时</td><td class="paths"><code>scripts/data_modules/chapter_runtime.py</code></td><td>Writer Prompt 六层、600 字截断、Canon 渲染</td></tr>
+              <tr><td>运行时</td><td class="paths"><code>scripts/data_modules/writing_guidance_builder.py</code></td><td>0.0 保稳、chapter % 5、题材锚点</td></tr>
+              <tr><td>运行时</td><td class="paths"><code>scripts/data_modules/context_manager.py</code></td><td>primary_genre 覆盖 canonical_genre</td></tr>
+              <tr><td>运行时</td><td class="paths"><code>scripts/story_craft.py</code></td><td>rhythm / timed lock / arc 的更新函数</td></tr>
+              <tr><td>真实产物</td><td class="paths"><code>zhanghui-acceptance-20261016/海港旧信/.webnovel/tmp/writer_prompt_0002.txt</code></td><td>Writer 实际输入 28,991 B</td></tr>
+              <tr><td>真实产物</td><td class="paths"><code>.../.webnovel/tmp/review_results.json</code></td><td>5 条发现、0 阻断、Sequel deferred</td></tr>
+              <tr><td>真实产物</td><td class="paths"><code>.../.webnovel/tmp/revision_plan_0002.json</code></td><td>4 条 PROSE_EDIT、2 条 ADVISORY</td></tr>
+              <tr><td>真实产物</td><td class="paths"><code>.../正文/第0002章-十年前的日期.md</code></td><td>三段查资料的正文</td></tr>
+              <tr><td>盲评</td><td class="paths"><code>zhanghui-benchmark/runs/return-to-peak-001/STAGE3-REPORT.md</code></td><td>文学 4.333 / 追读 2.750 / 成本</td></tr>
+              <tr><td>盲评</td><td class="paths"><code>zhanghui-benchmark/runs/pilot-tide-archive-001/stage1-benchmark-lite-001/final/stage1-benchmark-lite-summary.txt</code></td><td>0/12、3-0、但稿件脱离种子</td></tr>
+              <tr><td>盲评</td><td class="paths"><code>zhanghui-benchmark/report-stage2/README.md</code></td><td>30 章 1/30 HALT、Jarvis 30/30</td></tr>
+              <tr><td>正文对照</td><td class="paths"><code>.../zhanghui/prose/ch01.md</code>、<code>.../jarvis-write/prose/ch01.md</code></td><td>2,213 vs 1,598 字；12% vs 32% 对话</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style="margin-top:26px">仍未确认的问题</h3>
+        <ul class="clean">
+          <li><strong>Stage 1 lite 为什么不遵循种子。</strong>是项目绑定错误、初始化失败，还是上下文在 Step 1 丢失？本轮只确认为“稿件与种子不符”，未定位到具体代码路径。</li>
+          <li><strong>节奏曲线是否曾经接线。</strong><code>record_emotion_peak</code> / <code>increment_chapters_since_peak</code> 在当前代码中没有运行时调用者；是否存在已删除的调用点，需要 Git 史进一步确认。</li>
+          <li><strong>阅读吸引力的真实效应量。</strong>n=3、同模型评委、位置偏差与效应量同量级；需要更大的盲评样本才能排除顺序效应。</li>
+          <li><strong>Jarvis 的内部机制。</strong>本轮只比较正文，没有审计 Jarvis 源码；“它为什么能做到”是推断，不是事实。</li>
+        </ul>
+
+        <div class="footer">
+          <span>章回写作机制审计 · 2026-10-22</span>
+          <span>只读审计 · 未改代码 · 未跑 Benchmark · 未执行 Full Write</span>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>

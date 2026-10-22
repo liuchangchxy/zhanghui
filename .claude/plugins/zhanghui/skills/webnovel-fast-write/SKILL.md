@@ -70,6 +70,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
   --chapter {chapter_num} \
   --brief "{context_agent_creative_brief}" \
+  --scene-design --reader-pull \
   --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
 
 # 立即从同一份刚封口的 runtime 状态中读取 package_fingerprint（确保 Prompt 与 Fingerprint 来自同一 sealed WriterPackage）

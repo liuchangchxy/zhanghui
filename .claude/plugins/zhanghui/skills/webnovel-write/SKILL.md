@@ -84,8 +84,8 @@ allowed-tools: Read Write Edit Grep Bash Agent
   - 用途：Step 4 移动端阅读排版与发布前速查。
   - 触发：Step 4 必读。
 - `../../references/reading-power-taxonomy.md`
-  - 用途：Step 1（内置 Contract）钩子、爽点、微兑现 taxonomy。
-  - 触发：Step 1 当需要追读力设计时加载。
+  - 用途：Step 1 判断“本章是否真的兑现了期待”时参考；其中的 HARD 阈值与高频阶梯**不是**写作指令，不得转述给 Writer。
+  - 触发：Step 1 当需要判断追读力缺口时加载。
 - `../../references/genre-profiles.md`
   - 用途：Step 1（内置 Contract）按题材配置节奏阈值与钩子偏好。
   - 触发：Step 1 当 `state.project.genre` 已知时加载。
@@ -317,7 +317,7 @@ Use the Agent tool to run `zhanghui:context-agent`
   2. 这章的故事（本章目标/阻力、情节节点、必须覆盖/禁区、跨章约束）
   3. 人物小动作（动机外化、微反应、心理处境）
   4. 本章阻力与代价（逆境设计、情绪底色、写法指导）
-  5. 收在哪里（章末钩子、微兑现、定格画面）
+  5. 收在哪里（本章回报：谁得到了什么/失去了什么/知道了什么；由此产生的新期待。不要为留钩硬加悬念）
 - **硬边界**：Context Agent 专注于认知决策并输出写作任务书，不负责拼装底层系统/模型 Prompt，也不绕过 Native Writer Package 直接驱动起草。
 
 #### 1C. Runtime 封口与唯一 Canonical Writer Prompt 生成（Seal Native Writer Package）
@@ -329,6 +329,7 @@ Use the Agent tool to run `zhanghui:context-agent`
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
   --chapter {chapter_num} \
   --brief "{context_agent_creative_brief}" \
+  --scene-design --reader-pull \
   --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
 
 # 立即从同一份刚封口的 runtime 状态中提取 package_fingerprint（确保 Prompt 与 Fingerprint 绝对来自同一个 sealed WriterPackage）

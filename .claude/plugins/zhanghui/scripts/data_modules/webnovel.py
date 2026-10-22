@@ -387,7 +387,10 @@ def cmd_runtime(args: argparse.Namespace) -> int:
             if args.format == "json":
                 print(pkg.to_json())
             elif args.format == "prompt":
-                print(pkg.to_writer_prompt(scene_design=bool(getattr(args, "scene_design", False))))
+                print(pkg.to_writer_prompt(
+                    scene_design=bool(getattr(args, "scene_design", False)),
+                    reader_pull=bool(getattr(args, "reader_pull", False)),
+                ))
             else:
                 print(f"OK package chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
             return 0
@@ -412,7 +415,10 @@ def cmd_runtime(args: argparse.Namespace) -> int:
             if args.format == "json":
                 print(pkg.to_json())
             elif args.format == "prompt":
-                print(pkg.to_writer_prompt(scene_design=bool(getattr(args, "scene_design", False))))
+                print(pkg.to_writer_prompt(
+                    scene_design=bool(getattr(args, "scene_design", False)),
+                    reader_pull=bool(getattr(args, "reader_pull", False)),
+                ))
             else:
                 print(f"OK attach-creative-brief chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
             return 0
@@ -1780,6 +1786,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="把 Scene-Sequel 字段渲染为四个创作问题（默认渲染为原字段；实验开关，不改变输入数据）",
     )
+    p_rt_pkg.add_argument(
+        "--reader-pull",
+        action="store_true",
+        help="用追读三问取代钩子/爽点/微兑现参数（标准写作流程已启用；关闭时保留旧渲染，用于 A/B 对照）",
+    )
     p_rt_pkg.add_argument("--format", choices=["json", "text", "prompt"], default="json", help="输出格式")
     p_rt_pkg.set_defaults(func=cmd_runtime)
 
@@ -1791,6 +1802,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--scene-design",
         action="store_true",
         help="把 Scene-Sequel 字段渲染为四个创作问题（默认渲染为原字段；实验开关，不改变输入数据）",
+    )
+    p_rt_brief.add_argument(
+        "--reader-pull",
+        action="store_true",
+        help="用追读三问取代钩子/爽点/微兑现参数（标准写作流程已启用；关闭时保留旧渲染，用于 A/B 对照）",
     )
     p_rt_brief.add_argument("--format", choices=["json", "text", "prompt"], default="json", help="输出格式")
     p_rt_brief.set_defaults(func=cmd_runtime)

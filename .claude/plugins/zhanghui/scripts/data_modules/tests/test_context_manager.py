@@ -689,8 +689,10 @@ def test_context_manager_genre_alias_guidance_and_heading_extraction(temp_projec
     items = guidance.get("guidance_items") or []
 
     assert any("战术决策点" in str(text) for text in items)
-    assert any("网文节奏基线" in str(text) for text in items)
-    assert any("兑现密度基线" in str(text) for text in items)
+    # Fixed character positions ("章首300字", "每600-900字微兑现") had no source in the theory
+    # docs and contradicted Setup/transition chapters. They must not come back.
+    assert not any("网文节奏基线" in str(text) for text in items)
+    assert not any("兑现密度基线" in str(text) for text in items)
 
 
 def test_context_manager_genre_aliases_normalized_for_profile_lookup(temp_project):
