@@ -389,6 +389,11 @@ def test_lean_prompt_keeps_event_facts_but_drops_the_raw_payload(tmp_path):
             }
         }
     ]
+    # World rules now live in 本章相关既有事实 (round-4 A/B); the package seals them at
+    # build time, so the injection has to go through the same selector.
+    from data_modules.chapter_runtime import select_continuity_facts
+
+    pkg.continuity_facts = select_continuity_facts(pkg.governed_canon, {})
     lean = pkg.to_writer_prompt(scene_design=True, reader_pull=True, lean_input=True)
 
     assert "进站与离站都要在钥匙交接册的进出登记栏各签一次。" in lean

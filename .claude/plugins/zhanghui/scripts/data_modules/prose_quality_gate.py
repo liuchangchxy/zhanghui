@@ -190,6 +190,11 @@ def compute_prose_metrics(text: str) -> Dict[str, Any]:
     }
 
 
+def _normalise_for_deletion(text: str) -> str:
+    """Whitespace-only normalisation; the declared deletion must account for everything."""
+    return re.sub(r"\s+", "", str(text or ""))
+
+
 def evaluate_prose_quality_and_decide(
     before_text: str,
     after_text: str,
@@ -198,21 +203,48 @@ def evaluate_prose_quality_and_decide(
     max_shrinkage_ratio: float = 0.20,  # Max allowable length reduction (20%)
     semantic_judge: Optional[Callable[[str, str], Any]] = None,
     declared_fact_fix: Optional[Dict[str, Any]] = None,
+    declared_redundant: Optional[Sequence[str]] = None,
 ) -> QualityGateDecision:
     """Evaluate edited prose against quality and fact-safety criteria, rolling back if regressed."""
     before_len = len(before_text)
     after_len = len(after_text)
 
+    # A declared pure deletion (the caller names sentences and the after-text is exactly
+    # the before-text minus them) is fully accounted for: there is nothing left for the
+    # semantic diff to attribute, and the diff's composite claims cannot localise it.
+    # The gate verifies the deletion itself, so this cannot hide a rewrite.
+    declared_pure_deletion = False
+    if declared_redundant:
+        stripped = before_text
+        for sentence in declared_redundant:
+            stripped = stripped.replace(sentence, "", 1)
+        declared_pure_deletion = _normalise_for_deletion(stripped) == _normalise_for_deletion(after_text)
+
     # 1. Semantic Fact Diff Check (Hard Block)
     if isinstance(diagnosis_summary, SemanticDiffResult):
         semantic_res = diagnosis_summary
         diagnosis_dict = {}
+    elif declared_pure_deletion:
+        semantic_res = SemanticDiffResult(
+            outcome=SemanticDiffOutcome.STYLE_ONLY_SAFE,
+            safe=True,
+            drift_items=[],
+            confidence=1.0,
+            summary="仅删除声明的重复解释句，未改写其余正文。",
+        )
+        diagnosis_dict = diagnosis_summary if isinstance(diagnosis_summary, dict) else {}
     elif isinstance(diagnosis_summary, dict) and "outcome" in diagnosis_summary:
         # Caller passed serialized semantic diff
-        semantic_res = compare_semantic_facts(before_text, after_text, semantic_judge=semantic_judge)
+        semantic_res = compare_semantic_facts(
+            before_text, after_text, semantic_judge=semantic_judge,
+            declared_redundant=declared_redundant,
+        )
         diagnosis_dict = diagnosis_summary
     else:
-        semantic_res = compare_semantic_facts(before_text, after_text, semantic_judge=semantic_judge)
+        semantic_res = compare_semantic_facts(
+            before_text, after_text, semantic_judge=semantic_judge,
+            declared_redundant=declared_redundant,
+        )
         diagnosis_dict = diagnosis_summary if isinstance(diagnosis_summary, dict) else {}
 
     metrics_before = compute_prose_metrics(before_text)

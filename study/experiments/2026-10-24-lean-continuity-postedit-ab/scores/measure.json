@@ -1,0 +1,103 @@
+{
+  "chapters": [
+    {
+      "ch": "ch6",
+      "prompt_chars": 7499,
+      "prompt_chars_nows": 6985,
+      "hard_facts_chars": 287,
+      "continuity_chars": 479,
+      "continuity_facts": 7,
+      "brief_chars": 1741,
+      "skill_chars": 622,
+      "router_guidance_chars": 440,
+      "review_weighted_B": 11
+    },
+    {
+      "ch": "ch7",
+      "prompt_chars": 7544,
+      "prompt_chars_nows": 7031,
+      "hard_facts_chars": 271,
+      "continuity_chars": 479,
+      "continuity_facts": 7,
+      "brief_chars": 1783,
+      "skill_chars": 634,
+      "router_guidance_chars": 354,
+      "review_weighted_B": 8
+    },
+    {
+      "ch": "ch10",
+      "prompt_chars": 7432,
+      "prompt_chars_nows": 6930,
+      "hard_facts_chars": 286,
+      "continuity_chars": 479,
+      "continuity_facts": 7,
+      "brief_chars": 1667,
+      "skill_chars": 631,
+      "router_guidance_chars": 339,
+      "review_weighted_B": 11
+    }
+  ],
+  "totals": {
+    "prompt_nows": {
+      "ch6": 6985,
+      "ch7": 7031,
+      "ch10": 6930
+    },
+    "continuity_chars": 479,
+    "continuity_facts": 7,
+    "review_weighted": {
+      "A": {
+        "ch6": 9,
+        "ch7": 12,
+        "ch10": 11,
+        "total": 32
+      },
+      "B_r3": {
+        "ch6": 6,
+        "ch7": 9,
+        "ch10": 24,
+        "total": 39
+      },
+      "B_r4": {
+        "ch6": 11,
+        "ch7": 8,
+        "ch10": 11,
+        "total": 30
+      }
+    }
+  },
+  "postedit": {
+    "ch6": {
+      "detected": 0,
+      "applied": 0
+    },
+    "ch7": {
+      "detected": 0,
+      "applied": 0
+    },
+    "ch10": {
+      "detected": 0,
+      "applied": 0
+    },
+    "positive_control_ch7_A": {
+      "detected": 1,
+      "applied": 1,
+      "gate": "ACCEPTED",
+      "chars": "4735->4725"
+    }
+  },
+  "diagnostics": {
+    "show_then_explain": {
+      "A": {
+        "ch6": 0,
+        "ch7": 1,
+        "ch10": 0
+      },
+      "B": {
+        "ch6": 0,
+        "ch7": 0,
+        "ch10": 0
+      }
+    }
+  }
+}

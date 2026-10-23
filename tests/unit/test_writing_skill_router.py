@@ -455,6 +455,31 @@ def test_skills_are_bound_into_the_package_fingerprint_and_status(tmp_path):
     assert sealed.meta["writing_skill_ids"] == ["voice-style"]
 
 
+def test_continuity_facts_are_bound_into_the_fingerprint_and_status(tmp_path, monkeypatch):
+    """The status/ingest recompute must include the continuity fingerprint.
+
+    Regression: the continuity block is part of the sealed package, but `get_status`
+    recomputed the fingerprint without it, so every chapter with accepted continuity
+    facts read as stale and could never be ingested again.
+    """
+    from data_modules import chapter_runtime as cr
+
+    monkeypatch.setattr(
+        cr,
+        "select_continuity_facts",
+        lambda *args, **kwargs: [{"kind": "setting", "text": "旧报库在报社后院。"}],
+    )
+    root = _base_project(tmp_path)
+    runtime = cr.ChapterRuntime(root)
+    sealed = runtime.attach_creative_brief(1, "【任务书】")
+
+    assert sealed.continuity_facts == [{"kind": "setting", "text": "旧报库在报社后院。"}]
+    assert sealed.continuity_facts_fingerprint
+    status = runtime.get_status(1)
+    assert status.package_fingerprint == sealed.package_fingerprint
+    assert status.is_writer_package_stale is False
+
+
 def test_render_writer_skills_ignores_empty_entries():
     assert render_writer_skills([]) == []
     assert render_writer_skills([{"id": "x", "chapter_guidance": "  "}]) == []
