@@ -344,7 +344,7 @@ python3 -X utf8 -c "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(sys
 
 **硬要求**：
 - Skill 输出只是写作方法，永远不能覆盖 Canon、作者意图、本章禁区；冲突由 Router 在选择时消解。
-- Writer 会看到被选中 Skill 的**核心原则 + 一个极短例子 + 一句本章相关性说明**（所有 Skill 共享一个总预算，选得越多每条越短）；不得把 `reason`、id、分数写进正文 prompt，也不得把方法改写成本章动作脚本。
+- Writer 会看到被选中 Skill 的**名称 + 一句核心原则 + 一句本章相关性说明**（所有 Skill 共享一个总预算，选得越多每条越短）；不得把 `reason`、id、分数写进正文 prompt，也不得把方法改写成本章动作脚本。Skill 的 `## 方法` 条目、正反例、适用条件都不进 prompt。
 - `chapter_guidance` 一句话 40–120 字；**超过 120 字由 `writing-skills validate` 直接拒绝**，不是截断放行。
 - 新增技巧只需放入 `writing-skills/<id>/SKILL.md`，不修改任何 Python 或本流程。
 

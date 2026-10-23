@@ -340,8 +340,8 @@ def test_writer_prompt_renders_only_translated_guidance(tmp_path):
     assert 0 < len(with_skills) - len(without) < 1200
 
 
-def test_writer_receives_the_skill_principles_not_a_rewritten_script(tmp_path):
-    """The router states relevance; the method itself is passed through unchanged."""
+def test_writer_receives_one_principle_sentence_not_the_skill_document(tmp_path):
+    """The Writer gets name + one principle + relevance. Not the method, not the examples."""
     from data_modules.writing_skill_registry import attach_skill_bodies
 
     root = _base_project(tmp_path)
@@ -349,7 +349,8 @@ def test_writer_receives_the_skill_principles_not_a_rewritten_script(tmp_path):
         root / ".webnovel" / "writing-skills",
         "emotion-interiority",
         name="情绪与内心",
-        guidance="情绪从人物此刻的处境里自己浮现。\n直接写念头是正当的。",
+        purpose="情绪从人物自己的处境里长出来，不由叙述者命名。",
+        guidance="情绪从人物此刻的处境里自己浮现。\n直接写念头是正当的。\n不要每段都写完整的心理过程。",
     )
     skills = discover_writing_skills(project_root=root)
     catalog = build_router_catalog(skills)
@@ -369,24 +370,27 @@ def test_writer_receives_the_skill_principles_not_a_rewritten_script(tmp_path):
         render_writer_skills(attach_skill_bodies(result["selected_skills"], skills))
     )
 
-    assert "情绪与内心" in rendered
-    assert "本章的情绪容易由叙述者说破" in rendered
-    # The skill's own words reach the Writer once, not re-translated into actions.
-    assert "情绪从人物此刻的处境里自己浮现" in rendered
-    # One short example, not a matched pair: the Writer needs enough, not the document.
-    assert "正例：" in rendered and "短正例。" in rendered
-    assert "反例：" not in rendered
+    # What the Writer needs: which method, what it is, why it fits here.
+    assert "【情绪与内心】" in rendered
+    assert "情绪从人物自己的处境里长出来，不由叙述者命名。" in rendered
+    assert "本章相关：本章的情绪容易由叙述者说破" in rendered
     assert "不是执行步骤" in rendered
+    # The document stays out: no bullet list, no examples, no applicability rules.
+    assert "直接写念头是正当的" not in rendered
+    assert "不要每段都写完整的心理过程" not in rendered
+    assert "正例" not in rendered and "反例" not in rendered
+    assert "短正例。" not in rendered
     # Identity and the audit-only reason stay out.
     assert "emotion-interiority" not in rendered
     assert "情绪容易直陈" not in rendered
 
 
-def test_skill_bodies_share_one_budget_and_keep_one_example(tmp_path):
+def test_skill_principles_share_one_budget_and_carry_no_examples(tmp_path):
     """Selecting five skills must not multiply the Writer's prompt.
 
-    The 2026-10-23 A/B measured 2,033-2,868 chars of skill bodies at 1,200 chars per
-    skill. The budget is now shared: the more skills, the smaller each share.
+    The 2026-10-23 hard-facts A/B measured 1,597-1,738 chars per chapter for
+    "principle + one example", still 2-2.7x arm A. The budget now covers the rendered
+    section and carries one sentence per skill: the more skills, the smaller each share.
     """
     from data_modules.writing_skill_registry import (
         TOTAL_SKILL_CONTENT_BUDGET,
@@ -396,7 +400,12 @@ def test_skill_bodies_share_one_budget_and_keep_one_example(tmp_path):
     root = tmp_path / "skills"
     ids = [f"skill-{i}" for i in range(1, 6)]
     for skill_id in ids:
-        _write_skill(root, skill_id, guidance="原则。" * 400)
+        _write_skill(
+            root,
+            skill_id,
+            purpose="这一项原则写得很长。" * 40,
+            guidance="原则。" * 400,
+        )
     skills = discover_writing_skills(roots=[root])
     selection = [
         {"id": skill_id, "chapter_guidance": "本章需要这一项。"} for skill_id in ids
@@ -404,13 +413,17 @@ def test_skill_bodies_share_one_budget_and_keep_one_example(tmp_path):
 
     bodies = attach_skill_bodies(selection, skills)
     assert len(bodies) == 5
-    total = sum(
-        len(body.get("principle", "")) + len(body.get("example", ""))
-        for body in bodies
-    )
+    total = sum(len(body.get("principle", "")) for body in bodies)
     assert total <= TOTAL_SKILL_CONTENT_BUDGET
     for body in bodies:
-        assert bool(body.get("example")) != bool(body.get("anti_example"))
+        assert body["principle"]
+        assert "example" not in body and "anti_example" not in body
+    # The budget is the whole rendered section, not just the principle text.
+    rendered = "\n".join(render_writer_skills(bodies))
+    body_lines = [
+        line for line in rendered.splitlines() if line.startswith(("1.", "2.", "3.", "4.", "5.", "   本章相关"))
+    ]
+    assert sum(len(line.strip()) for line in body_lines) < TOTAL_SKILL_CONTENT_BUDGET + 300
 
 
 def test_overlong_relevance_is_rejected_not_truncated(tmp_path):

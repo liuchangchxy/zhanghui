@@ -43,14 +43,21 @@ DEFAULT_MIN_SKILLS = 2
 # 133-180 characters, so the sentence limit never took effect. It is now a hard reject.
 MAX_GUIDANCE_CHARS = 120
 MIN_GUIDANCE_CHARS = 40
-# The Writer needs a skill's core principle and one short example — not its documentation.
-# These are per-skill ceilings; TOTAL_SKILL_CONTENT_BUDGET divides one shared budget across
-# however many skills the router selected, so adding a fifth skill cannot multiply the
-# Writer's prompt. The 2026-10-23 A/B measured 2,033-2,868 chars of skill bodies per
-# chapter at the old 1,200-char-per-skill setting.
-MAX_PRINCIPLE_CHARS = 300
-MAX_EXAMPLE_CHARS = 120
-TOTAL_SKILL_CONTENT_BUDGET = 1200
+# The Writer gets a skill's name, its one-sentence principle and the router's relevance
+# sentence — not the skill document. The 2026-10-23 hard-facts A/B measured 1,597-1,738
+# chars per chapter for the "core principle + one example" form, still 2-2.7x arm A's
+# 630-801 chars, and both inverted rubric items ("too many rules", "mechanically
+# executing technique") scored worse than A. TOTAL_SKILL_CONTENT_BUDGET now covers the
+# whole rendered section: adding a fifth skill shrinks each share, it never grows the
+# prompt. MAX_PRINCIPLE_CHARS is a ceiling on the principle line, not a target.
+MAX_PRINCIPLE_CHARS = 160
+MIN_PRINCIPLE_CHARS = 40
+TOTAL_SKILL_CONTENT_BUDGET = 700
+# Heading plus the one-line "principles, not steps" preamble. Counted against the
+# budget so the budget describes what the Writer actually reads.
+SKILL_SECTION_FRAMING_CHARS = 80
+# "N. 【名称】" and "   本章相关：" per entry.
+SKILL_ENTRY_OVERHEAD_CHARS = 14
 
 REQUIRED_FIELDS = ("id", "name", "purpose", "applies_when", "avoid_when")
 
@@ -437,27 +444,41 @@ def validate_selection(
     }
 
 
-def _clip_lines(text: Any, limit: int) -> str:
-    """Keep whole lines up to ``limit`` characters, then mark the cut.
+def _first_sentence(text: Any, limit: int) -> str:
+    """The skill's one-line principle: its first sentence, whole.
 
-    Cutting mid-line turns a principle into a fragment; keeping whole bullets keeps the
-    part that survives readable.
+    ``purpose`` in SKILL.md is already written as one sentence, so this is a read, not a
+    summary — no second LLM call, no new field to maintain. If that sentence is longer
+    than the ceiling, the first clause is used; a principle cut mid-clause is still a
+    principle, whereas a truncated bullet list reads like a half-finished instruction.
     """
-    value = str(text or "").strip()
+    value = " ".join(str(text or "").split())
+    if not value:
+        return ""
     if len(value) <= limit:
         return value
-    kept: List[str] = []
-    used = 0
-    for line in value.splitlines():
-        line = line.rstrip()
-        cost = len(line) + (1 if kept else 0)
-        if used + cost > limit:
-            break
-        kept.append(line)
-        used += cost
-    if not kept:
-        return value[: max(0, limit - 1)].rstrip() + "…"
-    return "\n".join(kept).rstrip() + "…"
+    # Prefer a whole sentence, then a whole clause, then the hard ceiling.
+    for sep in ("。", "；", "，", "、"):
+        idx = value.find(sep)
+        if 0 < idx < limit:
+            return value[: idx + 1]
+    return value[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _clip_to_clause(text: Any, limit: int) -> str:
+    """Shorten at a clause boundary, never mid-clause.
+
+    Used for the router's relevance sentence when the shared budget is tight. The
+    preference order is the author's: the principle is never cut, the relevance is.
+    """
+    value = " ".join(str(text or "").split())
+    if len(value) <= limit or limit <= 0:
+        return value if len(value) <= limit else ""
+    for sep in ("。", "；", "，", "、"):
+        cut = value.rfind(sep, 0, limit)
+        if cut > limit // 2:
+            return value[: cut + 1]
+    return value
 
 
 def attach_skill_bodies(
@@ -466,42 +487,48 @@ def attach_skill_bodies(
     *,
     total_budget: int = TOTAL_SKILL_CONTENT_BUDGET,
 ) -> List[Dict[str, Any]]:
-    """Attach each selected skill's core principle and one short example.
+    """Attach the one-sentence principle the Writer needs — not the skill document.
 
-    The Writer needs the method, not the skill document. One shared budget is divided
-    across the selected skills before they are filled in, so selecting five skills does
-    not multiply the prompt — it just gives each skill a smaller share.
+    The Writer already gets the router's relevance sentence. What a skill can add is the
+    principle behind it: one sentence, in the skill's own words, never its bullets, its
+    examples or its applicability rules. One shared budget is divided across the selected
+    skills before they are filled in, so selecting five skills does not multiply the
+    prompt — it gives each skill a smaller share.
+
+    When a share is tight the relevance sentence is shortened and the principle is not:
+    the relevance is already a restatement of something the Writer can read in the
+    chapter material, while the principle exists nowhere else in the prompt.
     """
     by_id = {str(skill.get("id") or ""): skill for skill in skills}
     count = max(1, len(selection))
-    per_skill = max(1, int(total_budget) // count)
+    # The budget bounds the rendered section, so the fixed heading and its one-line
+    # preamble come off the top before anything is divided.
+    spendable = max(0, int(total_budget) - SKILL_SECTION_FRAMING_CHARS)
+    per_skill = max(1, spendable // count)
     enriched: List[Dict[str, Any]] = []
     for item in selection:
         entry = dict(item)
         skill = by_id.get(str(item.get("id") or ""))
         if skill:
             entry["name"] = str(skill.get("name") or "").strip()
-            example = str(skill.get("example") or "").strip()
-            anti = str(skill.get("anti_example") or "").strip()
-            # One example, not a pair: a positive example when the skill has one,
-            # otherwise the anti-example. Both are enough to show the effect.
-            picked = example or anti
-            example_reserve = (
-                min(MAX_EXAMPLE_CHARS, max(0, per_skill // 3)) if picked else 0
+            # Numbering and 【名称】 are what the Writer reads too, so they come off the
+            # share as well.
+            overhead = len(entry["name"]) + SKILL_ENTRY_OVERHEAD_CHARS
+            # ``purpose`` is the skill's own one-sentence statement of what it is for.
+            # ``guidance`` is the bullet list, which is what made the Writer read a
+            # checklist; it is deliberately not sent.
+            principle = _first_sentence(
+                skill.get("purpose") or skill.get("guidance"),
+                max(MIN_PRINCIPLE_CHARS, min(MAX_PRINCIPLE_CHARS, per_skill - overhead)),
             )
-            principle = _clip_lines(
-                skill.get("guidance"),
-                min(MAX_PRINCIPLE_CHARS, max(60, per_skill - example_reserve)),
-            )
-            entry["principle"] = principle
-            if picked:
-                example_limit = min(
-                    MAX_EXAMPLE_CHARS, max(0, per_skill - len(principle))
-                )
-                if example_limit >= 20:
-                    entry["example" if example else "anti_example"] = _clip_lines(
-                        picked, example_limit
-                    )
+            if principle:
+                entry["principle"] = principle
+                room = per_skill - overhead - len(principle)
+                relevance = str(item.get("chapter_guidance") or "").strip()
+                if len(relevance) > room:
+                    relevance = _clip_to_clause(relevance, room)
+                if relevance:
+                    entry["chapter_guidance"] = relevance
         enriched.append(entry)
     return enriched
 
@@ -527,11 +554,12 @@ def render_writer_skills(
     *,
     heading: str = "本章创作方法",
 ) -> List[str]:
-    """Render the selected skills as principles, not as a task script.
+    """Render each selected skill as a principle and why it fits this chapter.
 
-    With a skill body attached (the normal path), the Writer sees the skill's own
-    method, one short example pair, and the router's one-sentence reason. Without one
-    (legacy callers), the old guidance-only rendering is preserved.
+    Two lines per skill: ``【名称】原则`` then ``本章相关：…``. No bullets, no examples,
+    no applicability rules — those are what turned a writing principle into a checklist
+    the Writer executed step by step. Without an attached principle (legacy callers),
+    the guidance-only rendering is preserved.
     """
     entries = [
         item
@@ -557,20 +585,10 @@ def render_writer_skills(
         if not principle:
             lines.append(f"{idx}. {relevance}")
             continue
-        header = name or "本章方法"
+        head = f"{idx}. 【{name}】{principle}" if name else f"{idx}. {principle}"
+        lines.append(head)
         if relevance:
-            header = f"{header} —— 本章值得注意：{relevance}"
-        lines.append(f"{idx}. {header}")
-        for raw in principle.splitlines():
-            text = raw.rstrip()
-            lines.append(f"   {text}" if text.strip() else "")
-        for label, key in (("正例", "example"), ("反例", "anti_example")):
-            text = str(item.get(key) or "").strip()
-            if not text:
-                continue
-            parts = [part.strip() for part in text.splitlines() if part.strip()]
-            lines.append(f"   {label}：{parts[0]}")
-            lines.extend(f"   {part}" for part in parts[1:])
+            lines.append(f"   本章相关：{relevance}")
     return lines
 
 
