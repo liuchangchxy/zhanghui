@@ -33,7 +33,7 @@ import unicodedata
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 
 # 11 Canonical Fact Dimensions checked by Semantic Judge
@@ -522,10 +522,24 @@ def is_surface_only_edit(before_text: str, after_text: str) -> bool:
     return norm_before == norm_after
 
 
+def _in_declared_redundant(evidence: str, declared: Sequence[str] | None) -> bool:
+    """True when a claim lives inside a sentence the caller declared redundant.
+
+    Deleting a diagnosed restatement removes the claim it happened to contain; that is
+    the declared edit, not fact drift. The exclusion has to name the exact sentence, so a
+    blanket "ignore drift" is not expressible.
+    """
+    evidence = str(evidence or "").strip()
+    if not evidence or not declared:
+        return False
+    return any(evidence in str(sentence) or str(sentence) in evidence for sentence in declared if sentence)
+
+
 def compare_semantic_facts(
     before_text: str,
     after_text: str,
     semantic_judge: Optional[SemanticJudgeCallable] = None,
+    declared_redundant: Optional[Sequence[str]] = None,
 ) -> SemanticDiffResult:
     """
     Compare before and after prose to verify factual and semantic preservation.
@@ -565,6 +579,12 @@ def compare_semantic_facts(
 
     # 2. Extract structured claims from before and after
     before_claims = extract_semantic_claims(before_text)
+    if declared_redundant:
+        before_claims.claims = [
+            claim
+            for claim in before_claims.claims
+            if not _in_declared_redundant(claim.evidence_span, declared_redundant)
+        ]
     after_claims = extract_semantic_claims(after_text)
 
     drift_items: List[SemanticDriftItem] = []

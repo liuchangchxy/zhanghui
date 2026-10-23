@@ -310,6 +310,7 @@ def cmd_projections(args: argparse.Namespace) -> int:
 def _load_writing_skill_selection(args: argparse.Namespace, root) -> Optional[List[Dict[str, Any]]]:
     """Read and validate a router selection; never let an invalid one reach the Writer."""
     from .writing_skill_registry import (
+        attach_skill_bodies,
         build_router_catalog,
         discover_writing_skills,
         validate_selection,
@@ -329,11 +330,13 @@ def _load_writing_skill_selection(args: argparse.Namespace, root) -> Optional[Li
     except json.JSONDecodeError as exc:
         raise ValueError(f"invalid skills JSON: {exc}") from exc
 
-    catalog = build_router_catalog(discover_writing_skills(project_root=root))
+    skills = discover_writing_skills(project_root=root)
+    catalog = build_router_catalog(skills)
     result = validate_selection(raw, catalog)
     if not result["ok"]:
         raise ValueError("writing-skill selection rejected: " + "; ".join(result["errors"]))
-    return result["selected_skills"]
+    # The Writer receives each skill's own principles; the router only adds relevance.
+    return attach_skill_bodies(result["selected_skills"], skills)
 
 
 def cmd_runtime(args: argparse.Namespace) -> int:
@@ -425,6 +428,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                     scene_design=bool(getattr(args, "scene_design", False)),
                     reader_pull=bool(getattr(args, "reader_pull", False)),
                     writing_skills=bool(getattr(args, "skills_file", "") or getattr(args, "skills_json", "")),
+                    lean_input=bool(getattr(args, "lean_input", False)),
                 ))
             else:
                 print(f"OK package chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
@@ -458,6 +462,7 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                     scene_design=bool(getattr(args, "scene_design", False)),
                     reader_pull=bool(getattr(args, "reader_pull", False)),
                     writing_skills=bool(getattr(args, "skills_file", "") or getattr(args, "skills_json", "")),
+                    lean_input=bool(getattr(args, "lean_input", False)),
                 ))
             else:
                 print(f"OK attach-creative-brief chapter {args.chapter} fingerprint={pkg.package_fingerprint}")
@@ -692,6 +697,38 @@ def cmd_prose(args: argparse.Namespace) -> int:
             print(diag.to_json())
         else:
             print(diag.format_markdown_report())
+        return 0
+
+    if action == "postedit":
+        text = ""
+        fp = Path(getattr(args, "file", "") or "")
+        if fp.is_file():
+            text = fp.read_text(encoding="utf-8")
+        if not text:
+            print("ERROR: --file is required", file=sys.stderr)
+            return 2
+        result = pipeline.postedit_show_then_explain(
+            text, chapter=getattr(args, "chapter", 1) or 1
+        )
+        final = result.final_prose
+        out_path = getattr(args, "output", "") or ""
+        if getattr(args, "write", False):
+            fp.write_text(final, encoding="utf-8")
+        elif out_path:
+            Path(out_path).write_text(final, encoding="utf-8")
+        elif args.format != "json":
+            print(final)
+            return 0
+        payload = result.to_dict()
+        payload["edit"] = result.audit_record.get("show_then_explain", {})
+        payload["output"] = str(fp) if getattr(args, "write", False) else out_path
+        if args.format == "json":
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(
+                f"status={result.status} {result.before_chars}->{result.after_chars} "
+                f"applied={len(result.audit_record.get('show_then_explain', {}).get('removed', []))}"
+            )
         return 0
 
     if action == "diff-semantic":
@@ -1925,6 +1962,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="用追读三问取代钩子/爽点/微兑现参数（标准写作流程已启用；关闭时保留旧渲染，用于 A/B 对照）",
     )
+    p_rt_pkg.add_argument(
+        "--lean-input",
+        action="store_true",
+        help="强治理、弱干预 Writer 包：去掉规划术语、重复的 Scene/Reader-Pull 问句与原始事件/路径转储；不新增素材",
+    )
     p_rt_pkg.add_argument("--format", choices=["json", "text", "prompt"], default="json", help="输出格式")
     p_rt_pkg.set_defaults(func=cmd_runtime)
 
@@ -1943,6 +1985,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--reader-pull",
         action="store_true",
         help="用追读三问取代钩子/爽点/微兑现参数（标准写作流程已启用；关闭时保留旧渲染，用于 A/B 对照）",
+    )
+    p_rt_brief.add_argument(
+        "--lean-input",
+        action="store_true",
+        help="强治理、弱干预 Writer 包：去掉规划术语、重复的 Scene/Reader-Pull 问句与原始事件/路径转储；不新增素材",
     )
     p_rt_brief.add_argument("--format", choices=["json", "text", "prompt"], default="json", help="输出格式")
     p_rt_brief.set_defaults(func=cmd_runtime)
@@ -2019,6 +2066,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_prose_diag.add_argument("--text", default="", help="章节正文内容")
     p_prose_diag.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_prose_diag.set_defaults(func=cmd_prose)
+
+    p_prose_post = prose_sub.add_parser(
+        "postedit", help="写后局部修复：删除'先演后解释'的重复总结句"
+    )
+    p_prose_post.add_argument("--file", default="", help="章节正文文件路径")
+    p_prose_post.add_argument("--chapter", type=int, default=1, help="章节号")
+    p_prose_post.add_argument("--write", action="store_true", help="就地写回 --file（默认只输出到 stdout）")
+    p_prose_post.add_argument("--output", default="", help="修复后正文输出路径（默认 stdout）")
+    p_prose_post.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_prose_post.set_defaults(func=cmd_prose)
 
     p_prose_diff = prose_sub.add_parser("diff-semantic", help="事实安全语义比对 (Fact-safe Semantic Diff)")
     p_prose_diff.add_argument("--before", default="", help="修改前正文内容")

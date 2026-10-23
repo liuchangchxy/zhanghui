@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from .prose_voice_target import VoiceTarget, build_voice_target
 from .prose_diagnostics import DiagnosisReport, ProseIssue, diagnose_prose
+from .prose_postedit import ShowThenExplainEdit, apply_show_then_explain_edits, apply_single_edit
 from .prose_semantic_diff import (
     SemanticDiffOutcome,
     SemanticDiffResult,
@@ -118,6 +119,57 @@ class ProseQualityPipeline:
         return "\n".join(prompt_lines)
 
     build_editor_prompt = format_targeted_editor_prompt
+
+    def postedit_show_then_explain(self, text: str, chapter: int = 1) -> ProsePipelineResult:
+        """Delete restatement sentences that only repeat what the previous one showed.
+
+        Post-edit, not a pre-writing rule: the 2026-10-24 lean A/B found that removing
+        Writer-side craft instructions made "narrator over-explanation" worse, so the
+        repair happens on the finished prose.
+
+        Edits are applied one at a time and each candidate goes through the same
+        shrinkage / staccato / semantic gate as any polish. A sentence the gate reads as
+        a character-state fact (rather than a restatement) is rejected and reported, not
+        force-deleted.
+        """
+        diagnosis = self.diagnose(text)
+        issues = [i for i in diagnosis.issues if i.issue_type == "show_then_explain"]
+        current = text
+        edit = ShowThenExplainEdit()
+        for issue in issues:
+            sentence = str(issue.excerpt or "").strip()
+            candidate, reason = apply_single_edit(current, sentence)
+            if candidate is None:
+                edit.skipped.append({"sentence": sentence, "reason": reason})
+                continue
+            decision = evaluate_prose_quality_and_decide(
+                before_text=current,
+                after_text=candidate,
+                diagnosis_summary=diagnosis.to_dict(),
+                edit_plan="show_then_explain: 删除重复解释句",
+                declared_redundant=[sentence],
+            )
+            if decision.accepted:
+                current = decision.final_prose
+                edit.removed.append(sentence)
+            else:
+                edit.skipped.append(
+                    {"sentence": sentence, "reason": decision.rollback_reason or "gate_rejected"}
+                )
+
+        status = "ACCEPTED" if edit.applied_count else "NO_CHANGE"
+        return ProsePipelineResult(
+            ok=True,
+            status=status,
+            chapter=chapter,
+            before_chars=len(text),
+            after_chars=len(current),
+            diagnosis=diagnosis.to_dict(),
+            semantic_outcome="STYLE_ONLY_SAFE" if edit.applied_count else "NO_CHANGE",
+            rollback_reason=None,
+            final_prose=current,
+            audit_record={"show_then_explain": edit.to_dict()},
+        )
 
     def process_and_validate(
         self,

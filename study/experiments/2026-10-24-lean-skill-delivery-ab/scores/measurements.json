@@ -1,0 +1,50 @@
+[
+  {
+    "ch": "ch6",
+    "arm": "A",
+    "prompt": 14450,
+    "skill": 809,
+    "brief": 4555,
+    "hard": 0
+  },
+  {
+    "ch": "ch6",
+    "arm": "B",
+    "prompt": 6497,
+    "skill": 622,
+    "brief": 1741,
+    "hard": 287
+  },
+  {
+    "ch": "ch7",
+    "arm": "A",
+    "prompt": 14618,
+    "skill": 630,
+    "brief": 4902,
+    "hard": 0
+  },
+  {
+    "ch": "ch7",
+    "arm": "B",
+    "prompt": 6543,
+    "skill": 634,
+    "brief": 1783,
+    "hard": 271
+  },
+  {
+    "ch": "ch10",
+    "arm": "A",
+    "prompt": 13669,
+    "skill": 648,
+    "brief": 3952,
+    "hard": 0
+  },
+  {
+    "ch": "ch10",
+    "arm": "B",
+    "prompt": 6442,
+    "skill": 631,
+    "brief": 1667,
+    "hard": 286
+  }
+]

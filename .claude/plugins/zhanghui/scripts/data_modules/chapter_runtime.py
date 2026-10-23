@@ -80,6 +80,17 @@ from .write_gates import run_write_gate
 AUTO_REVISION_MAX_ROUNDS = 2
 AUTO_REVISION_BUDGET_SCHEMA = "auto-revision-budget/v1"
 
+# The Context Agent contract says 1,200–1,800 hanzi. It used to be prose only: in the
+# 2026-10-23 A/B the three Briefs came in at 2,874 / 3,476 / 5,188 characters and the
+# Writer prompt grew with them. A limit that nothing enforces is not a limit, so sealing
+# now refuses an oversized Brief instead of silently shipping it.
+MAX_CREATIVE_BRIEF_CHARS = 1800
+
+
+def count_brief_chars(text: str) -> int:
+    """Count the Brief's characters the way the contract reads: whitespace excluded."""
+    return len(re.sub(r"\s+", "", str(text or "")))
+
 
 # --------------------------------------------------------------------------- #
 # Writer prompt: chapter structure and scene design
@@ -337,6 +348,361 @@ def render_reader_pull_block(
     ]
 
 
+def _natural_node(value: Any) -> str:
+    """Turn ``主体 | 动作 | 结果`` planning notation into one natural line.
+
+    Every part is kept. Dropping the middle part silently deleted the action —
+    for example ``许知远 | 用周期规律与邻站插值 | 得到当夜逐时潮位`` used to render
+    as ``许知远：得到当夜逐时潮位``, which removed the method the chapter requires.
+    """
+    text = _usable_scene_value(value)
+    if not text:
+        return ""
+    parts = [part.strip() for part in text.split("|") if part.strip()]
+    if len(parts) >= 3:
+        return f"{parts[0]}：{'，'.join(parts[1:])}"
+    return text
+
+
+def _verbatim_fact(value: Any) -> str:
+    """Return a chapter-plan fact exactly as authored.
+
+    Hard facts may not be paraphrased, so this deliberately skips normalization —
+    except for a dangling pointer (``见 story_craft 第N章``), which carries no fact at
+    all. A next-chapter hand-off is kept: ``→ 下章目标`` still contains this chapter's
+    required outcome.
+    """
+    text = str(value or "").strip()
+    if not text or _SCENE_POINTER_RE.match(text):
+        return ""
+    return text
+
+
+def render_hard_facts(
+    directive: Dict[str, Any],
+    plot_structure: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    """The chapter's "get this wrong and the chapter is broken" facts.
+
+    In the 2026-10-23 writer-freedom A/B, arm B lost the tide-difference direction
+    (``低`` became ``高``) and turned a year gap into a month gap. Both facts existed in
+    the chapter plan but only in the Context Agent's Brief, which is a paraphrase and
+    can be wrong. This block copies the plan fields verbatim — value, direction,
+    sequence, causality and the required change — so the Writer always has an anchor
+    that neither the Context Agent nor the Router can rewrite.
+
+    The block is intentionally outside the Creative Brief: it is not material to
+    interpret, it is a constraint to obey.
+    """
+    directive = directive or {}
+    plot_structure = plot_structure or {}
+
+    facts: List[str] = []
+    change = _verbatim_fact(
+        directive.get("chapter_change") or plot_structure.get("chapter_change")
+    )
+    if change:
+        facts.append(f"- 本章变化：{change}")
+
+    hook = _verbatim_fact(directive.get("hook") or plot_structure.get("hook"))
+    if hook:
+        facts.append(f"- 计划钩子：{hook}")
+
+    nodes: List[str] = []
+    cbn = _natural_node(directive.get("cbn") or plot_structure.get("cbn"))
+    if cbn:
+        nodes.append(cbn)
+    cpns = directive.get("cpns") or plot_structure.get("cpns") or []
+    if isinstance(cpns, str):
+        cpns = [cpns]
+    for item in cpns:
+        node = _natural_node(item)
+        if node:
+            nodes.append(node)
+    cen = _natural_node(directive.get("cen") or plot_structure.get("cen"))
+    if cen:
+        nodes.append(cen)
+    if nodes:
+        facts.append("- 必须写到的事件：")
+        facts.extend(f"  - {node}" for node in nodes)
+
+    prohibitions = directive.get("forbidden_zones") or []
+    if isinstance(prohibitions, str):
+        prohibitions = [prohibitions]
+    prohibitions = [str(item).strip() for item in prohibitions if str(item).strip()]
+    if prohibitions:
+        facts.append(f"- 本章不能发生：{'；'.join(prohibitions)}")
+
+    return facts
+
+
+# ---------------------------------------------------------------------------
+# Continuity facts: the world facts a chapter must not re-invent
+# ---------------------------------------------------------------------------
+#
+# The 2026-10-24 lean-skill A/B found the lean Writer package had no place to read
+# *established* setting facts: ch10 moved the newspaper archive from "报社后院 + 登记簿
+# + 纸质原报" to "图书馆地下室 + 缩微阅读机", and changed the local gazette office's
+# location and admission process. Those facts were in the governed Canon, but the lean
+# renderer capped `【已确认前文事实】` at eight items and the world-rule entries were
+# items 16-19, so they were dropped.
+#
+# This block is deliberately narrow: only facts an accepted chapter already established —
+# place/item settings taken verbatim from accepted prose, plus the world rules, standing
+# relationships and entity attributes recorded in the Canon. It carries no chapter goal,
+# no plot, no craft advice, and it is capped so it can never become a second Canon dump.
+CONTINUITY_FACT_BUDGET_CHARS = 700
+_CONTINUITY_SETTING_TYPES = {"地点", "物品"}
+# A setting sentence says where something is or how it is used. These markers are what
+# separates "旧报库在报社后院，门口一本登记簿" from "走出旧报库的时候是下午四点半".
+_CONTINUITY_SETTING_MARKERS = (
+    "在", "位于", "门口", "登记", "凭", "须", "需要", "开放", "可以", "不能", "能进", "后院", "楼",
+)
+_CONTINUITY_SETTING_EXCLUDES = ("的时候", "走出", "回到", "离开", "他说", "他想", "他问")
+
+
+def _split_prose_sentences(text: str) -> List[str]:
+    """Sentences of one accepted chapter's prose, chapter_changes block removed."""
+    body = str(text or "").split("<chapter_changes>")[0]
+    out: List[str] = []
+    for line in body.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        out.extend(s.strip() for s in re.split(r"(?<=[。！？])", line) if s.strip())
+    return out
+
+
+def _clip_continuity_text(text: Any, limit: int) -> str:
+    """Trim a fact at a clause boundary so an entry never ends mid-phrase."""
+    value = " ".join(str(text or "").split())
+    if len(value) <= limit:
+        return value
+    for sep in ("。", "；"):
+        cut = value.rfind(sep, 0, limit)
+        if cut > limit // 2:
+            return value[: cut + 1]
+    for sep in ("，", "、"):
+        cut = value.rfind(sep, 0, limit)
+        if cut > limit // 2:
+            return value[: cut + 1]
+    return value
+
+
+def select_continuity_facts(
+    canon: Dict[str, Any],
+    prose_by_chapter: Optional[Dict[int, str]] = None,
+    *,
+    budget: int = CONTINUITY_FACT_BUDGET_CHARS,
+) -> List[Dict[str, str]]:
+    """Pick the established facts the chapter must not re-invent.
+
+    Sources, in priority order:
+    1. place/item setting sentences in accepted prose (concrete and unambiguous);
+    2. world rules recorded in Canon (processes, permissions, admission);
+    3. standing relationships recorded in Canon;
+    4. entity attributes recorded in Canon.
+
+    Every candidate must already exist in an accepted chapter or in the Canon; nothing is
+    inferred. The result is capped at ``budget`` characters of rendered text.
+    """
+    canon = canon or {}
+    prose_by_chapter = prose_by_chapter or {}
+    appearing = [item for item in (canon.get("appearing_characters") or []) if isinstance(item, dict)]
+    names = {
+        str(item.get("entity_id") or item.get("id") or ""): str(item.get("name") or "").strip()
+        for item in appearing
+        if str(item.get("entity_id") or item.get("id") or "").strip()
+    }
+    character_names = {
+        str(item.get("name") or "").strip()
+        for item in appearing
+        if str(item.get("type") or "") == "角色" and str(item.get("name") or "").strip()
+    }
+
+    facts: List[Dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add(kind: str, text: str) -> None:
+        text = text.strip()
+        if text and text not in seen:
+            seen.add(text)
+            facts.append({"kind": kind, "text": text})
+
+    # 1. Setting sentences, one per appearing place/item, earliest accepted chapter that
+    #    states it. Reading the introduction rather than the latest mention keeps the fact
+    #    stable even when later chapters only pass through the place.
+    for item in appearing:
+        etype = str(item.get("type") or "")
+        name = str(item.get("name") or "").strip()
+        if not name or etype not in _CONTINUITY_SETTING_TYPES:
+            continue
+        for chapter in sorted(prose_by_chapter):
+            found = ""
+            for sentence in _split_prose_sentences(prose_by_chapter[chapter]):
+                if name not in sentence:
+                    continue
+                if not 8 <= len(sentence) <= 80:
+                    continue
+                if any(x in sentence for x in _CONTINUITY_SETTING_EXCLUDES):
+                    continue
+                # A sentence with a named character in it is a scene beat, not a setting
+                # fact ("许知远站在旧潮位站的铁门外，把清单又看了一遍").
+                if any(person in sentence for person in character_names):
+                    continue
+                if any(m in sentence for m in _CONTINUITY_SETTING_MARKERS):
+                    found = sentence
+                    break
+            if found:
+                add("setting", found)
+                break
+
+    canon_items = [item for item in (canon.get("canon_items") or []) if isinstance(item, dict)]
+
+    def ordered(items):
+        return sorted(items, key=lambda item: -int(item.get("chapter") or 0))
+
+    # 2. World rules.
+    for item in ordered(canon_items):
+        content = item.get("content")
+        if not isinstance(content, dict) or content.get("event_type") != "world_rule_revealed":
+            continue
+        payload = content.get("payload") or {}
+        text = _clip_continuity_text(payload.get("rule_content"), 170)
+        if text:
+            add("rule", text)
+
+    # 3. Standing relationships, with entity ids resolved to the names the Writer reads.
+    for item in ordered(canon_items):
+        content = item.get("content")
+        if not isinstance(content, dict) or not (content.get("from_entity") and content.get("to_entity")):
+            continue
+        left = names.get(str(content["from_entity"]), str(content["from_entity"]))
+        right = names.get(str(content["to_entity"]), str(content["to_entity"]))
+        text = _clip_continuity_text(content.get("relationship"), 110)
+        if text:
+            add("relation", f"{left} 与 {right}：{text}")
+
+    # 4. Entity attributes already recorded in Canon, only when the entity has a name the
+    #    Writer can read. Internal ids never reach the prompt.
+    for item in ordered(canon_items):
+        content = item.get("content")
+        if not isinstance(content, dict) or content.get("event_type"):
+            continue
+        field_name = str(content.get("field") or "")
+        if not field_name.startswith("attributes."):
+            continue
+        entity = names.get(str(content.get("entity_id")), "")
+        if entity:
+            add("attribute", f"{entity} · {field_name.split('.', 1)[1]}：{content.get('value')}")
+
+    selected: List[Dict[str, str]] = []
+    used = 0
+    for fact in facts:
+        cost = len(fact["text"]) + 3  # "- " plus newline
+        if used + cost > budget:
+            continue
+        selected.append(fact)
+        used += cost
+    return selected
+
+
+def render_continuity_facts(facts: List[Dict[str, str]]) -> List[str]:
+    """Render the continuity block's bullets, or nothing when there are no facts."""
+    return [f"- {fact['text']}" for fact in facts if str(fact.get("text") or "").strip()]
+
+
+def render_lean_chapter_structure(
+    directive: Dict[str, Any],
+    plot_structure: Dict[str, Any],
+    *,
+    residual_notes: str = "",
+    include_nodes: bool = True,
+) -> List[str]:
+    """The chapter skeleton without planning vocabulary (CBN/CPNs/CEN, 节拍位置)."""
+    directive = directive or {}
+    plot_structure = plot_structure or {}
+    lines: List[str] = []
+
+    nodes: List[str] = []
+    cbn = _natural_node(directive.get("cbn") or plot_structure.get("cbn"))
+    if include_nodes and cbn:
+        nodes.append(cbn)
+    cpns = directive.get("cpns") or plot_structure.get("cpns") or []
+    if isinstance(cpns, str):
+        cpns = [cpns]
+    for item in cpns:
+        node = _natural_node(item)
+        if include_nodes and node:
+            nodes.append(node)
+    cen = _natural_node(directive.get("cen") or plot_structure.get("cen"))
+    if include_nodes and cen:
+        nodes.append(cen)
+    if nodes:
+        lines.append("本章必须经过：")
+        lines.extend(f"- {node}" for node in nodes)
+
+    def _as_list(value: Any) -> List[str]:
+        if isinstance(value, (list, tuple)):
+            return [str(item).strip() for item in value if str(item).strip()]
+        text = str(value or "").strip()
+        return [text] if text else []
+
+    buried = _as_list(directive.get("foreshadow_buried"))
+    paid = _as_list(directive.get("foreshadow_paid_off"))
+    if buried:
+        lines.append(f"- 本章需要埋下：{'、'.join(buried)}")
+    if paid:
+        lines.append(f"- 本章需要回收：{'、'.join(paid)}")
+
+    if residual_notes:
+        lines.append(f"- 章纲备注：\n{residual_notes}")
+
+    return lines
+
+
+def render_progress_obligation(obligation: Any) -> str:
+    """One natural sentence for the chapter's progress requirement."""
+    if not isinstance(obligation, dict):
+        return ""
+    if obligation.get("obligation_type") == "setup_or_transition":
+        return "本章是过渡/蓄势章：准备本身可以成为内容，但结束前仍要完成准备阶段的关键一步。"
+    return (
+        "本章结束前必须发生实质变化（行动、信息、关系、状态、位置或资源之一），"
+        "不能只停在“准备做某事”。"
+    )
+
+
+def _lean_event_text(content: Dict[str, Any]) -> str:
+    """Render a canon event as material; drop only the raw bookkeeping.
+
+    Events reach this renderer as ``{event_type, subject, payload}``. The payload holds
+    the actual fact, so it must be unwrapped — the old path dumped the whole dict as JSON,
+    and a naive "skip events" rule would silently delete hard facts (a world rule, a
+    planted clue) from the Writer's input.
+    """
+    payload = content.get("payload")
+    if isinstance(payload, dict):
+        merged = {**content, **payload}
+    else:
+        merged = dict(content)
+    event = str(merged.get("event_type") or "")
+    if event == "world_rule_revealed":
+        rule = merged.get("rule_content") or merged.get("content")
+        return f"世界规则：{rule}" if str(rule or "").strip() else ""
+    relation = merged.get("relationship") or merged.get("relation")
+    if relation:
+        src = str(merged.get("from_entity") or "").strip()
+        dst = str(merged.get("to_entity") or "").strip()
+        who = f"{src} → {dst}" if src or dst else ""
+        return f"关系（{who}）：{relation}" if who else f"关系：{relation}"
+    for key in ("content", "summary", "text", "description"):
+        text = merged.get(key)
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    return ""
+
+
 def render_chapter_structure(
     directive: Dict[str, Any],
     plot_structure: Dict[str, Any],
@@ -499,6 +865,10 @@ class WriterPackage:
     creative_brief_fingerprint: str = ""
     writing_skills: List[Dict[str, Any]] = field(default_factory=list)
     writing_skills_fingerprint: str = ""
+    # Established world facts (places, processes, relationships) the chapter must not
+    # re-invent. Selected from accepted chapters and Canon; see select_continuity_facts.
+    continuity_facts: List[Dict[str, str]] = field(default_factory=list)
+    continuity_facts_fingerprint: str = ""
     meta: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -525,6 +895,7 @@ class WriterPackage:
         scene_design: bool = False,
         reader_pull: bool = False,
         writing_skills: bool = False,
+        lean_input: bool = False,
     ) -> str:
         """
         Format the unified, canonical prompt for the Writer model.
@@ -548,9 +919,14 @@ class WriterPackage:
         what this chapter actually pays off, and what the reader now wants. It removes
         parameters rather than adding any; the chapter plan is unchanged.
 
-        `writing_skills=True` appends the router's chapter-specific instructions
-        ("本章创作方法"). Only the translated guidance is rendered — never skill ids,
-        scores, theory names, or the router's reasons.
+        `writing_skills=True` appends the selected skills ("本章创作方法"): each skill's
+        own principles, a short example pair, and the router's one-sentence relevance
+        note — never skill ids, scores, or the router's audit reasons.
+
+        `lean_input=True` is the "强治理、弱干预" Writer package: the same governed facts
+        and chapter intent, but planning vocabulary (CBN/CPNs/CEN, beat position, the
+        progress-obligation label), the duplicated Scene/Reader-Pull question blocks, and
+        raw event/path dumps are removed. It removes instructions; it adds no material.
         """
         if not self.is_writer_ready:
             raise RuntimeError(
@@ -588,7 +964,7 @@ class WriterPackage:
             f"=== 写作任务：第{self.chapter}章 ===",
             f"书名：{title} | 题材：{genre} | 目标读者：{readers} | 卷次：第{vol}卷",
             "",
-            "## 1. 本章写作意图 (Current Intent)",
+            "## 本章目标" if lean_input else "## 1. 本章写作意图 (Current Intent)",
         ]
         ch_meta = intent.get("chapter_meta") or {}
         core_event = ch_meta.get("core_event")
@@ -609,7 +985,7 @@ class WriterPackage:
         # With reader_pull on, the ending question and preset hook become material for the
         # third reader-pull question below. Rendering them here as a separate instruction is
         # what produced the "nothing happened, then add a suspense line" ending.
-        if not reader_pull:
+        if not (reader_pull or lean_input):
             if ending_q:
                 lines.append(f"- 章末钩子/未决问题：{ending_q}")
                 if hook and hook != ending_q:
@@ -618,12 +994,19 @@ class WriterPackage:
                 lines.append(f"- 章末预设钩子：{hook}（类型：{hook_type or '未指定'}）")
             elif hook_type:
                 lines.append(f"- 章末钩子倾向：{hook_type}")
-        if must_nodes:
+        if not lean_input and must_nodes:
             lines.append(f"- 必须覆盖节点：{', '.join(must_nodes)}")
-        if prohibitions:
+        if prohibitions and not lean_input:
+            # In the lean package the prohibitions are hard facts and live in the
+            # protected block below, so the Writer reads them once, with the same
+            # authority as the values and directions.
             lines.append(f"- 本章绝对禁区：{', '.join(prohibitions)}")
         prog_obligation = intent.get("progress_obligation") or {}
-        if prog_obligation and isinstance(prog_obligation, dict):
+        if lean_input:
+            obligation = render_progress_obligation(prog_obligation)
+            if obligation:
+                lines.append(f"- 本章推进要求：{obligation}")
+        elif prog_obligation and isinstance(prog_obligation, dict):
             ob_desc = prog_obligation.get("description", "")
             if ob_desc:
                 lines.append(f"- 剧情推进义务 (Progress Obligation)：{ob_desc}")
@@ -631,31 +1014,75 @@ class WriterPackage:
             # Structured fields first; the unparsed remainder is kept verbatim. No fixed
             # character slice: the old `outline[:600]` cut off CBN/CPNs/CEN, hook_type and
             # the chapter prohibitions on real ~900-1,100-char outlines.
-            structure_lines = render_chapter_structure(
-                directive,
-                intent.get("plot_structure") or {},
-                residual_notes=extract_outline_residual_notes(outline),
-            )
-            if structure_lines:
-                lines.append("【本章章纲结构】")
-                lines.extend(structure_lines)
-        scene_lines = render_scene_plan_block(directive, as_questions=scene_design)
-        if len(scene_lines) > 1:
-            lines.extend(scene_lines)
-        if reader_pull:
-            lines.extend(
-                render_reader_pull_block(
-                    directive,
-                    open_loops=writer_ctx.get("urgent_loops") or [],
+            plot_structure = intent.get("plot_structure") or {}
+            residual = extract_outline_residual_notes(outline)
+            if lean_input:
+                # The nodes are rendered once, in the protected block below; repeating
+                # them here is the "same fact twice reads as two facts" failure the
+                # lean package is meant to remove.
+                structure_lines = render_lean_chapter_structure(
+                    directive, plot_structure, residual_notes=residual, include_nodes=False
                 )
-            )
+            else:
+                structure_lines = render_chapter_structure(
+                    directive, plot_structure, residual_notes=residual
+                )
+            if structure_lines:
+                if not lean_input:
+                    lines.append("【本章章纲结构】")
+                lines.extend(structure_lines)
+        if not lean_input:
+            # The lean package lets the Creative Brief carry the scene/reader-pull
+            # conclusions. Rendering the same plan again as four + three questions is
+            # what made the Writer read a checklist.
+            scene_lines = render_scene_plan_block(directive, as_questions=scene_design)
+            if len(scene_lines) > 1:
+                lines.extend(scene_lines)
+            if reader_pull:
+                lines.extend(
+                    render_reader_pull_block(
+                        directive,
+                        open_loops=writer_ctx.get("urgent_loops") or [],
+                    )
+                )
+
+        if lean_input:
+            # Protected facts: copied verbatim from the chapter plan. This is the one
+            # region the Context Agent's Brief and the Router cannot rewrite; it exists
+            # because a single wrong direction ("低" → "高") or gap type invalidates the
+            # whole chapter, and a paraphrase is allowed to be wrong while the plan is not.
+            hard_facts = render_hard_facts(directive, intent.get("plot_structure") or {})
+            if hard_facts:
+                lines.extend([
+                    "",
+                    "## 本章必须写对",
+                    "（本节直接取自本章章纲原字段，节点只换排版、不改语义。数字、高低、先后、"
+                    "增减、因果、缺口类型一律照此，不得换成另一种说法；与后面的创作方向冲突时，"
+                    "以本节为准。）",
+                ])
+                lines.extend(hard_facts)
+
+            # Established world facts. Unlike the hard-facts block (this chapter's plan),
+            # this is what earlier accepted chapters already fixed: where a place is, how
+            # admission works, what objects look like, who stands where with whom. The
+            # Writer may use them; it may not re-invent them.
+            continuity_lines = render_continuity_facts(self.continuity_facts)
+            if continuity_lines:
+                lines.extend([
+                    "",
+                    "## 本章相关既有事实",
+                    "（本节是本书前文已经确认、本章会用到的具体事实。地点、流程、物品、人物关系"
+                    "一律照此，不要重新发明，也不要改写；本节不包含本章的剧情目标。）",
+                ])
+                lines.extend(continuity_lines)
 
         lines.extend([
             "",
-            "## 2. 治理事实与前情依据 (Governed Canon)",
+            "## 当前人物状态与前文事实" if lean_input else "## 2. 治理事实与前情依据 (Governed Canon)",
         ])
         char_entries: List[str] = []
         other_entries: List[str] = []
+        rendered_places: set[str] = set()
         rendered_facts: set[tuple[str, str]] = set()
         appearing_chars = canon.get("appearing_characters") or []
         for c in appearing_chars:
@@ -669,6 +1096,8 @@ class WriterPackage:
                 entity_id = str(c.get("entity_id") or c.get("id") or "").strip()
                 if c_type and c_type != "角色":
                     other_entries.append(f"- {c_type}：{c_name}")
+                    if c_type == "地点":
+                        rendered_places.add(c_name)
                     continue
                 state_items = [item for item in (c.get("state") or []) if isinstance(item, dict)]
                 state_text = "；".join(
@@ -705,6 +1134,13 @@ class WriterPackage:
 
         canon_items = canon.get("canon_items") or []
         if canon_items:
+            # In the lean package an open loop already shown under Writer Context is not
+            # repeated here: the same clue twice reads as two clues.
+            shown_loops = {
+                str(loop.get("content") or loop.get("hook_text") or loop.get("description") or "").strip()
+                for loop in (writer_ctx.get("urgent_loops") or [])[:3]
+                if isinstance(loop, dict)
+            } if lean_input else set()
             rendered_canon: List[str] = []
             for item in canon_items:
                 if not isinstance(item, dict):
@@ -718,9 +1154,25 @@ class WriterPackage:
                     if (entity_id, field) in rendered_facts:
                         # Already shown under the character's state; do not repeat it.
                         continue
+                    if lean_input and field.startswith("attributes."):
+                        # Established object attributes live in 本章相关既有事实.
+                        continue
                     rendered_canon.append(f"- {entity_id} · {field}：{content.get('value')}")
                 elif isinstance(content, dict):
-                    rendered_canon.append(f"- {json.dumps(content, ensure_ascii=False)}")
+                    if content.get("from_entity") and content.get("to_entity"):
+                        if lean_input:
+                            # Standing relationships live in 本章相关既有事实.
+                            continue
+                        rendered_canon.append(f"- {json.dumps(content, ensure_ascii=False)}")
+                    elif lean_input:
+                        if content.get("event_type") == "world_rule_revealed":
+                            # World rules live in 本章相关既有事实.
+                            continue
+                        event_text = _lean_event_text(content)
+                        if event_text and event_text not in shown_loops:
+                            rendered_canon.append(f"- {event_text}")
+                    else:
+                        rendered_canon.append(f"- {json.dumps(content, ensure_ascii=False)}")
                 else:
                     text = content or item.get("summary") or item.get("text") or str(item)
                     rendered_canon.append(f"- {text}")
@@ -732,15 +1184,15 @@ class WriterPackage:
         loc = scene.get("location") or scene.get("location_context")
         if isinstance(loc, dict):
             loc = loc.get("current") or loc.get("name") or loc.get("location") or ""
-        if loc:
+        if loc and not (lean_input and str(loc) in rendered_places):
             lines.append(f"【场景环境】：{loc}")
 
         lines.extend([
             "",
-            "## 3. 创作策划任务书 (Creative Brief)",
+            "## 创作方向" if lean_input else "## 3. 创作策划任务书 (Creative Brief)",
             self.creative_brief if self.creative_brief else "（未提供独立创作策划任务书）",
             "",
-            "## 4. 调性、文风与避坑约束 (Constraints & Craft)",
+            "## 工艺与边界" if lean_input else "## 4. 调性、文风与避坑约束 (Constraints & Craft)",
         ])
         if tone:
             lines.append(f"- 核心调性：{tone}")
@@ -858,54 +1310,63 @@ class WriterPackage:
         recent_sums = writer_ctx.get("recent_summaries") or []
         urgent_loops = writer_ctx.get("urgent_loops") or []
         ref_items = writer_ctx.get("reference") or []
-        if recent_sums or urgent_loops or ref_items:
+        context_lines: List[str] = []
+        for s in recent_sums[:3]:
+            s_text = s.get("summary") if isinstance(s, dict) else str(s)
+            if reader_pull or lean_input:
+                # The summary's YAML head used to hand the Writer `hook_strength: strong`
+                # and a hook-type label for a chapter it had already read.
+                s_text = strip_summary_reader_pull_fields(s_text)
+            ch_prefix = f"第{s.get('chapter')}章：" if isinstance(s, dict) and s.get("chapter") else ""
+            context_lines.append(f"- 前情摘要：{ch_prefix}{s_text}")
+        for loop in urgent_loops[:3]:
+            l_text = (
+                loop.get("hook_text")
+                or loop.get("description")
+                or loop.get("content")
+                or loop.get("expected_payoff")
+                if isinstance(loop, dict)
+                else str(loop)
+            )
+            context_lines.append(f"- 紧急伏笔待收：{l_text}")
+        rendered_refs = []
+        for r in ref_items:
+            if isinstance(r, dict):
+                c = r.get("content") or r.get("summary") or r.get("text") or ""
+                if isinstance(c, (dict, list, tuple)):
+                    if lean_input:
+                        # Provenance dumps (`story_craft.path: value`) are system
+                        # bookkeeping, not chapter material.
+                        continue
+                    if isinstance(c, dict) and "path" in c and "value" in c:
+                        c = f"{c['path']}: {c['value']}"
+                    else:
+                        c = json.dumps(c, ensure_ascii=False)
+                if str(c).strip():
+                    rendered_refs.append(str(c).strip())
+            elif isinstance(r, str) and r.strip():
+                rendered_refs.append(r.strip())
+        if rendered_refs:
+            context_lines.append("【参考依据 (Reference)】")
+            context_lines.extend(f"- {r_text}" for r_text in rendered_refs[:3])
+        if context_lines:
             lines.extend([
                 "",
-                "## 5. 关联前情线索 (Writer Context)",
+                "## 前情与线索" if lean_input else "## 5. 关联前情线索 (Writer Context)",
             ])
-            for s in recent_sums[:3]:
-                s_text = s.get("summary") if isinstance(s, dict) else str(s)
-                if reader_pull:
-                    # The summary's YAML head used to hand the Writer `hook_strength: strong`
-                    # and a hook-type label for a chapter it had already read.
-                    s_text = strip_summary_reader_pull_fields(s_text)
-                ch_prefix = f"第{s.get('chapter')}章：" if isinstance(s, dict) and s.get("chapter") else ""
-                lines.append(f"- 前情摘要：{ch_prefix}{s_text}")
-            for loop in urgent_loops[:3]:
-                l_text = (
-                    loop.get("hook_text")
-                    or loop.get("description")
-                    or loop.get("content")
-                    or loop.get("expected_payoff")
-                    if isinstance(loop, dict)
-                    else str(loop)
-                )
-                lines.append(f"- 紧急伏笔待收：{l_text}")
-            if ref_items:
-                rendered_refs = []
-                for r in ref_items:
-                    if isinstance(r, dict):
-                        c = r.get("content") or r.get("summary") or r.get("text") or ""
-                        if isinstance(c, dict):
-                            if "path" in c and "value" in c:
-                                c = f"{c['path']}: {c['value']}"
-                            else:
-                                c = json.dumps(c, ensure_ascii=False)
-                        if str(c).strip():
-                            rendered_refs.append(str(c).strip())
-                    elif isinstance(r, str) and r.strip():
-                        rendered_refs.append(r.strip())
-                if rendered_refs:
-                    lines.append("【参考依据 (Reference)】")
-                    for r_text in rendered_refs[:3]:
-                        lines.append(f"- {r_text}")
+            lines.extend(context_lines)
 
         if writing_skills:
-            lines.extend(render_writer_skills(self.writing_skills or []))
+            lines.extend(
+                render_writer_skills(
+                    self.writing_skills or [],
+                    heading="本章可用技巧" if lean_input else "本章创作方法",
+                )
+            )
 
         lines.extend([
             "",
-            "## 6. 正文交付协议 (Handoff Protocol)",
+            "## 交付要求" if lean_input else "## 6. 正文交付协议 (Handoff Protocol)",
             "1. 输出连贯正文，严格按中文叙事逻辑组织；",
             "2. 正文末尾必须严格附带合法的 <chapter_changes>...</chapter_changes> 结构化提案块；",
             "   提案块必须是合法 JSON 对象，包含以下 8 个标准顶级字段：",
@@ -1574,6 +2035,7 @@ class ChapterRuntime:
         creative_brief: Optional[str] = None,
         creative_brief_fingerprint: Optional[str] = None,
         writing_skills_fingerprint: Optional[str] = None,
+        continuity_facts_fingerprint: Optional[str] = None,
     ) -> str:
         """Deterministic fingerprint computed over chapter, source inputs, and creative brief."""
         source_fps = self.compute_source_fingerprints(chapter)
@@ -1596,6 +2058,8 @@ class ChapterRuntime:
             payload["creative_brief_fingerprint"] = brief_fp
         if writing_skills_fingerprint:
             payload["writing_skills_fingerprint"] = writing_skills_fingerprint
+        if continuity_facts_fingerprint:
+            payload["continuity_facts_fingerprint"] = continuity_facts_fingerprint
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
@@ -1911,6 +2375,21 @@ class ChapterRuntime:
             },
         }
 
+    def _accepted_prose_by_chapter(self, before_chapter: int) -> Dict[int, str]:
+        """Prose of every accepted chapter before ``before_chapter``.
+
+        The continuity block may only quote chapters that are already immutable history;
+        a draft still in flight is not a fact yet.
+        """
+        prose: Dict[int, str] = {}
+        for chapter in range(1, max(1, int(before_chapter))):
+            if not chapter_is_accepted(self.project_root, chapter):
+                continue
+            path = self._chapter_runtime_dir(chapter) / "draft.md"
+            if path.is_file():
+                prose[chapter] = path.read_text(encoding="utf-8")
+        return prose
+
     def get_writer_package(
         self,
         chapter: int,
@@ -1939,6 +2418,13 @@ class ChapterRuntime:
         writer_context = gov_ctx["writer_context"]
 
         final_brief = str(creative_brief or "").strip()
+        brief_chars = count_brief_chars(final_brief)
+        if final_brief and brief_chars > MAX_CREATIVE_BRIEF_CHARS:
+            raise ValueError(
+                f"Creative Brief 超出硬上限：{brief_chars} 字 > {MAX_CREATIVE_BRIEF_CHARS} 字。"
+                "请让 Context Agent 压缩后重新封包；不要截断或改写关键事实"
+                "（数字、方向、时间、因果由 Writer Package 的受保护区域承载）。"
+            )
         brief_fp = hashlib.sha256(final_brief.encode("utf-8")).hexdigest() if final_brief else ""
 
         sealed_skills: List[Dict[str, Any]] = []
@@ -1949,20 +2435,37 @@ class ChapterRuntime:
             guidance = str(item.get("chapter_guidance") or "").strip()
             if not skill_id or not guidance:
                 continue
-            sealed_skills.append(
-                {
-                    "id": skill_id,
-                    "chapter_guidance": guidance,
-                    "reason": str(item.get("reason") or "").strip(),
-                }
-            )
+            sealed = {
+                "id": skill_id,
+                "chapter_guidance": guidance,
+                "reason": str(item.get("reason") or "").strip(),
+            }
+            # The skill's own principles and examples travel with the sealed selection;
+            # they are what the Writer reads, so they must be inside the fingerprint.
+            for key in ("name", "principle", "example", "anti_example"):
+                value = str(item.get(key) or "").strip()
+                if value:
+                    sealed[key] = value
+            sealed_skills.append(sealed)
         skills_fp = selection_fingerprint(sealed_skills) if sealed_skills else ""
+
+        continuity_facts = select_continuity_facts(
+            governed_canon, self._accepted_prose_by_chapter(chapter)
+        )
+        continuity_fp = (
+            hashlib.sha256(
+                json.dumps(continuity_facts, sort_keys=True, ensure_ascii=False).encode("utf-8")
+            ).hexdigest()
+            if continuity_facts
+            else ""
+        )
 
         package_fp = self.compute_package_fingerprint(
             chapter,
             creative_brief=final_brief,
             creative_brief_fingerprint=brief_fp,
             writing_skills_fingerprint=skills_fp,
+            continuity_facts_fingerprint=continuity_fp,
         )
 
         meta = {
@@ -1971,8 +2474,13 @@ class ChapterRuntime:
             "native_context_authority": "ContextManager.build_context",
             "creative_planning_authority": "ContextAgent" if final_brief else "none",
             "is_writer_ready": bool(final_brief),
+            "creative_brief_chars": brief_chars,
+            "creative_brief_limit": MAX_CREATIVE_BRIEF_CHARS,
             "writing_skill_ids": [item["id"] for item in sealed_skills],
             "writing_skills_fingerprint": skills_fp,
+            "continuity_facts_count": len(continuity_facts),
+            "continuity_facts_chars": sum(len(fact["text"]) for fact in continuity_facts),
+            "continuity_facts_fingerprint": continuity_fp,
             "context_budget": writer_context.get("context_budget"),
         }
 
@@ -1989,6 +2497,8 @@ class ChapterRuntime:
             creative_brief_fingerprint=brief_fp,
             writing_skills=sealed_skills,
             writing_skills_fingerprint=skills_fp,
+            continuity_facts=continuity_facts,
+            continuity_facts_fingerprint=continuity_fp,
             meta=meta,
         )
 
@@ -2252,6 +2762,7 @@ class ChapterRuntime:
         saved_pkg = read_json_if_exists(pkg_file) or {}
         saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
         saved_skills_fp = str(saved_pkg.get("writing_skills_fingerprint") or "")
+        saved_continuity_fp = str(saved_pkg.get("continuity_facts_fingerprint") or "")
         saved_is_writer_ready = bool(saved_pkg.get("is_writer_ready") or False)
         saved_brief = str(saved_pkg.get("creative_brief") or "").strip()
 
@@ -2269,6 +2780,7 @@ class ChapterRuntime:
             chapter,
             creative_brief_fingerprint=saved_brief_fp,
             writing_skills_fingerprint=saved_skills_fp,
+            continuity_facts_fingerprint=saved_continuity_fp,
         )
         if package_fingerprint != current_fp:
             base_unsealed_fp = self.compute_package_fingerprint(chapter)
@@ -2371,6 +2883,7 @@ class ChapterRuntime:
             pkg_fp = pkg_data.get("package_fingerprint")
             saved_brief_fp = str(pkg_data.get("creative_brief_fingerprint") or "")
             saved_skills_fp = str(pkg_data.get("writing_skills_fingerprint") or "")
+            saved_continuity_fp = str(pkg_data.get("continuity_facts_fingerprint") or "")
             skills_fp = saved_skills_fp
             skill_ids = [
                 str(item.get("id"))
@@ -2381,6 +2894,7 @@ class ChapterRuntime:
                 chapter,
                 creative_brief_fingerprint=saved_brief_fp,
                 writing_skills_fingerprint=saved_skills_fp,
+                continuity_facts_fingerprint=saved_continuity_fp,
             )
             is_stale = (pkg_fp != current_fp)
 
@@ -2541,6 +3055,7 @@ class ChapterRuntime:
             saved_pkg = read_json_if_exists(pkg_file) or {}
             saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
             saved_skills_fp = str(saved_pkg.get("writing_skills_fingerprint") or "")
+            saved_continuity_fp = str(saved_pkg.get("continuity_facts_fingerprint") or "")
             saved_is_writer_ready = bool(saved_pkg.get("is_writer_ready") or False)
             if not saved_is_writer_ready or not saved_brief_fp:
                 return ChapterCommitOutcomeResult(
@@ -2582,6 +3097,7 @@ class ChapterRuntime:
                 chapter,
                 creative_brief_fingerprint=saved_brief_fp,
                 writing_skills_fingerprint=saved_skills_fp,
+                continuity_facts_fingerprint=saved_continuity_fp,
             )
             base_unsealed_fp = self.compute_package_fingerprint(chapter)
             if draft_pkg_fp == base_unsealed_fp or not draft_pkg_fp:
@@ -2624,14 +3140,17 @@ class ChapterRuntime:
                 pkg_file = runtime_dir / "writer_package.json"
                 saved_brief_fp = ""
                 saved_skills_fp = ""
+                saved_continuity_fp = ""
                 if pkg_file.is_file():
                     saved_pkg = read_json_if_exists(pkg_file) or {}
                     saved_brief_fp = str(saved_pkg.get("creative_brief_fingerprint") or "")
                     saved_skills_fp = str(saved_pkg.get("writing_skills_fingerprint") or "")
+                    saved_continuity_fp = str(saved_pkg.get("continuity_facts_fingerprint") or "")
                 current_fp = self.compute_package_fingerprint(
                     chapter,
                     creative_brief_fingerprint=saved_brief_fp,
                     writing_skills_fingerprint=saved_skills_fp,
+                    continuity_facts_fingerprint=saved_continuity_fp,
                 )
                 if _internal_package_fingerprint != current_fp:
                     return ChapterCommitOutcomeResult(
