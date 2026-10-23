@@ -340,6 +340,58 @@ def test_writer_prompt_renders_only_translated_guidance(tmp_path):
     assert 0 < len(with_skills) - len(without) < 1200
 
 
+def test_writer_receives_the_skill_principles_not_a_rewritten_script(tmp_path):
+    """The router states relevance; the method itself is passed through unchanged."""
+    from data_modules.writing_skill_registry import attach_skill_bodies
+
+    root = _base_project(tmp_path)
+    _write_skill(
+        root / ".webnovel" / "writing-skills",
+        "emotion-interiority",
+        name="情绪与内心",
+        guidance="情绪从人物此刻的处境里自己浮现。\n直接写念头是正当的。",
+    )
+    skills = discover_writing_skills(project_root=root)
+    catalog = build_router_catalog(skills)
+    result = validate_selection(
+        {
+            "selected_skills": [
+                {
+                    "id": "emotion-interiority",
+                    "reason": "情绪容易直陈",
+                    "chapter_guidance": "本章的情绪容易由叙述者说破；让念头和误判自己出现。",
+                }
+            ]
+        },
+        catalog,
+    )
+    rendered = "\n".join(
+        render_writer_skills(attach_skill_bodies(result["selected_skills"], skills))
+    )
+
+    assert "情绪与内心" in rendered
+    assert "本章的情绪容易由叙述者说破" in rendered
+    # The skill's own words reach the Writer once, not re-translated into actions.
+    assert "情绪从人物此刻的处境里自己浮现" in rendered
+    assert "正例：" in rendered and "短正例。" in rendered
+    assert "反例：" in rendered and "短反例。" in rendered
+    assert "不是执行步骤" in rendered
+    # Identity and the audit-only reason stay out.
+    assert "emotion-interiority" not in rendered
+    assert "情绪容易直陈" not in rendered
+
+
+def test_relevance_is_capped_at_one_sentence(tmp_path):
+    result = validate_selection(
+        {"selected_skills": [{"id": "alpha", "chapter_guidance": "动" * 500}]},
+        _catalog(tmp_path, "alpha"),
+    )
+
+    assert result["ok"] is True
+    assert len(result["selected_skills"][0]["chapter_guidance"]) <= 240
+    assert any("one relevance sentence" in w for w in result["warnings"])
+
+
 def test_skills_are_bound_into_the_package_fingerprint_and_status(tmp_path):
     root = _base_project(tmp_path)
     runtime = ChapterRuntime(root)

@@ -314,6 +314,86 @@ def test_reader_pull_prompt_replaces_genre_config_with_three_questions(tmp_path)
     assert "逻辑完整性优先于爽点密度" in new
 
 
+def test_lean_prompt_removes_planning_vocabulary_and_duplicate_question_blocks(tmp_path):
+    """The lean package keeps the material and drops the instruction scaffolding."""
+    root = _base_project(tmp_path)
+    (root / "大纲" / "第1卷-详细大纲.md").write_text(
+        _outline_with_structure_after_600_chars(), encoding="utf-8"
+    )
+    pkg = ChapterRuntime(root).get_writer_package(1, creative_brief="【任务书】")
+
+    legacy = pkg.to_writer_prompt(scene_design=True, reader_pull=True)
+    lean = pkg.to_writer_prompt(scene_design=True, reader_pull=True, lean_input=True)
+
+    for token in (
+        "CBN",
+        "CPNs",
+        "CEN",
+        "Progress Obligation",
+        "【场景设计四问】",
+        "【追读设计三问】",
+        "节拍位置",
+        "必须覆盖节点",
+        "本章绝对禁区",
+        "Current Intent",
+    ):
+        assert token not in lean, token
+
+    # The story material itself is still there.
+    assert "从老周口中问出潮位站停用前后的情况" in lean
+    assert "想追问 vs 每问一句都在把自己变成被观察对象" in lean
+    assert "老周反复强调自己只负责看站、不负责记录" in lean
+    assert "不得引入超自然力量" in lean
+    # The planning notation `主体 | 动作 | 结果` becomes one natural line, with
+    # every part kept: dropping the middle part would delete the action itself.
+    assert "许知远：追问老周，只得到“不负责记录”的答复" in lean
+    assert "老周：上报档案科，许知远被科长警告" in lean
+
+    # Fewer instructions, not different facts.
+    assert len(lean) < len(legacy)
+
+
+def test_lean_prompt_keeps_event_facts_but_drops_the_raw_payload(tmp_path):
+    """Unwrapping a canon event must not delete the fact inside it.
+
+    A "skip events" rule looks tidy and silently removes world rules and planted clues
+    from the Writer's input. The lean rendering unwraps `payload` instead.
+    """
+    root = _base_project(tmp_path)
+    (root / "大纲" / "第1卷-详细大纲.md").write_text(
+        _outline_with_structure_after_600_chars(), encoding="utf-8"
+    )
+    cfg = DataModulesConfig.from_project_root(root)
+    cfg.ensure_dirs()
+    IndexManager(cfg)
+    import sqlite3
+
+    db = cfg.webnovel_dir / "index.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO entities (id, type, canonical_name, current_json) VALUES (?, ?, ?, '{}')",
+            ("xu_zhiyuan", "角色", "许知远"),
+        )
+        conn.commit()
+
+    pkg = ChapterRuntime(root).get_writer_package(1, creative_brief="【任务书】")
+    # Inject a canon event the way governed context presents it.
+    pkg.governed_canon["canon_items"] = [
+        {
+            "content": {
+                "event_type": "world_rule_revealed",
+                "subject": "dang_anke",
+                "payload": {"rule_content": "进站与离站都要在钥匙交接册的进出登记栏各签一次。"},
+            }
+        }
+    ]
+    lean = pkg.to_writer_prompt(scene_design=True, reader_pull=True, lean_input=True)
+
+    assert "进站与离站都要在钥匙交接册的进出登记栏各签一次。" in lean
+    assert "event_type" not in lean
+    assert '"payload"' not in lean
+
+
 def test_legacy_prompt_keeps_config_so_the_ab_control_is_reproducible(tmp_path):
     root = _base_project(tmp_path)
     (root / "大纲" / "第1卷-详细大纲.md").write_text(
@@ -428,3 +508,4 @@ def test_both_write_skills_enable_scene_and_reader_pull_for_the_writer():
         brief_cmd = next(seg for seg in segments if "--chapter {chapter_num}" in seg)
         assert "--scene-design" in brief_cmd, f"{skill}: missing --scene-design"
         assert "--reader-pull" in brief_cmd, f"{skill}: missing --reader-pull"
+        assert "--lean-input" in brief_cmd, f"{skill}: missing --lean-input"

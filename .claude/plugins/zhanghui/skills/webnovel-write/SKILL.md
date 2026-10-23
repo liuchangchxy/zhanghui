@@ -305,26 +305,26 @@ Use the Agent tool to run `zhanghui:context-agent`
 
 硬要求：
 - 若 `state` 或大纲不可用，立即阻断并返回缺失项。
-- 写章链路隔离约束：本步使用 `zhanghui:context-agent`（写作任务书），与下游 `zhanghui:reviewer` / `zhanghui:data-agent` 通过 Agent 工具显式分隔；不得用主流程口头代替 subagent 输出。
-- **保留 Context Agent 文学认知能力**：Context Agent 消费上述受治理上下文及参考输入，专注文学层面的创作决策：
+- 写章链路隔离约束：本步使用 `zhanghui:context-agent`（创作材料），与下游 `zhanghui:reviewer` / `zhanghui:data-agent` 通过 Agent 工具显式分隔；不得用主流程口头代替 subagent 输出。
+- **保留 Context Agent 文学认知能力**：Context Agent 消费上述受治理上下文及参考输入，专注文学层面的创作判断：
   - 人物核心动机与心理走向；
   - 本章核心冲突、阻力与代价；
-  - 章节节拍（Beats）与情节推进（CBN/CPNs/CEN）；
-  - 情绪节奏与追读力设计；
-  - 针对性写法与镜头指导。
-- **产物**：返回真实五段写作任务书（Creative Brief）：
+  - 章节节拍与情节推进（内部判断，不在材料里罗列 CBN/CPNs/CEN）；
+  - 情绪节奏与追读设计（内部判断，只写结论）；
+  - 本章感觉与边界（基调、节奏、视角；不排镜头、不编动作）。
+- **产物**：返回真实创作材料（Creative Brief），五节、1200–1800 字：
   1. 开篇委托（书名、章号、标题、一句话目标）
-  2. 这章的故事（本章目标/阻力、情节节点、必须覆盖/禁区、跨章约束）
-  3. 人物小动作（动机外化、微反应、心理处境）
-  4. 本章阻力与代价（逆境设计、情绪底色、写法指导）
+  2. 这章必须发生什么（从哪接上、目标、阻力、代价、结束前必须兑现的变化、必须覆盖/不能提前发生）
+  3. 人物与硬事实（状态、驱动力、本章作用、说话倾向、绝对不能写错的事实）
+  4. 这章的感觉与边界（基调、节奏、视角、题材质感；不排动作）
   5. 收在哪里（本章回报：谁得到了什么/失去了什么/知道了什么；由此产生的新期待。不要为留钩硬加悬念）
-- **硬边界**：Context Agent 专注于认知决策并输出写作任务书，不负责拼装底层系统/模型 Prompt，也不绕过 Native Writer Package 直接驱动起草。
+- **硬边界**：Context Agent 专注于创作材料，不替 Writer 编动作、对白、道具操作或镜头；不负责拼装底层系统/模型 Prompt，也不绕过 Native Writer Package 直接驱动起草。
 
 #### 1B2. Writing Skill Router（本章写作方法选择）
 
-在 Context Agent 产出任务书之后、封口之前，增加一次**轻量**方法选择。它不写正文、不改章纲，只回答“本章真正需要哪些写作技巧”。
+在 Context Agent 产出创作材料之后、封口之前，增加一次**轻量**方法选择。它不写正文、不改章纲，只回答“本章真正需要哪些写作技巧”。
 
-1. 把 Context Agent 的任务书写到临时文件（后文 1C 与 Router 共用同一份）：
+1. 把 Context Agent 的创作材料写到临时文件（后文 1C 与 Router 共用同一份）：
 
 ```bash
 python3 -X utf8 -c "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(sys.argv[2], encoding='utf-8')" \
@@ -336,7 +336,7 @@ python3 -X utf8 -c "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(sys
    该 agent 会：
    - 运行 `writing-skills input`（运行时扫描 `writing-skills/`，无需任何 Python 注册表）；
    - 选择 2–5 个真正适用的技巧；
-   - 把每个技巧翻译成**本章具体写法**（不出现理论名、字段名、技巧 id）；
+   - 为每个技巧写**一句本章为什么值得注意**（不出现理论名、字段名、技巧 id；不编动作、对白或镜头）；
    - 写入 `.webnovel/tmp/writing_skills_{chapter_padded}.json` 并运行 `writing-skills validate` 自检。
 
 3. 校验必须由 Router 完成且 `ok=true`；主流程不手工改写选择文件。若 Router 失败，
@@ -344,20 +344,20 @@ python3 -X utf8 -c "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(sys
 
 **硬要求**：
 - Skill 输出只是写作方法，永远不能覆盖 Canon、作者意图、本章禁区；冲突由 Router 在选择时消解。
-- Writer 只会看到“本章创作方法”编号列表；不得把 `reason`、id、分数、理论名写进正文 prompt。
+- Writer 会看到被选中 Skill 的**原始原则 + 极短正反例 + 一句本章相关性说明**；不得把 `reason`、id、分数写进正文 prompt，也不得把方法改写成本章动作脚本。
 - 新增技巧只需放入 `writing-skills/<id>/SKILL.md`，不修改任何 Python 或本流程。
 
 #### 1C. Runtime 封口与唯一 Canonical Writer Prompt 生成（Seal Native Writer Package）
-将 Context Agent 输出的真实写作任务书回传给 Runtime 进行签名封口，生成唯一 Canonical Writer Prompt：
+将 Context Agent 输出的真实创作材料回传给 Runtime 进行签名封口，生成唯一 Canonical Writer Prompt：
 
 ```bash
-# 将 Context Agent 输出的五段任务书作为参数传给 runtime attach-creative-brief
+# 将 Context Agent 输出的创作材料作为参数传给 runtime attach-creative-brief
 # --format prompt 输出 Canonical Writer Prompt，重定向至临时文件供 Writer 消费
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
   --chapter {chapter_num} \
   --brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt" \
   --skills-file "${PROJECT_ROOT}/.webnovel/tmp/writing_skills_{chapter_padded}.json" \
-  --scene-design --reader-pull \
+  --scene-design --reader-pull --lean-input \
   --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
 
 # 立即从同一份刚封口的 runtime 状态中提取 package_fingerprint（确保 Prompt 与 Fingerprint 绝对来自同一个 sealed WriterPackage）

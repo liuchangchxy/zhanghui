@@ -1,0 +1,101 @@
+{
+  "chapter": 6,
+  "draft_id": "draft-006-4c6f351d",
+  "draft_fingerprint": "7ead798ab32983a3f0e503999ff0d32360e3409d05bd5d5aa018a2fc4686d15f",
+  "review_subject_fingerprint": "2247e4a94cbb937d4a3b6f43900ad4f2222fea4c0dc877e0ac91c2078678d21f",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "high",
+      "category": "continuity",
+      "location": "ch006:line53-59",
+      "description": "许知远问“墙角那台终端，你动过吗”，梁沐答“不动。那台不在我工单上”，与第2章已提交正文中梁沐正蹲在该通信终端旁拧螺丝、并自述“拆之前最后一轮”的事实冲突；许知远当时在场亲眼所见，此处提问与他的知识边界不符。",
+      "evidence": "第2章：“他走到那台通信终端旁边。外壳已经打开了……蹲着的人没有抬头”；本章：“不动。那台不在我工单上。”",
+      "fix_hint": "改为延续性追问（如“这台终端上回是你拆的，电源板动过没有”），或让梁沐的回避限定为“这一轮不在我工单上”，并由许知远点破前后不一致。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "continuity",
+      "location": "ch006:line173",
+      "description": "章末称通信终端“布角掀着，是他上回掀的”，与第1章“他没有掀那块塑料布”及第2章外壳由梁沐打开的事实矛盾，也违背老周“地上那台机器你别碰”的禁令。",
+      "evidence": "第1章：“他没有掀那块塑料布”；本章：“布角掀着，是他上回掀的。”",
+      "fix_hint": "改为“布角掀着，是上回拆机时掀的”，或删去归属只写“布角还掀着”。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "setting",
+      "location": "ch006:line71-73",
+      "description": "抄录位置与 canon 记录不一致：canon 记为抄在“本人工作记录背面”，本章写为“翻到中间那几页”。",
+      "evidence": "canon xu_zhiyuan.known_evidence：“仅抄录于本人工作记录背面”；正文：“翻到中间那几页，转过去”。",
+      "fix_hint": "统一为背面（或在 canon 侧统一改为中间页），避免后续取证时位置对不上。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "continuity",
+      "location": "ch006:全章",
+      "description": "第5章钩子（月报封底那行不是他笔迹的铅笔小字）在本章完全未提及，只回应了缺页一侧。",
+      "evidence": "第5章章纲钩子：“他在月报封底看到一行铅笔小字，不是他的笔迹”；本章末仅“缺的那一页，正是这一天”。",
+      "fix_hint": "加一句他此刻把那行小字与“这天不该有记录”并置（不推进结论），让钩子保持存活。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "logic",
+      "location": "ch006:line9-11, line167",
+      "description": "开场以“补两项差异说明、需要一份原始登记参照”为由进站，但全章未取得任何原始登记，老周只“嗯”了一声，结尾直接“我回去填”，开场动机线悬空。",
+      "evidence": "“得有一份原始登记参照”……“老周‘嗯’了一声”……结尾“两项差异说明，我回去填。”",
+      "fix_hint": "让老周给出或明确拒绝给出原始登记（一句即可），或让许知远自己点明这只是进站的幌子。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "beat_compliance",
+      "location": "ch006:line71-77",
+      "description": "CPN“交出设备型号变更记录”未字面落实：他交出的是市志大事记、两条旧报简讯与铭牌型号抄录，并无“设备型号变更记录”这份材料；CBN 与 CEN 均已落实。",
+      "evidence": "CPN：“许知远 | 交出设备型号变更记录 | 换取梁沐信任”；正文交出物：“市志大事记……旧报两条……型号 TX-2015，编号 TX-2015-086”。",
+      "fix_hint": "把交出物准确表述为“公开材料与铭牌抄录”，或补一笔他把“事故后统一换的”记为待核的变更线索。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 6,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "发现1个问题：抄录位置与 canon（工作记录背面）不一致"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "发现3个问题：终端“动过吗”与第2章冲突、章末“是他上回掀的”与第1章冲突、第5章铅笔小字钩子未回应"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "发现1个问题：开场“原始登记参照”诉求章内无后续"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "发现1个问题：CPN 字面未落实（CBN/CEN 已覆盖，Break Into Two 与 B 线成立）"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "summary": "6个问题：0个阻断（reviewer 未赋予任何阻断），1个高优（梁沐对通信终端的说法与第2章已提交正文冲突），其余5个为 medium/low；CBN+CEN 与 TL-005（本章内建立与梁沐的合作）均已落实，do_not_copy 扫描零违规。"
+}

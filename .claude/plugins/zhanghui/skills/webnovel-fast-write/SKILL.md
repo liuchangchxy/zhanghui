@@ -66,7 +66,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
    `scripts_dir` 必须显式传入 `${SCRIPTS_DIR}`：subagent 的 Bash 不继承本会话的 `export`。
    把任务书写到 `${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt`。
 2. 使用 Agent 工具调用 `zhanghui:writing-skill-router`（传入 `chapter`、`project_root`、`scripts_dir`、
-   `brief_file`），由它发现 `writing-skills/`、选择 2–5 个适用技巧、翻译成本章写法，并写出
+   `brief_file`），由它发现 `writing-skills/`、选择 2–5 个适用技巧、为每个技巧写一句本章相关性说明，并写出
    `.webnovel/tmp/writing_skills_{chapter_padded}.json`（内部已跑 `writing-skills validate`）。
    该步骤失败时记录原因并按“无 Skill”继续，不得伪造选择。
 3. 调用 `runtime attach-creative-brief` 签名封口，生成唯一 Canonical Writer Prompt，并从同一封口包提取 `package_fingerprint`：
@@ -76,7 +76,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
   --chapter {chapter_num} \
   --brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt" \
   --skills-file "${PROJECT_ROOT}/.webnovel/tmp/writing_skills_{chapter_padded}.json" \
-  --scene-design --reader-pull \
+  --scene-design --reader-pull --lean-input \
   --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
 
 # 立即从同一份刚封口的 runtime 状态中读取 package_fingerprint（确保 Prompt 与 Fingerprint 来自同一 sealed WriterPackage）

@@ -10,10 +10,15 @@ central list, or registration call to edit.
 Two audiences, deliberately separated:
 
 * the **router** (an AI step) sees the method — purpose, applicability, anti-patterns,
-  guidance body — and decides which skills this chapter actually needs, then translates
-  each into a chapter-specific instruction;
-* the **Writer** sees only that translation ("本章创作方法"), never the theory, the skill
-  id, the score, or why the skill was picked.
+  guidance body — and decides which skills this chapter actually needs. It states *why
+  this chapter* needs each one, in a single sentence. It does not rewrite the method into
+  actions, dialogue, or a shot list;
+* the **Writer** sees the skill's own principles, its short positive/negative examples,
+  and that one-sentence relevance note ("本章创作方法"). The skill id, the score and the
+  router's audit reason stay out.
+
+The principles are passed through from ``SKILL.md`` rather than re-translated, so a
+literary method reaches the Writer once, not twice.
 
 Discovery scans without a cache. Files are small and read once per chapter, so a stale
 cache would only buy a hot-reload bug.
@@ -33,7 +38,10 @@ PROJECT_SKILLS_REL = Path(".webnovel") / "writing-skills"
 
 DEFAULT_MAX_SKILLS = 5
 DEFAULT_MIN_SKILLS = 2
-MAX_GUIDANCE_CHARS = 600
+# The router now writes one relevance sentence, not a direction. Keep it a sentence.
+MAX_GUIDANCE_CHARS = 240
+MAX_PRINCIPLE_CHARS = 1200
+MAX_EXAMPLE_CHARS = 320
 
 REQUIRED_FIELDS = ("id", "name", "purpose", "applies_when", "avoid_when")
 
@@ -368,17 +376,23 @@ def validate_selection(
             continue
         guidance = item["chapter_guidance"]
         if not guidance:
-            errors.append(f"{skill_id}: chapter_guidance is required (theory alone must not reach the Writer)")
+            errors.append(
+                f"{skill_id}: chapter_guidance is required (say why this chapter needs the skill; "
+                "the skill body itself is passed through separately)"
+            )
             continue
         leak = next((tok for tok in THEORY_LEAK_TOKENS if tok in guidance.lower()), None)
         if leak:
             errors.append(
                 f"{skill_id}: chapter_guidance leaks meta/theory token {leak!r}; "
-                "translate it into what to write, not which method is being used"
+                "state why this chapter needs it, not which method is being used"
             )
             continue
         if len(guidance) > MAX_GUIDANCE_CHARS:
-            warnings.append(f"{skill_id}: chapter_guidance truncated to {MAX_GUIDANCE_CHARS} chars")
+            warnings.append(
+                f"{skill_id}: chapter_guidance truncated to {MAX_GUIDANCE_CHARS} chars "
+                "(it should be one relevance sentence, not a scene direction)"
+            )
             guidance = guidance[:MAX_GUIDANCE_CHARS].rstrip()
         seen.add(skill_id)
         selected.append(
@@ -408,9 +422,50 @@ def validate_selection(
     }
 
 
+def _trim(text: Any, limit: int) -> str:
+    """Trim without collapsing line breaks: skill bodies are bullet lists."""
+    value = str(text or "").strip()
+    if len(value) <= limit:
+        return value
+    return value[: max(0, limit - 1)].rstrip() + "…"
+
+
+def attach_skill_bodies(
+    selection: Sequence[Mapping[str, Any]],
+    skills: Sequence[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Attach each selected skill's own principles and examples to the selection.
+
+    The router only says *why this chapter* needs the skill. The method text comes from
+    the skill file unchanged, so the Writer is not reading a second-hand translation.
+    """
+    by_id = {str(skill.get("id") or ""): skill for skill in skills}
+    enriched: List[Dict[str, Any]] = []
+    for item in selection:
+        entry = dict(item)
+        skill = by_id.get(str(item.get("id") or ""))
+        if skill:
+            entry["name"] = str(skill.get("name") or "").strip()
+            entry["principle"] = _trim(skill.get("guidance"), MAX_PRINCIPLE_CHARS)
+            example = _trim(skill.get("example"), MAX_EXAMPLE_CHARS)
+            anti = _trim(skill.get("anti_example"), MAX_EXAMPLE_CHARS)
+            if example:
+                entry["example"] = example
+            if anti:
+                entry["anti_example"] = anti
+        enriched.append(entry)
+    return enriched
+
+
 def selection_fingerprint(selection: Sequence[Mapping[str, Any]]) -> str:
     payload = [
-        {"id": item.get("id", ""), "guidance": item.get("chapter_guidance", "")}
+        {
+            "id": item.get("id", ""),
+            "guidance": item.get("chapter_guidance", ""),
+            "principle": item.get("principle", ""),
+            "example": item.get("example", ""),
+            "anti_example": item.get("anti_example", ""),
+        }
         for item in selection
     ]
     return hashlib.sha256(
@@ -419,21 +474,50 @@ def selection_fingerprint(selection: Sequence[Mapping[str, Any]]) -> str:
 
 
 def render_writer_skills(selection: Sequence[Mapping[str, Any]]) -> List[str]:
-    """Render only the chapter-specific instructions, never the skill identity."""
-    guidance = [
-        str(item.get("chapter_guidance") or "").strip()
+    """Render the selected skills as principles, not as a task script.
+
+    With a skill body attached (the normal path), the Writer sees the skill's own
+    method, one short example pair, and the router's one-sentence reason. Without one
+    (legacy callers), the old guidance-only rendering is preserved.
+    """
+    entries = [
+        item
         for item in selection
-        if isinstance(item, Mapping) and str(item.get("chapter_guidance") or "").strip()
+        if isinstance(item, Mapping)
+        and (
+            str(item.get("chapter_guidance") or "").strip()
+            or str(item.get("principle") or "").strip()
+        )
     ]
-    if not guidance:
+    if not entries:
         return []
     lines = [
         "",
         "## 本章创作方法",
-        "（以下方法只在本章素材允许的范围内执行；与 Canon、作者意图、本章禁区冲突时，一律以后者为准。）",
+        "（这些是写作原则，不是执行步骤；具体动作、对白和细节由你根据本章材料自己决定。"
+        "与 Canon、作者意图、本章禁区冲突时，一律以后者为准。）",
     ]
-    for idx, text in enumerate(guidance, start=1):
-        lines.append(f"{idx}. {text}")
+    for idx, item in enumerate(entries, start=1):
+        relevance = str(item.get("chapter_guidance") or "").strip()
+        principle = str(item.get("principle") or "").strip()
+        name = str(item.get("name") or "").strip()
+        if not principle:
+            lines.append(f"{idx}. {relevance}")
+            continue
+        header = name or "本章方法"
+        if relevance:
+            header = f"{header} —— 本章值得注意：{relevance}"
+        lines.append(f"{idx}. {header}")
+        for raw in principle.splitlines():
+            text = raw.rstrip()
+            lines.append(f"   {text}" if text.strip() else "")
+        for label, key in (("正例", "example"), ("反例", "anti_example")):
+            text = str(item.get(key) or "").strip()
+            if not text:
+                continue
+            parts = [part.strip() for part in text.splitlines() if part.strip()]
+            lines.append(f"   {label}：{parts[0]}")
+            lines.extend(f"   {part}" for part in parts[1:])
     return lines
 
 

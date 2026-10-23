@@ -1,0 +1,146 @@
+{
+  "chapter": 7,
+  "draft_id": "draft-007-bad0b389",
+  "draft_fingerprint": "c1d921ed64a0e5f065bb4c99185562abf89b1027653b490de31917181275b177",
+  "review_subject_fingerprint": "dbedbe0a4034faecd1c000db828314f9a1e020fc0551a8c4623c3305755c48f9",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "high",
+      "category": "beat_compliance",
+      "location": "L89、L97-99（『三点二三减二点三一，零点九二』）",
+      "description": "章末钩子的方向与正文数值相反。规划钩子为『复算出的当夜潮位，比官方记录低了将近一米』，而正文复算 3.23 米、月报 2.31 米，复算值比官方记录高 0.92 米。CEN『差近一米』成立，但 hook 的方向被写反，且正文始终没有把 0.92 表述为『低』。",
+      "evidence": "planning hook『复算出的当夜潮位，比官方记录低了将近一米』 vs 正文『三点二三减二点三一，零点九二』（复算>官方）",
+      "fix_hint": "二选一：把 17 日 2 时的复算值改到 2.31 之下（如 1.4 米量级）以匹配『低了近一米』，或把规划钩子方向改为『高了将近一米』并同步 chapter_meta。",
+      "blocking": false
+    },
+    {
+      "severity": "high",
+      "category": "continuity",
+      "location": "L103（『第十一至十三项没核，第二项第七项的差异说明空着』）",
+      "description": "清点单状态与已锁定的既有事实冲突。第2章正文与 canon inventory_status 均记『十三项已全部核完并逐项勾销』，第十一至十三项当时已核并划销；第6章已把第二项差异说明写成『标尺座为旧式，长度待核，原始登记未取得』。本章把二者都写回未完成状态。",
+      "evidence": "本章『第十一至十三项没核』『第二项…差异说明空着』 vs ch2『第十一项，数量对，编号对。第十二项，数量对。第十三项，数量对』+ canon『十三项已全部核完并逐项勾销』；ch6『在第二项下面写了一行…原始登记未取得』",
+      "fix_hint": "改为『十一至十三项已勾销，第二项差异说明已填、第七项仍空着』，只保留未交这一层压力。",
+      "blocking": false
+    },
+    {
+      "severity": "high",
+      "category": "setting",
+      "location": "L53-55（『北屿比临港晚二十三分，三天一样』）",
+      "description": "潮汐表数据与据此得出的结论自相矛盾。按本章抄录的高潮时刻计算，北屿比临港晚：十六日 48 分钟、十七日 23 分钟、十八日 23 分钟，『三天一样』不成立。这是主角用来验证『表自己跟自己对得上』的关键一步。",
+      "evidence": "抄录值：临港 16/17/18 日高潮 2:45/3:35/4:25，北屿 3:33/3:58/4:48；差值 48/23/23 分钟",
+      "fix_hint": "把北屿十六日高潮改为约 3:08，或把结论改为『十七、十八两日都晚二十三分』并解释十六日为何不同。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "L91-93（『两点到三点这一小时…曲线最陡的一段就在这儿』）",
+      "description": "结论与紧邻两行的自有数据矛盾。同一段给出的时值是一时 2.56、二时 3.23、三时 3.63、四时 3.67，即 1→2 时涨 67 厘米/时、2→3 时涨 40 厘米/时，最陡的一段在一时到二时，不在两点到三点；按余弦插值，最大斜率出现在半潮位（约零点二十七分），也不在两点到三点。",
+      "evidence": "『一时，二点五六；三时，三点六三』与『两点到三点…抬了四十厘米…最陡的一段就在这儿』",
+      "fix_hint": "删掉『最陡』判断，或改为『这一段已经开始放缓』，与半潮位最大斜率保持一致。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "setting",
+      "location": "L59（『库房在码头后面』）",
+      "description": "旧报库位置与第2章设定冲突。第2章明写旧报库在报社后院，本章改到码头后面，且第2章同一天他从旧报库出来后走到港区坐班车，两处地理关系无法同时成立。",
+      "evidence": "ch2『旧报库在报社后院』 vs 本章『库房在码头后面』",
+      "fix_hint": "统一为报社后院；若确要迁到码头，需补一句搬迁或另设分库。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "timeline",
+      "location": "L9（『地方志办公室在文化馆三楼…墙上的钟指着九点四十』）",
+      "description": "开放时间与第2章冲突。第2章明写该办公室下午两点半开门，许知远当天是午后到的；本章上午九点四十已在内办理查阅，未交代开放时段变化。",
+      "evidence": "ch2『下午两点半开门』 vs 本章上午九点四十已在办事员窗口前查目录",
+      "fix_hint": "改为下午到场并把后续旧报库、回科里的时间顺推，或补一句当天因故上午临时开放。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "continuity",
+      "location": "L69、L97（『十七日那一页过程记录不在』『二时那一格印着二点三一』）",
+      "description": "上一章章末钩子未被回应，反而被架空。第6章以梁沐『三月十七那天不该有记录』收尾，并把下章动机指向『通信设备故障这个结论是从哪一份数上来的』；本章直接拿月报 17 日 2 时的数值当官方基准去比对，全程没有处理『停测期为何还有 17 日记录』这一层。该矛盾本可成为本章的推进点，却被静默略过。",
+      "evidence": "ch6『三月中下旬停测，仪器停，纸带不走』『那天不该有记录』 vs 本章『十七日那一行…二时那一格印着二点三一』",
+      "fix_hint": "在比对前加一两句点破：若十七日停测，这一格本不该有数；把『不该有的记录』直接并入本次比对的结论。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "timeline",
+      "location": "L3（『昨晚那两行字还在背面』）",
+      "description": "时间锚点与既有事实不符。本子背面那两行（日期与编号）是第1章（10 月 9 日）抄下的，第6章 10 月 14 日夜并无再抄录的动作；称其为『昨晚那两行字』缺少来源。",
+      "evidence": "ch1『把日期和编号抄上去，抄在自己那本工作记录的背面』（10/9） vs 本章 10/15 称『昨晚』",
+      "fix_hint": "改为『本子背面那两行字还在』，去掉『昨晚』。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "setting",
+      "location": "L59（『管理员给他一张登记单：姓名、单位、日期、调阅内容』）",
+      "description": "旧报库登记方式与已建立规则有偏移。canon 记『在门口登记簿写下姓名与进库时间即可查阅』，本章改成一张含单位与调阅内容的登记单。虽保留了『没有事由栏』这一层，但新增了单位字段，等于多留一条可追溯记录，会削弱本章的规避逻辑。",
+      "evidence": "canon『旧报库在门口登记簿写下姓名与进库时间即可查阅』 vs 本章登记单含『单位』『调阅内容』",
+      "fix_hint": "回到登记簿写法，只留姓名与进库时间；若保留登记单，需交代单位栏他如何填。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "logic",
+      "location": "L41（『科长会看见。郑培也会』）",
+      "description": "『郑培也会看见』缺少组织路径支撑。登记簿一本留海洋资料部门、一本回本单位（档案科），郑培是港务集团调度主管，与港口管理局档案科不属同一单位，其可见性在既有设定中没有依据。",
+      "evidence": "设定集/主角卡『郑培（港务调度主管）』vs 本章『一本在那边，一本回你们单位』",
+      "fix_hint": "要么补一句郑培与档案科的业务交叉（如调度与档案的联合台账），要么只保留『科长会看见』。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "foreshadow_compliance",
+      "location": "全章（timed_locks TL-005）",
+      "description": "限时锁 TL-005『第6章内必须建立与梁沐的合作关系』deadline 为第 6 章，至本章仍为 active。第6章正文与本章均显示该关系已建立，疑似为状态未回写而非剧情遗漏，但本章未对此做任何承接。",
+      "evidence": "craft_constraints.timed_locks: TL-005 status=active, deadline_chapter=6, fulfilled_chapter=null",
+      "fix_hint": "在章节提取/提交时把 TL-005 标为 fulfilled（以第6章铁门后对话为证据），避免逾期状态继续累积。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 11,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "发现3个问题：北屿时差结论与抄录数据不符（48/23/23 被写成三天同为23分钟）；旧报库位置（报社后院→码头后面）冲突；旧报库登记方式偏离 canon"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "发现2个问题：地方志办公室上午九点四十已在办理，与第2章『下午两点半开门』冲突；『昨晚那两行字』时间锚点与第1章抄录事实不符"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "发现2个问题：清点单状态与 canon/第2、6章冲突（十一至十三项已核、第二项差异说明已填）；第6章『那天不该有记录』钩子未被回应"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "发现2个问题：『曲线最陡的一段』与本章自有数值矛盾；『郑培也会看见』缺少组织路径支撑"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "发现1个问题：章末钩子方向与正文数值相反（规划为『低了近一米』，正文复算比官方高 0.92 米）"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "发现1个问题：TL-005 逾期未回写（低）"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "summary": "11个问题：0个 reviewer 自行赋予的阻断，0个 critical、3个高优、4个中优、4个低优。高优三项：章末钩子方向与正文数值相反、清点单状态与 canon/第2章冲突、北屿时差结论与本章抄录数据不符。8维均已逐项检查；do_not_copy_check.json 的 violations 为空。"
+}
