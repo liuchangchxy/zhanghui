@@ -88,6 +88,7 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
   `chapter_004`；`chapter_padded` 是四位章号，只用于 `.webnovel/tmp/` 下的文件名）；
 - Canonical Writer Prompt 经 `--format prompt` 渲染输出，直接保存为草稿起草唯一输入；
 - `PACKAGE_FINGERPRINT` 经 `runtime status --format json` 提取（Runtime 校验 `has_writer_package=true` 且 `is_writer_package_stale=false`）；
+- Brief 超过 1800 字（不计空白）或某条 Router 说明超过 120 字都会被硬拒绝；压缩后重新生成，不要截断事实绕过；
 - 严禁二次封口、严禁手动计算或伪造指纹、严禁重新拼装 Writer Prompt。
 
 ### Step 2A：正文起草与草稿登记

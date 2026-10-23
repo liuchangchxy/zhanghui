@@ -22,7 +22,7 @@ color: cyan
 
 - `reason`：选它的审计理由，不会给 Writer。
 - `chapter_guidance`：**一句本章为什么值得注意这项方法**，Writer 会看到。
-- 被选中技巧的原始原则、正例、反例由 runtime 从 `SKILL.md` 原样附给 Writer，**不需要你复述或改写**。
+- 被选中技巧的**核心原则与一个极短例子**由 runtime 从 `SKILL.md` 附给 Writer（所有技巧共享一个预算），**不需要你复述或改写**。
 
 ## 2. 输入
 
@@ -55,10 +55,10 @@ Creative Brief，以及 `available_skills`（当前目录里真实存在的技�
 
 ## 4. `chapter_guidance` 只回答“这一章为什么用得上”
 
-Writer 会同时收到你的这句说明，以及被选中技巧的原始原则与正反例。所以你不负责把方法
+Writer 会同时收到你的这句说明，以及被选中技巧的核心原则与一个短例子。所以你不负责把方法
 改写成动作脚本；你只负责指出这项方法落在本章的哪一个真实风险上。
 
-- **一句话，40–120 字，最多 240 字。**
+- **一句话，40–120 字。120 是硬上限：超过会被 `writing-skills validate` 直接拒绝，不是截断放行。**
 - 用本书的人物名、地点、本章冲突来说明“为什么值得注意”，不排演“怎么做”。
 - 禁止出现：技巧 id、技巧名、作者名、理论名、`scene_goal` / `hook_type` 这类字段名、
   “运用……理论”“根据……方法”“Skill”等元语言。
@@ -93,7 +93,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" \
   writing-skills validate --selection-file "${PROJECT_ROOT}/.webnovel/tmp/writing_skills_{chapter_padded}.json" --format json
 ```
 
-`ok` 必须为 `true`。若为 `false`，按 `errors` 修正（未知 id、缺少相关性说明、理论泄漏、超过数量上限），
+`ok` 必须为 `true`。若为 `false`，按 `errors` 修正（未知 id、缺少相关性说明、理论泄漏、说明超过 120 字、超过数量上限），
 重写文件并再次校验。不要绕过校验，也不要把未通过的文件交给主流程。
 
 ## 6. 返回

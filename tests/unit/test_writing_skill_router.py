@@ -373,23 +373,56 @@ def test_writer_receives_the_skill_principles_not_a_rewritten_script(tmp_path):
     assert "本章的情绪容易由叙述者说破" in rendered
     # The skill's own words reach the Writer once, not re-translated into actions.
     assert "情绪从人物此刻的处境里自己浮现" in rendered
+    # One short example, not a matched pair: the Writer needs enough, not the document.
     assert "正例：" in rendered and "短正例。" in rendered
-    assert "反例：" in rendered and "短反例。" in rendered
+    assert "反例：" not in rendered
     assert "不是执行步骤" in rendered
     # Identity and the audit-only reason stay out.
     assert "emotion-interiority" not in rendered
     assert "情绪容易直陈" not in rendered
 
 
-def test_relevance_is_capped_at_one_sentence(tmp_path):
+def test_skill_bodies_share_one_budget_and_keep_one_example(tmp_path):
+    """Selecting five skills must not multiply the Writer's prompt.
+
+    The 2026-10-23 A/B measured 2,033-2,868 chars of skill bodies at 1,200 chars per
+    skill. The budget is now shared: the more skills, the smaller each share.
+    """
+    from data_modules.writing_skill_registry import (
+        TOTAL_SKILL_CONTENT_BUDGET,
+        attach_skill_bodies,
+    )
+
+    root = tmp_path / "skills"
+    ids = [f"skill-{i}" for i in range(1, 6)]
+    for skill_id in ids:
+        _write_skill(root, skill_id, guidance="原则。" * 400)
+    skills = discover_writing_skills(roots=[root])
+    selection = [
+        {"id": skill_id, "chapter_guidance": "本章需要这一项。"} for skill_id in ids
+    ]
+
+    bodies = attach_skill_bodies(selection, skills)
+    assert len(bodies) == 5
+    total = sum(
+        len(body.get("principle", "")) + len(body.get("example", ""))
+        for body in bodies
+    )
+    assert total <= TOTAL_SKILL_CONTENT_BUDGET
+    for body in bodies:
+        assert bool(body.get("example")) != bool(body.get("anti_example"))
+
+
+def test_overlong_relevance_is_rejected_not_truncated(tmp_path):
+    """120 chars is a hard gate: a 500-char direction must not reach the Writer."""
     result = validate_selection(
         {"selected_skills": [{"id": "alpha", "chapter_guidance": "动" * 500}]},
         _catalog(tmp_path, "alpha"),
     )
 
-    assert result["ok"] is True
-    assert len(result["selected_skills"][0]["chapter_guidance"]) <= 240
-    assert any("one relevance sentence" in w for w in result["warnings"])
+    assert result["ok"] is False
+    assert result["selected_skills"] == []
+    assert any("hard limit" in e for e in result["errors"])
 
 
 def test_skills_are_bound_into_the_package_fingerprint_and_status(tmp_path):

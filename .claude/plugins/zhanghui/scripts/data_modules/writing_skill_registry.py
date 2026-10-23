@@ -38,10 +38,19 @@ PROJECT_SKILLS_REL = Path(".webnovel") / "writing-skills"
 
 DEFAULT_MAX_SKILLS = 5
 DEFAULT_MIN_SKILLS = 2
-# The router now writes one relevance sentence, not a direction. Keep it a sentence.
-MAX_GUIDANCE_CHARS = 240
-MAX_PRINCIPLE_CHARS = 1200
-MAX_EXAMPLE_CHARS = 320
+# The router writes one relevance sentence, not a direction. The 2026-10-23 A/B found
+# the old 240-char "cap" only warned and every one of 11 guidance lines came in at
+# 133-180 characters, so the sentence limit never took effect. It is now a hard reject.
+MAX_GUIDANCE_CHARS = 120
+MIN_GUIDANCE_CHARS = 40
+# The Writer needs a skill's core principle and one short example — not its documentation.
+# These are per-skill ceilings; TOTAL_SKILL_CONTENT_BUDGET divides one shared budget across
+# however many skills the router selected, so adding a fifth skill cannot multiply the
+# Writer's prompt. The 2026-10-23 A/B measured 2,033-2,868 chars of skill bodies per
+# chapter at the old 1,200-char-per-skill setting.
+MAX_PRINCIPLE_CHARS = 300
+MAX_EXAMPLE_CHARS = 120
+TOTAL_SKILL_CONTENT_BUDGET = 1200
 
 REQUIRED_FIELDS = ("id", "name", "purpose", "applies_when", "avoid_when")
 
@@ -389,11 +398,17 @@ def validate_selection(
             )
             continue
         if len(guidance) > MAX_GUIDANCE_CHARS:
-            warnings.append(
-                f"{skill_id}: chapter_guidance truncated to {MAX_GUIDANCE_CHARS} chars "
-                "(it should be one relevance sentence, not a scene direction)"
+            errors.append(
+                f"{skill_id}: chapter_guidance is {len(guidance)} chars, over the "
+                f"{MAX_GUIDANCE_CHARS}-char hard limit; write one relevance sentence "
+                "(why this chapter needs the skill), not a scene direction"
             )
-            guidance = guidance[:MAX_GUIDANCE_CHARS].rstrip()
+            continue
+        if len(guidance) < MIN_GUIDANCE_CHARS:
+            warnings.append(
+                f"{skill_id}: chapter_guidance is only {len(guidance)} chars; "
+                f"aim for {MIN_GUIDANCE_CHARS}-{MAX_GUIDANCE_CHARS} so the relevance is concrete"
+            )
         seen.add(skill_id)
         selected.append(
             {
@@ -422,37 +437,71 @@ def validate_selection(
     }
 
 
-def _trim(text: Any, limit: int) -> str:
-    """Trim without collapsing line breaks: skill bodies are bullet lists."""
+def _clip_lines(text: Any, limit: int) -> str:
+    """Keep whole lines up to ``limit`` characters, then mark the cut.
+
+    Cutting mid-line turns a principle into a fragment; keeping whole bullets keeps the
+    part that survives readable.
+    """
     value = str(text or "").strip()
     if len(value) <= limit:
         return value
-    return value[: max(0, limit - 1)].rstrip() + "…"
+    kept: List[str] = []
+    used = 0
+    for line in value.splitlines():
+        line = line.rstrip()
+        cost = len(line) + (1 if kept else 0)
+        if used + cost > limit:
+            break
+        kept.append(line)
+        used += cost
+    if not kept:
+        return value[: max(0, limit - 1)].rstrip() + "…"
+    return "\n".join(kept).rstrip() + "…"
 
 
 def attach_skill_bodies(
     selection: Sequence[Mapping[str, Any]],
     skills: Sequence[Mapping[str, Any]],
+    *,
+    total_budget: int = TOTAL_SKILL_CONTENT_BUDGET,
 ) -> List[Dict[str, Any]]:
-    """Attach each selected skill's own principles and examples to the selection.
+    """Attach each selected skill's core principle and one short example.
 
-    The router only says *why this chapter* needs the skill. The method text comes from
-    the skill file unchanged, so the Writer is not reading a second-hand translation.
+    The Writer needs the method, not the skill document. One shared budget is divided
+    across the selected skills before they are filled in, so selecting five skills does
+    not multiply the prompt — it just gives each skill a smaller share.
     """
     by_id = {str(skill.get("id") or ""): skill for skill in skills}
+    count = max(1, len(selection))
+    per_skill = max(1, int(total_budget) // count)
     enriched: List[Dict[str, Any]] = []
     for item in selection:
         entry = dict(item)
         skill = by_id.get(str(item.get("id") or ""))
         if skill:
             entry["name"] = str(skill.get("name") or "").strip()
-            entry["principle"] = _trim(skill.get("guidance"), MAX_PRINCIPLE_CHARS)
-            example = _trim(skill.get("example"), MAX_EXAMPLE_CHARS)
-            anti = _trim(skill.get("anti_example"), MAX_EXAMPLE_CHARS)
-            if example:
-                entry["example"] = example
-            if anti:
-                entry["anti_example"] = anti
+            example = str(skill.get("example") or "").strip()
+            anti = str(skill.get("anti_example") or "").strip()
+            # One example, not a pair: a positive example when the skill has one,
+            # otherwise the anti-example. Both are enough to show the effect.
+            picked = example or anti
+            example_reserve = (
+                min(MAX_EXAMPLE_CHARS, max(0, per_skill // 3)) if picked else 0
+            )
+            principle = _clip_lines(
+                skill.get("guidance"),
+                min(MAX_PRINCIPLE_CHARS, max(60, per_skill - example_reserve)),
+            )
+            entry["principle"] = principle
+            if picked:
+                example_limit = min(
+                    MAX_EXAMPLE_CHARS, max(0, per_skill - len(principle))
+                )
+                if example_limit >= 20:
+                    entry["example" if example else "anti_example"] = _clip_lines(
+                        picked, example_limit
+                    )
         enriched.append(entry)
     return enriched
 
@@ -473,7 +522,11 @@ def selection_fingerprint(selection: Sequence[Mapping[str, Any]]) -> str:
     ).hexdigest()
 
 
-def render_writer_skills(selection: Sequence[Mapping[str, Any]]) -> List[str]:
+def render_writer_skills(
+    selection: Sequence[Mapping[str, Any]],
+    *,
+    heading: str = "本章创作方法",
+) -> List[str]:
     """Render the selected skills as principles, not as a task script.
 
     With a skill body attached (the normal path), the Writer sees the skill's own
@@ -493,7 +546,7 @@ def render_writer_skills(selection: Sequence[Mapping[str, Any]]) -> List[str]:
         return []
     lines = [
         "",
-        "## 本章创作方法",
+        f"## {heading}",
         "（这些是写作原则，不是执行步骤；具体动作、对白和细节由你根据本章材料自己决定。"
         "与 Canon、作者意图、本章禁区冲突时，一律以后者为准。）",
     ]
@@ -602,11 +655,11 @@ def build_router_input(
             "only_if": "the skill changes how this chapter is actually written",
             "never_override": ["canon", "author_intent", "chapter_forbidden_zones"],
             "writer_already_receives": [
-                "场景四问（目标/阻力/被迫选择/场景后变化）",
-                "追读三问（期待/当章回报/新期待）",
-                "章纲结构与人物状态",
+                "章纲硬事实（数值、方向、本章变化、必须节点、禁区）",
+                "人物当前状态与前文事实",
+                "创作方向（Context Agent 的 Creative Brief）",
             ],
-            "do_not_restate": "若选择 scene-sequel 或 reader-pull，不要复述四问/三问；把它们翻译成本章的具体写法。",
+            "do_not_restate": "不要复述硬事实或创作方向；只说明这项方法落在本章的哪一个真实风险上。",
             "output": {"selected_skills": [{"id": "...", "reason": "...", "chapter_guidance": "..."}]},
         },
     }

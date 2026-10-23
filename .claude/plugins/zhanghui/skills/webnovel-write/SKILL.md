@@ -312,10 +312,10 @@ Use the Agent tool to run `zhanghui:context-agent`
   - 章节节拍与情节推进（内部判断，不在材料里罗列 CBN/CPNs/CEN）；
   - 情绪节奏与追读设计（内部判断，只写结论）；
   - 本章感觉与边界（基调、节奏、视角；不排镜头、不编动作）。
-- **产物**：返回真实创作材料（Creative Brief），五节、1200–1800 字：
+- **产物**：返回真实创作材料（Creative Brief），五节、1200–1800 字（**1800 是硬上限：`attach-creative-brief` 会拒绝超限 Brief，不会截断放行**）：
   1. 开篇委托（书名、章号、标题、一句话目标）
-  2. 这章必须发生什么（从哪接上、目标、阻力、代价、结束前必须兑现的变化、必须覆盖/不能提前发生）
-  3. 人物与硬事实（状态、驱动力、本章作用、说话倾向、绝对不能写错的事实）
+  2. 这章必须发生什么（从哪接上、目标、阻力、代价、结束前必须兑现的变化）
+  3. 人物与状态（当前状态、驱动力、本章作用、说话倾向、知道/不知道什么；**不要另列硬事实清单**，数字、方向、时间、因果与章节禁区由 Writer Package 的【本章必须写对】逐字承载）
   4. 这章的感觉与边界（基调、节奏、视角、题材质感；不排动作）
   5. 收在哪里（本章回报：谁得到了什么/失去了什么/知道了什么；由此产生的新期待。不要为留钩硬加悬念）
 - **硬边界**：Context Agent 专注于创作材料，不替 Writer 编动作、对白、道具操作或镜头；不负责拼装底层系统/模型 Prompt，也不绕过 Native Writer Package 直接驱动起草。
@@ -344,7 +344,8 @@ python3 -X utf8 -c "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(sys
 
 **硬要求**：
 - Skill 输出只是写作方法，永远不能覆盖 Canon、作者意图、本章禁区；冲突由 Router 在选择时消解。
-- Writer 会看到被选中 Skill 的**原始原则 + 极短正反例 + 一句本章相关性说明**；不得把 `reason`、id、分数写进正文 prompt，也不得把方法改写成本章动作脚本。
+- Writer 会看到被选中 Skill 的**核心原则 + 一个极短例子 + 一句本章相关性说明**（所有 Skill 共享一个总预算，选得越多每条越短）；不得把 `reason`、id、分数写进正文 prompt，也不得把方法改写成本章动作脚本。
+- `chapter_guidance` 一句话 40–120 字；**超过 120 字由 `writing-skills validate` 直接拒绝**，不是截断放行。
 - 新增技巧只需放入 `writing-skills/<id>/SKILL.md`，不修改任何 Python 或本流程。
 
 #### 1C. Runtime 封口与唯一 Canonical Writer Prompt 生成（Seal Native Writer Package）
@@ -366,6 +367,8 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
 （亦可将 brief 写入临时文件后使用 `--brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt"`）
 
 - **封口保证**：Runtime 计算 `creative_brief_fingerprint` 与 `package_fingerprint`，将任务书与受治理事实永久绑定为 `is_writer_ready=True` 的 Sealed Native Writer Package。
+- **受保护硬事实**：lean 包在创作方向之前渲染【本章必须写对】——`chapter_change`、`hook`、CBN/CPNs/CEN 节点与禁区逐字取自章纲，Context Agent 与 Router 都不能改写；创作方向与本节冲突时以本节为准。
+- **Brief 硬上限**：Brief 超过 1800 字（不计空白）时 `attach-creative-brief` 直接拒绝并报出实际字数；Context Agent 必须压缩后重新封包。
 - **唯一输入渲染**：命令附带 `--format prompt` 将直接调用 `WriterPackage.to_writer_prompt()` 输出完整的 Canonical Writer Prompt。未提供 Brief 时该命令严格 fail-closed。
 - **指纹获取与绑定**：紧随封口调用 `runtime status --format json` 提取 `package_fingerprint`（Runtime 校验 `has_writer_package=true` 且 `is_writer_package_stale=false`）。严禁重复封口两次、严禁手动计算或伪造指纹、严禁重新拼装 Writer Prompt。
 

@@ -80,6 +80,17 @@ from .write_gates import run_write_gate
 AUTO_REVISION_MAX_ROUNDS = 2
 AUTO_REVISION_BUDGET_SCHEMA = "auto-revision-budget/v1"
 
+# The Context Agent contract says 1,200–1,800 hanzi. It used to be prose only: in the
+# 2026-10-23 A/B the three Briefs came in at 2,874 / 3,476 / 5,188 characters and the
+# Writer prompt grew with them. A limit that nothing enforces is not a limit, so sealing
+# now refuses an oversized Brief instead of silently shipping it.
+MAX_CREATIVE_BRIEF_CHARS = 1800
+
+
+def count_brief_chars(text: str) -> int:
+    """Count the Brief's characters the way the contract reads: whitespace excluded."""
+    return len(re.sub(r"\s+", "", str(text or "")))
+
 
 # --------------------------------------------------------------------------- #
 # Writer prompt: chapter structure and scene design
@@ -353,16 +364,49 @@ def _natural_node(value: Any) -> str:
     return text
 
 
-def render_lean_chapter_structure(
+def _verbatim_fact(value: Any) -> str:
+    """Return a chapter-plan fact exactly as authored.
+
+    Hard facts may not be paraphrased, so this deliberately skips normalization —
+    except for a dangling pointer (``见 story_craft 第N章``), which carries no fact at
+    all. A next-chapter hand-off is kept: ``→ 下章目标`` still contains this chapter's
+    required outcome.
+    """
+    text = str(value or "").strip()
+    if not text or _SCENE_POINTER_RE.match(text):
+        return ""
+    return text
+
+
+def render_hard_facts(
     directive: Dict[str, Any],
-    plot_structure: Dict[str, Any],
-    *,
-    residual_notes: str = "",
+    plot_structure: Optional[Dict[str, Any]] = None,
 ) -> List[str]:
-    """The chapter skeleton without planning vocabulary (CBN/CPNs/CEN, 节拍位置)."""
+    """The chapter's "get this wrong and the chapter is broken" facts.
+
+    In the 2026-10-23 writer-freedom A/B, arm B lost the tide-difference direction
+    (``低`` became ``高``) and turned a year gap into a month gap. Both facts existed in
+    the chapter plan but only in the Context Agent's Brief, which is a paraphrase and
+    can be wrong. This block copies the plan fields verbatim — value, direction,
+    sequence, causality and the required change — so the Writer always has an anchor
+    that neither the Context Agent nor the Router can rewrite.
+
+    The block is intentionally outside the Creative Brief: it is not material to
+    interpret, it is a constraint to obey.
+    """
     directive = directive or {}
     plot_structure = plot_structure or {}
-    lines: List[str] = []
+
+    facts: List[str] = []
+    change = _verbatim_fact(
+        directive.get("chapter_change") or plot_structure.get("chapter_change")
+    )
+    if change:
+        facts.append(f"- 本章变化：{change}")
+
+    hook = _verbatim_fact(directive.get("hook") or plot_structure.get("hook"))
+    if hook:
+        facts.append(f"- 计划钩子：{hook}")
 
     nodes: List[str] = []
     cbn = _natural_node(directive.get("cbn") or plot_structure.get("cbn"))
@@ -377,6 +421,46 @@ def render_lean_chapter_structure(
             nodes.append(node)
     cen = _natural_node(directive.get("cen") or plot_structure.get("cen"))
     if cen:
+        nodes.append(cen)
+    if nodes:
+        facts.append("- 必须写到的事件：")
+        facts.extend(f"  - {node}" for node in nodes)
+
+    prohibitions = directive.get("forbidden_zones") or []
+    if isinstance(prohibitions, str):
+        prohibitions = [prohibitions]
+    prohibitions = [str(item).strip() for item in prohibitions if str(item).strip()]
+    if prohibitions:
+        facts.append(f"- 本章不能发生：{'；'.join(prohibitions)}")
+
+    return facts
+
+
+def render_lean_chapter_structure(
+    directive: Dict[str, Any],
+    plot_structure: Dict[str, Any],
+    *,
+    residual_notes: str = "",
+    include_nodes: bool = True,
+) -> List[str]:
+    """The chapter skeleton without planning vocabulary (CBN/CPNs/CEN, 节拍位置)."""
+    directive = directive or {}
+    plot_structure = plot_structure or {}
+    lines: List[str] = []
+
+    nodes: List[str] = []
+    cbn = _natural_node(directive.get("cbn") or plot_structure.get("cbn"))
+    if include_nodes and cbn:
+        nodes.append(cbn)
+    cpns = directive.get("cpns") or plot_structure.get("cpns") or []
+    if isinstance(cpns, str):
+        cpns = [cpns]
+    for item in cpns:
+        node = _natural_node(item)
+        if include_nodes and node:
+            nodes.append(node)
+    cen = _natural_node(directive.get("cen") or plot_structure.get("cen"))
+    if include_nodes and cen:
         nodes.append(cen)
     if nodes:
         lines.append("本章必须经过：")
@@ -700,7 +784,7 @@ class WriterPackage:
             f"=== 写作任务：第{self.chapter}章 ===",
             f"书名：{title} | 题材：{genre} | 目标读者：{readers} | 卷次：第{vol}卷",
             "",
-            "## 1. 本章要完成的事" if lean_input else "## 1. 本章写作意图 (Current Intent)",
+            "## 本章目标" if lean_input else "## 1. 本章写作意图 (Current Intent)",
         ]
         ch_meta = intent.get("chapter_meta") or {}
         core_event = ch_meta.get("core_event")
@@ -732,9 +816,11 @@ class WriterPackage:
                 lines.append(f"- 章末钩子倾向：{hook_type}")
         if not lean_input and must_nodes:
             lines.append(f"- 必须覆盖节点：{', '.join(must_nodes)}")
-        if prohibitions:
-            label = "不能提前发生" if lean_input else "本章绝对禁区"
-            lines.append(f"- {label}：{', '.join(prohibitions)}")
+        if prohibitions and not lean_input:
+            # In the lean package the prohibitions are hard facts and live in the
+            # protected block below, so the Writer reads them once, with the same
+            # authority as the values and directions.
+            lines.append(f"- 本章绝对禁区：{', '.join(prohibitions)}")
         prog_obligation = intent.get("progress_obligation") or {}
         if lean_input:
             obligation = render_progress_obligation(prog_obligation)
@@ -748,12 +834,19 @@ class WriterPackage:
             # Structured fields first; the unparsed remainder is kept verbatim. No fixed
             # character slice: the old `outline[:600]` cut off CBN/CPNs/CEN, hook_type and
             # the chapter prohibitions on real ~900-1,100-char outlines.
-            render_structure = render_lean_chapter_structure if lean_input else render_chapter_structure
-            structure_lines = render_structure(
-                directive,
-                intent.get("plot_structure") or {},
-                residual_notes=extract_outline_residual_notes(outline),
-            )
+            plot_structure = intent.get("plot_structure") or {}
+            residual = extract_outline_residual_notes(outline)
+            if lean_input:
+                # The nodes are rendered once, in the protected block below; repeating
+                # them here is the "same fact twice reads as two facts" failure the
+                # lean package is meant to remove.
+                structure_lines = render_lean_chapter_structure(
+                    directive, plot_structure, residual_notes=residual, include_nodes=False
+                )
+            else:
+                structure_lines = render_chapter_structure(
+                    directive, plot_structure, residual_notes=residual
+                )
             if structure_lines:
                 if not lean_input:
                     lines.append("【本章章纲结构】")
@@ -773,9 +866,25 @@ class WriterPackage:
                     )
                 )
 
+        if lean_input:
+            # Protected facts: copied verbatim from the chapter plan. This is the one
+            # region the Context Agent's Brief and the Router cannot rewrite; it exists
+            # because a single wrong direction ("低" → "高") or gap type invalidates the
+            # whole chapter, and a paraphrase is allowed to be wrong while the plan is not.
+            hard_facts = render_hard_facts(directive, intent.get("plot_structure") or {})
+            if hard_facts:
+                lines.extend([
+                    "",
+                    "## 本章必须写对",
+                    "（本节直接取自本章章纲原字段，节点只换排版、不改语义。数字、高低、先后、"
+                    "增减、因果、缺口类型一律照此，不得换成另一种说法；与后面的创作方向冲突时，"
+                    "以本节为准。）",
+                ])
+                lines.extend(hard_facts)
+
         lines.extend([
             "",
-            "## 2. 已经确定的事实" if lean_input else "## 2. 治理事实与前情依据 (Governed Canon)",
+            "## 当前人物状态与前文事实" if lean_input else "## 2. 治理事实与前情依据 (Governed Canon)",
         ])
         char_entries: List[str] = []
         other_entries: List[str] = []
@@ -875,10 +984,10 @@ class WriterPackage:
 
         lines.extend([
             "",
-            "## 3. 创作方向" if lean_input else "## 3. 创作策划任务书 (Creative Brief)",
+            "## 创作方向" if lean_input else "## 3. 创作策划任务书 (Creative Brief)",
             self.creative_brief if self.creative_brief else "（未提供独立创作策划任务书）",
             "",
-            "## 4. 工艺与边界" if lean_input else "## 4. 调性、文风与避坑约束 (Constraints & Craft)",
+            "## 工艺与边界" if lean_input else "## 4. 调性、文风与避坑约束 (Constraints & Craft)",
         ])
         if tone:
             lines.append(f"- 核心调性：{tone}")
@@ -1038,16 +1147,21 @@ class WriterPackage:
         if context_lines:
             lines.extend([
                 "",
-                "## 5. 前情与线索" if lean_input else "## 5. 关联前情线索 (Writer Context)",
+                "## 前情与线索" if lean_input else "## 5. 关联前情线索 (Writer Context)",
             ])
             lines.extend(context_lines)
 
         if writing_skills:
-            lines.extend(render_writer_skills(self.writing_skills or []))
+            lines.extend(
+                render_writer_skills(
+                    self.writing_skills or [],
+                    heading="本章可用技巧" if lean_input else "本章创作方法",
+                )
+            )
 
         lines.extend([
             "",
-            "## 6. 交付要求" if lean_input else "## 6. 正文交付协议 (Handoff Protocol)",
+            "## 交付要求" if lean_input else "## 6. 正文交付协议 (Handoff Protocol)",
             "1. 输出连贯正文，严格按中文叙事逻辑组织；",
             "2. 正文末尾必须严格附带合法的 <chapter_changes>...</chapter_changes> 结构化提案块；",
             "   提案块必须是合法 JSON 对象，包含以下 8 个标准顶级字段：",
@@ -2081,6 +2195,13 @@ class ChapterRuntime:
         writer_context = gov_ctx["writer_context"]
 
         final_brief = str(creative_brief or "").strip()
+        brief_chars = count_brief_chars(final_brief)
+        if final_brief and brief_chars > MAX_CREATIVE_BRIEF_CHARS:
+            raise ValueError(
+                f"Creative Brief 超出硬上限：{brief_chars} 字 > {MAX_CREATIVE_BRIEF_CHARS} 字。"
+                "请让 Context Agent 压缩后重新封包；不要截断或改写关键事实"
+                "（数字、方向、时间、因果由 Writer Package 的受保护区域承载）。"
+            )
         brief_fp = hashlib.sha256(final_brief.encode("utf-8")).hexdigest() if final_brief else ""
 
         sealed_skills: List[Dict[str, Any]] = []
@@ -2118,6 +2239,8 @@ class ChapterRuntime:
             "native_context_authority": "ContextManager.build_context",
             "creative_planning_authority": "ContextAgent" if final_brief else "none",
             "is_writer_ready": bool(final_brief),
+            "creative_brief_chars": brief_chars,
+            "creative_brief_limit": MAX_CREATIVE_BRIEF_CHARS,
             "writing_skill_ids": [item["id"] for item in sealed_skills],
             "writing_skills_fingerprint": skills_fp,
             "context_budget": writer_context.get("context_budget"),
