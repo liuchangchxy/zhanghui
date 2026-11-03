@@ -41,7 +41,7 @@ from .chapter_commit_service import (
 from .config import DataModulesConfig
 from .context_manager import ContextManager
 from .durable_projection import discover_validated_chapter_commits
-from .gate_finding_adapters import adapt_changes_gate_result, adapt_legacy_artifacts
+from .gate_finding_adapters import adapt_canon_validation, adapt_changes_gate_result, adapt_legacy_artifacts
 from .projections import retry_projection
 from .reconciliation import (
     prose_only_text,
@@ -2685,6 +2685,65 @@ class ChapterRuntime:
                 "instruction": "这是本章的首次审查，请从头完整独立检查全部 8 个维度。",
             }
 
+        # Previous-chapter closure: a finding that is still high/critical after the previous
+        # chapter was accepted must be visible when the next chapter's review starts. Without
+        # this, every chapter's first review looked like a clean first round and cross-chapter
+        # review evidence never reached the reviewer. Same storage as the same-chapter round
+        # (`runtime/chapter_NNN/last_review.json`, written by review-pipeline) — no second
+        # review ledger.
+        prior_chapter_context: dict[str, Any] = {
+            "has_previous_chapter_review": False,
+            "previous_chapter": chapter - 1 if chapter > 1 else None,
+            "previous_review_status": "no_previous_chapter",
+            "high_or_critical_findings": [],
+            "instruction": "本章没有上一章审查记录可核验。",
+        }
+        if chapter > 1:
+            prev_chapter = chapter - 1
+            prev_candidates = (
+                self._chapter_runtime_dir(prev_chapter) / "last_review.json",
+                self.project_root / ".webnovel" / "tmp" / "review_results.json",
+            )
+            prior_status = "no_previous_chapter"
+            for cand in prev_candidates:
+                if not cand.is_file():
+                    continue
+                try:
+                    data = json.loads(cand.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    prior_status = f"unreadable:{cand.name}:{exc}"
+                    continue
+                if not isinstance(data, dict) or int(data.get("chapter", 0)) != prev_chapter:
+                    prior_status = f"chapter_mismatch:{cand.name}"
+                    continue
+                prev_items = data.get("issues") or []
+                hi = [
+                    {
+                        "category": i.get("category"),
+                        "severity": i.get("severity"),
+                        "location": i.get("location"),
+                        "description": i.get("description"),
+                        "fix_hint": i.get("fix_hint"),
+                    }
+                    for i in prev_items
+                    if isinstance(i, dict) and i.get("severity") in ("high", "critical")
+                ]
+                prior_chapter_context = {
+                    "has_previous_chapter_review": True,
+                    "previous_chapter": prev_chapter,
+                    "previous_review_status": "loaded",
+                    "previous_finding_count": len(prev_items),
+                    "high_or_critical_findings": hi,
+                    "instruction": (
+                        f"以下是第 {prev_chapter} 章收尾时仍未闭环的高优/严重问题。"
+                        "本章必须核验它们是否真的解决：若本章正文继续沿用与问题相同的错误事实，"
+                        "请按可验证证据正常报告；若已解决，请在 summary 中写明闭环结论。"
+                    ),
+                }
+                break
+            else:
+                prior_chapter_context["previous_review_status"] = prior_status
+
         return {
             "chapter": chapter,
             "canon_authority": governed_canon,
@@ -2715,6 +2774,7 @@ class ChapterRuntime:
             },
             "review_contract": review_contract,
             "convergence_context": convergence_context,
+            "prior_chapter_context": prior_chapter_context,
             "auto_revision_budget": auto_revision_budget,
         }
 
@@ -3299,6 +3359,16 @@ class ChapterRuntime:
             contract_payloads=contracts,
         )
         findings.extend(adapt_changes_gate_result(gate_result, chapter=chapter))
+
+        # Deterministic Canon fact guard: the producer the shared policy was missing.
+        # Reviewer findings are model judgement and stay advisory; this one is rebuilt from
+        # accepted commits, so a proven contradiction can reach HARD_CANON / REJECT.
+        from .canon_fact_validator import validate_canon_facts
+
+        canon_validation = validate_canon_facts(
+            self.project_root, chapter, ext, proposed_changes=proposed_changes
+        )
+        findings.extend(adapt_canon_validation(canon_validation, chapter=chapter))
 
         attempt_id = f"runtime-{uuid.uuid4().hex[:8]}"
         attempt_kwargs = {

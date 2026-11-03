@@ -1003,6 +1003,19 @@ def cmd_revise(args: argparse.Namespace) -> int:
 
         from .revision_planner import RevisionBindingError, resolve_active_draft_identity
 
+        diagnosis = None
+        diagnosis_file = getattr(args, "diagnosis_file", "") or ""
+        if diagnosis_file:
+            diagnosis_path = Path(diagnosis_file)
+            if not diagnosis_path.is_file():
+                print(f"ERROR: diagnosis file not found: {diagnosis_path}", file=sys.stderr)
+                return 2
+            try:
+                diagnosis = json.loads(diagnosis_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                print(f"ERROR: diagnosis file is not valid JSON: {exc}", file=sys.stderr)
+                return 2
+
         active_draft = resolve_active_draft_identity(
             _resolve_root(args.project_root), int(args.chapter)
         )
@@ -1019,6 +1032,8 @@ def cmd_revise(args: argparse.Namespace) -> int:
                 blocking_only=bool(args.blocking_only),
                 active_draft=active_draft,
                 require_review_binding=not getattr(args, "allow_unbound_review", False),
+                style_only=bool(getattr(args, "style_only", False)),
+                diagnosis=diagnosis,
             )
         except RevisionBindingError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
@@ -2156,6 +2171,19 @@ def build_parser() -> argparse.ArgumentParser:
             "显式把 Craft advisory 也纳入修订计划（默认只纳入可由正文修订处理的 PROSE_EDIT 问题；"
             "普通 ALLOW_WITH_ADVISORY 不等于必须重写正文）"
         ),
+    )
+    p_revise_plan.add_argument(
+        "--style-only",
+        action="store_true",
+        help=(
+            "表达层定向润色（Step 4）：只规划可由改写正文完成的表达问题；"
+            "事实/设定/时间线/逻辑类问题转 FACT_REVIEW，不进入修订目标"
+        ),
+    )
+    p_revise_plan.add_argument(
+        "--diagnosis-file",
+        default="",
+        help="`prose diagnose` 输出的 JSON；把可定位的表达瑕疵转成定向修订目标",
     )
     p_revise_plan.add_argument("--output", default="", help="计划 JSON 输出路径")
     p_revise_plan.add_argument(

@@ -266,3 +266,123 @@ def test_conflicting_duplicate_proposal_is_not_silently_accepted():
     result = reconcile_changes(proposed, observation("筑基"), chapter_text="final")
     assert result["status"] == "conflict"
     assert any(item["type"] == "proposal_internal_conflict" for item in result["conflicts"])
+
+
+def test_item_transfer_matches_holder_state_delta():
+    proposed = change("情绪平稳")
+    proposed["item_transfers"] = [
+        {"item_id": "青锋剑", "from_holder": "林越", "to_holder": "梅叔"}
+    ]
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [
+            {"entity_id": "青锋剑", "field": "持有者", "old": "林越", "new": "梅叔"}
+        ],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert any(item["proposed"]["source"] == "item_transfers" for item in result["matched"])
+
+
+def test_same_fact_synonymous_wording_is_matched():
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [{"entity_id": "lin-xuan", "field": "修为", "new": "筑基期"}],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(change("境界：筑基"), observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert result["matched"]
+    assert not result["conflicts"]
+
+
+def test_same_fact_different_new_value_is_a_conflict():
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [{"entity_id": "lin-xuan", "field": "修为", "new": "金丹"}],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(change("境界：筑基"), observed, chapter_text="final")
+
+    assert result["status"] == "conflict"
+    assert any(item["type"] == "proposal_observed_conflict" for item in result["conflicts"])
+
+
+def test_declaration_without_corresponding_fact_is_unmatched_not_conflict():
+    proposed = change("情绪平稳")
+    proposed["character_state_changes"] = []
+    proposed["new_plot_points"] = [
+        {"description": "林越在集市听见有人议论北境商路被截断"}
+    ]
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [{"entity_id": "lin-xuan", "field": "修为", "new": "筑基"}],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert result["proposed_not_observed"]
+    assert result["unproposed_observed"]
+    assert not result["conflicts"]
+
+
+def test_item_name_alias_matches_when_only_one_candidate_is_close():
+    proposed = change("情绪平稳")
+    proposed["item_transfers"] = [
+        {"item_id": "密封胶残片", "from_holder": "乔宁", "to_holder": "林越"}
+    ]
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [
+            {"entity_id": "透明胶残片", "field": "持有者", "old": "乔宁", "new": "林越"}
+        ],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    alias = [item for item in result["matched"] if item.get("entity_alias")]
+    assert alias and alias[0]["entity_alias"] == {
+        "proposed_entity": "密封胶残片", "observed_entity": "透明胶残片"
+    }
+
+
+def test_free_text_plot_summary_pairs_with_its_observed_state_fact():
+    proposed = change("情绪平稳")
+    proposed["character_state_changes"] = []
+    proposed["new_plot_points"] = [
+        {"description": "乔宁查明胶残片并非维护间库存，而是九十年代末封存销毁的批次。"}
+    ]
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [
+            {"entity_id": "林越", "field": "知识.胶残片",
+             "new": "胶残片已比对：不是维护间库存，属九十年代末封存销毁批次；能拿到的人要么管过库存"}
+        ],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert any(item["proposed"]["source"] == "new_plot_points" for item in result["matched"])
+
+
+def test_two_rewordings_of_one_state_are_not_an_internal_conflict():
+    observed = {
+        "state_deltas": [{"entity_id": "梅叔", "field": "对林越.态度",
+                          "new": "否认缺页为人为并禁止林越触碰铁皮柜"}],
+        "entity_deltas": [],
+        "accepted_events": [
+            {"event_type": "character_state_changed", "subject": "梅叔",
+             "payload": {"field": "对林越.态度",
+                         "new": "被指出缺页后否认并露出破绽（持针的手停顿两秒），明确禁止林越触碰墙角铁皮柜"}},
+        ],
+    }
+    result = reconcile_changes(change("情绪平稳"), observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert not any(item["type"] == "observed_internal_conflict" for item in result["conflicts"])

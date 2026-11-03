@@ -215,6 +215,59 @@ def adapt_legacy_artifacts(*, chapter: int, review: dict[str, Any], fulfillment:
     return findings
 
 
+def adapt_canon_validation(validation: dict[str, Any], *, chapter: int) -> list[DetectedFinding]:
+    """Turn deterministic Canon contradictions into hard reject findings.
+
+    `canon_fact_validator` supplies the proof the policy requires: an accepted commit id,
+    a deterministic validator id, and a yes/no contradiction. This adapter performs no
+    judgement of its own — an entry without that proof is not emitted as a contradiction.
+    """
+    findings: list[DetectedFinding] = []
+    contradictions = validation.get("contradictions") if isinstance(validation, dict) else None
+    if not isinstance(contradictions, list):
+        return findings
+    for row in contradictions:
+        if not isinstance(row, dict):
+            continue
+        entity = str(row.get("entity") or "").strip()
+        field = str(row.get("field") or "").strip()
+        canon_event_id = str(row.get("canon_event_id") or "").strip()
+        if not entity or not field or not canon_event_id:
+            continue
+        subject = f"{entity}::{field}"
+        identity = {
+            "accepted_canon": True,
+            "canon_event_id": canon_event_id,
+            "canon_source": row.get("canon_source"),
+            "validator_id": validation.get("validator_id") or "canon_fact_validator.v1",
+            "deterministic": True,
+            "contradiction": True,
+            "entity": entity,
+            "field": field,
+        }
+        findings.append(_finding(
+            chapter=chapter,
+            checker_id="canon_fact_validator",
+            gate_id="canon.contradiction",
+            category=FindingCategory.CANON_CONTRADICTION,
+            authority=FindingAuthority.ACCEPTED_CANON,
+            explicitness=Explicitness.EXPLICIT,
+            subject_id=subject,
+            evidence=[EvidenceRef(
+                kind="canon_contradiction",
+                identity=identity,
+                observed=row.get("observed_value"),
+                expected=row.get("canon_value"),
+                source_ref=canon_event_id,
+            )],
+            message=(
+                f"{entity}.{field}: {row.get('reason')} "
+                f"(canon={row.get('canon_value')!r}, prose={row.get('observed_value')!r})"
+            ),
+        ))
+    return findings
+
+
 def adapt_changes_gate_result(gate_result: dict[str, Any], *, chapter: int) -> list[DetectedFinding]:
     """Normalize CHANGES failures from registered rules and structured severity."""
     findings: list[DetectedFinding] = []

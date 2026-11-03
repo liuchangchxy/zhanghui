@@ -12,7 +12,11 @@ from pathlib import Path
 from runtime_compat import enable_windows_utf8_stdio
 
 from data_modules.chapter_commit_service import ChapterCommitService
-from data_modules.gate_finding_adapters import adapt_changes_gate_result, adapt_legacy_artifacts
+from data_modules.gate_finding_adapters import (
+    adapt_canon_validation,
+    adapt_changes_gate_result,
+    adapt_legacy_artifacts,
+)
 from data_modules.story_runtime_sources import load_runtime_sources
 
 
@@ -69,6 +73,13 @@ def main() -> None:
         contract_payloads=load_runtime_sources(Path(args.project_root), args.chapter).contracts,
     )
     findings.extend(adapt_changes_gate_result(gate_result, chapter=args.chapter))
+    from data_modules.canon_fact_validator import validate_canon_facts
+
+    canon_validation = validate_canon_facts(
+        Path(args.project_root), args.chapter, extraction_result,
+        proposed_changes=proposed_changes,
+    )
+    findings.extend(adapt_canon_validation(canon_validation, chapter=args.chapter))
     attempt_kwargs = {
         "policy_version": "phase6a-v1", "scope": {"chapter": args.chapter},
         "review_result": review_result, "fulfillment_result": fulfillment_result,

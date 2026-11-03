@@ -26,7 +26,8 @@ allowed-tools: Read Write Edit Grep Bash Agent
 1. 先校验输入完整性，再进入写作流程；缺关键输入时立即阻断。
 2. 审查与数据回写是硬步骤，`--fast`/`--minimal` 只允许降级可选环节。
 3. 参考资料严格按步骤按需加载，不一次性灌入全部文档。
-4. Step 2B 与 Step 4 职责分离：2B 只做风格转译，4 只做问题修复与质控。
+4. Step 2B 与 Step 4 职责分离：2B 只做风格转译，4 只做**表达层**诊断驱动润色；
+   两者都不修事实。事实问题由 Canon gate 阻断或在显式事实纠错路径处理。
 5. 任一步失败优先做最小回滚，不重跑全流程。
 
 ## 模式定义
@@ -42,8 +43,11 @@ allowed-tools: Read Write Edit Grep Bash Agent
 - `.webnovel/state.json` 的进度与 `chapter_meta` 更新
 
 修订路径（Reviewer 发现问题时用哪条）：
-- **定点小修**（时间/数字/编号/道具/措辞类，`revise plan` 给出的 `kind=LOCAL_FACT` 或 `STYLE_ONLY`）
-  → Step 4 的定向修订流程：只改计划命中的句段，重登记新 `draft_id`，重审受影响草稿。
+- **表达层润色**（措辞/句式/节奏/段落/描写/对话表达/反 AI 痕迹，`prose diagnose` 定位的病灶）
+  → Step 4 的 `revise plan --style-only` 定向修订：只改计划命中的句段，不碰事实。
+- **事实纠错**（时间/数字/编号/道具/知情状态，Reviewer 已确证且计划定位为 `kind=LOCAL_FACT`）
+  → 不属于 Step 4 自动润色；走**显式事实纠错**路径（`prose validate --revision-plan` 声明 +
+  强制重审），或由 Canon gate 阻断后按人工恢复处理。见 Step 4「事实纠错的例外路径」。
 - **整章重做**（`kind=STRUCTURAL`，大面积剧情冲突）
   → ledger 的「重新起草」路径（Step 2A 重新生成），必须在报告中写明理由。
 - **已 accepted 章节**（`kind=CANON_HISTORY`）→ 常规修订 fail-closed，只能走 Canon Correction。
@@ -479,7 +483,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 | `status` | `semantic_outcome` | 处理 |
 |---|---|---|
 | `ACCEPTED` | `STYLE_ONLY_SAFE` | 文风调整通过：候选正文覆盖回工作草稿，重刷 `<chapter_changes>` 并重新 `runtime ingest-draft` 取得新 `draft_id` / `draft_fingerprint` |
-| `ROLLEDBACK` | `SEMANTIC_CHANGE_PROPOSED` | 检测到事实漂移/新增未授权设定：**保留 Step 2A 原稿**，记录回退审计；事实类问题走 Step 4 的定向修订路径 |
+| `ROLLEDBACK` | `SEMANTIC_CHANGE_PROPOSED` | 检测到事实漂移/新增未授权设定：**保留 Step 2A 原稿**，记录回退审计；事实类问题走显式事实纠错路径或由 Canon gate 阻断 |
 | `ROLLEDBACK` | `UNCERTAIN` | 确定性覆盖不足 → 按下方「Semantic Judge 宿主裁决」接线重验；Judge 未接通或失败则保持 `ROLLEDBACK`（fail-closed） |
 | `ROLLEDBACK` | 其它 | 质量退化（缩水/电报体）：保留原稿并记录 |
 
@@ -525,8 +529,8 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
   哈希重新盖章；缺 `request_id` 且缺哈希的回答同样拒绝（不能让「没写绑定」变成「随手绑定」）。
 - `--judge-file` 的裁决必须已经绑定到当前 before/after 文本；指纹不匹配会被判为 `UNCERTAIN` 并回滚。
 - 只有 `STYLE_ONLY_SAFE` 会放行；`SEMANTIC_CHANGE_PROPOSED` 与 `UNCERTAIN` 一律保留原稿。
-- 判定事实错误（时间/数字/道具/知情状态）**不是文风问题**：交给下面 Step 4 的**定向修订 + 事实纠错路径**
-  （`prose validate --revision-plan`），不要试图用「伪装成风格修改」骗过 Judge，
+- 判定事实错误（时间/数字/道具/知情状态）**不是文风问题**：交给**显式事实纠错路径**
+  （`prose validate --revision-plan`，见 Step 4「事实纠错的例外路径」），不要试图用「伪装成风格修改」骗过 Judge，
   也不要把合法的事实纠错硬凑成 `STYLE_ONLY_SAFE`。
 - Judge 的裁决与**原始 judge-request** 绑定：`judge-bind` 必须带 `--request-file`，
   回答里的 `request_id` / `before_sha256` / `after_sha256` 与请求不一致时一律拒绝（不是在当前正文上重新盖章）。
@@ -623,34 +627,52 @@ cat "${SKILL_ROOT}/references/polish-guide.md"
 cat "${SKILL_ROOT}/references/writing/typesetting.md"
 ```
 
-**改动范围契约（先定位，再最小修改）**：Step 4 只做**定向**修改，不做整章重写。
+**改动范围契约（先定位，再最小修改）**：Step 4 是**表达层**定向润色，只改"怎么说"，不改"说了什么"。
 
-1. 把 Step 3 的审查结果转成定向修订计划（无需 `## §N` 标题，普通正文即可）：
+- 允许：措辞、句式、节奏、段落切分、描写方式、对话表达、反 AI 痕迹。
+- 禁止：人物已知信息、事实真伪、时间、地点、事件顺序、行为结果、物品归属、Canon、
+  新增线索 / 人物互动 / 因果。
+
+事实类问题**不是 Step 4 的目标**：Reviewer 报出的 setting / timeline / continuity / character /
+logic 问题只能靠改事实"修复"，而这正是 Step 4 语义漂移的来源。`--style-only` 会把它们全部
+放进 `plan.deferred`（`owner=FACT_REVIEW`），由 Canon gate 阻断或在显式事实纠错路径处理。
+
+1. **先诊断**（目标来源是确定性诊断，不是 Reviewer 的事实清单）：
+   ```bash
+   python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose diagnose \
+     --file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" --format json \
+     > "${PROJECT_ROOT}/.webnovel/tmp/prose_diagnosis_{chapter_padded}.json"
+   ```
+   诊断只报**可定位**的表达病灶（套话、旁白解释、对话说明书化、复读句式等），不得无病呻吟。
+   `diagnosis.issues` 为空时，本轮不做表达润色，直接进入 Step 4.5 前的复审判断。
+2. **生成纯表达修订计划**（无需 `## §N` 标题，普通正文即可）：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise plan \
      --chapter {chapter_num} \
      --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --review-result "${PROJECT_ROOT}/.webnovel/tmp/review_results.json" \
      --draft-id "{draft_id}" --draft-fingerprint "{draft_fingerprint}" \
+     --style-only \
+     --diagnosis-file "${PROJECT_ROOT}/.webnovel/tmp/prose_diagnosis_{chapter_padded}.json" \
      --output "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json" --format text
    ```
-   （默认只纳入 `PROSE_EDIT` 目标；需要连 Craft advisory 一起改时才追加 `--include-advisory`。）
+   `--style-only` 只把表达类目标（`ai_flavor` 与可定位的诊断病灶）变成可修订目标。
    计划逐条给出：定位方式（行号 / 段落号 / 原文引用）、命中的最小可编辑区间、修复指令、
-   以及 `kind`（`STYLE_ONLY` / `LOCAL_FACT` / `STRUCTURAL` / `CANON_HISTORY`）与 `owner`。
-   `unresolved` / `ambiguous` 条目**不会自动替换**，需人工指定位置。
+   以及 `kind`（`STYLE_ONLY`）与 `owner`。`unresolved` / `ambiguous` 条目**不会自动替换**。
 
-   **纳入范围按 owner 判定，不按"非阻断就一并改"**：计划只把 `owner=PROSE_EDIT` 的问题
-   变成可修订目标。其余问题进 `plan.deferred` 并带 `repair_hint`，**不进入正文修订循环**：
+   **纳入范围按 owner 判定，不按"非阻断就一并改"**：其余问题进 `plan.deferred` 并带 `repair_hint`：
    - `ARTIFACT_REPAIR`：产物文件缺失/不可读（如 `do_not_copy_check.json`）→ 重跑对应产物生成，不改正文；
    - `GOVERNANCE_REPAIR`：伏笔登记 / loop 关联 / 账本元数据 → 在治理数据层修，不改正文；
-   - `ADVISORY`：Craft 启发式（节拍、伏笔时限、节奏曲线、hook_type）→ 仅记录建议。
-   `plan.summary.deferred_by_owner` 给出各类计数，请在报告中如实呈现。
-   确需把 advisory 也纳入时，显式加 `--include-advisory`；不要为了清零 advisory 反复改写正文。
-2. **先诊断**：运行 `prose diagnose --file ...`，列出真实病灶，不得无病呻吟或整篇机械改写。
-3. 主流程按计划改写**对应句段**，把替换写成：
+   - `ADVISORY`：Craft 启发式（节拍、伏笔时限、节奏曲线、hook_type）→ 仅记录建议；
+   - `FACT_REVIEW`：事实 / 设定 / 时间线 / 逻辑问题 → 由 Canon gate 阻断或走显式事实纠错，**不改正文**。
+   `plan.summary.diagnosis_targets` 与 `plan.summary.deferred_by_owner` 请在报告中如实呈现。
+   不要为了清零 advisory 或 FACT_REVIEW 反复改写正文。
+3. **只改表达**：按计划逐条改写**对应句段**，保留原意、说话人、动作结果与信息量。
+   把替换写成：
    `[{"target_id": "<issue_id>", "new_text": "<改写后的该段原文>"}]`
    保存到 `${PROJECT_ROOT}/.webnovel/tmp/revision_edits_{chapter_padded}.json`。
-   严禁借此发明履历、设定、翻转所有权或颠倒意图。
+   改写前后必须仍是"同一件事的不同说法"：不得借润色发明履历、设定、线索、人物互动或因果，
+   不得翻转所有权、意图、时间与知情状态。做不到就跳过该目标（记为 `untouched_targets`），不要硬改。
 4. **应用并校验边界**：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise apply \
@@ -661,13 +683,17 @@ cat "${SKILL_ROOT}/references/writing/typesetting.md"
    ```
    - 草稿在计划生成后又被改过 → `drift` 报错并拒绝应用（不盲改）。
    - `changed=false`（正文没有变化）→ **不登记新草稿、不重跑审查**，直接沿用现有 `draft_id` 与审查结论。
-5. **事实与退化校验**（Semantic Judge 走 Step 2B 的同一套宿主裁决流程）：
+5. **表达安全与退化校验**（Semantic Judge 走 Step 2B 的同一套宿主裁决流程；
+   Step 4 的自动润色**不传** `--revision-plan`，因为它没有声明任何事实纠错）：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
      --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
      --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
      --chapter {chapter_num} --judge-file "<已绑定的 judge_verdict_*.json>"
    ```
+   期望 `status=ACCEPTED` / `semantic_outcome=STYLE_ONLY_SAFE`。
+   `ROLLEDBACK`（`SEMANTIC_CHANGE_PROPOSED` 或 `UNCERTAIN`）→ 保留 Step 3 审查版本：
+   说明这轮改写确实动了语义，回退重做或缩小改动面；不得伪造 Judge 裁决、不得去掉 Judge 强行放行。
 6. **只允许计划内改动**：
    ```bash
    python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" revise verify \
@@ -687,28 +713,14 @@ cat "${SKILL_ROOT}/references/writing/typesetting.md"
    退出码 `4` 表示**版本/来源不匹配**（计划不是为当前草稿生成的，或审查没有绑定当前草稿），
    必须重新 `revise plan`，不得改用手工定位。
 
-6.5 **事实安全裁决（按改动性质分流，不要混淆）**：
-
-```bash
-python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose validate \
-  --before-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
-  --after-file "${PROJECT_ROOT}/.webnovel/tmp/step4_candidate_{chapter_padded}.md" \
-  --chapter {chapter_num} \
-  --revision-plan "${PROJECT_ROOT}/.webnovel/tmp/revision_plan_{chapter_padded}.json"
-```
-
-三类改动走三条不同的路，**不能混用**：
-
-| 改动性质 | 判定 | 处理 |
-|---|---|---|
-| **待提交草稿内的事实纠错**（时间/数字/编号/道具，Reviewer 指出且计划已定位） | `status=PENDING_REREVIEW`，`semantic_outcome=FACT_FIX_DECLARED` | **正常路径**：不要求判成 `STYLE_ONLY_SAFE`，也不回滚；但必须完成下面的「事实纠错后置动作」 |
-| **纯文风修饰** | `status=ACCEPTED`，`semantic_outcome=STYLE_ONLY_SAFE` | 直接采用，仍需重新登记 + 重审（正文变了） |
-| **越界改写 / 非法事实篡改** | `status=ROLLEDBACK` | 回退重做；确定性层抓到的事实漂移（所有权/世界规则/关系/状态/履历/动机/能力）一律硬阻断，声明也不能豁免 |
-
-- `--revision-plan` 是「这次改动属于计划内的事实纠错」的声明。它**不放宽**任何检查：
-  改动必须完全落在计划命中的 `LOCAL_FACT` 区间内，且声明里的 `draft_sha256` 必须等于当前正文，
-  否则一律 `ROLLEDBACK`。章节整体重写、把事实篡改伪装成纠错，都会被这条挡住。
-- 合法性不来自「声明」，而来自「声明 + 强制重审」：事实纠错**必须**绑定新 Draft 并重新审查。
+> **事实纠错的例外路径（不属于 Step 4 自动润色）**：Step 4 的纯表达改动没有事实可纠，
+> 因此不声明 `--revision-plan`。若 Reviewer 确证了具体事实错误（时间/数字/编号/道具/知情状态），
+> 且作者明确要求修正，则走独立的显式事实纠错流程：`prose validate --revision-plan <plan>`
+> 声明 `kind=LOCAL_FACT` 区间 → `status=PENDING_REREVIEW` / `semantic_outcome=FACT_FIX_DECLARED`
+> → 完成下方「事实纠错后置动作」的强制重审。该声明**不放宽**任何检查：改动必须完全落在计划命中的
+> `LOCAL_FACT` 区间内，且声明的 `draft_sha256` 必须等于当前正文，否则一律 `ROLLEDBACK`。
+> Step 4 不得自行发起这类改动；确定性层抓到的事实漂移（所有权/世界规则/关系/状态/履历/动机/能力）
+> 一律硬阻断，声明也不能豁免。
 - **本节的重审要求以自动修订预算为前提**（见下方「自动修订预算」）：只有在预算内产生的新草稿才走
   下面的后置动作。预算耗尽后**不得**再产生新的自动修订轮次——因此也不存在需要重审的新草稿。
   确需继续修复时走 hard gate 阻断 / 人工恢复路径，并显式传 `--allow-over-budget`。
@@ -759,7 +771,9 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 
 **收敛策略（不设隐藏分数线）**：
 - 哪些问题阻断由正式 Gate 判断；非阻断（advisory）问题记录建议后继续，不追求把分数刷到某个阈值。
-- 已确定的具体事实错误（时间/数字/编号/道具/知情状态）→ 优先走上面的**定向修订**。
+- 已确定的具体事实错误（时间/数字/编号/道具/知情状态）→ **不属于 Step 4**：走显式事实纠错路径，
+  或由 Canon gate 阻断；不要在表达润色里顺手改事实。
+- 表达层问题（套话、旁白解释、复读句式、对话说明书化）→ 上面的 `--style-only` 定向修订。
 - 大面积剧情冲突（`kind=STRUCTURAL`，计划里标为章级范围）→ 允许按 ledger 的「重新起草」路径整章重写，
   但必须在报告中写明理由。
 - `kind=CANON_HISTORY`（本章已 accepted）→ 禁止常规修订，只能走 Canon Correction。
@@ -1172,7 +1186,8 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ba
 
 1. 章节正文文件存在且非空：`正文/第{chapter_padded}章-{title_safe}.md` 或 `正文/第{chapter_padded}章.md`
 2. Step 3 已产出 `overall_score` 且 `review_metrics` 成功落库
-3. Step 4 已处理全部 `critical`，`high` 未修项有 deviation 记录
+3. Step 4 已处理全部**表达层** `critical`；事实类 `critical` 已由 Canon gate 阻断或走显式事实纠错并有记录；
+   `high` 未修项有 deviation 记录
 4. Step 4 的 `anti_ai_force_check=pass`（基于全文检查；fail 时不得进入 Step 5）
 5. Step 5.6 已确认本次 accepted commit 对应的 state/index/summary/memory/vector 投影全部成功，或 `projections retry` 已成功；仍缺失或过期的投影必须保持为可见失败。
 6. 若开启性能观测，已读取最新 timing 记录并输出结论
