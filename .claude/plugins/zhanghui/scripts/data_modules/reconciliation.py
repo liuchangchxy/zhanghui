@@ -69,6 +69,36 @@ TEXT_MATCH_MIN_BIGRAM = 0.42
 # used *only* for text pairing — structured values still use the strict pair above.
 TEXT_SUMMARY_MIN_RATIO = 0.45
 TEXT_SUMMARY_MIN_BIGRAM = 0.22
+# A long declaration and a long observation rarely share enough surface n-grams even when
+# they describe one fact ("老周反复说‘我只负责看站，不负责记录’" vs the extractor's
+# "……反复以……‘我只负责看站，不负责记录’回应"). Whole-text ratio is diluted by the extra
+# detail on both sides, so free-text pairing also accepts a strong shared core phrase.
+TEXT_SUMMARY_MIN_CONTAINMENT = 0.60
+TEXT_SUMMARY_MIN_LCS = 10
+# Short texts ("记录消失" / "原有记录不见了") are dominated by a shared prefix, which makes
+# the ratio and bigram thresholds unsafe: "老周负责看站" / "老周负责记录" scores high while
+# stating two different facts. For a short text the shorter whole phrase has to be present.
+TEXT_SHORT_MAX_CHARS = 16
+TEXT_SHORT_MIN_CONTAINMENT = 0.75
+# Frequency/degree markers that do not change the fact being stated.
+TEXT_MATCH_NOISE = (
+    "反复", "多次", "一再", "一遍遍", "连续", "再次", "又重新", "又一次",
+    "两遍", "三遍", "每次",
+)
+# High-confidence paraphrases. Each mapping keeps the predicate intact; it only removes
+# wording differences that would otherwise make one fact look like two.
+TEXT_MATCH_EQUIVALENTS = (
+    ("不见踪影", "消失"), ("不见了", "消失"), ("查不到", "消失"),
+    ("找不到", "消失"), ("没了", "消失"), ("删掉", "消失"),
+    ("删除", "消失"), ("抹除", "消失"), ("抹去", "消失"), ("清除", "消失"),
+    ("注意到", "发现"), ("察觉到", "发现"),
+    ("答道", "说"), ("说道", "说"), ("问道", "说"), ("回答", "说"), ("回应", "说"),
+    ("告诫", "警告"), ("提醒", "警告"),
+    ("汇报", "报告"), ("报给", "报告"), ("上报", "报告"), ("通报", "报告"),
+    ("返回", "回"), ("回到", "回"),
+    ("检索", "查"), ("查询", "查"), ("搜索", "查"), ("查找", "查"), ("搜寻", "查"),
+    ("名下", "名义"), ("口头", ""),
+)
 # Structured facts can describe the same object with a different modifier ("密封胶残片" /
 # "透明胶残片"). When the field is the same and exactly one observed entity is this close,
 # the pair is treated as the same entity and the alias is recorded in the matched entry.
@@ -177,6 +207,93 @@ def _bigram_overlap(a: str, b: str) -> float:
     if not left or not right:
         return 0.0
     return len(left & right) / len(left | right)
+
+
+def _normalize_for_pairing(text: str) -> str:
+    """Normalize free text for summary pairing without touching structured values."""
+    normalized = _strip_for_compare(text)
+    for noise in TEXT_MATCH_NOISE:
+        normalized = normalized.replace(noise, "")
+    for source, target in TEXT_MATCH_EQUIVALENTS:
+        normalized = normalized.replace(source, target)
+    return normalized
+
+
+def _pairing_ngrams(text: str, size: int = 4) -> set[str]:
+    normalized = _normalize_for_pairing(text)
+    if len(normalized) < size:
+        return {normalized} if normalized else set()
+    return {normalized[i:i + size] for i in range(len(normalized) - size + 1)}
+
+
+def _pairing_containment(a: str, b: str, size: int = 4) -> float:
+    left, right = _pairing_ngrams(a, size), _pairing_ngrams(b, size)
+    if not left or not right:
+        return 0.0
+    return len(left & right) / min(len(left), len(right))
+
+
+def _pairing_ratio(a: str, b: str) -> float:
+    return difflib.SequenceMatcher(
+        None, _normalize_for_pairing(a), _normalize_for_pairing(b)
+    ).ratio()
+
+
+def _pairing_bigram_overlap(a: str, b: str) -> float:
+    left, right = _pairing_ngrams(a, 2), _pairing_ngrams(b, 2)
+    if not left or not right:
+        return 0.0
+    return len(left & right) / len(left | right)
+
+
+def _longest_common_substring(a: str, b: str) -> int:
+    left, right = _normalize_for_pairing(a), _normalize_for_pairing(b)
+    if not left or not right:
+        return 0
+    match = difflib.SequenceMatcher(None, left, right, autojunk=False).find_longest_match(
+        0, len(left), 0, len(right)
+    )
+    return match.size
+
+
+def texts_share_fact(a: str, b: str) -> bool:
+    """True when two free-text descriptions are the same fact, not merely similar words.
+
+    Long texts may pair on ratio, containment of the shorter text, or a shared core phrase
+    (>= 10 characters) such as a quotation. Short texts are stricter: the shorter phrase
+    must be essentially contained, because a shared prefix ("老周负责……") is not evidence
+    that the predicates agree.
+    """
+    left = _normalize_for_pairing(a)
+    right = _normalize_for_pairing(b)
+    if not left or not right:
+        return left == right
+    if left == right:
+        return True
+
+    shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
+    containment = _pairing_containment(a, b)
+
+    if len(longer) <= TEXT_SHORT_MAX_CHARS:
+        # Short vs short: a shared prefix is not a shared fact.
+        if containment >= TEXT_SHORT_MIN_CONTAINMENT:
+            return True
+        lcs = _longest_common_substring(a, b)
+        return lcs >= max(4, int(0.90 * len(shorter)))
+
+    if len(shorter) <= TEXT_SHORT_MAX_CHARS:
+        # Short vs long: the short statement must be present in the observation.
+        lcs = _longest_common_substring(a, b)
+        return containment >= TEXT_SHORT_MIN_CONTAINMENT or lcs >= max(
+            TEXT_SUMMARY_MIN_LCS, int(0.80 * len(shorter))
+        )
+
+    return (
+        _pairing_ratio(a, b) >= TEXT_SUMMARY_MIN_RATIO
+        or _pairing_bigram_overlap(a, b) >= TEXT_SUMMARY_MIN_BIGRAM
+        or containment >= TEXT_SUMMARY_MIN_CONTAINMENT
+        or _longest_common_substring(a, b) >= TEXT_SUMMARY_MIN_LCS
+    )
 
 
 def _injury_present(text: str) -> bool:
@@ -422,13 +539,26 @@ def _proposal_facts(proposed: dict[str, Any]) -> list[dict[str, Any]]:
                                        kind="text", text=str(text)))
 
     for index, item in enumerate(proposed["foreshadowing_actions"]):
-        target = item.get("foreshadow_id") or item.get("target") or item.get("detail")
+        target = item.get("foreshadow_id") or item.get("target") or item.get("name")
         action = str(item.get("action") or "").strip().lower()
         if target and action:
+            # `content`/`detail` is the beat the Writer actually declared. Falling back to
+            # the id made a declaration pair on "FS-001" instead of on its text, so a real
+            # observation of the same beat could never match.
+            declared_text = next(
+                (
+                    str(value).strip()
+                    for value in (
+                        item.get("content"), item.get("detail"),
+                        item.get("description"), item.get("summary"),
+                    )
+                    if value and str(value).strip()
+                ),
+                str(target),
+            )
             facts.append(_fact(entity=target, field="foreshadow", value=action,
                                source_type="foreshadowing_actions", source_index=index,
-                               kind="foreshadow",
-                               text=str(item.get("detail") or item.get("target") or target)))
+                               kind="foreshadow", text=declared_text))
 
     for index, item in enumerate(proposed["new_plot_points"]):
         text = item.get("context") or item.get("description") or ""
@@ -496,11 +626,17 @@ def _event_fact(event: dict[str, Any], index: int) -> list[dict[str, Any]]:
                                text=str(payload.get("detail") or relation), event_type=event_type))
     elif event_type in {"open_loop_created", "promise_created", "open_loop_closed", "promise_paid_off"}:
         content = payload.get("content") or payload.get("question") or payload.get("detail")
+        unanswered = payload.get("unanswered_question")
         if content:
             action = "payoff" if event_type in {"open_loop_closed", "promise_paid_off"} else "setup"
+            # The loop's open question is part of the same observation; an unresolved-
+            # question declaration is allowed to pair with it, not only with the summary.
+            observation_text = " ".join(
+                str(part) for part in (content, unanswered) if part
+            )
             facts.append(_fact(entity=subject or "__open_loop__", field="open_loop",
                                value=content, source_type="accepted_events", source_index=index,
-                               kind="open_loop", text=str(content), event_type=action))
+                               kind="open_loop", text=observation_text, event_type=action))
     return facts
 
 
@@ -557,10 +693,13 @@ def _pair_text(declaration: dict[str, Any], facts: list[dict[str, Any]]) -> dict
         return None
     scored = []
     for fact in candidates:
-        ratio = _text_ratio(declaration["text"], fact["text"])
-        overlap = _bigram_overlap(declaration["text"], fact["text"])
-        if ratio >= TEXT_SUMMARY_MIN_RATIO or overlap >= TEXT_SUMMARY_MIN_BIGRAM:
-            scored.append((ratio + overlap, fact))
+        if not texts_share_fact(declaration["text"], fact["text"]):
+            continue
+        containment = _pairing_containment(declaration["text"], fact["text"])
+        lcs = _longest_common_substring(declaration["text"], fact["text"])
+        ratio = _pairing_ratio(declaration["text"], fact["text"])
+        overlap = _pairing_bigram_overlap(declaration["text"], fact["text"])
+        scored.append(((containment, lcs, ratio, overlap), fact))
     if not scored:
         return None
     scored.sort(key=lambda item: item[0], reverse=True)

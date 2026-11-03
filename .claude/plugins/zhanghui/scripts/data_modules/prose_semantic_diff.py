@@ -535,6 +535,242 @@ def _in_declared_redundant(evidence: str, declared: Sequence[str] | None) -> boo
     return any(evidence in str(sentence) or str(sentence) in evidence for sentence in declared if sentence)
 
 
+# ----------------------------------------------------------------------
+# Deterministic added-action guard (Step 2B)
+# ----------------------------------------------------------------------
+#
+# The Semantic Judge is a model call, and a model can call a newly invented action
+# "STYLE_ONLY_SAFE". The Judge therefore cannot be the only thing standing between a
+# polish pass and a candidate that quietly adds beats ("他翻开清单逐项查看", "他走到窗边",
+# "他检查钥匙"). This layer runs *before* the Judge and is consulted again after it: a
+# clause that has no counterpart in the original prose and carries a material action verb
+# is a new event, whatever the Judge says.
+#
+# It is deliberately narrow. Only material verbs are listed, similes are skipped, and an
+# action is allowed whenever the original prose already performs the same verb family on
+# the same object. Paraphrased actions on an existing object ("他合上记录本" ->
+# "他把记录本合上", "拾掇账目" -> "翻着账册") therefore remain style edits.
+
+_ACTION_VERB_GROUPS: Dict[str, Tuple[str, ...]] = {
+    "state_toggle": (
+        "打开", "推开", "拉开", "掀开", "翻开", "翻到", "翻动", "翻出",
+        "合上", "关上", "关闭", "锁上", "锁好", "盖好", "扣上",
+    ),
+    "transfer": (
+        "拿起", "放下", "掏出", "抽出", "取出", "收起", "收回", "放进",
+        "装进", "塞进", "放到", "放在", "推到", "推过去", "拉过", "拿过",
+        "递给", "交给", "还给", "腾出",
+    ),
+    "contact": (
+        "摸", "碰", "碰到", "触到", "抓住", "握住", "压住", "按住",
+        "扶住", "拉住", "拦住", "捂住",
+    ),
+    "move": (
+        "走到", "走向", "走进", "走出", "来到", "回到", "返回", "退到",
+        "靠近", "上前", "走上前", "转身", "起身", "站起", "坐下", "弯腰", "伸手",
+    ),
+    "inspect": ("检查", "查看", "翻看", "核对", "查验", "比对"),
+    "search": ("查找", "检索", "搜索", "搜寻", "翻阅"),
+    "strike": ("敲", "拍", "叩", "捶", "扣了扣", "扣了"),
+    "write": ("写下", "记下", "抄下", "抄写", "划掉", "涂掉", "撕下", "撕开"),
+    "social": ("追问", "问道", "告诉", "报告", "警告", "拦住", "叫住", "喊住", "指着"),
+    "discover": ("发现", "意识到", "注意到", "察觉", "察觉出", "目击", "得知", "知晓"),
+}
+
+_ACTION_VERBS: Tuple[Tuple[str, str], ...] = tuple(
+    sorted(
+        ((verb, group) for group, verbs in _ACTION_VERB_GROUPS.items() for verb in verbs),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
+)
+
+# A clause framed as a simile is description, not a new event.
+_SIMILE_MARKERS = ("像", "仿佛", "好似", "好像", "宛如", "如同", "好比", "似的", "犹如")
+# A gaze that is withdrawn/returned is not a material action on its object.
+_GAZE_SUBJECTS = ("目光", "视线", "眼神", "眼光")
+# Characters stripped from the head of an extracted object phrase.
+_OBJECT_LEADING_STOP = "了着过的地得把被给在从向往又就才便正还也都和与跟对为是"
+# Quantifiers/measure words do not make an object phrase distinctive on their own
+# ("推过去一点" has no object; "锁上了门" does).
+_OBJECT_QUANTIFIERS = set(
+    "一二两三四五六七八九十几些每个块张条页件只把份本处点下次遍行项盏杯间座根支"
+    "片颗名位种层段句章道扇串套双副圈步口眼声年月日天"
+)
+_OBJECT_SUFFIXES = ("的时候", "之后", "之前", "以后", "以前", "时", "后", "前", "里", "中", "上", "下", "来", "去")
+# A lone directional/particle character is not an object identity ("收回来" has none).
+_OBJECT_WEAK_SINGLE_CHARS = set("来去上下里中前后时")
+_CAUSAL_MARKERS = ("因为", "由于", "所以", "因此", "导致", "造成", "引发", "使得", "从而")
+
+
+def _action_clauses(text: str) -> List[str]:
+    """Split prose into clause-sized units for action comparison."""
+    clauses: List[str] = []
+    for sentence in re.split(r"[。！？；\n!?]+", text):
+        for clause in re.split(r"[，,]", sentence):
+            clause = clause.strip()
+            if clause:
+                clauses.append(clause)
+    return clauses
+
+
+def _action_norm(text: str) -> str:
+    return re.sub(r"[^\u4e00-\u9fffA-Za-z0-9]", "", text)
+
+
+def _strip_object_phrase(text: str) -> str:
+    while text and text[0] in _OBJECT_LEADING_STOP:
+        text = text[1:]
+    quantifier_only = False
+    while len(text) >= 2 and text[0] in _OBJECT_QUANTIFIERS:
+        text = text[1:]
+        quantifier_only = True
+    if len(text) <= 1 and quantifier_only:
+        text = ""
+    for suffix in _OBJECT_SUFFIXES:
+        if text.endswith(suffix) and len(text) - len(suffix) >= 2:
+            return text[: -len(suffix)]
+    return text
+
+
+def _object_keys(text: str) -> List[str]:
+    if not text:
+        return []
+    return [text[:n] for n in (4, 3, 2, 1) if len(text) >= n]
+
+
+def _action_object_keys(clause: str, verb_start: int, verb_end: int) -> Tuple[str, List[str], str]:
+    """Return (post-verb object, match keys, `把`/`被` object)."""
+    match = re.match(r"[\u4e00-\u9fff]{0,8}", clause[verb_end:])
+    post_object = _strip_object_phrase(match.group(0) if match else "")
+    if len(post_object) == 1 and post_object in _OBJECT_WEAK_SINGLE_CHARS:
+        post_object = ""
+    keys = _object_keys(post_object)
+
+    prefix = clause[:verb_start]
+    marker = max(prefix.rfind("把"), prefix.rfind("被"))
+    ba_object = ""
+    if marker >= 0:
+        ba_object = _strip_object_phrase(prefix[marker + 1:])
+        keys.extend(_object_keys(ba_object))
+    return post_object, keys, ba_object
+
+
+def _before_has_action(
+    group: str,
+    verb: str,
+    keys: List[str],
+    ba_object: str,
+    before_clauses: List[str],
+) -> bool:
+    members = _ACTION_VERB_GROUPS[group]
+    for clause in before_clauses:
+        if keys:
+            if any(member in clause for member in members) and any(key in clause for key in keys):
+                return True
+        elif group == "state_toggle" and ba_object:
+            # Same object, opposite state toggle: a rewrite of the existing beat, not an
+            # added one. (`他打开了门` -> `他把门锁上` stays with the Judge.)
+            if any(member in clause for member in members) and ba_object in clause:
+                return True
+        elif verb in clause:
+            # No object to compare: only the exact verb form counts as already present.
+            return True
+    return False
+
+
+def detect_added_events(before_text: str, after_text: str) -> List[SemanticDriftItem]:
+    """Find material actions/events/causal links the candidate added.
+
+    A clause is only inspected when it has no close counterpart in the original prose
+    (similarity < 0.75). Within such a clause, an action verb is "added" unless the
+    original already performs the same verb family on the same object. This keeps
+    reordered/reworded existing beats (`他合上记录本` -> `他把记录本合上`) out of the
+    guard while catching genuinely new beats (`他翻开清单逐项查看`, `他走到窗边`).
+    """
+    before_clauses = [_action_norm(clause) for clause in _action_clauses(before_text)]
+    before_norm = _action_norm(before_text)
+    findings: List[SemanticDriftItem] = []
+
+    for clause in _action_clauses(after_text):
+        norm = _action_norm(clause)
+        if len(norm) < 2:
+            continue
+        if any(marker in clause for marker in _SIMILE_MARKERS):
+            continue
+        if norm in before_clauses:
+            continue
+        similarity = max(
+            (difflib.SequenceMatcher(None, norm, candidate).ratio() for candidate in before_clauses),
+            default=0.0,
+        )
+        if similarity >= 0.75:
+            continue
+
+        flagged: Dict[str, Tuple[str, str]] = {}
+        allowed_groups: set[str] = set()
+        for verb, group in _ACTION_VERBS:
+            found = False
+            allowed = False
+            start = 0
+            while True:
+                index = clause.find(verb, start)
+                if index < 0:
+                    break
+                start = index + len(verb)
+                found = True
+                if group in {"transfer", "move", "state_toggle"} and any(
+                    gaze in clause[:index] for gaze in _GAZE_SUBJECTS
+                ):
+                    allowed = True
+                    break
+                _, keys, ba_object = _action_object_keys(clause, index, index + len(verb))
+                if _before_has_action(group, verb, keys, ba_object, before_clauses):
+                    allowed = True
+                    break
+            if not found:
+                continue
+            if allowed:
+                allowed_groups.add(group)
+            elif group not in allowed_groups:
+                flagged.setdefault(group, (verb, clause))
+
+        for group, (verb, flagged_clause) in flagged.items():
+            findings.append(
+                SemanticDriftItem(
+                    dimension="event_outcome",
+                    evidence_type="added_action_not_in_before",
+                    original_excerpt="(原文无该动作)",
+                    edited_excerpt=flagged_clause,
+                    description=(
+                        f"候选稿新增了原文没有的动作/事件「{verb}」：{flagged_clause}。"
+                        "这不是文风润色，STYLE_ONLY_SAFE 不能成立。"
+                    ),
+                    severity="blocking",
+                )
+            )
+
+        if not flagged:
+            for marker in _CAUSAL_MARKERS:
+                if marker in clause and marker not in before_norm:
+                    findings.append(
+                        SemanticDriftItem(
+                            dimension="causality",
+                            evidence_type="added_causality_not_in_before",
+                            original_excerpt="(原文无该因果关系)",
+                            edited_excerpt=clause,
+                            description=(
+                                f"候选稿新增了原文没有的因果连接「{marker}」：{clause}。"
+                                "新增因果关系不是文风润色。"
+                            ),
+                            severity="blocking",
+                        )
+                    )
+                    break
+
+    return findings[:8]
+
+
 def compare_semantic_facts(
     before_text: str,
     after_text: str,
@@ -738,6 +974,14 @@ def compare_semantic_facts(
                         severity="blocking",
                     )
                 )
+
+    # Check 9: Deterministic added-action guard.
+    #
+    # This is not a Judge input and it cannot be overridden by one. A candidate that adds
+    # a material beat ("他翻开清单逐项查看") is a semantic change even if the Judge labels
+    # it STYLE_ONLY_SAFE. The check is clause-scoped and object-aware, so reordering an
+    # existing action or rewording it around the same object stays a style edit.
+    drift_items.extend(detect_added_events(before_text, after_text))
 
     # 3. Decision
     if drift_items:
