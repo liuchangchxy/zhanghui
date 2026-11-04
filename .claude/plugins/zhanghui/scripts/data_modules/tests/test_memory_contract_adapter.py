@@ -504,7 +504,7 @@ class TestCommitChapter:
         result = MemoryContractAdapter(cfg).commit_chapter(1, {
             "review_result": {"blocking_count": 0},
             "fulfillment_result": {"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
-            "disambiguation_result": {"pending": [{"id": "entity-1"}]},
+            "disambiguation_result": {"pending": [{"id": "entity-1", "kind": "core_identity_merge"}]},
             "extraction_result": extraction, "chapter_text": text, "proposed_changes": changes,
             "reconciliation_result": reconcile_changes(changes, extraction, chapter_text=text),
         })

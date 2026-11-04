@@ -39,12 +39,24 @@ def test_pending_disambiguation_maps_to_human_decision():
     findings = adapt_legacy_artifacts(
         chapter=4, review={"issues": []},
         fulfillment={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
-        disambiguation={"pending": [{"id": "entity-1", "subject_id": "entity-1"}]},
+        disambiguation={"pending": [{"id": "entity-1", "subject_id": "entity-1", "kind": "core_identity_merge"}]},
         gate_registry=REGISTRY,
     )
     from data_modules.gate_severity_policy import GateSeverityPolicy
     decision = GateSeverityPolicy().evaluate(findings, policy_version="v1", scope={"chapter": 4})
     assert decision.aggregate_action == WorkflowAction.REQUIRE_HUMAN
+
+
+def test_ordinary_pending_disambiguation_is_recorded_but_not_blocking():
+    findings = adapt_legacy_artifacts(
+        chapter=4, review={"issues": []},
+        fulfillment={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
+        disambiguation={"pending": [{"mention": "科长", "entity_id": "kezhang"}]},
+        gate_registry=REGISTRY,
+    )
+    from data_modules.gate_severity_policy import GateSeverityPolicy
+    decision = GateSeverityPolicy().evaluate(findings, policy_version="v1", scope={"chapter": 4})
+    assert decision.aggregate_action == WorkflowAction.ALLOW_WITH_ADVISORY
 
 
 def test_planner_must_cover_miss_stays_advisory():

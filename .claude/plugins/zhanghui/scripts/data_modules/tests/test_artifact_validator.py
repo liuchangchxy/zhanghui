@@ -78,10 +78,17 @@ def test_artifact_validator_does_not_derive_semantic_veto_from_legacy_counts(tmp
         },
     )
     disambiguation = _write_json(tmp_path / "disambiguation_result.json", {"pending": [{"mention": "宗主"}]})
+    hard_conflict = _write_json(
+        tmp_path / "hard_conflict.json",
+        {"pending": [{"mention": "宗主", "kind": "core_identity_merge"}]},
+    )
 
     review_report = validate_review_result(review)
     fulfillment_report = validate_fulfillment_result(fulfillment)
-    assert validate_disambiguation_result(disambiguation)["errors"][0]["type"] == ERROR_PENDING_DISAMBIGUATION
+    ordinary = validate_disambiguation_result(disambiguation)
+    assert ordinary["ok"] is True
+    assert ordinary["warnings"][0]["type"] == "pending_disambiguation_recorded"
+    assert validate_disambiguation_result(hard_conflict)["errors"][0]["type"] == ERROR_PENDING_DISAMBIGUATION
     assert review_report["ok"] is True
     assert review_report["payload"]["blocking_count"] == 1
     assert fulfillment_report["ok"] is True

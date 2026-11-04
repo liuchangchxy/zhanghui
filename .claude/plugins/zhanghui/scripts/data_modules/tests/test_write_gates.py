@@ -242,7 +242,23 @@ def test_precommit_gate_rejects_fulfillment_missing_missed_nodes(tmp_path):
     assert any("missed_nodes" in item["message"] for item in report["errors"])
 
 
-def test_precommit_gate_rejects_pending_disambiguation(tmp_path):
+def test_precommit_gate_rejects_blocking_identity_conflict(tmp_path):
+    _make_init_ready(tmp_path)
+    _make_contracts(tmp_path, chapter=1)
+    (tmp_path / "正文" / "第0001章.md").write_text("正文\n", encoding="utf-8")
+    _write_valid_artifacts(tmp_path)
+    _write_json(
+        tmp_path / ".webnovel" / "tmp" / "disambiguation_result.json",
+        {"pending": [{"id": "entity-1", "mention": "未确认称谓", "kind": "core_identity_merge"}]},
+    )
+
+    report = run_write_gate(tmp_path, chapter=1, stage="precommit")
+
+    assert report["ok"] is False
+    assert any(item["code"] == "artifact.pending_disambiguation" for item in report["errors"])
+
+
+def test_precommit_gate_records_ordinary_pending_without_blocking(tmp_path):
     _make_init_ready(tmp_path)
     _make_contracts(tmp_path, chapter=1)
     (tmp_path / "正文" / "第0001章.md").write_text("正文\n", encoding="utf-8")
@@ -254,8 +270,8 @@ def test_precommit_gate_rejects_pending_disambiguation(tmp_path):
 
     report = run_write_gate(tmp_path, chapter=1, stage="precommit")
 
-    assert report["ok"] is False
-    assert any(item["code"] == "artifact.pending_disambiguation" for item in report["errors"])
+    assert report["ok"] is True
+    assert any("unresolved candidate" in item.get("message", "") for item in report["warnings"])
 
 
 def test_precommit_gate_rejects_disambiguation_missing_pending(tmp_path):

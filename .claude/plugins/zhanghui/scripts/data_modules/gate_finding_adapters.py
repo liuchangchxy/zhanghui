@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .artifact_validator import is_blocking_disambiguation
 from .gate_findings import (
     DetectedFinding, EvidenceRef, Explicitness, FindingAuthority,
     FindingCategory, ScorePayload,
@@ -166,6 +167,11 @@ def adapt_legacy_artifacts(*, chapter: int, review: dict[str, Any], fulfillment:
     if isinstance(pending, list):
         for row in pending:
             item = _obj(row)
+            if not is_blocking_disambiguation(item):
+                # Ordinary unresolved candidates remain in the artifact as a
+                # recorded ambiguity. Only a declared core-identity conflict
+                # needs an accountable choice before commit.
+                continue
             subject = item.get("subject_id") or item.get("id")
             evidence = _evidence_refs(item.get("structured_evidence") or item.get("evidence"),
                 fallback_kind="unresolved_identity", fallback_identity={"subject_id": subject} if subject else None)
