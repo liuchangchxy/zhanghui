@@ -5,6 +5,7 @@ text is intentionally ignored.
 """
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from .artifact_validator import is_blocking_disambiguation
@@ -218,6 +219,79 @@ def adapt_legacy_artifacts(*, chapter: int, review: dict[str, Any], fulfillment:
             category=FindingCategory.WORKFLOW, authority=FindingAuthority.LEGACY_UNKNOWN,
             explicitness=Explicitness.UNKNOWN, subject_id=None,
             evidence=[EvidenceRef(kind="count_only_diagnostic", identity={"artifact_type": "review_result"})]))
+    return findings
+
+
+# Step 4 is a style-only pass: it must not rewrite a time, a count, a name, or an
+# injury/ownership state. When the reviewer still reports such a finding as high or
+# critical, leaving `blocking=false` is not permission to auto-publish — it is an
+# unresolved fact problem. Only these explicit fact dimensions qualify; pure expression
+# (ai_flavor, pacing, beat/foreshadow compliance) stays out of this rule.
+_FACT_REVIEW_CATEGORIES = frozenset({"setting", "timeline", "continuity", "character", "logic"})
+_FACT_REVIEW_BLOCKING_SEVERITIES = frozenset({"high", "critical"})
+_FACT_RESOLVED_STATES = frozenset({"resolved", "closed", "fixed"})
+
+
+def _fact_review_subject_key(issue: dict[str, Any]) -> str:
+    explicit = issue.get("issue_id") or issue.get("subject_id")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+    basis = "|".join(str(issue.get(field) or "") for field in ("category", "location", "description"))
+    return "fact-review-" + hashlib.sha256(basis.encode("utf-8")).hexdigest()[:16]
+
+
+def adapt_unresolved_fact_review(*, chapter: int, review: dict[str, Any]) -> list[DetectedFinding]:
+    """Route unresolved high/critical FACT_REVIEW findings into the shared gate.
+
+    This intentionally reuses the existing pieces instead of introducing a second
+    blocker system: the Reviewer finding supplies the problem, `classify_finding_owner`
+    (the revision planner's owner for Step 4) decides whether it is a fact-layer
+    finding, and the shared `GateSeverityPolicy` decides the action. A
+    `CANON_CONTRADICTION` with `LLM_REVIEW` authority already evaluates to
+    `REQUIRE_HUMAN`, which `ChapterCommitService` turns into `pending_human` — no
+    automatic commit or publish. medium/low findings and pure-expression findings are
+    not emitted, so they keep flowing as advisories.
+    """
+    from .revision_planner import OWNER_FACT_REVIEW, classify_finding_owner
+
+    issues = review.get("issues") if isinstance(review, dict) else None
+    if not isinstance(issues, list):
+        return []
+
+    findings: list[DetectedFinding] = []
+    for row in issues:
+        issue = _obj(row)
+        severity = str(issue.get("severity") or "").strip().lower()
+        if severity not in _FACT_REVIEW_BLOCKING_SEVERITIES:
+            continue
+        if issue.get("resolved") is True:
+            continue
+        if str(issue.get("status") or "").strip().lower() in _FACT_RESOLVED_STATES:
+            continue
+        category = str(issue.get("category") or "").strip().lower()
+        if category not in _FACT_REVIEW_CATEGORIES:
+            continue
+        if classify_finding_owner(issue, style_only=True) != OWNER_FACT_REVIEW:
+            continue
+        findings.append(_finding(
+            chapter=chapter,
+            checker_id="reviewer_fact_review",
+            gate_id="review.fact_review_unresolved",
+            category=FindingCategory.CANON_CONTRADICTION,
+            authority=FindingAuthority.LLM_REVIEW,
+            explicitness=Explicitness.EXPLICIT,
+            subject_id=_fact_review_subject_key(issue),
+            evidence=_evidence_refs(
+                issue.get("structured_evidence"),
+                fallback_kind="fact_review_candidate",
+                fallback_identity={
+                    "severity": severity,
+                    "category": category,
+                    "location": str(issue.get("location") or ""),
+                },
+            ),
+            message=str(issue.get("description") or ""),
+        ))
     return findings
 
 

@@ -754,13 +754,23 @@ logic 问题只能靠改事实"修复"，而这正是 Step 4 语义漂移的来�
         - `review_subject_fingerprint` **未变化** → 正文一个字符都没变，**不重审**。沿用既有
           `review_results.json`，只需重新运行 `review-pipeline --save-metrics` 把该审查登记到新草稿身份上；
         - `review_subject_fingerprint` **已变化** → 正文确实变了，旧审查彻底失效，必须重新调用
-          `zhanghui:reviewer`（继续传入 `reviewer_context_{chapter_padded}.json`）产出与新草稿绑定的
-          全新 `review_results.json`，再 `review-pipeline --save-metrics`；
+          `zhanghui:reviewer`。调用前**必须重新生成同章重审上下文并覆盖写入**：
+          ```bash
+          python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime reviewer-context \
+            --chapter {chapter_num} \
+            --format json > "${PROJECT_ROOT}/.webnovel/tmp/reviewer_context_{chapter_padded}.json"
+          ```
+          然后传入刷新后的 `reviewer_context_{chapter_padded}.json`，产出与新草稿绑定的全新
+          `review_results.json`，再 `review-pipeline --save-metrics`。**不得**复用首次审查前生成、
+          `convergence_context.has_previous_review=false` 的旧上下文文件；那份文件看不到上一轮
+          review，重审会把 `resolved/persistent` 误报成首次审查；
      5. 只有第 4 步完成后，方可进入 Step 4.5。
    - **预算门**：第 4 步的重审要求只在自动修订预算未耗尽时适用。第 4 步之前必须先重新拉取
-     `runtime reviewer-context --enforce-auto-budget`；若它以退出码 `2`
+     `runtime reviewer-context --enforce-auto-budget` 做预算检查；若它以退出码 `2`
      （`AUTO_REVISION_BUDGET_EXHAUSTED`）拒绝，说明本轮修订已经是预算外的第 3 轮以上，
      此时**不得**再改正文、不得再调用 reviewer——把未处理问题写进报告并进入 Step 4.5。
+     预算检查通过后，按上一条的 `reviewer-context` 命令**重新生成上下文文件**再交给 reviewer；
+     预算检查那一次的输出只是计数凭据，不得当作重审上下文直接复用。
 
 > **审查失效判据（`review_subject_fingerprint`）**：审查的有效性由**审查对象**决定——即剔除了
 > `<chapter_changes>` 容器的纯正文的 SHA-256。`draft_id` 与 `draft_fingerprint` 是全量产物指纹，

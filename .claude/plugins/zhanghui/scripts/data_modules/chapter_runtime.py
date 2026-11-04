@@ -41,7 +41,12 @@ from .chapter_commit_service import (
 from .config import DataModulesConfig
 from .context_manager import ContextManager
 from .durable_projection import discover_validated_chapter_commits
-from .gate_finding_adapters import adapt_canon_validation, adapt_changes_gate_result, adapt_legacy_artifacts
+from .gate_finding_adapters import (
+    adapt_canon_validation,
+    adapt_changes_gate_result,
+    adapt_legacy_artifacts,
+    adapt_unresolved_fact_review,
+)
 from .projections import retry_projection
 from .reconciliation import (
     prose_only_text,
@@ -162,6 +167,22 @@ def build_scene_plan(directive: Dict[str, Any]) -> Dict[str, str]:
 
 def _same_text(value: str, *candidates: Any) -> bool:
     return bool(value) and any(value == str(candidate or "").strip() for candidate in candidates)
+
+
+def _review_chapter_number(data: Any) -> int | None:
+    """Return the chapter a review file claims, or None when it is absent/malformed.
+
+    Review stores are read for convergence, not as a schema gate: a legacy or
+    hand-edited file must fall back to "no same-chapter review", never crash the
+    reviewer-context command with a TypeError/ValueError.
+    """
+    if not isinstance(data, dict):
+        return None
+    raw = data.get("chapter")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def render_scene_plan_block(
@@ -2621,6 +2642,7 @@ class ChapterRuntime:
         runtime_dir = self._chapter_runtime_dir(chapter)
         prev_review = None
         prev_review_status = "no_previous_review"
+        ignored_review_candidates: list[dict[str, Any]] = []
         for cand in (
             runtime_dir / "last_review.json",
             self.project_root / ".webnovel" / "tmp" / "review_results.json",
@@ -2632,11 +2654,19 @@ class ChapterRuntime:
             except (OSError, json.JSONDecodeError) as exc:
                 prev_review_status = f"unreadable:{cand.name}:{exc}"
                 continue
-            if isinstance(data, dict) and int(data.get("chapter", 0)) == chapter:
+            candidate_chapter = _review_chapter_number(data)
+            if candidate_chapter == chapter:
                 prev_review = data
                 prev_review_status = "loaded"
                 break
-            prev_review_status = f"chapter_mismatch:{cand.name}"
+            # A review file for another chapter is expected before a chapter's first
+            # review (`.webnovel/tmp/review_results.json` still holds chapter N-1).
+            # That is "no same-chapter review", not evidence of corruption; keep the
+            # candidate as a diagnostic instead of reporting `chapter_mismatch`.
+            if candidate_chapter is not None or isinstance(data, dict):
+                ignored_review_candidates.append(
+                    {"file": cand.name, "chapter": candidate_chapter}
+                )
 
         convergence_context: dict[str, Any]
         if prev_review and isinstance(prev_review.get("issues"), list):
@@ -2670,6 +2700,7 @@ class ChapterRuntime:
                     if isinstance(i, dict)
                 ],
                 "high_or_critical_findings": hi_crit,
+                "ignored_review_candidates": ignored_review_candidates,
                 "instruction": (
                     "这是上一轮草稿的审查问题列表。本次审查仍须从头独立检查全部 8 个维度并可提出全新问题；"
                     "同时请重点核验上一轮 high/critical 问题在当前草稿中是否已得到明确解决 (closure)。"
@@ -2682,6 +2713,7 @@ class ChapterRuntime:
                 "previous_finding_count": 0,
                 "previous_findings": [],
                 "high_or_critical_findings": [],
+                "ignored_review_candidates": ignored_review_candidates,
                 "instruction": "这是本章的首次审查，请从头完整独立检查全部 8 个维度。",
             }
 
@@ -2696,6 +2728,7 @@ class ChapterRuntime:
             "previous_chapter": chapter - 1 if chapter > 1 else None,
             "previous_review_status": "no_previous_chapter",
             "high_or_critical_findings": [],
+            "ignored_review_candidates": [],
             "instruction": "本章没有上一章审查记录可核验。",
         }
         if chapter > 1:
@@ -2705,6 +2738,7 @@ class ChapterRuntime:
                 self.project_root / ".webnovel" / "tmp" / "review_results.json",
             )
             prior_status = "no_previous_chapter"
+            prior_ignored: list[dict[str, Any]] = []
             for cand in prev_candidates:
                 if not cand.is_file():
                     continue
@@ -2713,8 +2747,11 @@ class ChapterRuntime:
                 except (OSError, json.JSONDecodeError) as exc:
                     prior_status = f"unreadable:{cand.name}:{exc}"
                     continue
-                if not isinstance(data, dict) or int(data.get("chapter", 0)) != prev_chapter:
-                    prior_status = f"chapter_mismatch:{cand.name}"
+                if _review_chapter_number(data) != prev_chapter:
+                    # `.webnovel/tmp/review_results.json` is usually chapter N's own
+                    # review by the time chapter N+1 is reviewed. That is a stale
+                    # candidate, not corruption — record it and keep looking.
+                    prior_ignored.append({"file": cand.name, "chapter": _review_chapter_number(data)})
                     continue
                 prev_items = data.get("issues") or []
                 hi = [
@@ -2734,6 +2771,7 @@ class ChapterRuntime:
                     "previous_review_status": "loaded",
                     "previous_finding_count": len(prev_items),
                     "high_or_critical_findings": hi,
+                    "ignored_review_candidates": prior_ignored,
                     "instruction": (
                         f"以下是第 {prev_chapter} 章收尾时仍未闭环的高优/严重问题。"
                         "本章必须核验它们是否真的解决：若本章正文继续沿用与问题相同的错误事实，"
@@ -2743,6 +2781,7 @@ class ChapterRuntime:
                 break
             else:
                 prior_chapter_context["previous_review_status"] = prior_status
+                prior_chapter_context["ignored_review_candidates"] = prior_ignored
 
         return {
             "chapter": chapter,
@@ -3359,6 +3398,12 @@ class ChapterRuntime:
             contract_payloads=contracts,
         )
         findings.extend(adapt_changes_gate_result(gate_result, chapter=chapter))
+
+        # A high/critical fact finding the Reviewer still reports was deferred by
+        # Step 4 to FACT_REVIEW. `blocking=false` is not permission to publish: route
+        # it through the shared policy as an accountable human decision. medium/low
+        # and pure-expression findings are not emitted by this adapter.
+        findings.extend(adapt_unresolved_fact_review(chapter=chapter, review=rev))
 
         # Deterministic Canon fact guard: the producer the shared policy was missing.
         # Reviewer findings are model judgement and stay advisory; this one is rebuilt from
