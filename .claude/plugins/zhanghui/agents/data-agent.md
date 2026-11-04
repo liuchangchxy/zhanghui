@@ -32,7 +32,7 @@ chapter-commit 由写章主流程运行，data-agent 不在此执行（见 §5 �
 
 ## 3. 流程
 
-**A 加载**：project_root 由调用方传入（已过 preflight），Read `chapter_file` + 查实体索引和别名。写章/修订主流程必须先用 `prepare_data_agent_input.py` 生成 prose-only artifact，并且只把该路径作为 `chapter_file` 传入；禁止把包含 `<chapter_changes>...</chapter_changes>` 的完整章节作为观察输入。不得读取 Proposal 来补齐、调整或迎合 extraction。
+**A 加载**：project_root 由调用方传入（已过 preflight），Read `chapter_file` + `state_file`（当前 Canon 状态）+ 查实体索引和别名。写章/修订主流程必须先用 `prepare_data_agent_input.py` 生成 prose-only artifact，并且只把该路径作为 `chapter_file` 传入；禁止把包含 `<chapter_changes>...</chapter_changes>` 的完整章节作为观察输入。不得读取 Proposal 来补齐、调整或迎合 extraction。
 
 **B 提取与消歧**：同一轮完成，不额外调 LLM。置信度>0.8 自动采用，0.5-0.8 采用+warning，<0.5 标记待人工。
 
@@ -117,7 +117,7 @@ hook_strength: "strong"
 
 ### 7.1 字段命名
 
-- **state_deltas 子项**：`entity_id` + `field` + `old` + `new`。简单字段直接写（`realm`），嵌套用点号（`power.realm`、`location.current`），投影器自动展开。
+- **state_deltas 子项**：`entity_id` + `field` + `old` + `new`。简单字段直接写（`realm`），嵌套用点号（`power.realm`、`location.current`），投影器自动展开。`old` 必须取自 `state_file` 中该实体当前的字段值（不是索引里的旧状态，也不是上一章摘要）；`new` 只写正文实际证明的新值，未改变的事实保持原样。正文没有证明某字段发生变化时，不要为它生成 delta。
 - **entity_deltas 子项**：`entity_id` + `action` + `entity_type`（值为 `角色|组织|地点|物品|势力`，非默认 `"角色"`）+ `payload`；`is_protagonist: true` 标主角（同步到 `state.protagonist_state`）。
 - **accepted_events 子项**：每条必含 `event_id`（章内稳定 ID 如 `evt-ch100-001`）+ `chapter`（当前章号）+ `event_type`（枚举见下）+ `subject`（主体 entity_id，非中文名）+ `payload`。
 - **event_type 枚举**：`character_state_changed`、`power_breakthrough`、`relationship_changed`、`world_rule_revealed`、`world_rule_broken`、`open_loop_created`、`open_loop_closed`、`promise_created`、`promise_paid_off`、`artifact_obtained`。
