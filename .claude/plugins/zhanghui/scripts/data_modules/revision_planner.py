@@ -865,6 +865,14 @@ def locate_issue(text: str, issue: Dict[str, Any], *, index: int = 0) -> Revisio
 
     candidates: List[Tuple[str, Optional[RevisionTarget], str]] = []
 
+    # Several independently cited locations cannot safely be collapsed to one edit.
+    # The reviewer may use physical line numbers while calling them paragraphs.
+    # In that case a bare numeric reference is not enough to select a target.
+    if len(list(_PARAGRAPH_REF_RE.finditer(location))) > 1 or len(list(_LINE_REF_RE.finditer(location))) > 1:
+        base.resolvable = False
+        base.ambiguity = "multiple_locations_require_explicit_quotes"
+        return base
+
     # 1) legacy §N section reference
     section_match = _SECTION_REF_RE.search(location)
     if section_match:
@@ -917,9 +925,10 @@ def locate_issue(text: str, issue: Dict[str, Any], *, index: int = 0) -> Revisio
 
     # 4) exact quote carried by the finding (description / fix_hint / structured evidence / excerpt)
     for quote in _extract_quotes(
-        description,
-        fix_hint,
+        str(issue.get("evidence") or ""),
+        str(issue.get("anchor_quote") or ""),
         str(issue.get("excerpt") or ""),
+        description,
         json.dumps(issue.get("structured_evidence") or [], ensure_ascii=False),
     ):
         target, ambiguity = _expand_quote_span(base, text, paragraphs, quote)
@@ -947,6 +956,13 @@ def locate_issue(text: str, issue: Dict[str, Any], *, index: int = 0) -> Revisio
                 "",
             )
         )
+
+    if (not any(target is not None and locator != LOC_QUOTE for locator, target, _ in candidates)
+            and any(locator == LOC_QUOTE and ambiguity == "ambiguous_quote"
+                    for locator, target, ambiguity in candidates if target is None)):
+        base.resolvable = False
+        base.ambiguity = "ambiguous_quote"
+        return base
 
     resolved = [(locator, target) for locator, target, _ in candidates if target is not None]
     if resolved:
@@ -1211,8 +1227,13 @@ def apply_edits(
         target = targets.get(target_id)
         if target is None:
             raise RevisionApplyError(f"unknown target_id: {target_id!r}")
+        if not target.get("resolvable") or target.get("locator") == LOC_CHAPTER:
+            raise RevisionApplyError(f"target {target_id} is not a resolvable local span")
         new_text = str(edit.get("new_text") or "")
         start, end = int(target["start"]), int(target["end"])
+        if end <= start or not any(int(span["start"]) <= start and end <= int(span["end"])
+                                   for span in plan.get("editable_spans") or []):
+            raise RevisionApplyError(f"target {target_id} lies outside editable spans")
         before = str(target["before_text"])
         current = text[start:end]
         if current != before:

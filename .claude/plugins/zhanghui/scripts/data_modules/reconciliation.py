@@ -97,6 +97,7 @@ TEXT_MATCH_EQUIVALENTS = (
     ("汇报", "报告"), ("报给", "报告"), ("上报", "报告"), ("通报", "报告"),
     ("返回", "回"), ("回到", "回"),
     ("检索", "查"), ("查询", "查"), ("搜索", "查"), ("查找", "查"), ("搜寻", "查"),
+    ("知道得比其职位应知的多", "知情程度超出其职位应有范围"),
     ("名下", "名义"), ("口头", ""),
 )
 # Structured facts can describe the same object with a different modifier ("密封胶残片" /
@@ -117,8 +118,10 @@ def _digest(value: Any) -> str:
 
 
 def _key(value: Any) -> str:
-    text = str(value or "").strip().casefold().replace("_", " ")
-    return re.sub(r"\s+", " ", text)
+    text = str(value or "").strip().casefold()
+    if text in {"__plot__", "__question__", "__chapter_time__", "__open_loop__"}:
+        return text
+    return re.sub(r"\s+", " ", text.replace("_", " ")).strip()
 
 
 def _field(value: Any) -> str:
@@ -475,7 +478,8 @@ def _proposal_facts(proposed: dict[str, Any]) -> list[dict[str, Any]]:
         raw_field = item.get("field") or item.get("field_name")
         if not raw_field and isinstance(raw_value, str):
             match = re.match(r"\s*([^:=：]+)\s*[:=：]\s*(.+)\s*$", raw_value)
-            if match:
+            if match and (_field(match.group(1)) in set(FIELD_ALIASES.values())
+                          or re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_.]*", match.group(1).strip())):
                 raw_field, raw_value = match.group(1), match.group(2)
             elif _value(str(raw_value).removeprefix("突破")) in {"筑基", "炼气", "金丹", "元婴"}:
                 raw_field, raw_value = "realm", str(raw_value).removeprefix("突破")
@@ -675,7 +679,8 @@ def _observed_facts(observed: dict[str, Any]) -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 
 
-def _pair_text(declaration: dict[str, Any], facts: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _pair_text(declaration: dict[str, Any], facts: list[dict[str, Any]],
+               aliases: dict[str, set[str]] | None = None) -> dict[str, Any] | None:
     """Best observed text fact for a free-text declaration, or None when nothing is close."""
     entity = declaration["entity"]
     # A chapter's time statement can only pair with an observed time fact, and a plot point
@@ -685,6 +690,9 @@ def _pair_text(declaration: dict[str, Any], facts: list[dict[str, Any]]) -> dict
     candidates = [fact for fact in facts if fact["kind"] in {"text", "open_loop", "foreshadow", "state", "time", "relationship"}]
     if entity == "__chapter_time__":
         candidates = [fact for fact in candidates if fact["kind"] == "time"]
+    elif declaration["source_type"] == "character_state_changes":
+        identities = {entity} | (aliases or {}).get(entity, set())
+        candidates = [fact for fact in candidates if fact["entity"] in identities]
     elif entity not in {"__plot__", "__question__"}:
         scoped = [fact for fact in candidates if fact["entity"] == entity]
         if scoped:
@@ -699,7 +707,8 @@ def _pair_text(declaration: dict[str, Any], facts: list[dict[str, Any]]) -> dict
         lcs = _longest_common_substring(declaration["text"], fact["text"])
         ratio = _pairing_ratio(declaration["text"], fact["text"])
         overlap = _pairing_bigram_overlap(declaration["text"], fact["text"])
-        scored.append(((containment, lcs, ratio, overlap), fact))
+        score = (lcs, containment, ratio, overlap) if declaration["source_type"] == "character_state_changes" else (containment, lcs, ratio, overlap)
+        scored.append((score, fact))
     if not scored:
         return None
     scored.sort(key=lambda item: item[0], reverse=True)
@@ -744,6 +753,13 @@ def reconcile_changes(proposed_changes: Any, observed_changes: Any, *, chapter_t
     observed = ExtractionResult.model_validate(observed_changes).model_dump()
     declarations = _proposal_facts(proposed)
     facts = _observed_facts(observed)
+    # Only unambiguous explicit entity names from this extraction bridge names to IDs.
+    names: dict[str, set[str]] = defaultdict(set)
+    for delta in observed.get("entity_deltas", []):
+        payload = delta.get("payload") or {}
+        if isinstance(payload, dict) and payload.get("name") and delta.get("entity_id"):
+            names[_key(payload["name"])].add(_key(delta["entity_id"]))
+    aliases = {name: ids for name, ids in names.items() if len(ids) == 1}
     normalized_proposal_sources = {(item["source_type"], item["source_index"]) for item in declarations}
 
     # Internal consistency: the same canonical (entity, field) must not carry two values
@@ -836,7 +852,7 @@ def reconcile_changes(proposed_changes: Any, observed_changes: Any, *, chapter_t
     # meaning. They cannot establish a structured field conflict on their own.
     for item in declarations:
         if item["kind"] == "text":
-            hit = _pair_text(item, facts)
+            hit = _pair_text(item, facts, aliases)
             if hit is None:
                 proposed_not_observed.append({"proposed": {"source": item["source_type"], "index": item["source_index"]},
                                               "reason": "no observation is paraphrase-equivalent"})
