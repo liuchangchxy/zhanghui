@@ -638,9 +638,11 @@ def _event_fact(event: dict[str, Any], index: int) -> list[dict[str, Any]]:
             observation_text = " ".join(
                 str(part) for part in (content, unanswered) if part
             )
-            facts.append(_fact(entity=subject or "__open_loop__", field="open_loop",
-                               value=content, source_type="accepted_events", source_index=index,
-                               kind="open_loop", text=observation_text, event_type=action))
+            fact = _fact(entity=subject or "__open_loop__", field="open_loop",
+                         value=content, source_type="accepted_events", source_index=index,
+                         kind="open_loop", text=observation_text, event_type=action)
+            fact["question_text"] = str(unanswered or "")
+            facts.append(fact)
     return facts
 
 
@@ -701,14 +703,23 @@ def _pair_text(declaration: dict[str, Any], facts: list[dict[str, Any]],
         return None
     scored = []
     for fact in candidates:
-        if not texts_share_fact(declaration["text"], fact["text"]):
-            continue
-        containment = _pairing_containment(declaration["text"], fact["text"])
-        lcs = _longest_common_substring(declaration["text"], fact["text"])
-        ratio = _pairing_ratio(declaration["text"], fact["text"])
-        overlap = _pairing_bigram_overlap(declaration["text"], fact["text"])
-        score = (lcs, containment, ratio, overlap) if declaration["source_type"] == "character_state_changes" else (containment, lcs, ratio, overlap)
-        scored.append((score, fact))
+        texts = [fact["text"]]
+        if declaration["source_type"] == "unresolved_questions" and fact.get("question_text"):
+            texts.append(fact["question_text"])
+        if (declaration["source_type"] == "new_plot_points"
+                and fact["field"] == _field("known_evidence") and fact["old"]
+                and fact["text"].startswith(fact["old"])):
+            added = fact["text"][len(fact["old"]):]
+            texts.extend([added, *re.split(r"[。！？\n]+", added)])
+        for text in texts:
+            if not texts_share_fact(declaration["text"], text):
+                continue
+            containment = _pairing_containment(declaration["text"], text)
+            lcs = _longest_common_substring(declaration["text"], text)
+            ratio = _pairing_ratio(declaration["text"], text)
+            overlap = _pairing_bigram_overlap(declaration["text"], text)
+            score = (lcs, containment, ratio, overlap) if declaration["source_type"] == "character_state_changes" else (containment, lcs, ratio, overlap)
+            scored.append((score, fact))
     if not scored:
         return None
     scored.sort(key=lambda item: item[0], reverse=True)

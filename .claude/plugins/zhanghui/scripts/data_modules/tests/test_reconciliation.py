@@ -500,6 +500,30 @@ def test_foreshadow_content_is_used_for_pairing_not_the_id():
     assert any(item["proposed"]["source"] == "foreshadowing_actions" for item in result["matched"])
 
 
+def test_actual_monthly_report_question_uses_question_text():
+    proposed = _free_text_proposal("郑培为何提起十年前的月报，他从何处得知相关信息？", source="unresolved_questions")
+    observed = {"accepted_events": [{"event_type": "open_loop_created", "subject": "zheng_pei", "payload": {
+        "content": "郑培送别时问“十年前的月报，你手上应该也有一份吧”；本次核查请求及交谈未提及月报，他为何知晓或作此判断、消息从何而来仍未知。",
+        "unanswered_question": "郑培为何提到十年前的月报，他从哪里得到相关消息？",
+    }}], "state_deltas": [], "entity_deltas": []}
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+    assert result["matched"][0]["observed"] == [{"source": "accepted_events", "index": 0}]
+    proposed["unresolved_questions"][0]["question"] = "老周为何藏起设备登记簿，谁指使他这样做？"
+    assert not reconcile_changes(proposed, observed, chapter_text="final")["matched"]
+
+
+def test_plot_point_matches_new_known_evidence_without_matching_old_history():
+    text = "老周向档案科报告许知远再次来站，科长随后警告许知远不要掺和海事的事，并要求他报告差异核查经过。"
+    old = "旧报2016年3月17日记载事故。" * 20
+    added = "另在工作记录正面记下旧站设备登记资料名称及驳回时间，原因及处理人未知。老周向档案科通报其问登记，科长知其问及通信终端并警告勿掺和海事。"
+    observed = _observed_text(old + added, field="known_evidence")
+    observed["state_deltas"][0]["old"] = old
+    result = reconcile_changes(_free_text_proposal(text), observed, chapter_text="final")
+    assert result["matched"][0]["observed"] == [{"source": "state_deltas", "index": 0}]
+    result = reconcile_changes(_free_text_proposal("梁沐独自带走了旧站全部设备登记资料。"), observed, chapter_text="final")
+    assert not result["matched"]
+
+
 def test_unresolved_question_can_pair_with_an_open_loops_question():
     proposed = change("情绪平稳")
     proposed["character_state_changes"] = []
