@@ -169,7 +169,13 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
 
 ### 跳过 Step 4（定向安全润色）
 
-快车道跳过 Step 4 诊断与定向润色。
+快车道跳过 Step 4 诊断与定向润色，但不跳过事实纠错。审查落盘后、提交前，检查 high/critical
+且按 revision planner 的 `style_only` 分类属于 `FACT_REVIEW` 的未解决问题：事实与正文证据足以唯一确定
+修复时，主流程按 `../webnovel-write/SKILL.md` 的「自动事实纠错」复用 `webnovel-revise` 的计划、
+受限编辑、`prose validate --revision-plan`、重新 ingest 和 Reviewer 重审；只有重审通过才继续。
+必须解析 `PENDING_REREVIEW`，不得将退出码 0 当作可提交。若需要选择 Canon 解释、事实不足、定位或
+校验失败、重审后问题仍存在，则保留有效审查，走现有提交门禁 `pending_human`，不得发布。
+medium/low 和纯表达 finding 不因此进入此纠错链。必要的事实重审可用 `--allow-over-budget`。
 
 ### Step 4.5：刷新 ProposedChanges 并校验协议
 
@@ -223,7 +229,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
    - **`review_subject_fingerprint` 已变化**（正文真的改了）→ 旧审查彻底失效，必须重审：
      - **所有权绝对禁令**：Reviewer Agent 独占拥有 `review_results.json` 的生成权威；
        **严禁主流程直接手工修改或就地替换 Reviewer Agent 原始审查产物中的草稿身份字段**。
-     - **权威重审**：复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder），
+     - **权威重审**：通过 `runtime reviewer-context` 刷新 `reviewer_context_{chapter_padded}.json`，
        使用 `Agent` 工具重新调用 `zhanghui:reviewer`，输入参数传入新草稿身份：
        - `chapter`: `{chapter_num}`
        - `chapter_file`: `"${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"`
@@ -232,7 +238,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
        - `draft_fingerprint`: `"{new_draft_fingerprint}"`
        - `review_subject_fingerprint`: `"{new_review_subject_fingerprint}"`
        - `mode`: `"core"`
-     - 随后同样用 `review-pipeline --save-metrics` 入库。
+     - 随后同样用 `review-pipeline --save-metrics` 入库，并对新发现的 high/critical `FACT_REVIEW`
+       执行上面的自动事实纠错判断；纠错后重新提取和对账。
    - 无论哪条路径，`<chapter_changes>` 的变更都仍必须走 Step 4.5 的 `changes_gate` 校验：
      **"正文没变"不豁免对账校验**。
 3. **重新执行提取与对账（Re-Extraction & Reconciliation）**：

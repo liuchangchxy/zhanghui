@@ -46,8 +46,8 @@ allowed-tools: Read Write Edit Grep Bash Agent
 - **表达层润色**（措辞/句式/节奏/段落/描写/对话表达/反 AI 痕迹，`prose diagnose` 定位的病灶）
   → Step 4 的 `revise plan --style-only` 定向修订：只改计划命中的句段，不碰事实。
 - **事实纠错**（时间/数字/编号/道具/知情状态，Reviewer 已确证且计划定位为 `kind=LOCAL_FACT`）
-  → 不属于 Step 4 自动润色；走**显式事实纠错**路径（`prose validate --revision-plan` 声明 +
-  强制重审），或由 Canon gate 阻断后按人工恢复处理。见 Step 4「事实纠错的例外路径」。
+  → 不属于 Step 4 表达润色；high/critical 且证据足够时优先走自动事实纠错（`prose validate
+  --revision-plan` 声明 + 强制重审），无法安全收敛时交由现有门禁处理。见 Step 4「自动事实纠错」。
 - **整章重做**（`kind=STRUCTURAL`，大面积剧情冲突）
   → ledger 的「重新起草」路径（Step 2A 重新生成），必须在报告中写明理由。
 - **已 accepted 章节**（`kind=CANON_HISTORY`）→ 常规修订 fail-closed，只能走 Canon Correction。
@@ -618,6 +618,8 @@ review_metrics 字段约束（当前工作流约定只传以下字段）：
 硬要求：
 - `--minimal` 也必须产出 `overall_score`。
 - 未落库 `review_metrics` 不得进入 Step 5。
+- 每次审查完成后和最终提交前，必须检查 high/critical `FACT_REVIEW`：执行 Step 4 下文的「自动事实纠错」。
+  如在 Step 4.5 或 Step 5 后因正文变化而重审，再次执行此检查；不得复用先前修复计划或旧提取/对账。
 
 ### Step 4：定向安全润色与回滚门禁（Targeted Fact-Safe Editing）
 
@@ -633,9 +635,9 @@ cat "${SKILL_ROOT}/references/writing/typesetting.md"
 - 禁止：人物已知信息、事实真伪、时间、地点、事件顺序、行为结果、物品归属、Canon、
   新增线索 / 人物互动 / 因果。
 
-事实类问题**不是 Step 4 的目标**：Reviewer 报出的 setting / timeline / continuity / character /
-logic 问题只能靠改事实"修复"，而这正是 Step 4 语义漂移的来源。`--style-only` 会把它们全部
-放进 `plan.deferred`（`owner=FACT_REVIEW`），由 Canon gate 阻断或在显式事实纠错路径处理。
+事实类问题**不是 Step 4 的表达润色目标**。`--style-only` 将 setting / timeline / continuity /
+character / logic 问题放进 `plan.deferred`（`owner=FACT_REVIEW`）。高优或严重的事实问题在提交前
+必须优先执行本节下方的「自动事实纠错」；不能仅因 Reviewer 发现它就直接要求人工。
 
 1. **先诊断**（目标来源是确定性诊断，不是 Reviewer 的事实清单）：
    ```bash
@@ -664,9 +666,9 @@ logic 问题只能靠改事实"修复"，而这正是 Step 4 语义漂移的来�
    - `ARTIFACT_REPAIR`：产物文件缺失/不可读（如 `do_not_copy_check.json`）→ 重跑对应产物生成，不改正文；
    - `GOVERNANCE_REPAIR`：伏笔登记 / loop 关联 / 账本元数据 → 在治理数据层修，不改正文；
    - `ADVISORY`：Craft 启发式（节拍、伏笔时限、节奏曲线、hook_type）→ 仅记录建议；
-   - `FACT_REVIEW`：事实 / 设定 / 时间线 / 逻辑问题 → 由 Canon gate 阻断或走显式事实纠错，**不改正文**。
+   - `FACT_REVIEW`：事实 / 设定 / 时间线 / 逻辑问题 → 不在表达润色中改；high/critical 优先走下方自动事实纠错。
    `plan.summary.diagnosis_targets` 与 `plan.summary.deferred_by_owner` 请在报告中如实呈现。
-   不要为了清零 advisory 或 FACT_REVIEW 反复改写正文。
+   不要为了清零 advisory 反复改写正文。
 3. **只改表达**：按计划逐条改写**对应句段**，保留原意、说话人、动作结果与信息量。
    把替换写成：
    `[{"target_id": "<issue_id>", "new_text": "<改写后的该段原文>"}]`
@@ -713,23 +715,25 @@ logic 问题只能靠改事实"修复"，而这正是 Step 4 语义漂移的来�
    退出码 `4` 表示**版本/来源不匹配**（计划不是为当前草稿生成的，或审查没有绑定当前草稿），
    必须重新 `revise plan`，不得改用手工定位。
 
-> **事实纠错的例外路径（不属于 Step 4 自动润色）**：Step 4 的纯表达改动没有事实可纠，
-> 因此不声明 `--revision-plan`。若 Reviewer 确证了具体事实错误（时间/数字/编号/道具/知情状态），
-> 且作者明确要求修正，则走独立的显式事实纠错流程：`prose validate --revision-plan <plan>`
-> 声明 `kind=LOCAL_FACT` 区间 → `status=PENDING_REREVIEW` / `semantic_outcome=FACT_FIX_DECLARED`
-> → 完成下方「事实纠错后置动作」的强制重审。该声明**不放宽**任何检查：改动必须完全落在计划命中的
-> `LOCAL_FACT` 区间内，且声明的 `draft_sha256` 必须等于当前正文，否则一律 `ROLLEDBACK`。
-> Step 4 不得自行发起这类改动；确定性层抓到的事实漂移（所有权/世界规则/关系/状态/履历/动机/能力）
-> 一律硬阻断，声明也不能豁免。
-- **本节的重审要求以自动修订预算为前提**（见下方「自动修订预算」）：只有在预算内产生的新草稿才走
-  下面的后置动作。预算耗尽后**不得**再产生新的自动修订轮次——因此也不存在需要重审的新草稿。
-  确需继续修复时走 hard gate 阻断 / 人工恢复路径，并显式传 `--allow-over-budget`。
+> **自动事实纠错（独立于 Step 4 表达润色）**：每次 Reviewer 的结果经 `review-pipeline` 登记后，
+> 在提交前检查 high/critical 且 `owner=FACT_REVIEW` 的未解决问题。若当前 Canon 和正文证据足以唯一确定
+> 修复，主流程自动执行已有 `webnovel-revise` 的在编草稿定向修订步骤：用当前草稿与审查生成不带
+> `--style-only` 的 `revise plan`，只选择对应 high/critical 的可定位 `LOCAL_FACT` 目标，依据受治理事实
+> 生成 edits，执行 `revise apply` 和 `revise verify`；调用 `prose validate --revision-plan <plan>`，
+> 仅当 `status=PENDING_REREVIEW` / `semantic_outcome=FACT_FIX_DECLARED` 时执行下方强制重审。
+> 检查 JSON 状态，不能仅凭退出码 0 放行。计划的草稿身份、哈希、区间与所有确定性事实检查均保持有效。
+> 对同一问题最多自动尝试一次；重审仍报 high/critical、无法定位、证据不足、存在多个合理 Canon 解释、
+> 或校验失败时停止自动纠错，保留当前有效审查并经现有提交门禁进入 `pending_human`，不得发布。
+> medium/low 不因此强制纠错；纯表达问题不进入事实纠错链。已 accepted 章节仍走既有历史订正路径。
+> 若表达润色也改了正文，应先完成其登记和审查，再根据最新审查决定是否执行事实纠错；审查预算耗尽时
+> 对必要的事实纠错重审使用 `--allow-over-budget`，不是继续自动表达打磨。
+- 自动表达润色遵守下方预算；必要的事实纠错不因表达润色预算耗尽而被跳过，其重审按上述例外执行。
 
 **事实纠错后置动作（`PENDING_REREVIEW` 时必做，缺一不可）**：
 1. 采用候选正文覆盖工作草稿，重刷 `<chapter_changes>`；
 2. `runtime ingest-draft` 取得**新 `draft_id` / `draft_fingerprint`**；
-3. 用 `zhanghui:reviewer` 对**新草稿**完整重审（并将新 `draft_id` / `draft_fingerprint` 传入，
-   Reviewer 会回填到审查结果里）；
+3. 重新运行 `runtime reviewer-context --chapter {chapter_num}` 并覆盖上下文文件；用 `zhanghui:reviewer`
+   对**新草稿**完整重审（传入新 `draft_id` / `draft_fingerprint` / `review_subject_fingerprint`）；
 4. `review-pipeline --chapter {chapter_num} --review-results ... --save-metrics` 把新审查绑定到新草稿；
 5. 只有第 4 步完成后，才允许进入 Step 4.5 与 Step 5。
 
