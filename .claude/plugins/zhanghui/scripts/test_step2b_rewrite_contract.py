@@ -65,6 +65,25 @@ def test_reordered_and_synonymous_actions_are_not_added(before, after):
     assert not detect_added_events(before, after)
 
 
+def test_duration_rewording_is_not_added():
+    from data_modules.prose_semantic_diff import detect_added_events
+    assert not detect_added_events("他压了很久。", "他压了许久。")
+
+
+def test_historical_added_duration_not_cancelled_by_unrelated_removed_duration():
+    fixture = Path(__file__).parent / "tests/fixtures/step2b_historical_prose.json"
+    texts = json.loads(fixture.read_text(encoding="utf-8"))
+    before = texts["003_A"] + "\n她停了很久。"
+    after = texts["003_B"] + "\n她停下。"
+    result = compare_semantic_facts(
+        before, after, semantic_judge=lambda *_: {"outcome": "STYLE_ONLY_SAFE", "changes": []}
+    )
+    assert any("压了很久" in item.edited_excerpt for item in result.drift_items)
+    gate = evaluate_prose_quality_and_decide(before, after, result)
+    assert not gate.accepted
+    assert gate.final_text == before
+
+
 def test_rewrite_contract_includes_historical_counterexamples():
     """Check the written contract only; this does not test automatic detection."""
     skill = (Path(__file__).resolve().parents[1] / "skills/webnovel-write/SKILL.md").read_text()

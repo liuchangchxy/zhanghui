@@ -737,6 +737,39 @@ def test_character_state_event_is_not_projected_as_current_state_or_index_change
     }
 
 
+@pytest.mark.parametrize("case", ["unmatched", "matched", "event_only"])
+def test_reconciled_character_state_events_do_not_backfill(tmp_path, case):
+    from data_modules.event_log_store import EventLogStore
+    from data_modules.reconciliation import reconcile_changes
+
+    event = {"event_id": "evt-001", "chapter": 3, "event_type": "character_state_changed",
+             "subject": "xiaoyan", "payload": {"field": "mood", "old": "平静", "new": "紧张"}}
+    other = {"event_id": "evt-002", "chapter": 3, "event_type": "world_rule_revealed",
+             "subject": "world", "payload": {"rule_content": "夜间禁止通行"}}
+    delta = {"entity_id": "xiaoyan", "field": "mood", "old": "平静", "new": "紧张"}
+    proposal = dict(EMPTY_PROPOSAL)
+    if case == "matched":
+        proposal["character_state_changes"] = [{"entity_id": "xiaoyan", "field": "mood", "new": "紧张"}]
+    extraction = {"accepted_events": [event, other], "state_deltas": [] if case == "event_only" else [delta], "entity_deltas": []}
+    reconciled = reconcile_changes(proposal, extraction, chapter_text="final")
+    accepted = reconciled["accepted_payload"]
+    assert accepted["state_deltas"] == ([delta] if case == "matched" else [])
+    assert accepted["accepted_events"] == [event, other]
+
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    cfg.state_file.write_text(json.dumps({"entity_state": {"xiaoyan": {"mood": "平静"}}}), encoding="utf-8")
+    payload = _commit_payload(**accepted)
+    _persist_payload(tmp_path, payload)
+    events = EventLogStore(tmp_path)
+    events.write_events(payload)
+    result = StateProjectionWriter(tmp_path).apply(payload)
+    state = json.loads(cfg.state_file.read_text(encoding="utf-8"))
+    assert state["entity_state"]["xiaoyan"]["mood"] == ("紧张" if case == "matched" else "平静")
+    assert result["applied_count"] == (1 if case == "matched" else 0)
+    assert events.read_events(3) == [event, other]
+
+
 def test_summary_projection_writer_writes_summary_markdown(tmp_path):
     cfg = DataModulesConfig.from_project_root(tmp_path)
     cfg.ensure_dirs()

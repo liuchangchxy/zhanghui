@@ -681,8 +681,13 @@ def _before_has_action(
 
 def _detect_local_added_beats(before_text: str, after_text: str) -> List[SemanticDriftItem]:
     """Inspect added diff spans, accounting for equivalent beats removed elsewhere."""
-    duration = re.compile(r"(?:压|按|握|抓|等|停|站|坐|看|沉默)(?:了|着)?(?:很久|许久|好久|半晌)")
-    patterns = (duration, re.compile(r"搁下|放下"), re.compile(r"合上|关上|关闭"))
+    # A removed wait cannot account for a newly prolonged press elsewhere in the text.
+    # Count each duration verb separately while allowing its duration wording to change.
+    durations = tuple(
+        re.compile(rf"{verb}(?:了|着)?(?:很久|许久|好久|半晌)")
+        for verb in ("压", "按", "握", "抓", "等", "停", "站", "坐", "看", "沉默")
+    )
+    patterns = durations + (re.compile(r"搁下|放下"), re.compile(r"合上|关上|关闭"))
     # Paragraph alignment bounds character-level work for normal chapter-length prose.
     # For an unusually long unbroken paragraph, retain difflib's repetition guard.
     before_lines = before_text.splitlines(keepends=True)
