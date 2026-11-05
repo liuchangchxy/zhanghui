@@ -1,0 +1,34 @@
+{
+  "A": {
+    "hanzi": 2687,
+    "paragraphs": 91,
+    "dialogue_ratio": 0.507,
+    "emotion_words": {},
+    "body_templates": {},
+    "explain_markers": {
+      "原来": 1
+    },
+    "other_mind": {},
+    "diagnose": {
+      "total_chars": 4427,
+      "issue_counts_by_type": {},
+      "issue_total": 0
+    }
+  },
+  "B": {
+    "hanzi": 2638,
+    "paragraphs": 83,
+    "dialogue_ratio": 0.432,
+    "emotion_words": {},
+    "body_templates": {},
+    "explain_markers": {
+      "原来": 1
+    },
+    "other_mind": {},
+    "diagnose": {
+      "total_chars": 4298,
+      "issue_counts_by_type": {},
+      "issue_total": 0
+    }
+  }
+}

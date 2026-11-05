@@ -1,0 +1,77 @@
+{
+  "chapter": 10,
+  "draft_id": "draft-010-d67af749",
+  "draft_fingerprint": "9cc37448aa0f5d75a9c889a7763d04b5c8e68848e0ee519301855c8c09f192b3",
+  "review_subject_fingerprint": "0a0dafe3536f591177d54d1eb460dd0a04ba582fb5cf1abcd5a522834785d539",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "medium",
+      "category": "continuity",
+      "location": "第45段（旧报库，3月18日第二版右下角）",
+      "description": "本章把 2016-03-18 旧报简讯写成“两行字”，与 Canon 第2章记录的“三行简讯”不一致。",
+      "evidence": "正文：“右下角那条简讯还在，两行字” vs Canon evt-ch2-002：“2016 年 3 月 18 日旧报第二版右下角三行简讯同样只有一句介入调查”",
+      "fix_hint": "改为“三行字”，或把行数一笔带过（不写行数），只保留内容层面的一致描述。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "setting",
+      "location": "第15-31段（地方志办公室，办事员调出“公开值班表”系统）",
+      "description": "在地方志办公室查询港口管理局值班表公示，超出了 Canon 对该地点授权范围的界定（志书阅览：大事记、机构沿革），正文也未交代这套公示数据源的来处。",
+      "evidence": "正文：“办事员把眼镜戴上，在键盘上敲了几下……屏幕转过来一点，上面是一张表格，年份一栏从二〇二二年排到二〇二六年” vs Canon evt-ch2-005 将地方志办公室的开放范围限定为“地方志凭阅览单……查阅”",
+      "fix_hint": "点明数据来源（如市政务公开平台/局门户公示栏），或把查询动作放回港口管理局对外公示渠道，地方志办公室只保留“志书不收排班”的答复。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "continuity",
+      "location": "第81段（旧潮位站值班室，许知远自述上次清点所见）",
+      "description": "正文以“上次清点我看见你桌上摊着一本”为索要留底的依据，但 Canon 第1-2章清点记录中没有手抄本出现在老周桌上的记载（仅记录搬开两箱记录纸、终端禁触等），该前提缺 Canon 支撑。",
+      "evidence": "正文：“上次清点，我看见你桌上摊着一本，旁边还有一摞用麻绳捆着的旧本” vs Canon ch1-2 inventory_status / 场景记录无对应条目",
+      "fix_hint": "核对第3-9章是否已埋过“清点当天见手抄本”，若无则改为本章当场第一次看到（第89段提出，第91段目击柜顶），去掉“上次清点”这一回溯依据。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "第131-145段（梁沐提供工资单照片）",
+      "description": "梁沐作为外包检修工，在当天数小时内拿到带签批栏的工资单汇总页照片；正文明确回避来源（“没有说这张单子是怎么拿到的，他也没有问”），与全章“证据必须可核验”的推理标准不匹配，读者无法对该证据做公平评估。",
+      "evidence": "正文：“梁沐没有说这张单子是怎么拿到的，他也没有问。” vs Canon 对梁沐的定位：“外包检修工，信息提供者”",
+      "fix_hint": "给出一句可核查的来源（如检修外包公司结算附件、财务科公开的劳务结算表），或让许知远明确把这张照片标为“只作方向、不作证据”，留到后续章节补证。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "foreshadow_compliance",
+      "location": "全章 / 伏笔账本 FS-006",
+      "description": "FS-006 的 expected_payoff_chapter 为 9，deadline 已过但 Status 仍为 active、payoff_chapter 为空；本章第11段已把该线当作已消费资产使用（“一个从照片上认出来的笔迹”），账本未回收。",
+      "evidence": "正文：“还有一个从照片上认出来的笔迹” vs 伏笔账本 FS-006 status=active, expected_payoff_chapter=9, payoff_chapter=null",
+      "fix_hint": "补登记 FS-006 的回收章与回收质量；若第9章的比对结论未落账，需在后续章节给出明确回收动作。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "foreshadow_compliance",
+      "location": "全章 / 定时锁 TL-005",
+      "description": "TL-005（第6章内建立与梁沐的合作关系）deadline_chapter=6，状态仍为 active；本章梁沐主动提供关键证据，协作关系事实上已成立，定时锁未登记履约。",
+      "evidence": "timed_locks TL-005 status=active, fulfilled_chapter=null vs 正文第133段梁沐直接介入取证",
+      "fix_hint": "按实际履约章补登记 TL-005（含履约证据），避免多把定时锁长期悬挂。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 6,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {"dimension": "setting", "conclusion": "发现1个问题：地方志办公室查询值班表公示，超出 Canon 授权范围且未交代数据源"},
+    {"dimension": "timeline", "conclusion": "pass"},
+    {"dimension": "continuity", "conclusion": "发现2个问题：旧报简讯行数两行/三行不一致；‘上次清点见手抄本’缺 Canon 支撑"},
+    {"dimension": "character", "conclusion": "pass"},
+    {"dimension": "logic", "conclusion": "发现1个问题：工资单照片来源未交代，证据可核验性与本章推理标准不匹配"},
+    {"dimension": "beat_compliance", "conclusion": "pass"},
+    {"dimension": "foreshadow_compliance", "conclusion": "发现2个问题：FS-006 逾期未回收；TL-005 逾期未登记履约"},
+    {"dimension": "do_not_copy_violation", "conclusion": "pass"}
+  ],
+  "summary": "6个问题，0个阻断（全部 blocking=false，无 critical/high）：medium 3（旧报简讯行数与 Canon 冲突、地方志办公室查询渠道越界、工资单来源未交代）、low 3（清点回溯缺 Canon 支撑、FS-006 逾期未回收、TL-005 逾期未登记）。核心节点核对通过：CBN（寻找十年期排班证据/公开表仅近五年，第25-31段）、CPN（老周拒绝留底/年份缺口，第85-103段）、CEN（查岗位记录/补贴十年在岗，第139-143段）均落地；本章变化确为“手抄本年份连续性有缺口（缺二〇一六年）”，未写成月份缺页；姓名、地点、时间、物品与 Canon 一致，未提前泄露禁区内容，章末为留白式且无未来时态剧透。convergence：本章首次审查，无上一轮 high/critical 需闭环。"
+}

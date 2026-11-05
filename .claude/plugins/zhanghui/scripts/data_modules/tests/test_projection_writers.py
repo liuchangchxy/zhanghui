@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from data_modules.tests.commit_helpers import build_commit_with_reconciliation
+from data_modules.tests.commit_helpers import EMPTY_PROPOSAL, build_commit_with_reconciliation
 from data_modules.chapter_commit_service import ChapterCommitService
 from data_modules.config import DataModulesConfig
 from data_modules.index_manager import IndexManager
@@ -368,7 +368,7 @@ def test_reapplying_accepted_chapter_commit_does_not_double_count_words(tmp_path
     assert second_state["progress"]["last_updated"] == first_state["progress"]["last_updated"]
 
 
-def test_state_projection_writer_derives_delta_from_power_breakthrough_event(tmp_path):
+def test_state_projection_writer_does_not_derive_delta_from_power_breakthrough_event(tmp_path):
     (tmp_path / ".webnovel").mkdir(parents=True, exist_ok=True)
     (tmp_path / ".webnovel" / "state.json").write_text("{}", encoding="utf-8")
     writer = StateProjectionWriter(tmp_path)
@@ -388,7 +388,8 @@ def test_state_projection_writer_derives_delta_from_power_breakthrough_event(tmp
 
     payload = json.loads((tmp_path / ".webnovel" / "state.json").read_text(encoding="utf-8"))
     assert result["applied"] is True
-    assert payload["entity_state"]["xiaoyan"]["realm"] == "斗师"
+    assert "xiaoyan" not in payload["entity_state"]
+    assert result["applied_count"] == 0
 
 
 def test_state_projection_writer_updates_strand_tracker(tmp_path):
@@ -443,6 +444,7 @@ def test_accepted_commit_updates_state_json_end_to_end(tmp_path):
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": ["发现陷阱"], "covered_nodes": ["发现陷阱"], "missed_nodes": [], "extra_nodes": []},
         disambiguation_result={"pending": []},
+        proposed_changes={**EMPTY_PROPOSAL, "character_state_changes": [{"entity_id": "x", "field": "realm", "new": "斗者"}]},
         extraction_result={"state_deltas": [{"entity_id": "x", "field": "realm", "new": "斗者"}], "entity_deltas": [], "accepted_events": []},
     )
 
@@ -608,6 +610,7 @@ def test_accepted_commit_writes_chapter_index_tables(tmp_path):
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
         disambiguation_result={"pending": []},
+        proposed_changes={**EMPTY_PROPOSAL, "character_state_changes": [{"entity_id": "xiaoyan", "field": "realm", "new": "斗师"}]},
         extraction_result={
             "summary_text": "本章摘要",
             "state_deltas": [{"entity_id": "xiaoyan", "field": "realm", "old": "斗者", "new": "斗师"}],
@@ -654,6 +657,7 @@ def test_index_projection_writer_is_idempotent_for_replay(tmp_path):
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
         disambiguation_result={"pending": []},
+        proposed_changes={**EMPTY_PROPOSAL, "character_state_changes": [{"entity_id": "xiaoyan", "field": "realm", "new": "斗师"}]},
         extraction_result={
             "summary_text": "本章摘要",
             "state_deltas": [{"entity_id": "xiaoyan", "field": "realm", "old": "斗者", "new": "斗师"}],
@@ -692,30 +696,78 @@ def test_index_projection_writer_is_idempotent_for_replay(tmp_path):
     assert manager.get_entity("xiaoyan")["canonical_name"] == "萧炎"
 
 
-def test_index_projection_writer_records_state_change_from_event(tmp_path):
+def test_character_state_event_is_not_projected_as_current_state_or_index_change(tmp_path):
     cfg = DataModulesConfig.from_project_root(tmp_path)
     cfg.ensure_dirs()
     writer = IndexProjectionWriter(tmp_path)
 
-    result = writer.apply(
-        _commit_payload(
-            accepted_events=[
-                {
-                    "event_id": "evt-001",
-                    "chapter": 3,
-                    "event_type": "character_state_changed",
-                    "subject": "xiaoyan",
-                    "payload": {"field": "mood", "old": "躁动", "new": "冷静"},
-                }
-            ],
-        )
-    )
+    from data_modules.event_log_store import EventLogStore
+    from data_modules.knowledge_query import KnowledgeQuery
 
+    cfg.state_file.write_text(json.dumps({
+        "entity_state": {"xiaoyan": {"mood": "平静"}},
+        "protagonist_state": {"entity_id": "xiaoyan", "mood": "平静"},
+    }), encoding="utf-8")
+    payload = _commit_payload(
+        state_deltas=[{"entity_id": "xiaoyan", "field": "realm", "new": "斗师"}],
+        accepted_events=[
+            {"event_id": "evt-001", "chapter": 3, "event_type": "character_state_changed",
+             "subject": "xiaoyan", "payload": {"field": "mood", "old": "躁动", "new": "冷静"}},
+            {"event_id": "evt-002", "chapter": 3, "event_type": "character_state_changed",
+             "subject": "xiaoyan", "payload": {"field": "realm", "new": "斗皇"}},
+            {"event_id": "evt-003", "chapter": 3, "event_type": "power_breakthrough",
+             "subject": "xiaoyan", "payload": {"field": "power.level", "new": "二层"}},
+        ],
+    )
+    result = writer.apply(payload)
+    StateProjectionWriter(tmp_path).apply(payload)
+
+    state = json.loads(cfg.state_file.read_text(encoding="utf-8"))
+    EventLogStore(tmp_path).write_events(payload)
+    assert [event["event_id"] for event in EventLogStore(tmp_path).read_events(3)] == ["evt-001", "evt-002", "evt-003"]
+    assert state["entity_state"]["xiaoyan"] == {"mood": "平静", "realm": "斗师"}
+    assert state["protagonist_state"]["mood"] == "平静"
+    assert state["protagonist_state"]["realm"] == "斗师"
+    assert "power" not in state["protagonist_state"]
     changes = IndexManager(cfg).get_chapter_state_changes(3)
     assert result["state_changes"] == 1
-    assert len(changes) == 1
-    assert changes[0]["entity_id"] == "xiaoyan"
-    assert changes[0]["field"] == "mood"
+    assert {row["field"] for row in changes} == {"realm"}
+    assert KnowledgeQuery(tmp_path).entity_state_at_chapter("xiaoyan", 3)["state_at_chapter"] == {
+        "realm": "斗师",
+    }
+
+
+@pytest.mark.parametrize("case", ["unmatched", "matched", "event_only"])
+def test_reconciled_character_state_events_do_not_backfill(tmp_path, case):
+    from data_modules.event_log_store import EventLogStore
+    from data_modules.reconciliation import reconcile_changes
+
+    event = {"event_id": "evt-001", "chapter": 3, "event_type": "character_state_changed",
+             "subject": "xiaoyan", "payload": {"field": "mood", "old": "平静", "new": "紧张"}}
+    other = {"event_id": "evt-002", "chapter": 3, "event_type": "world_rule_revealed",
+             "subject": "world", "payload": {"rule_content": "夜间禁止通行"}}
+    delta = {"entity_id": "xiaoyan", "field": "mood", "old": "平静", "new": "紧张"}
+    proposal = dict(EMPTY_PROPOSAL)
+    if case == "matched":
+        proposal["character_state_changes"] = [{"entity_id": "xiaoyan", "field": "mood", "new": "紧张"}]
+    extraction = {"accepted_events": [event, other], "state_deltas": [] if case == "event_only" else [delta], "entity_deltas": []}
+    reconciled = reconcile_changes(proposal, extraction, chapter_text="final")
+    accepted = reconciled["accepted_payload"]
+    assert accepted["state_deltas"] == ([delta] if case == "matched" else [])
+    assert accepted["accepted_events"] == [event, other]
+
+    cfg = DataModulesConfig.from_project_root(tmp_path)
+    cfg.ensure_dirs()
+    cfg.state_file.write_text(json.dumps({"entity_state": {"xiaoyan": {"mood": "平静"}}}), encoding="utf-8")
+    payload = _commit_payload(**accepted)
+    _persist_payload(tmp_path, payload)
+    events = EventLogStore(tmp_path)
+    events.write_events(payload)
+    result = StateProjectionWriter(tmp_path).apply(payload)
+    state = json.loads(cfg.state_file.read_text(encoding="utf-8"))
+    assert state["entity_state"]["xiaoyan"]["mood"] == ("紧张" if case == "matched" else "平静")
+    assert result["applied_count"] == (1 if case == "matched" else 0)
+    assert events.read_events(3) == [event, other]
 
 
 def test_summary_projection_writer_writes_summary_markdown(tmp_path):

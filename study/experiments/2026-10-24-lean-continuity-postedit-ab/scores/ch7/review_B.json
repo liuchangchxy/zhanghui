@@ -1,0 +1,83 @@
+{
+  "chapter": 7,
+  "draft_id": "draft-007-56949249",
+  "draft_fingerprint": "21f95ef078823b88ef20ccc398b92c5088e11d82d52b325555f2984cf901b11f",
+  "review_subject_fingerprint": "6e5a58eee4ca423a1cf134a0fb2c41ef4c9a8f5583ba2d53ee4461eafa1fd2c7",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "high",
+      "category": "logic",
+      "location": "第9段 / 第45段 / 第47段",
+      "description": "空间加权方法与本章自报的临港本站常态潮位在算术上不能同时成立。正文明确“临港站在两个邻站中间偏北。位置定了，高度就该在两者之间”，并称按邻站同刻配权后“除了十七日，差都在八厘米以内”；但第9段给出的临港十六日、十八日高潮（3.24/3.21、3.26/3.23）都高于两个邻站同日高潮（北3.15/3.17，南3.12/3.13）。凸权重加权平均必然落在两邻站值之间，既得不到3.24/3.26，也不可能把误差压到八厘米以内。按章内数字复算，本章“可复算”的核心前提失效。",
+      "evidence": "第45段“高度就该在两者之间……除了十七日，差都在八厘米以内” vs 第9段“前一天同一栏是3.24和3.21，后一天是3.26和3.23” 与 第17段“十六日，北站第一高潮3.15，南站3.12”",
+      "fix_hint": "把临港本站十六日、十八日高潮下调到两邻站之间（如3.16/3.13、3.17/3.14，仍与4.12保持约0.95米差），或明确写出站点基准面/振幅换算系数并交代出处，使“配权结果落在两者之间、其余各日误差八厘米内”在算术上成立。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "第9段 / 第41段 / 第43段 / 第59段",
+      "description": "半日潮周期在本章被当作精确校验条件（“两次高潮之间隔十二小时二十五分……也要过十二小时二十五分之后的下一个点。对不上，就说明补错了”），但本章自报的临港十七日两次高潮03:42与15:54相隔12小时12分，差13分钟；正文仍在第43段判定“时间没有错”，第59段照常拿第二高潮比对，未处理这一偏差。按正文自设的校验规则，第二高潮这一项应先被判为“补错或数据不对”。",
+      "evidence": "第41段“两次高潮之间隔十二小时二十五分……对不上，就说明补错了” vs 第9段“第一高潮，03:42……第二高潮，15:54”（相隔12小时12分）",
+      "fix_hint": "把周期写成近似值并允许逐日十到二十分钟变化（或补一句实际间隔逐日在十二小时十分到十二小时四十分之间），或把第二高潮时间改到16:05前后，使方法与数值自洽。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "continuity",
+      "location": "全章（对照第6章章末）",
+      "description": "上一章以梁沐“你查的那天，潮位站应该是在检修期，不该有记录”收束，把“检修期为什么会有记录”作为下章未闭合问题；本章通篇未出现“检修”二字，也没有一句交代主角为何先转去查潮汐，只回顾了梁沐的另一句“那批设备是事故之后统一换的”（第69段）。上一章钩子在本章完全悬空。",
+      "evidence": "第6章结尾“你查的那天，潮位站应该是在检修期，不该有记录。” vs 本章第69段仅“那批设备是事故之后统一换的”，全文无“检修”",
+      "fix_hint": "在本章前段（第2-3段附近）补一句把两条线并置：检修期这条线暂时无法核，先从完全公开的潮汐数据下手。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "foreshadow_compliance",
+      "location": "craft_constraints.story_craft.timed_locks / 第69段",
+      "description": "定时锁TL-005（“第6章内必须建立与梁沐的合作关系”，deadline_chapter 6）在审查上下文中仍为 status=active、fulfilled_chapter=null，已过截止章；而本章正文按合作已建立来写（“他刚说过只交换能互相核对的”）。状态记录滞后于正文事实，后续定时锁统计会失真。",
+      "evidence": "timed_locks TL-005: deadline_chapter 6, status active, fulfilled_chapter null；第69段“他刚说过只交换能互相核对的”",
+      "fix_hint": "若第6章正文确已建立合作（CEN/ Break Into Two），把TL-005补登为fulfilled（fulfilled_chapter=6并附原文证据）；否则第69段的前提需要补依据。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 4,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "发现1个问题：第6章“检修期”钩子在本章无任何回应"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "发现2个问题：邻站加权与本站常态潮位算术上不自洽；半日潮周期校验与两次高潮间隔相差13分钟"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "发现1个问题：TL-005已过截止章仍为active，需状态同步"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "summary": "4个问题：0个reviewer自行赋予的阻断，1个高优、2个中优、1个低优。高优为第9/45/47段潮位数值与空间加权方法在算术上不能同时成立；CBN+CEN已覆盖，本章禁区未见触碰。"
+}

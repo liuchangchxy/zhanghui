@@ -60,6 +60,34 @@ def _issue(
     }
 
 
+# Only a declared core-identity conflict may stop a chapter: merging two
+# distinct core characters, or splitting one core character into two long-lived
+# identities. Ordinary unresolved candidates (a new title such as "科长", or a
+# legacy duplicate already resolved to the canonical id) are recorded in the
+# artifact and surfaced as warnings, but do not require a human decision before
+# the chapter can be published.
+_HARD_DISAMBIGUATION_KINDS = {
+    "identity_conflict",
+    "core_identity_conflict",
+    "core_identity_merge",
+    "core_identity_split",
+    "merge_conflict",
+    "split_identity",
+}
+_HARD_DISAMBIGUATION_SEVERITIES = {"high", "critical", "blocker"}
+
+
+def is_blocking_disambiguation(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    if item.get("blocking") is True or item.get("hard_conflict") is True:
+        return True
+    if str(item.get("severity") or "").strip().lower() in _HARD_DISAMBIGUATION_SEVERITIES:
+        return True
+    kind = item.get("kind") or item.get("type") or item.get("conflict_type")
+    return str(kind or "").strip().lower() in _HARD_DISAMBIGUATION_KINDS
+
+
 def _empty_report(artifact: str, path: str = "") -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -116,15 +144,28 @@ def _policy_issues(artifact: str, payload: dict[str, Any], path: str) -> list[di
     # required human decision and therefore still blocks this precommit stage.
     if artifact == "disambiguation_result":
         pending = payload.get("pending") or []
-        if pending:
+        hard = [item for item in pending if is_blocking_disambiguation(item)]
+        if hard:
             issues.append(
                 _issue(
                     ERROR_PENDING_DISAMBIGUATION,
-                    message=f"disambiguation_result has {len(pending)} pending item(s)",
+                    message=f"disambiguation_result has {len(hard)} blocking identity conflict(s)",
                     path=path,
                     field="pending",
-                    impact="未消歧实体会污染角色、关系和事件投影。",
-                    repair="人工确认 pending 项，或把低置信实体从 extraction 中移除。",
+                    impact="核心角色可能被错误合并或拆分，继续提交会污染长期身份。",
+                    repair="确认该身份冲突，或从 extraction 中移除对应实体。",
+                )
+            )
+        elif pending:
+            issues.append(
+                _issue(
+                    "pending_disambiguation_recorded",
+                    severity="warning",
+                    message=f"disambiguation_result has {len(pending)} unresolved candidate(s)",
+                    path=path,
+                    field="pending",
+                    impact="普通实体歧义已记录，不阻断本章提交。",
+                    repair="可在后续章节或索引维护时处理。",
                 )
             )
     return issues
@@ -153,7 +194,11 @@ def validate_artifact_payload(artifact: str, payload: Any, *, path: str = "") ->
 
     normalized = model.model_dump()
     report["payload"] = normalized
-    report["errors"].extend(_policy_issues(artifact, normalized, path))
+    for issue in _policy_issues(artifact, normalized, path):
+        if issue.get("severity") == "blocker":
+            report["errors"].append(issue)
+        else:
+            report["warnings"].append(issue)
     report["ok"] = not any(item.get("severity") == "blocker" for item in report["errors"])
     return report
 

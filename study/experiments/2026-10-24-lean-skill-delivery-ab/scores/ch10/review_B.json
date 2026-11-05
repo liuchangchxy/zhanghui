@@ -1,0 +1,137 @@
+{
+  "chapter": 10,
+  "draft_id": "draft-010-3715e16f",
+  "draft_fingerprint": "e6b8b02f43e4a9c68fb13392875c336e4a1743e5fe83f6a4a2300fa432f2de18",
+  "review_subject_fingerprint": "3a718915c5de0afbbddf681dafc99d62166c6c96a9402140798224ed521b4e50",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "critical",
+      "category": "setting",
+      "location": "第11段（旧报库场景）",
+      "description": "旧报库的位置与查阅介质与第2章已提交正文冲突：本章写成“图书馆的地下室”并用“缩微阅读机”读报，第2章正文明确为“报社后院”，且许知远翻的是纸质原报（“把报纸举近了一点”“把报纸按原样叠好，送还窗口”）。",
+      "evidence": "本章：“旧报库在图书馆的地下室……只把缩微阅读机的开关指给他” vs 第2章：“旧报库在报社后院，门口一本登记簿，写上日期就能进”“他把报纸举近了一点”",
+      "fix_hint": "改回“报社后院”与纸质原报（或明确交代旧报库搬迁/新增缩微设备的时间与原因），保持与第2章一致。",
+      "blocking": false
+    },
+    {
+      "severity": "high",
+      "category": "setting",
+      "location": "第15、21、23段（地方志办公室场景）",
+      "description": "地方志办公室的位置与准入流程与第2章已提交正文及 canon 世界规则冲突：位置由“城西，一栋老楼的三层”改成“市政府西配楼的三层”；准入由“凭阅览单”改成在硬皮登记簿上写“姓名，单位，查什么”。canon（evt-ch2-005）明确“地方志凭阅览单、旧报库在门口登记簿写下姓名与进库时间”，本章把两者的流程对调了。",
+      "evidence": "本章：“地方志办公室在市政府西配楼的三层”“姓名，单位，查什么” vs 第2章：“地方志办公室在城西，一栋老楼的三层……手里都拿着阅览单”“管理员……在单子上记了一笔卷次”",
+      "fix_hint": "恢复第2章的地点与阅览单流程；若要写登记簿，应把它放回旧报库场景。",
+      "blocking": false
+    },
+    {
+      "severity": "high",
+      "category": "timeline",
+      "location": "第3段起至第167段（全章）",
+      "description": "章内跨两个自然日，越过本章时间锚点并占用下一章时段。时间线表定第10章为“10月19日周一下午、章内3小时、D-20”，第11章为“10月20日周二上午”；本章第一天上午在局内查网站、下午跑旧报库/地方志/旧潮位站，第二天上午再赴地方志，实际落到10月20日上午，与第11章时段重叠。",
+      "evidence": "本章：“第二天上午，他又去了地方志办公室。” vs 时间线表：“第10章 10月19日 周一下午 … 3小时”“第11章 10月20日 周二 上午”",
+      "fix_hint": "把附册查证压回同一日下午（或前移到10月18日），使本章收在10月19日 D-20 内，给第11章留出10月20日上午。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "timeline",
+      "location": "第1段（开篇）",
+      "description": "缺少第9章（10月17日周六）到本章（10月19日周一）之间的周末过渡。时间线表对本章明确标注“跨周末（2天）· 需过渡交代周末”，正文直接从办公室查网页起笔，没有任何周末流逝的交代。",
+      "evidence": "本章开篇：“局网站的公开栏目，许知远是在自己办公室的电脑上翻的。” vs 时间线表第10章备注“跨周末（2天）｜需过渡交代周末”",
+      "fix_hint": "补一两句周末过渡（如周末做了什么、为何等到周一才查局内公开栏目），落实时间跳跃规则。",
+      "blocking": false
+    },
+    {
+      "severity": "high",
+      "category": "continuity",
+      "location": "全章",
+      "description": "第9章章末钩子在本章无任何回应或提及。第9章以“那位值班员，十年前的名单上标注的是‘已离职，去向不明’”收束，并交代原件被登记“残破，已销毁”、他手上只有违规拍下的照片；本章从头到尾没有提到该值班员、销毁登记或照片，等于把上一章的核心线索与自证违规的风险搁置。",
+      "evidence": "本章无相关提及（全文检索“值班员/销毁/照片”无命中） vs 第9章钩子“那位值班员，十年前的名单上标注的是‘已离职，去向不明’”",
+      "fix_hint": "在局内查网站或旧潮位站段落里补一句对第9章结论的处置（查去向无果/照片不敢用），把两章接上。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "第141、147、161段（长编附册查证）",
+      "description": "数量与年份自相矛盾：办事员抱来“三册”却称“近十年的，一年一册”（应为十册）；许知远随后“从2015年翻到2025年”是十一个年份，且故事当前年份为2026年，“近十年”应为2016–2026。此外前文明确“附册不单列，跟正文装在一起”，却又单独抱来三册附册。",
+      "evidence": "“回来时抱了三册，放在桌上：‘近十年的，一年一册。’”“他从2015年翻到2025年”“附册不单列……跟正文装在一起，在后头”",
+      "fix_hint": "统一为十册、年份区间与当前年份对齐（2016–2025 或 2015–2024 择一），并让“附册不单列”与后文取阅方式自洽。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "beat_compliance",
+      "location": "第145–167段（章末）",
+      "description": "CBN/CEN/CPN 三节点均已覆盖，但钩子落位与续场收束偏离规划：规划钩子“老周的工资单显示，这十年他的岗位补贴一直按‘在岗’发放”被写在章中（以长编附册名册替代工资单），章末改为内心总结“后一件，他连一半都没有”，留白式钩子未在章末成形；sequel_decision（“老周这十年为什么一直守着一座废站 → 下章目标”）也未落成可复述的决定句。",
+      "evidence": "“后一件，他连一半都没有。” vs chapter_meta.hook“老周的工资单显示，这十年他的岗位补贴一直按‘在岗’发放”、sequel_decision“老周这十年为什么一直守着一座废站 → 下章目标”",
+      "fix_hint": "把补贴异常挪到章末最后一段作为收束，并让他在退出前明确“要弄清老周为什么守着”这一决定；钩子载体可保持附册，但需与 hook 字段口径一致。",
+      "blocking": false
+    },
+    {
+      "severity": "high",
+      "category": "foreshadow_compliance",
+      "location": "全章 / story_craft 状态",
+      "description": "伏笔与定时锁逾期未闭环（craft advisory）：FS-006（值班记录本多出的笔迹）expected_payoff_chapter=9 已过仍为 active；TL-005（第6章内建立与梁沐的合作关系）deadline_chapter=6 已过仍为 active。本章亦未触及梁沐线，B 线在本章缺席。",
+      "evidence": "foreshadow_chain: FS-006 {expected_payoff_chapter: 9, status: active}；timed_locks: TL-005 {deadline_chapter: 6, status: active}",
+      "fix_hint": "核对第9章是否已回收 FS-006 并回写状态；TL-005 需按第6章实际履约情况标记 fulfilled 或补履约。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "continuity",
+      "location": "第83–91段（铁皮柜）",
+      "description": "柜内器物与前章描述存在张力：第1章许知远打开同一只柜子时只见到“台账一共四本，按年份码着”，本章却从柜门缝里看见成排书脊标着 2011–2015、2017 的手抄本；若二十余本一直在此柜中，第1章的清点视角应有察觉。",
+      "evidence": "本章：“柜门没有关严，中间那道缝里能看见一摞硬壳本……2011，2012，2013，2014，2015” vs 第1章：“他先开柜子。台账一共四本，按年份码着”",
+      "fix_hint": "交代手抄本原先收纳位置（另一只柜/抽屉/柜子下层被台账挡住），或在第1章视角里留一处“柜子深处还有一摞本子”的伏笔。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "setting",
+      "location": "第125段（离站登记）",
+      "description": "钥匙交接册的位置与登记要求与前章及 canon 规则不符：第1章明确交接册在平房的桌上、离站要回平房签，本章写成“摊在门边的桌上”；canon 规则要求进站与离站各签一次，本章只写了离站签字，未交代进站登记。",
+      "evidence": "本章：“钥匙交接册摊在门边的桌上。许知远签了离站” vs 第1章：“钥匙交接册在平房的桌上”“他锁门，回到平房，把钥匙还给老周”；canon evt-ch1-004“进站与离站都要在钥匙交接册的进出登记栏各签一次”",
+      "fix_hint": "把签字场景移回平房，并补一句进站登记，使流程与第1章一致。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 10,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "发现3个问题：旧报库位置与介质、地方志办公室位置与准入流程均与第2章冲突；钥匙交接册位置与进出登记规则与第1章不符"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "发现2个问题：章内跨两日越出本章锚点并占用第11章时段；缺周末过渡"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "发现2个问题：第9章钩子无回应；铁皮柜内手抄本与第1章视角存在张力"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "发现1个问题：附册册数、年份区间与“附册不单列”三处自相矛盾"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "发现1个问题：CBN/CEN/CPN 已覆盖，但钩子未落在章末、sequel_decision 未落成决定"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "发现1个问题：FS-006 与 TL-005 逾期仍 active，B 线缺席"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "summary": "10个问题：0个 reviewer 自行赋予的阻断，5个高优（含1个 critical：旧报库位置与介质与第2章冲突），其余为时间线/连贯/逻辑/节拍/伏笔提示"
+}

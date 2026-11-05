@@ -66,7 +66,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
    `scripts_dir` 必须显式传入 `${SCRIPTS_DIR}`：subagent 的 Bash 不继承本会话的 `export`。
    把任务书写到 `${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt`。
 2. 使用 Agent 工具调用 `zhanghui:writing-skill-router`（传入 `chapter`、`project_root`、`scripts_dir`、
-   `brief_file`），由它发现 `writing-skills/`、选择 2–5 个适用技巧、翻译成本章写法，并写出
+   `brief_file`），由它发现 `writing-skills/`、选择 2–5 个适用技巧、为每个技巧写一句本章相关性说明，并写出
    `.webnovel/tmp/writing_skills_{chapter_padded}.json`（内部已跑 `writing-skills validate`）。
    该步骤失败时记录原因并按“无 Skill”继续，不得伪造选择。
 3. 调用 `runtime attach-creative-brief` 签名封口，生成唯一 Canonical Writer Prompt，并从同一封口包提取 `package_fingerprint`：
@@ -76,7 +76,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
   --chapter {chapter_num} \
   --brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt" \
   --skills-file "${PROJECT_ROOT}/.webnovel/tmp/writing_skills_{chapter_padded}.json" \
-  --scene-design --reader-pull \
+  --scene-design --reader-pull --lean-input \
   --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
 
 # 立即从同一份刚封口的 runtime 状态中读取 package_fingerprint（确保 Prompt 与 Fingerprint 来自同一 sealed WriterPackage）
@@ -88,6 +88,7 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
   `chapter_004`；`chapter_padded` 是四位章号，只用于 `.webnovel/tmp/` 下的文件名）；
 - Canonical Writer Prompt 经 `--format prompt` 渲染输出，直接保存为草稿起草唯一输入；
 - `PACKAGE_FINGERPRINT` 经 `runtime status --format json` 提取（Runtime 校验 `has_writer_package=true` 且 `is_writer_package_stale=false`）；
+- Brief 超过 1800 字（不计空白）或某条 Router 说明超过 120 字都会被硬拒绝；压缩后重新生成，不要截断事实绕过；
 - 严禁二次封口、严禁手动计算或伪造指纹、严禁重新拼装 Writer Prompt。
 
 ### Step 2A：正文起草与草稿登记
@@ -168,7 +169,13 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
 
 ### 跳过 Step 4（定向安全润色）
 
-快车道跳过 Step 4 诊断与定向润色。
+快车道跳过 Step 4 诊断与定向润色，但不跳过事实纠错。审查落盘后、提交前，检查 high/critical
+且按 revision planner 的 `style_only` 分类属于 `FACT_REVIEW` 的未解决问题：事实与正文证据足以唯一确定
+修复时，主流程按 `../webnovel-write/SKILL.md` 的「自动事实纠错」复用 `webnovel-revise` 的计划、
+受限编辑、`prose validate --revision-plan`、重新 ingest 和 Reviewer 重审；只有重审通过才继续。
+必须解析 `PENDING_REREVIEW`，不得将退出码 0 当作可提交。若需要选择 Canon 解释、事实不足、定位或
+校验失败、重审后问题仍存在，则保留有效审查，走现有提交门禁 `pending_human`，不得发布。
+medium/low 和纯表达 finding 不因此进入此纠错链。必要的事实重审可用 `--allow-over-budget`。
 
 ### Step 4.5：刷新 ProposedChanges 并校验协议
 
@@ -222,7 +229,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
    - **`review_subject_fingerprint` 已变化**（正文真的改了）→ 旧审查彻底失效，必须重审：
      - **所有权绝对禁令**：Reviewer Agent 独占拥有 `review_results.json` 的生成权威；
        **严禁主流程直接手工修改或就地替换 Reviewer Agent 原始审查产物中的草稿身份字段**。
-     - **权威重审**：复用既有 `reviewer_context_{chapter_padded}.json`（无需重建 Context Builder），
+     - **权威重审**：通过 `runtime reviewer-context` 刷新 `reviewer_context_{chapter_padded}.json`，
        使用 `Agent` 工具重新调用 `zhanghui:reviewer`，输入参数传入新草稿身份：
        - `chapter`: `{chapter_num}`
        - `chapter_file`: `"${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md"`
@@ -231,7 +238,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/check-ai-patterns.js \
        - `draft_fingerprint`: `"{new_draft_fingerprint}"`
        - `review_subject_fingerprint`: `"{new_review_subject_fingerprint}"`
        - `mode`: `"core"`
-     - 随后同样用 `review-pipeline --save-metrics` 入库。
+     - 随后同样用 `review-pipeline --save-metrics` 入库，并对新发现的 high/critical `FACT_REVIEW`
+       执行上面的自动事实纠错判断；纠错后重新提取和对账。
    - 无论哪条路径，`<chapter_changes>` 的变更都仍必须走 Step 4.5 的 `changes_gate` 校验：
      **"正文没变"不豁免对账校验**。
 3. **重新执行提取与对账（Re-Extraction & Reconciliation）**：

@@ -48,13 +48,55 @@ def test_proposal_without_observation_is_not_accepted():
     assert not result["accepted_payload"]["state_deltas"]
 
 
-def test_observation_without_proposal_is_accepted_as_advisory():
+def test_observation_without_proposal_is_excluded_as_advisory():
     observed = observation()
     result = reconcile_changes(change(state="情绪振奋"), observed, chapter_text="final")
 
     assert result["status"] == "passed"
     assert result["unproposed_observed"]
-    assert result["accepted_payload"]["state_deltas"] == observed["state_deltas"]
+    assert result["accepted_payload"]["state_deltas"] == []
+
+
+def test_mixed_state_deltas_preserve_original_source_indices_and_other_types():
+    from data_modules.reconciliation import verify_observed_payload
+
+    observed = observation()
+    observed["state_deltas"].insert(0, {"entity_id": "other", "field": "mood", "new": "calm"})
+    observed["accepted_events"] = [{"event_type": "unmapped", "subject": "other", "payload": {}}]
+    observed["entity_deltas"] = [{"entity_id": "other", "patch": {"mood": "calm"}}]
+    result = reconcile_changes(change(), observed, chapter_text="final")
+
+    assert result["accepted_payload"]["state_deltas"] == observed["state_deltas"][1:]
+    assert result["accepted_payload"]["accepted_events"] == observed["accepted_events"]
+    assert result["accepted_payload"]["entity_deltas"] == observed["entity_deltas"]
+    source = next(s for s in result["accepted_sources"] if s["accepted"]["field"] == "state_deltas")
+    assert source["accepted"]["index"] == 0
+    assert source["observed"]["index"] == 1
+    assert verify_observed_payload(result, observed) == result["accepted_payload"]
+
+
+@pytest.mark.parametrize("source", ["new_plot_points", "unresolved_questions", "character_state_changes"])
+def test_free_text_match_cannot_confirm_state_delta(source):
+    from data_modules.reconciliation import verify_observed_payload
+
+    text = "许知远与梁沐建立只交换可验证信息的合作。"
+    proposed = change("情绪平稳")
+    proposed["character_state_changes"] = []
+    if source == "character_state_changes":
+        proposed[source] = [{"entity_id": "lin-xuan", "new_state": text}]
+    else:
+        proposed[source] = [{"description" if source == "new_plot_points" else "question": text}]
+    observed = {"accepted_events": [], "entity_deltas": [], "state_deltas": [
+        {"entity_id": "lin-xuan", "field": "known_evidence", "new": text + "随后又自行离开。"}
+    ]}
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+    assert result["matched"]
+    assert result["accepted_payload"]["state_deltas"] == []
+    assert result["unproposed_observed"] == [{
+        "observed": {"source": "state_deltas", "index": 0},
+        "reason": "final-prose observation has no deterministic proposal match",
+    }]
+    assert verify_observed_payload(result, observed)["state_deltas"] == []
 
 
 def test_structured_conflict_blocks_reconciliation():
@@ -266,3 +308,282 @@ def test_conflicting_duplicate_proposal_is_not_silently_accepted():
     result = reconcile_changes(proposed, observation("筑基"), chapter_text="final")
     assert result["status"] == "conflict"
     assert any(item["type"] == "proposal_internal_conflict" for item in result["conflicts"])
+
+
+def test_item_transfer_matches_holder_state_delta():
+    proposed = change("情绪平稳")
+    proposed["item_transfers"] = [
+        {"item_id": "青锋剑", "from_holder": "林越", "to_holder": "梅叔"}
+    ]
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [
+            {"entity_id": "青锋剑", "field": "持有者", "old": "林越", "new": "梅叔"}
+        ],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert any(item["proposed"]["source"] == "item_transfers" for item in result["matched"])
+
+
+def test_same_fact_synonymous_wording_is_matched():
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [{"entity_id": "lin-xuan", "field": "修为", "new": "筑基期"}],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(change("境界：筑基"), observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert result["matched"]
+    assert not result["conflicts"]
+
+
+def test_same_fact_different_new_value_is_a_conflict():
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [{"entity_id": "lin-xuan", "field": "修为", "new": "金丹"}],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(change("境界：筑基"), observed, chapter_text="final")
+
+    assert result["status"] == "conflict"
+    assert any(item["type"] == "proposal_observed_conflict" for item in result["conflicts"])
+
+
+def test_declaration_without_corresponding_fact_is_unmatched_not_conflict():
+    proposed = change("情绪平稳")
+    proposed["character_state_changes"] = []
+    proposed["new_plot_points"] = [
+        {"description": "林越在集市听见有人议论北境商路被截断"}
+    ]
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [{"entity_id": "lin-xuan", "field": "修为", "new": "筑基"}],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert result["proposed_not_observed"]
+    assert result["unproposed_observed"]
+    assert not result["conflicts"]
+
+
+def test_item_name_alias_matches_when_only_one_candidate_is_close():
+    proposed = change("情绪平稳")
+    proposed["item_transfers"] = [
+        {"item_id": "密封胶残片", "from_holder": "乔宁", "to_holder": "林越"}
+    ]
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [
+            {"entity_id": "透明胶残片", "field": "持有者", "old": "乔宁", "new": "林越"}
+        ],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    alias = [item for item in result["matched"] if item.get("entity_alias")]
+    assert alias and alias[0]["entity_alias"] == {
+        "proposed_entity": "密封胶残片", "observed_entity": "透明胶残片"
+    }
+
+
+def test_free_text_plot_summary_pairs_with_its_observed_state_fact():
+    proposed = change("情绪平稳")
+    proposed["character_state_changes"] = []
+    proposed["new_plot_points"] = [
+        {"description": "乔宁查明胶残片并非维护间库存，而是九十年代末封存销毁的批次。"}
+    ]
+    observed = {
+        "accepted_events": [],
+        "state_deltas": [
+            {"entity_id": "林越", "field": "知识.胶残片",
+             "new": "胶残片已比对：不是维护间库存，属九十年代末封存销毁批次；能拿到的人要么管过库存"}
+        ],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert any(item["proposed"]["source"] == "new_plot_points" for item in result["matched"])
+
+
+def test_two_rewordings_of_one_state_are_not_an_internal_conflict():
+    observed = {
+        "state_deltas": [{"entity_id": "梅叔", "field": "对林越.态度",
+                          "new": "否认缺页为人为并禁止林越触碰铁皮柜"}],
+        "entity_deltas": [],
+        "accepted_events": [
+            {"event_type": "character_state_changed", "subject": "梅叔",
+             "payload": {"field": "对林越.态度",
+                         "new": "被指出缺页后否认并露出破绽（持针的手停顿两秒），明确禁止林越触碰墙角铁皮柜"}},
+        ],
+    }
+    result = reconcile_changes(change("情绪平稳"), observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert not any(item["type"] == "observed_internal_conflict" for item in result["conflicts"])
+
+
+# --------------------------------------------------------------------------- #
+# Free-text pairing: normalize, then require real containment / a shared core phrase
+# --------------------------------------------------------------------------- #
+
+
+def _free_text_proposal(text: str, *, source: str = "new_plot_points") -> dict:
+    proposed = change("情绪平稳")
+    proposed["character_state_changes"] = []
+    if source == "new_plot_points":
+        proposed["new_plot_points"] = [{"description": text}]
+    else:
+        proposed["unresolved_questions"] = [{"question": text}]
+    return proposed
+
+
+def _observed_text(text: str, *, entity: str = "lao_zhou", field: str = "observed") -> dict:
+    return {
+        "accepted_events": [],
+        "state_deltas": [{"entity_id": entity, "field": field, "old": None, "new": text}],
+        "entity_deltas": [],
+    }
+
+
+def _is_matched(result: dict) -> bool:
+    return bool(result["matched"])
+
+
+def test_identical_free_text_is_matched():
+    text = "老周反复说：我只负责看站，不负责记录。"
+    result = reconcile_changes(
+        _free_text_proposal(text), _observed_text(text), chapter_text="final"
+    )
+
+    assert result["status"] == "passed"
+    assert _is_matched(result)
+    assert not result["proposed_not_observed"]
+
+
+def test_same_sentence_with_frequency_wording_is_matched():
+    proposed = "他说：我只负责看站，不负责记录。"
+    observed = "他反复说：我只负责看站，不负责记录，一连说了三遍。"
+    result = reconcile_changes(
+        _free_text_proposal(proposed), _observed_text(observed), chapter_text="final"
+    )
+
+    assert _is_matched(result)
+
+
+def test_disappearance_paraphrase_is_matched():
+    result = reconcile_changes(
+        _free_text_proposal("记录消失。"),
+        _observed_text("原有记录不见了。"),
+        chapter_text="final",
+    )
+
+    assert _is_matched(result)
+
+
+def test_same_subject_different_fact_is_not_matched():
+    result = reconcile_changes(
+        _free_text_proposal("老周负责看站。"),
+        _observed_text("老周负责记录。"),
+        chapter_text="final",
+    )
+
+    assert not _is_matched(result)
+    assert result["proposed_not_observed"]
+
+
+def test_small_shared_vocabulary_is_not_matched():
+    result = reconcile_changes(
+        _free_text_proposal("许知远发现记录消失。"),
+        _observed_text("许知远警告老周不要多问。"),
+        chapter_text="final",
+    )
+
+    assert not _is_matched(result)
+    assert result["proposed_not_observed"]
+
+
+def test_foreshadow_content_is_used_for_pairing_not_the_id():
+    """The declaration text must come from `content`/`detail`, never from `FS-001`."""
+    proposed = change("情绪平稳")
+    proposed["character_state_changes"] = []
+    proposed["foreshadowing_actions"] = [
+        {
+            "foreshadow_id": "FS-001",
+            "action": "setup",
+            "content": "老周反复用同一句话挡回许知远的追问，不透露任何实质信息",
+        }
+    ]
+    observed = {
+        "accepted_events": [
+            {
+                "event_type": "open_loop_created",
+                "subject": "lao_zhou",
+                "payload": {
+                    "content": "老周反复用同一句话挡回许知远的追问，不透露任何实质信息。",
+                    "loop_type": "悬疑",
+                    "unanswered_question": "老周为什么只肯重复这一句话？",
+                },
+            }
+        ],
+        "state_deltas": [],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert result["status"] == "passed"
+    assert any(item["proposed"]["source"] == "foreshadowing_actions" for item in result["matched"])
+
+
+def test_actual_monthly_report_question_uses_question_text():
+    proposed = _free_text_proposal("郑培为何提起十年前的月报，他从何处得知相关信息？", source="unresolved_questions")
+    observed = {"accepted_events": [{"event_type": "open_loop_created", "subject": "zheng_pei", "payload": {
+        "content": "郑培送别时问“十年前的月报，你手上应该也有一份吧”；本次核查请求及交谈未提及月报，他为何知晓或作此判断、消息从何而来仍未知。",
+        "unanswered_question": "郑培为何提到十年前的月报，他从哪里得到相关消息？",
+    }}], "state_deltas": [], "entity_deltas": []}
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+    assert result["matched"][0]["observed"] == [{"source": "accepted_events", "index": 0}]
+    proposed["unresolved_questions"][0]["question"] = "老周为何藏起设备登记簿，谁指使他这样做？"
+    assert not reconcile_changes(proposed, observed, chapter_text="final")["matched"]
+
+
+def test_plot_point_matches_new_known_evidence_without_matching_old_history():
+    text = "老周向档案科报告许知远再次来站，科长随后警告许知远不要掺和海事的事，并要求他报告差异核查经过。"
+    old = "旧报2016年3月17日记载事故。" * 20
+    added = "另在工作记录正面记下旧站设备登记资料名称及驳回时间，原因及处理人未知。老周向档案科通报其问登记，科长知其问及通信终端并警告勿掺和海事。"
+    observed = _observed_text(old + added, field="known_evidence")
+    observed["state_deltas"][0]["old"] = old
+    result = reconcile_changes(_free_text_proposal(text), observed, chapter_text="final")
+    assert result["matched"][0]["observed"] == [{"source": "state_deltas", "index": 0}]
+    result = reconcile_changes(_free_text_proposal("梁沐独自带走了旧站全部设备登记资料。"), observed, chapter_text="final")
+    assert not result["matched"]
+
+
+def test_unresolved_question_can_pair_with_an_open_loops_question():
+    proposed = change("情绪平稳")
+    proposed["character_state_changes"] = []
+    proposed["unresolved_questions"] = [{"question": "那条记录为什么消失了？"}]
+    observed = {
+        "accepted_events": [
+            {
+                "event_type": "open_loop_created",
+                "subject": "shigu_juanzong",
+                "payload": {
+                    "content": "档案系统里出现了一条许知远名下的调阅驳回记录。",
+                    "unanswered_question": "那条记录为什么消失了？",
+                },
+            }
+        ],
+        "state_deltas": [],
+        "entity_deltas": [],
+    }
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+
+    assert any(item["proposed"]["source"] == "unresolved_questions" for item in result["matched"])

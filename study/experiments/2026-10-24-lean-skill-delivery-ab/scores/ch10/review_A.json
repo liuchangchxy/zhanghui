@@ -1,0 +1,110 @@
+{
+  "chapter": 10,
+  "draft_id": "draft-010-ebe6edb7",
+  "draft_fingerprint": "76611ba5b18b4e37af6352dc772941a57e3ed2d0f8532a08b26a474626432f96",
+  "review_subject_fingerprint": "ea12c613e9ec49c4f536e72462a5cbb40902426678cca1c1febf2bf43871a45f",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "第25行（“认出来的人”一段）",
+      "description": "字数统计与原文自相矛盾：称“六个字”，实际“已离职，去向不明”是七个汉字。",
+      "evidence": "名字后面是六个字：已离职，去向不明。",
+      "fix_hint": "改为“七个字”，或把状态拆成两处（如“已离职”与“去向不明”分栏），保证可数细节自洽。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "第49–51行（合上目录前的结论段）",
+      "description": "缺口范围与本章自述的可得范围对不上：公开表最早 2021、归档运行期值班表止于 2016，实际缺口只有 2016/2017–2020，而结论写“那十年，一页也没有”，读者无法复算出“十年”的缺口；这句又直接支撑他“证据只在老周手里”的判断。",
+      "evidence": "公开的表从二〇二一年起。档案里的表到二〇一六年止，最后一年连归档号都没有。他要的那十年，一页也没有。",
+      "fix_hint": "明确“那十年”指哪一段：若指停用后十年（2017–2026），需说明 2021–2026 的公开表为何不算他需要的排班证据（例如公开表不含看护岗、无值班人姓名）；若指事故前十年，则说明档案里的运行期表为何不可用。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "第137–163行（回科里递调阅申请一段）",
+      "description": "与第2章已确立的决策反转缺少动机交代：canon 记录他因“递申请会在系统留痕”而放弃走档案科调阅申请；本章他主动递交并让姓名、工号入系统，正文只有“这一次，他没有拿回来”，未说明为何这次肯留痕，也未处理老周刚说过的“科里就来过电话”带来的暴露风险。",
+      "evidence": "他把单子推过窗口。这一次，他没有拿回来。 / “上次你来完，科里就来过电话。”",
+      "fix_hint": "用一次内部动作点明取舍：事由真实且不指向 3·17，用一条无害的留痕换取津贴台账的查阅资格；并让他意识到这条留痕会回到老周和科里手上。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "character",
+      "location": "第47行（归档目录补充说明）",
+      "description": "与已建立的抄录习惯不一致：canon 记录他查证时“全部只抄录，未复印未拍照”，本章对直接影响结论的归档口径调整页“看了两遍……没有抄”，正文未给理由，读起来像作者扣线索。",
+      "evidence": "他看了两遍，把那一页翻过去，又翻回来，没有抄。",
+      "fix_hint": "补一个具体理由（如口径页涉密、只记页位待后再取），或改为抄下但暂不解读，保持“凡经手必留抄录”的人物一致性。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "beat_compliance",
+      "location": "第107–181行（旧潮位站签退至章末汇总表）",
+      "description": "规划中的本章变化只兑现一半：只写到“注意到年份连续性有缺口”，未落成“判断老周在保护什么”；sequel_decision（老周这十年为什么守着一座废站→下章目标）也没有形成可复述的动机句，章末停在汇总表的“在岗”上。",
+      "evidence": "二〇一七。他没有问。 / 结尾：“第三行，老周。岗位补贴那一栏，在岗。”",
+      "fix_hint": "在“高压克制”前提下用一次没说出口的问句或一个动作（把清点单上的横线与抽屉里的空格并置）把“他在保护什么”的判断与下章动机落地，不必写内心总结。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "foreshadow_compliance",
+      "location": "craft_constraints.story_craft.foreshadow_chain FS-006",
+      "description": "FS-006 expected_payoff_chapter=9，已到第10章仍 status=active；正文显示第9章的笔迹比对已认出作者，登记状态疑似未回填。",
+      "evidence": "FS-006 status=\"active\", expected_payoff_chapter=9 vs 正文“那行字他比对过很多遍，比对到认出来为止。”",
+      "fix_hint": "核对第9章 commit 后回填 FS-006 的 payoff_chapter / payoff_quality。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "foreshadow_compliance",
+      "location": "craft_constraints.story_craft.timed_locks TL-005",
+      "description": "TL-005（第6章内建立与梁沐的合作关系）deadline_chapter=6，仍 status=active，已逾期 4 章。",
+      "evidence": "TL-005: \"deadline_chapter\": 6, \"status\": \"active\"",
+      "fix_hint": "若第6章已建立合作，回填 fulfilled_chapter；若未建立，需在后续章节补足或重设 deadline。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 7,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "发现1个问题：归档口径补充说明“没有抄”，与已建立的逐字抄录习惯不一致"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "发现3个问题：“六个字”实为七个字；缺口“十年”与自述可得范围矛盾；递调阅申请的决策反转缺动机"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "发现1个问题：本章变化只到“观察缺口”，未落成判断与下章动机句"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "发现2个问题：FS-006 逾期未回填；TL-005 逾期仍 active"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "summary": "7个问题：0个阻断（全部 blocking=false），4个中优（逻辑3、节拍1）、3个低优，无 high/critical。CBN（公开表只有近五年）与 CEN（津贴十年按在岗发放）均已覆盖，三条禁区未触碰；FS-004 按规划埋设，hook_type 留白式与章末收束一致。第9章摘要与正文缺失，“上章钩子回应”一项未能校验；do_not_copy_check.json 的 mtime 早于本章草稿，按空 violations 记 pass。首次审查，无上轮 high/critical 需闭环。"
+}

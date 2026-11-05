@@ -1,0 +1,111 @@
+{
+  "chapter": 10,
+  "draft_id": null,
+  "draft_fingerprint": null,
+  "review_subject_fingerprint": "49587c48b1b0fc1c11997ba3be62e92a000e384cf58699f9b7db34119d981801",
+  "fingerprint_note": "入参未提供 draft_id / draft_fingerprint，置 null；review_subject_fingerprint 由审查者计算：draft_B.md 剔除 <chapter_changes> 后的正文（去尾部空白）SHA-256",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "medium",
+      "category": "timeline",
+      "location": "第1段（全章）",
+      "description": "本章按卷时间线为10月19日周一下午、D-20，与上章10月17日周六上午相隔两天跨周末；正文无日期、星期或周末过渡交代，读者无法定位本章时点。",
+      "evidence": "开篇“地方志办公室在城西……下午两点半开门。许知远两点二十就到了”，全章无“周一/周末/10月”等时间标记；对照《第1卷-时间线》第10章备注“跨周末（2天）需过渡交代周末”。",
+      "fix_hint": "开篇补一两句交代周末两天做了什么、为何拖到周一下午才跑这一趟。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "continuity",
+      "location": "第1段 / 全章",
+      "description": "未接上第9章结尾线索。上一章以记录本原件被登记销毁、笔迹指向一位“已离职、去向不明”的值班员收束，本章开篇直接跳到地方志办公室查公开值班表，未交代上章结果如何推动他改走这条路。",
+      "evidence": "全章未出现“值班记录本”“原件销毁”“离职”“去向不明”；“笔迹”一词仅出现在第79段指本章公示的审核签名。",
+      "fix_hint": "开头用一两句承接：记录本原件已不可得，他才退回到公开渠道找独立凭据。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "foreshadow_compliance",
+      "location": "全章（对照 craft_constraints.foreshadow_chain）",
+      "description": "FS-006（值班记录本上多出的那行笔迹）预期回收章为第9章，至本章第10章仍为 active 且 payoff 为空；本章也未推进该线索。",
+      "evidence": "FS-006: buried_chapter=1, expected_payoff_chapter=9, status=\"active\", payoff_chapter=null。",
+      "fix_hint": "尽快补收，或在伏笔表中登记延期并写明原因。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "foreshadow_compliance",
+      "location": "全章（对照 craft_constraints.timed_locks）",
+      "description": "TL-005（第6章内必须建立与梁沐的合作关系，B 线开局）截止章为6，至本章第10章仍为 active；本章无梁沐线推进。",
+      "evidence": "TL-005: deadline_chapter=6, status=\"active\", fulfilled_chapter=null。",
+      "fix_hint": "在下章前补一次梁沐出场或可验证信息交换，或登记该定时锁状态。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "logic",
+      "location": "第75段",
+      "description": "“2016年那本册子空着”指代不清：他此刻手上拿的是旧报库2016年合订本，而第61段已判定老周架上2016年手抄册是被人抽走；“空着”与“被抽走”混用，容易误读成合订本空白。",
+      "evidence": "“2016年那本册子空着，如果是因为那一年老周不在岗，岗位补贴就该停。” 对照第61段“少得不像漏，像有人拿走了”。",
+      "fix_hint": "改为“老周架上缺掉的那本2016年册子”，与手头合订本明确区分。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "character",
+      "location": "第33段",
+      "description": "主角未经核实即断言册子的具体存放位置，与其“不把未经核实的东西说出口”“在没有可查证依据时下结论”的设定底线相冲；正文以“在赌”作缓冲，但仍是以未证信息逼问。",
+      "evidence": "“站上有。”许知远说，“你每年抄一份，装订起来，放在里屋架子上。” / “这句话说出口，他就知道自己在赌。”",
+      "fix_hint": "把“里屋架子上”降为试探性问句，或让“站上自抄留底”先有办事员那句话作明确支点。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "setting",
+      "location": "第5、73、77段",
+      "description": "同一机构在正文中先称“港务局”，第77段公示全称却是“临港市港口管理局”；世界观核心势力中另有独立实体“临港港务集团”，两名并用易致混淆。",
+      "evidence": "“港务局的值班表”（第5段） / “临港市港口管理局当年度特殊岗位津贴发放情况公示”（第77段）；设定集世界观：核心势力为“临港市港口管理局档案科”“临港港务集团”。",
+      "fix_hint": "全章统一为“港口管理局”，或在首次出现时点明“港务局”是俗称。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 7,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "发现1个问题：港务局/港口管理局称谓不统一，且与港务集团易混"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "发现1个问题：跨周末两天无过渡与时间锚点"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "发现1个问题：未接续上章结尾的销毁/笔迹线索"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "发现1个问题：主角以未核实的存放位置逼问，触碰其行为底线"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "发现1个问题：第75段“2016年那本册子空着”指代不清"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "发现2个问题：FS-006 预期第9章回收仍未收；TL-005 截止第6章仍未兑现"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "summary": "7个问题：0个阻断（全部 blocking=false），4个中优（跨周末无过渡、上章线索未接续、FS-006 逾期未收、TL-005 逾期未兑现），3个低优（册子指代不清、主角未证断言、机构称谓不统一）。本章 CBN（公开值班表只有近五年）与 CEN（查岗位记录发现补贴十年按在岗发放）均已覆盖，Scene 四步与 Sequel 各步齐备，FS-004 已按计划埋设，do_not_copy 扫描无违规；风险集中在跨章衔接与伏笔时限，而非事实矛盾。"
+}

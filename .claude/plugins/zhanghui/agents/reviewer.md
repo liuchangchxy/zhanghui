@@ -46,7 +46,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 
 - `chapter`：章节号
 - `chapter_file`：正文文件路径
-- `reviewer_context_file`：受治理 Reviewer 上下文文件路径（包含 `canon_authority`、`creative_intent`、`craft_constraints`、`chapter_planning`、`advisory_constraints`、`review_contract`）
+- `reviewer_context_file`：受治理 Reviewer 上下文文件路径（包含 `canon_authority`、`creative_intent`、`craft_constraints`、`chapter_planning`、`advisory_constraints`、`review_contract`、`prior_chapter_context`）
 - `project_root`：项目根目录
 - `scripts_dir`：脚本目录
 - `draft_id`：当前草稿标识（**必须原样回填到输出 JSON**）
@@ -73,6 +73,11 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 3. **故事工艺与建议 (`craft_constraints` / `advisory_constraints`)**：Story Craft（节奏曲线张力、限时锁到期、人物弧光）及写作指引，属于启发式工艺指引；
 4. **硬性审查约束 (Hard Constraints) 的授权边界**：Reviewer 不拥有最终 gate authority。普通章节规划的 `forbidden_zones` 或合同清单中的 `blocking_rules` 仅代表规划意图与执行关注项，**不得仅凭字段名就自动升级为 hard gate authority**。所有已获授权的硬性约束判定由现有 shared policy / ChapterCommitService 独占裁决；
 5. **收敛上下文 (`convergence_context`)**：若当前为重审（re-review），上下文提供上一轮审查问题（特别是上一轮 high/critical 问题）。Reviewer 仍必须从头独立检查全部 8 个维度并可报告全新问题；同时对上一轮 high/critical 问题在当前草稿中的状态进行核验并在 summary 中明确闭环结论（closure）。严禁复用旧审查替代当前草稿独立审查。
+6. **跨章闭环上下文 (`prior_chapter_context`)**：`has_previous_chapter_review=true` 时，上一章收尾仍未闭环的高优/严重问题会列在 `high_or_critical_findings` 中（来自 `.webnovel/runtime/chapter_<上一章>/last_review.json`，与同章重审共用同一份存储，没有第二套审查账本）。你必须：
+   - 对每条问题核验本章正文是否继续沿用同一错误事实：仍在 → 用当前正文的可验证证据正常报一条 finding（可在 `location` 注明"承自第{上一章}章"）；已解决 → 不重复报；
+   - 在 `summary` 中写明核验结论：`prior_chapter: resolved=N / persistent=M`；
+   - `previous_review_status` 不是 `loaded` 时，在 `summary` 中如实写出（例如 `prior_chapter: unavailable`），不得假装"没有上一章问题"。
+   该上下文只是核验线索，不构成事实权威；一切仍以 `canon_authority` 与当前正文证据为准，严禁照抄旧 finding。
 
 **裁决铁律**：
 - Reviewer 发现正文偏离规划意图、触碰规划禁区（`forbidden_zones`）或与事实冲突时，应正常报告问题描述、位置与原文依据；
@@ -203,6 +208,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" in
 - [ ] `review_subject_fingerprint` 已原样回填
 - [ ] `review_mode` 已回填，且 `core` 模式下未查的维度写的是 `skipped` 而非 `pass`
 - [ ] 输出中没有整段复述 Canon/正文/推理过程（只保留 finding 与最短证据）
+- [ ] 若 `prior_chapter_context.has_previous_chapter_review=true`，`summary` 已写明上一章 high/critical 问题的核验结论（`resolved=N / persistent=M`）
 - [ ] `do_not_copy_check.json` 中每条 violation 都已转成一条 issue（无遗漏、无新增）
 
 ## 8. 输出格式

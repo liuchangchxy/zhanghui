@@ -370,6 +370,82 @@ class TestWorkflowConvergence:
         assert commit_res.ok
         assert commit_res.chapter_outcome == "accepted"
 
+    def test_high_fact_review_blocks_auto_commit(self, tmp_path: Path):
+        """A high fact/continuity finding deferred to FACT_REVIEW may not auto-publish.
+
+        Step 4 must not rewrite facts, and every raw Reviewer finding stays
+        `blocking=false`; without this rule the chapter committed and published while
+        a high-severity continuity problem was still open.
+        """
+        project_root = _setup_book_project(tmp_path, chapter=1)
+        runtime = ChapterRuntime(project_root)
+        runtime.prepare(1, with_package=True)
+
+        fact_review = {
+            "blocking_count": 0,
+            "issues": [{
+                "category": "continuity",
+                "severity": "high",
+                "blocking": False,
+                "description": "青牌数量与第1章登记冲突：登记两支，本章写一支",
+                "location": "第3段",
+            }],
+        }
+
+        _, commit_res = _prepare_and_commit(
+            runtime, chapter=1, prose=_sample_draft(), review_result=fact_review
+        )
+
+        assert commit_res.ok is False
+        assert commit_res.chapter_outcome == "pending_human"
+        assert commit_res.human_decision_required
+
+    def test_medium_fact_review_does_not_block_auto_commit(self, tmp_path: Path):
+        project_root = _setup_book_project(tmp_path, chapter=1)
+        runtime = ChapterRuntime(project_root)
+        runtime.prepare(1, with_package=True)
+
+        fact_review = {
+            "blocking_count": 0,
+            "issues": [{
+                "category": "continuity",
+                "severity": "medium",
+                "blocking": False,
+                "description": "调阅列表的空/非空描述缺少筛选交代",
+                "location": "第3段",
+            }],
+        }
+
+        _, commit_res = _prepare_and_commit(
+            runtime, chapter=1, prose=_sample_draft(), review_result=fact_review
+        )
+
+        assert commit_res.ok
+        assert commit_res.chapter_outcome == "accepted"
+
+    def test_high_expression_finding_does_not_block_auto_commit(self, tmp_path: Path):
+        project_root = _setup_book_project(tmp_path, chapter=1)
+        runtime = ChapterRuntime(project_root)
+        runtime.prepare(1, with_package=True)
+
+        expression_review = {
+            "blocking_count": 0,
+            "issues": [{
+                "category": "ai_flavor",
+                "severity": "high",
+                "blocking": False,
+                "description": "旁白解释过多，句式复读",
+                "location": "第2段",
+            }],
+        }
+
+        _, commit_res = _prepare_and_commit(
+            runtime, chapter=1, prose=_sample_draft(), review_result=expression_review
+        )
+
+        assert commit_res.ok
+        assert commit_res.chapter_outcome == "accepted"
+
     def test_resume_and_retry_prevent_duplicate_commit_and_republication(self, tmp_path: Path):
         """7. 恢复与重试不会重复提交或重复发布（幂等发布，resume plan 跳过已 accepted commit）。"""
         project_root = _setup_book_project(tmp_path, chapter=1)

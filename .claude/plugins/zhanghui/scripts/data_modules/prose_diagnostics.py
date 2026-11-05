@@ -107,6 +107,85 @@ STOCK_PATTERNS = [
 ]
 
 
+# Show-then-explain: a sentence that only re-states what the sentence before it already
+# showed. The 2026-10-24 lean A/B found this is the one craft dimension that got *worse*
+# when Writer-side instructions were removed, so it is detected here and repaired after
+# the draft exists, not constrained before it.
+#
+# Deliberately narrow. A sentence is only flagged when it opens with an explicit
+# restatement connector or a narrator-understanding frame *and* adds nothing new: no
+# number, no inference (只能/必须/因为/所以/…), and nothing the previous two sentences did
+# not already say. A conclusion that carries a new judgement is left alone.
+SHOW_THEN_EXPLAIN_CONNECTORS = (
+    "也就是说", "换句话说", "换言之", "意思是说", "这表明", "这说明", "这意味着",
+)
+SHOW_THEN_EXPLAIN_FRAMES = (
+    "他终于明白", "他这才明白", "他终于意识到", "他这才意识到", "他意识到",
+    "他终于知道", "他明白了", "他懂了", "他终于懂了", "这让他明白", "这让他知道",
+    "他知道", "他清楚", "原来", "显然",
+)
+SHOW_THEN_EXPLAIN_NEW_JUDGEMENT = (
+    "只能", "必须", "因为", "所以", "除非", "如果", "到底", "为什么", "谁", "哪",
+    "是不是", "多少", "恐怕", "很可能",
+)
+_NUMBER_RE = re.compile(
+    # Arabic digits, or a Chinese numeral bound to a unit. 「那一年」「这一次」 are
+    # grammar, not new data, so a numeral preceded by a demonstrative is ignored.
+    r"\d|(?<![那这某同每上下前后几])[一二三四五六七八九十百千万两][年月日米次页册项人天时分号岁元块层公分]"
+)
+
+
+def _split_sentences(paragraph: str) -> List[str]:
+    return [s.strip() for s in re.split(r"(?<=[。！？])", paragraph) if s.strip()]
+
+
+def _is_dialogue(sentence: str) -> bool:
+    return sentence.startswith(("“", "\"", "「"))
+
+
+def detect_show_then_explain(paragraphs: List[str]) -> List[ProseIssue]:
+    """Find sentences whose only job is to repeat what the preceding sentence showed."""
+    issues: List[ProseIssue] = []
+    previous_sentences: List[str] = []
+    for idx, para in enumerate(paragraphs, 1):
+        sentences = _split_sentences(para)
+        for pos, sentence in enumerate(sentences):
+            # Restatements often open a new paragraph ("也就是说，……"), so the context is
+            # the last two sentences of the prose, not just of this paragraph.
+            context = previous_sentences[-2:]
+            previous_sentences.append(sentence)
+            if not context or _is_dialogue(sentence):
+                continue
+            marker = next(
+                (c for c in SHOW_THEN_EXPLAIN_CONNECTORS if c in sentence[:12]), None
+            )
+            if marker is None:
+                marker = next((f for f in SHOW_THEN_EXPLAIN_FRAMES if sentence.startswith(f)), None)
+            if marker is None:
+                continue
+            rest = sentence[len(marker):] if sentence.startswith(marker) else sentence
+            if _NUMBER_RE.search(rest):
+                # A number is new information, not a restatement.
+                continue
+            if any(word in rest for word in SHOW_THEN_EXPLAIN_NEW_JUDGEMENT):
+                # An inference the reader cannot derive from the action alone.
+                continue
+            previous = "".join(context)
+            if not previous.strip():
+                continue
+            issues.append(
+                ProseIssue(
+                    issue_type="show_then_explain",
+                    location=f"第{idx}段",
+                    excerpt=sentence,
+                    evidence=f"前文已呈现（「{previous[-40:]}」），本句「{marker}」只是重复解释",
+                    suggested_intervention="删除本句；若它据有新判断，改写为人物自己的推理而不是叙述者总结",
+                    severity="suggested",
+                )
+            )
+    return issues
+
+
 def diagnose_prose(text: str, voice_target: Optional[VoiceTarget] = None) -> DiagnosisReport:
     """Diagnose chapter prose and output structured targeted issues."""
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
@@ -194,7 +273,10 @@ def diagnose_prose(text: str, voice_target: Optional[VoiceTarget] = None) -> Dia
             )
         )
 
-    # 6. Check book-specific repeated phrase fatigue (non-stop repetition of certain content words)
+    # 6. Show-then-explain: restating what the previous sentence already showed.
+    issues.extend(detect_show_then_explain(paragraphs))
+
+    # 7. Check book-specific repeated phrase fatigue (non-stop repetition of certain content words)
     words = re.findall(r"[\u4e00-\u9fa5]{2,4}", text)
     word_counts = Counter(words)
     # Ignore common grammatical stop-words

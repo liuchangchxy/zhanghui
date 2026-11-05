@@ -1,0 +1,92 @@
+{
+  "chapter": 7,
+  "draft_id": "draft-007-dc5ddfca",
+  "draft_fingerprint": "e3b1c1728916d37cdecae107d66820070e3c40fd95b9849349ba02f7770cb7b6",
+  "review_subject_fingerprint": "19f1962d43757aa628a0548c1cba9640b18199e0fc42f8eb6f53e2cceb582450",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "high",
+      "category": "continuity",
+      "location": "全章（对照第6章末）",
+      "description": "第6章末许知远与梁沐约定次日对工单，本章时间正是该日，但全天行动线为地方志办公室→旧报库→家中，从未去旧潮位站，也未用一句交代失约或改期，读者会认为上一章的约定被吞掉。",
+      "evidence": "第6章：“你明天下午还来。”“我把工单号抄给你，你自己去核”“搜到了，明天我们对一遍”；本章第1段起为“天亮的时候，楼下早点摊的抽油烟机响了”，其后“地方志办公室在文化馆三楼”“旧报库在巷子里”“到家天已经黑了”，无旧潮位站、无梁沐在场。",
+      "fix_hint": "补一句交代（例如他把赴约推后、或决定先把手上的数算完再去），或把本章时间明确推到约定日之后。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "character",
+      "location": "第59段（“回去的路上他买了一个面包”）",
+      "description": "叙述把与梁沐的关系写成尚未建立交换、且他不打算开口，与第6章已完成交换并立下三条规矩的事实相反，属人物认知状态倒退。",
+      "evidence": "本章：“梁沐说过，只交换能互相核对的东西。他现在手上还没有能拿出去换的。他也没打算找谁要。” vs 第6章他已交出资产调拨公示抄件并约定“一，只说能指到出处的……三，不往外传”“行。”",
+      "fix_hint": "改为“已经换过一次”的口径，把不找梁沐的理由落在“不想欠第二次人情”或“这次只能靠自己算”。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "setting",
+      "location": "第41段（旧报库入场）",
+      "description": "旧报库的位置与入馆手续与第2章已建立的公开渠道规则不一致：已确立的是“报社后院、门口登记簿写下姓名与进库时间即可”，本章改成“巷子里、铁门、门房窗口”，且需填一张含“单位”的表单，新增了 canon 未有的门槛字段。",
+      "evidence": "canon evt-ch2-005“旧报库在门口登记簿写下姓名与进库时间即可查阅，不需要授权”；第2章正文“旧报库在报社后院，门口一本登记簿，写上日期就能进”；本章“旧报库在巷子里，铁门，门房窗口比人低半头。管理员递给他一张单子：姓名、单位、日期、查什么。”",
+      "fix_hint": "统一为第2章的报社后院＋登记簿写法；若要保留“查什么”一栏，需说明该栏是新增要求，并处理他填“单位”留下的痕迹。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "setting",
+      "location": "第11段（地方志办公室）",
+      "description": "地方志办公室的场所描述与第2章不一致（城西老楼三层 vs 文化馆三楼），且本章未出现 canon 规定的“阅览单”手续，办事员直接从里屋搬书给他。",
+      "evidence": "第2章“地方志办公室在城西，一栋老楼的三层，下午两点半开门……手里都拿着阅览单”“在单子上记了一笔卷次”；canon evt-ch2-005“地方志凭阅览单”；本章“地方志办公室在文化馆三楼，走廊尽头”“她从里屋搬出一本厚书”。",
+      "fix_hint": "把地点写成同一处（城西老楼/文化馆择一并与第2章对齐），并补一笔阅览单或说明本章无需登记的原因。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "foreshadow_compliance",
+      "location": "craft_constraints.story_craft.timed_locks.TL-005",
+      "description": "限时锁 TL-005（第6章内建立与梁沐的合作关系）期限已过仍为 active，第6章正文实际已完成该节点，锁未闭环，后续会持续误报逾期。",
+      "evidence": "TL-005 deadline_chapter=6, status=active, fulfilled_chapter=null；第6章正文“规矩说清楚……行。”及章末约定已建立合作。",
+      "fix_hint": "提交本章时同步把 TL-005 标记为 fulfilled 并回填 fulfilled_chapter=6。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 5,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "发现2个问题：旧报库位置与入馆手续偏离第2章规则（新增“单位”栏）；地方志办公室场所描述与“阅览单”手续不一致"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "发现1个问题：第6章末“次日对工单”的约定在本章全天未回应、无一句交代"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "发现1个问题：叙述称“手上还没有能拿出去换的、没打算找谁要”，与第6章已完成交换并立规矩矛盾"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "发现1个问题：TL-005 期限已过仍为 active 未闭环"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "summary": "5个问题：0个 reviewer 自行赋予的阻断，1个高优（第6章约定在本章未回应）；另有设定偏差2项、人物状态倒退1项、限时锁未闭环1项"
+}

@@ -84,6 +84,23 @@ def test_commit_service_accepts_when_all_checks_pass(tmp_path):
     assert "entity_deltas" not in payload
 
 
+def test_commit_recomputes_state_confirmation_and_rejects_forged_audit(tmp_path):
+    from data_modules.reconciliation import reconcile_changes
+
+    service = ChapterCommitService(tmp_path)
+    kwargs = _attempt_kwargs()
+    delta = {"entity_id": "lin", "field": "realm", "old": "炼气", "new": "筑基"}
+    kwargs["extraction_result"]["state_deltas"] = [delta]
+    payload = service.build_commit(3, **kwargs)
+    assert payload["extraction_result"]["state_deltas"] == []
+
+    forged = reconcile_changes(kwargs["proposed_changes"], kwargs["extraction_result"],
+                               chapter_text=kwargs["chapter_text"])
+    forged["accepted_payload"]["state_deltas"] = [delta]
+    with pytest.raises(Exception, match="audit artifact is stale"):
+        service.build_commit(3, **kwargs, reconciliation_result=forged)
+
+
 def test_commit_service_rejects_missing_original_reconciliation_inputs_even_with_no_artifact(tmp_path):
     service = ChapterCommitService(tmp_path)
     with pytest.raises(Exception, match="final chapter_text and proposed_changes are required"):

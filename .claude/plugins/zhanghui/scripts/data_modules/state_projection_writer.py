@@ -151,59 +151,6 @@ class StateProjectionWriter:
             for delta in extraction_list(commit_payload, "state_deltas")
             if isinstance(delta, dict)
         ]
-        seen = {
-            (str(delta.get("entity_id") or "").strip(), str(delta.get("field") or "").strip())
-            for delta in deltas
-        }
-
-        for event in extraction_list(commit_payload, "accepted_events"):
-            if not isinstance(event, dict):
-                continue
-            event_type = str(event.get("event_type") or "").strip()
-            payload = dict(event.get("payload") or {})
-            entity_id = str(payload.get("entity_id") or event.get("subject") or "").strip()
-            if not entity_id:
-                continue
-
-            field = ""
-            if event_type == "power_breakthrough":
-                field = (
-                    str(payload.get("field") or payload.get("field_path") or "realm").strip()
-                )
-            elif event_type == "character_state_changed":
-                field = str(payload.get("field") or payload.get("field_path") or "").strip()
-            else:
-                continue
-
-            key = (entity_id, field)
-            if not field or key in seen:
-                continue
-
-            seen.add(key)
-            deltas.append(
-                {
-                    "entity_id": entity_id,
-                    "field": field,
-                    "old": (
-                        payload.get("old")
-                        if "old" in payload
-                        else payload.get("from")
-                        if "from" in payload
-                        else payload.get("old_value")
-                        if "old_value" in payload
-                        else payload.get("previous_state")
-                    ),
-                    "new": (
-                        payload.get("new")
-                        if "new" in payload
-                        else payload.get("to")
-                        if "to" in payload
-                        else payload.get("new_value")
-                        if "new_value" in payload
-                        else payload.get("new_state")
-                    ),
-                }
-            )
         return deltas
 
     @staticmethod

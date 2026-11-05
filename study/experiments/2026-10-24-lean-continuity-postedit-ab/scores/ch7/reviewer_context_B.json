@@ -1,0 +1,1918 @@
+{
+  "chapter": 7,
+  "canon_authority": {
+    "canon_items": [
+      {
+        "content": {
+          "entity_id": "xu_zhiyuan",
+          "field": "location.current",
+          "value": "旧潮位站"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:1",
+        "chapter": 1,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:1"
+        ],
+        "fact_key": [
+          "xu_zhiyuan",
+          "location.current"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:1",
+        "scope": "chapter:1"
+      },
+      {
+        "content": {
+          "entity_id": "xu_zhiyuan",
+          "field": "inventory_status",
+          "value": "十三项已全部核完并逐项勾销；第二项水位标尺少一支、第七项备用灯泡实物不在，两项差异说明仍未填；清点单当天未交；第十项通信终端已补记编号 TX-2015-086"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2",
+          "state:2"
+        ],
+        "fact_key": [
+          "xu_zhiyuan",
+          "inventory_status"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "entity_id": "xu_zhiyuan",
+          "field": "procedure_compliance",
+          "value": "本日调阅环节未违规：限制查阅卷宗未提交申请，空白申请单原样放回；改用地方志与旧报等公开渠道查证，未在档案系统留下调阅记录"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2",
+          "state:2"
+        ],
+        "fact_key": [
+          "xu_zhiyuan",
+          "procedure_compliance"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "entity_id": "xu_zhiyuan",
+          "field": "known_evidence",
+          "value": "《值班记录本》封底夹层内的对折纸：日期 2016年3月17日、编号 临潮07；未上报、未拍照、未带走原件，仅抄录于本人工作记录背面。另新增：2016 年事故调查卷宗目录卡片（限制查阅、须科级以上授权、归档单位市海事局、卷宗编号含 0317）；《临港市志》大事记 2016 年 3 月 17 日一行事故记载（书名、卷次、页码已抄）；旧报 2016-03-18 第二版右下角简讯（“昨日凌晨”）与 2016-03-24 同位置后续（原因系通信设备故障，均无地点、船名、伤亡、署名）。全部只抄录，未复印、未拍照"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2",
+          "state:2"
+        ],
+        "fact_key": [
+          "xu_zhiyuan",
+          "known_evidence"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "entity_id": "xu_zhiyuan",
+          "field": "stance.anonymous_letter",
+          "value": "未上报；决定先自行核实"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:1",
+        "chapter": 1,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:1"
+        ],
+        "fact_key": [
+          "xu_zhiyuan",
+          "stance.anonymous_letter"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:1",
+        "scope": "chapter:1"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "niming_xin",
+          "payload": {
+            "content": "《值班记录本》封底与最后一页之间的夹层里塞着一张对折的纸，摊开后纸上只有一行字：日期 2016年3月17日，编号 临潮07。没有称呼，没有落款，没有多余的字。该编号与铁门旁一小块新刷的深灰色编号漆一致。",
+            "loop_type": "悬疑谜题",
+            "unanswered_question": "是谁把一张只有日期与站号的纸，放进一座停用十年的潮位站的值班记录本夹层里？",
+            "urgency": 90,
+            "planted_chapter": 1,
+            "expected_payoff": "第20章揭示寄信人身份与动机"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:1",
+        "chapter": 1,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:1"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-001"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:1",
+        "scope": "chapter:1"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "zhiban_jilu_ben",
+          "payload": {
+            "content": "《值班记录本》中间偏后一页的最下面多出一行字：不是打印的，是手写的，墨色比这一页其他字要新，行距也不一样——别的行都贴着横线写，这一行浮在两条横线中间。",
+            "loop_type": "物证异常",
+            "unanswered_question": "这行多出来的笔迹是谁写的、什么时候写上去的？",
+            "urgency": 70,
+            "planted_chapter": 1,
+            "expected_payoff": "第9章笔迹比对认出作者"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:1",
+        "chapter": 1,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:1"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-002"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:1",
+        "scope": "chapter:1"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "qingdan_lg_2026_1009",
+          "payload": {
+            "content": "清点清单 LG-2026-1009 共十三项，核到第十项：第二项水位标尺少一支（数量不符），第七项备用灯泡实物不在，两项差异都还没有填差异说明；第十项通信终端因老周禁止触碰而未核；第十一至十三项留待下次。",
+            "loop_type": "物证缺失",
+            "unanswered_question": "对不上的那两项资产去了哪里？老周为什么禁止触碰地面那台通信终端？",
+            "urgency": 40,
+            "planted_chapter": 1
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:1",
+        "chapter": 1,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:1"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-003"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:1",
+        "scope": "chapter:1"
+      },
+      {
+        "content": {
+          "event_type": "world_rule_revealed",
+          "subject": "dang_anke",
+          "payload": {
+            "rule_content": "档案科流程：资产清点遇台账与实物不符须填差异说明，差异说明需要一份可以参照的原始登记；调阅不在本次清点范围内的材料须先走调阅申请；进站与离站都要在钥匙交接册的进出登记栏各签一次。",
+            "rule_category": "组织流程",
+            "scope": "临港市港口管理局档案科、旧潮位站"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:1",
+        "chapter": 1,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:1"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-004"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:1",
+        "scope": "chapter:1"
+      },
+      {
+        "content": {
+          "from_entity": "xu_zhiyuan",
+          "to_entity": "lao_zhou",
+          "relationship": "放行但限制逗留：“核完就走，别在站里转”，允许搬开两箱记录纸后仍要求放回原位，并站在门口看着他"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2"
+        ],
+        "fact_key": [
+          "relationship",
+          "xu_zhiyuan",
+          "lao_zhou"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "entity_id": "xu_zhiyuan",
+          "field": "decision.query_route",
+          "value": "放弃走档案科调阅申请：事由栏无论写实还是编造都会把“许知远查 3·17 事故卷宗”留在系统里，改走地方志办公室与旧报库等公开渠道"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2",
+          "state:2"
+        ],
+        "fact_key": [
+          "xu_zhiyuan",
+          "decision.query_route"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "entity_id": "tongxin_zhongduan",
+          "field": "attributes.model",
+          "value": "TX-2015"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2",
+          "state:2"
+        ],
+        "fact_key": [
+          "tongxin_zhongduan",
+          "attributes.model"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "entity_id": "tongxin_zhongduan",
+          "field": "attributes.serial",
+          "value": "TX-2015-086"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2",
+          "state:2"
+        ],
+        "fact_key": [
+          "tongxin_zhongduan",
+          "attributes.serial"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "shigu_juanzong",
+          "payload": {
+            "content": "2016 年航道事故调查卷宗的目录卡片右下角标着“限制查阅”，须科级以上授权；卡片背面铅笔字写着归档单位：市海事局。许知远最终没有提交调阅申请，卷宗里写了什么、谁批过、为何被限制，全部未知。",
+            "loop_type": "悬疑",
+            "unanswered_question": "这份被限制查阅的事故卷宗里究竟记录了 3·17 事故的什么内容，又是谁把它锁起来的？",
+            "urgency": 70,
+            "planted_chapter": 2,
+            "expected_payoff": "取得科级以上授权或找到绕过授权链的其他入口"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch2-001"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "xu_zhiyuan",
+          "payload": {
+            "content": "公开记载对 3·17 事故的描述被压到极限：《临港市志》大事记只有一行“三月十七日，我市发生一起船舶事故，市海事局介入调查”；2016 年 3 月 18 日旧报第二版右下角三行简讯同样只有一句介入调查；3 月 24 日同一位置的后续称“事故原因查明，系通信设备故障所致”。没有地点、没有船名、没有伤亡数字，也没有署名记者。",
+            "loop_type": "悬疑",
+            "unanswered_question": "公开记载为何三处都省掉了地点、船名和伤亡，3 月 24 日“通信设备故障”的结论是否就是真实原因？",
+            "urgency": 60,
+            "planted_chapter": 2,
+            "expected_payoff": "找到地点、船名或伤亡相关的一手记录"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch2-002"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "tongxin_zhongduan",
+          "payload": {
+            "content": "旧潮位站第十项通信终端外壳内侧铭牌为型号 TX-2015、编号 TX-2015-086，外壳打开后电源板出厂标签边缘翘起、胶已发黄；许知远说“这机器看着比站里别的设备新”。外包检修工梁沐随口回了一句：那批设备啊，是事故之后统一换的。",
+            "loop_type": "悬疑",
+            "unanswered_question": "“事故之后统一换的那批设备”指的是不是 3·17 之后，通信终端与那起事故之间有什么直接关系？",
+            "urgency": 85,
+            "planted_chapter": 2,
+            "expected_payoff": "查 TX-2015 批次设备的采购与更换记录"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch2-003"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "event_type": "world_rule_revealed",
+          "subject": "dang_anke",
+          "payload": {
+            "rule_content": "档案科的限制查阅卷宗须科级以上签字才能调阅；申请在系统里走，谁批的、谁看的都有记录；按卷宗等级，签完还要备案。经办人的原话是“录进去的东西，该看见的都能看见”。",
+            "rule_category": "制度/权限留痕",
+            "scope": "临港市港口管理局档案科"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch2-004"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "event_type": "world_rule_revealed",
+          "subject": "difangzhi_bangongshi",
+          "payload": {
+            "rule_content": "地方志办公室阅览室与报社旧报库对普通查阅者开放：地方志凭阅览单、旧报库在门口登记簿写下姓名与进库时间即可查阅，不需要授权，也不与档案系统的调阅记录关联。",
+            "rule_category": "制度/公开渠道",
+            "scope": "临港市地方志办公室、报社旧报库"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch2-005"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      },
+      {
+        "content": {
+          "from_entity": "xu_zhiyuan",
+          "to_entity": "liang_mu",
+          "relationship": "初次接触/信息提供者：外包检修工，主动透露“那批设备是事故之后统一换的”"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:2",
+        "chapter": 2,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:2"
+        ],
+        "fact_key": [
+          "relationship",
+          "xu_zhiyuan",
+          "liang_mu"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:2",
+        "scope": "chapter:2"
+      }
+    ],
+    "appearing_characters": [
+      {
+        "entity_id": "xu_zhiyuan",
+        "name": "许知远",
+        "type": "角色",
+        "last_chapter": null,
+        "total": null,
+        "state": [
+          {
+            "field": "location.current",
+            "value": "旧潮位站"
+          },
+          {
+            "field": "stance.anonymous_letter",
+            "value": "未上报；决定先自行核实"
+          },
+          {
+            "field": "decision.query_route",
+            "value": "放弃走档案科调阅申请：事由栏无论写实还是编造都会把“许知远查 3·17 事故卷宗”留在系统里，改走地方志办公室与旧报库等公开渠道"
+          }
+        ]
+      },
+      {
+        "entity_id": "dang_anke",
+        "name": "临港市港口管理局档案科",
+        "type": "组织",
+        "last_chapter": 2,
+        "total": 2
+      },
+      {
+        "entity_id": "jiu_chaoweizhan",
+        "name": "旧潮位站",
+        "type": "地点",
+        "last_chapter": 2,
+        "total": 2
+      },
+      {
+        "entity_id": "lao_zhou",
+        "name": "老周",
+        "type": "角色",
+        "last_chapter": 2,
+        "total": 2,
+        "state": []
+      },
+      {
+        "entity_id": "qingdan_lg_2026_1009",
+        "name": "旧潮位站资产清点清单",
+        "type": "物品",
+        "last_chapter": 2,
+        "total": 2
+      },
+      {
+        "entity_id": "difangzhi_bangongshi",
+        "name": "地方志办公室",
+        "type": "地点",
+        "last_chapter": 2,
+        "total": 1
+      },
+      {
+        "entity_id": "difangzhi_banshiyuan",
+        "name": "地方志办公室办事员",
+        "type": "角色",
+        "last_chapter": 2,
+        "total": 1,
+        "state": []
+      },
+      {
+        "entity_id": "jiubaoku",
+        "name": "旧报库",
+        "type": "地点",
+        "last_chapter": 2,
+        "total": 1
+      },
+      {
+        "entity_id": "liang_mu",
+        "name": "梁沐",
+        "type": "角色",
+        "last_chapter": 2,
+        "total": 1,
+        "state": []
+      },
+      {
+        "entity_id": "lingang_shizhi",
+        "name": "《临港市志》",
+        "type": "物品",
+        "last_chapter": 2,
+        "total": 1
+      },
+      {
+        "entity_id": "shi_haishi_ju",
+        "name": "市海事局",
+        "type": "组织",
+        "last_chapter": 2,
+        "total": 1
+      }
+    ],
+    "entities": {},
+    "scene": {
+      "location_context": {
+        "current": "旧潮位站",
+        "last_chapter": 0
+      },
+      "appearing_characters": [
+        {
+          "entity_id": "dang_anke",
+          "last_chapter": 2,
+          "total": 2
+        },
+        {
+          "entity_id": "jiu_chaoweizhan",
+          "last_chapter": 2,
+          "total": 2
+        },
+        {
+          "entity_id": "lao_zhou",
+          "last_chapter": 2,
+          "total": 2
+        },
+        {
+          "entity_id": "qingdan_lg_2026_1009",
+          "last_chapter": 2,
+          "total": 2
+        },
+        {
+          "entity_id": "difangzhi_bangongshi",
+          "last_chapter": 2,
+          "total": 1
+        },
+        {
+          "entity_id": "difangzhi_banshiyuan",
+          "last_chapter": 2,
+          "total": 1
+        },
+        {
+          "entity_id": "jiubaoku",
+          "last_chapter": 2,
+          "total": 1
+        },
+        {
+          "entity_id": "liang_mu",
+          "last_chapter": 2,
+          "total": 1
+        },
+        {
+          "entity_id": "lingang_shizhi",
+          "last_chapter": 2,
+          "total": 1
+        },
+        {
+          "entity_id": "shi_haishi_ju",
+          "last_chapter": 2,
+          "total": 1
+        }
+      ]
+    },
+    "memory": [],
+    "long_term_memory": [],
+    "context_snapshot": {
+      "latest_commit": {
+        "chapter": 2,
+        "sha256": "cf42396cbe09a82b5fd2fcf0ef182c35f007918d811b9fd5dbd868b2aca9182a"
+      },
+      "projection_chapter": 2,
+      "projection_freshness": {
+        "state": 2,
+        "index": 2,
+        "vector": 2
+      },
+      "semantic_activation_id": null,
+      "generation_id": null,
+      "publication_record_id": null
+    }
+  },
+  "creative_intent": {
+    "goal": "用公开潮汐数据独立复算事故当夜的真实潮位。",
+    "must_cover_nodes": [
+      "CBN + CEN"
+    ],
+    "forbidden_zones": [
+      "不得引入超自然力量或系统",
+      "不得让主角凭直觉跳过证据链",
+      "不得出现无记录支撑的“超期信息”"
+    ],
+    "core_event": "",
+    "hook": "复算出的当夜潮位，比官方记录低了将近一米。",
+    "hook_type": "信息投放式",
+    "progress_obligation": {
+      "chapter": 7,
+      "obligation_type": "progression",
+      "is_setup_or_transition": false,
+      "explicit_type": "Fun and Games",
+      "description": "本章性质判定为【正向推进章】：本章结束前，与本章 goal（“用公开潮汐数据独立复算事故当夜的真实潮位。”）直接相关的核心状态必须发生实质变化（行动推进、信息推进、关系推进、状态推进、位置推进或资源推进之一）。严禁仅以'准备做某事'空转结束；章末钩子不能替代本章剧情实质兑现。",
+      "allowed_progress_dimensions": [
+        "action",
+        "information",
+        "relationship",
+        "state",
+        "location",
+        "resource"
+      ],
+      "policy": "ADVISORY_INTENT: 指导创作推进与审查意图核验，不升级为 Canon，不作为阻断门禁。"
+    }
+  },
+  "craft_constraints": {
+    "core_tone": "高压克制",
+    "prohibitions": [
+      "不得引入超自然力量或系统",
+      "不得让主角凭直觉跳过证据链",
+      "不得出现无记录支撑的“超期信息”"
+    ],
+    "mandatory_nodes": [
+      "CBN + CEN"
+    ],
+    "anti_patterns": [
+      "谜底提前透光",
+      "规则写得像背景板",
+      "处罚没有代价",
+      "规则写得像氛围诗，读者不知道能不能照做，也无法参与推理。",
+      "单纯作死",
+      "所有人都劝还硬送",
+      "死亡没有任何信息价值",
+      "公告过长像设定说明",
+      "宣告后无即时后果",
+      "主角和旁观者都反应过慢",
+      "直接给答案",
+      "试错重复无信息",
+      "破解后规则失去威胁",
+      "规则过于文学化无法执行",
+      "每条都只会吓人",
+      "没有条件和后果",
+      "一上来就满篇怪力乱神",
+      "格式松散像随笔",
+      "异常内容多到没有对比基础",
+      "线索不公平",
+      "侦探神启",
+      "规则没有惩罚"
+    ],
+    "story_craft": {
+      "rhythm_curve": {
+        "last_emotion_peak_chapter": 0,
+        "chapters_since_peak": 0,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+      },
+      "foreshadow_chain": [
+        {
+          "id": "FS-001",
+          "type": "对话双关",
+          "depth": "表层",
+          "content": "老周反复强调“我只负责看站，不负责记录”",
+          "buried_chapter": 3,
+          "expected_payoff_chapter": 15,
+          "payoff_method": "第15章老周情绪失控说出“那天我不在站上”，坐实全站无人对记录负责",
+          "linked_entities": [
+            "老周"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-002",
+          "type": "对话双关",
+          "depth": "表层",
+          "content": "郑培说“十年前的月报，你手上应该也有一份吧”",
+          "buried_chapter": 4,
+          "expected_payoff_chapter": 11,
+          "payoff_method": "第11章郑培主动给调度摘要，暴露他两头下注的立场",
+          "linked_entities": [
+            "郑培"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-003",
+          "type": "物谶",
+          "depth": "表层",
+          "content": "月报封底有一行不是许知远笔迹的铅笔小字",
+          "buried_chapter": 5,
+          "expected_payoff_chapter": 20,
+          "payoff_method": "第20章追补页操作记录，确认小字来自补页人",
+          "linked_entities": [
+            "许知远"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-004",
+          "type": "习惯",
+          "depth": "表层",
+          "content": "老周的岗位补贴十年来一直按“在岗”发放",
+          "buried_chapter": 10,
+          "expected_payoff_chapter": 20,
+          "payoff_method": "第20章揭示老周十年守站的真实动机：替人守着一个谎言",
+          "linked_entities": [
+            "老周"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-005",
+          "type": "对话双关",
+          "depth": "表层",
+          "content": "同事提醒“当年查过的人，都调走了”",
+          "buried_chapter": 13,
+          "expected_payoff_chapter": 16,
+          "payoff_method": "第16章许知远本人被借调出档案科，应验这句话",
+          "linked_entities": [
+            "许知远"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-006",
+          "type": "物谶",
+          "depth": "中层",
+          "content": "旧潮位站值班记录本上多出一行十年前的笔迹",
+          "buried_chapter": 1,
+          "expected_payoff_chapter": 9,
+          "payoff_method": "第9章笔迹比对认出作者；原件随后被登记“已销毁”",
+          "linked_entities": [
+            "旧潮位站",
+            "许知远"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-007",
+          "type": "对话双关",
+          "depth": "中层",
+          "content": "梁沐提到“那批设备是事故之后统一换的”",
+          "buried_chapter": 2,
+          "expected_payoff_chapter": 17,
+          "payoff_method": "第17章墙后备件序列号证明通信中断是人为关机而非设备故障",
+          "linked_entities": [
+            "梁沐"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-008",
+          "type": "物谶",
+          "depth": "中层",
+          "content": "许知远本人经手归档的潮位观测月报缺了事故当天那一页",
+          "buried_chapter": 5,
+          "expected_payoff_chapter": 21,
+          "payoff_method": "第21章在墙内找到原始值班记录本，补全证据链",
+          "linked_entities": [
+            "许知远"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-009",
+          "type": "物谶",
+          "depth": "深层",
+          "content": "匿名信只有一行：一个日期，和一个已停用十年的潮位站编号，没有署名",
+          "buried_chapter": 1,
+          "expected_payoff_chapter": 20,
+          "payoff_method": "第20章揭示寄信人是老周，动机是让人替他把记录本的事说出去",
+          "linked_entities": [
+            "老周",
+            "旧潮位站"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        }
+      ],
+      "timed_locks": [
+        {
+          "id": "TL-001",
+          "description": "Midpoint 必须发生",
+          "trigger_chapter": null,
+          "deadline_chapter": 12,
+          "status": "active",
+          "fulfilled_chapter": null
+        },
+        {
+          "id": "TL-002",
+          "description": "All Is Lost 必须到达",
+          "trigger_chapter": null,
+          "deadline_chapter": 18,
+          "status": "active",
+          "fulfilled_chapter": null
+        },
+        {
+          "id": "TL-003",
+          "description": "卷末新钩子必须留",
+          "trigger_chapter": null,
+          "deadline_chapter": 24,
+          "status": "active",
+          "fulfilled_chapter": null
+        },
+        {
+          "id": "TL-004",
+          "description": "第1章内主角必须接触到匿名信（悬疑开局定时锁）",
+          "trigger_chapter": null,
+          "deadline_chapter": 1,
+          "status": "fulfilled",
+          "fulfilled_chapter": 1,
+          "fulfilled_evidence": "日期是 2016 年 3 月 17 日。编号是 临潮07。",
+          "fulfilled_evidence_sha256": "caf07aaf24d82bf167038f3c2fbee1a178c190b58cd78a55059dc70c019ab7ff"
+        },
+        {
+          "id": "TL-005",
+          "description": "第6章内必须建立与梁沐的合作关系（B 线开局）",
+          "trigger_chapter": null,
+          "deadline_chapter": 6,
+          "status": "active",
+          "fulfilled_chapter": null
+        }
+      ],
+      "thematic_echoes": [
+        {
+          "id": "TE-001",
+          "premise": "可复算的才可信——记录会被人修订，但自然规律不会",
+          "echoes": [
+            {
+              "chapter": 5,
+              "manifestation": "自己经手归档的月报缺页：记录会变，这是他第一次被迫承认"
+            },
+            {
+              "chapter": 12,
+              "manifestation": "Midpoint 反转：靠泊记录上的签名是他自己，连“自己的档案”也不可信"
+            },
+            {
+              "chapter": 19,
+              "manifestation": "All Is Lost 后重建信仰：他不需要被相信，只需要让公开数据自己说话"
+            },
+            {
+              "chapter": 24,
+              "manifestation": "Final Image：他把补页过程完整留痕——区别不在于改不改记录，而在于改得可追溯"
+            }
+          ]
+        }
+      ],
+      "character_arc": {
+        "name": "许知远",
+        "starting_state": "只信纸面证据，怀疑所有人，独来独往；把“归档之后就不会变”当作职业信仰",
+        "ending_state": "仍然谨慎、仍然多疑，但学会信任人并验证人；承认记录可以被修订，把信仰换成“可复算的才可信”",
+        "transformation": "经历三次职业信仰动摇（发现归档被动过 → 发现自己被借名 → 发现记录可被合法修订），从“信任记录”转向“信任可复算的东西”，并在此过程中第一次真正依赖他人",
+        "key_moments": [
+          {
+            "chapter": 5,
+            "event": "发现自己经手归档的月报缺页"
+          },
+          {
+            "chapter": 6,
+            "event": "第一次把判断权分给梁沐"
+          },
+          {
+            "chapter": 12,
+            "event": "Midpoint：靠泊记录归档签名是他自己"
+          },
+          {
+            "chapter": 19,
+            "event": "重建信仰：从“记录可信”转为“可复算的才可信”"
+          },
+          {
+            "chapter": 24,
+            "event": "Finale：补回缺页并完整留痕"
+          }
+        ]
+      },
+      "volume_beat": {
+        "volume": 1,
+        "total_chapters": 24,
+        "beats": [
+          {
+            "name": "Opening Image",
+            "chapter": 1,
+            "filled": true,
+            "notes": "旧潮位站清点：许知远按流程办事的日常，与那封不该存在的信"
+          },
+          {
+            "name": "Theme Stated",
+            "chapter": 2,
+            "filled": true,
+            "notes": "梁沐一句“那批设备是事故之后统一换的”点出主题：记录是可以被换掉的"
+          },
+          {
+            "name": "Setup",
+            "chapter": 3,
+            "filled": true,
+            "notes": "老周“只负责看站，不负责记录”——全站无人对记录负责"
+          },
+          {
+            "name": "Catalyst",
+            "chapter": 4,
+            "filled": true,
+            "notes": "郑培当面点破“十年前的月报，你手上应该也有一份吧”，调查被迫转入公开对抗"
+          },
+          {
+            "name": "Debate",
+            "chapter": 5,
+            "filled": true,
+            "notes": "自己经手归档的月报缺了一页：要不要上报，等于要不要承认自己的档案出了问题"
+          },
+          {
+            "name": "Break Into Two",
+            "chapter": 6,
+            "filled": true,
+            "notes": "许知远第一次把判断权分给别人，与梁沐结成只交换可验证信息的合作"
+          },
+          {
+            "name": "B Story",
+            "chapter": 6,
+            "filled": true,
+            "notes": "B 线（梁沐）建立：外部视角成为许知远职业偏执的镜像"
+          },
+          {
+            "name": "Fun and Games",
+            "chapter": 9,
+            "filled": true,
+            "notes": "用公开潮汐数据独立复算、反推船位、识破笔迹——“可复算”带来的第一波快感"
+          },
+          {
+            "name": "Midpoint",
+            "chapter": 12,
+            "filled": true,
+            "notes": "中段反转：靠泊记录的归档签名是他自己，而他的入职日期比事故晚三个月"
+          },
+          {
+            "name": "Bad Guys Close In",
+            "chapter": 16,
+            "filled": true,
+            "notes": "被借调出档案科、失去全部查阅权限；对手开始主动投喂假线索"
+          },
+          {
+            "name": "All Is Lost",
+            "chapter": 18,
+            "filled": true,
+            "notes": "梁沐被举报停工，两人证据全部失效，旧潮位站进入拆除倒计时"
+          },
+          {
+            "name": "Dark Night of the Soul",
+            "chapter": 19,
+            "filled": true,
+            "notes": "只剩一组自己算出来的潮位数字：他决定不靠被相信，而靠可复算"
+          },
+          {
+            "name": "Break Into Three",
+            "chapter": 20,
+            "filled": true,
+            "notes": "寄信人是老周；墙是十年前就砌好的——目标从翻案转为让数据自己说话"
+          },
+          {
+            "name": "Finale",
+            "chapter": 22,
+            "filled": true,
+            "notes": "完整证据链还原事故当夜时间线，公开可复算说明，程序无法再拖"
+          },
+          {
+            "name": "Final Image",
+            "chapter": 24,
+            "filled": true,
+            "notes": "把缺的那一页补回去并留痕：记录可以被修订，潮汐不会"
+          }
+        ]
+      },
+      "volume_anchors": {
+        "version": 1,
+        "anchors": []
+      },
+      "event_matrix_state": {
+        "version": 1,
+        "types": {},
+        "history": [],
+        "gentle_window": 5,
+        "max_consecutive_fast": 2
+      },
+      "pacing_history": {
+        "version": 1,
+        "history": [],
+        "rules": {
+          "max_consecutive_fast": 1,
+          "slow_per_4_chapters_min": 1
+        }
+      },
+      "reader_contract": {
+        "version": 1,
+        "expectation_debt": [],
+        "causal_credits": {
+          "protagonist_actions_used_without_setup": []
+        },
+        "endgame_reserves": [],
+        "swap_debts": []
+      },
+      "derived_views": {
+        "version": 1
+      }
+    },
+    "writing_guidance": {
+      "chapter": 7,
+      "guidance_items": [
+        "题材锚定：按“悬疑”叙事主线推进，保持题材读者预期稳定兑现。",
+        "题材加权：线索必须可回收，优先以规则冲突制造悬念。",
+        "方法论策略（通用/mystery）：保持压力-破局-余波的完整链路。",
+        "长线控制：换图承接旧资产，避免主角进入新地图后能力与资源归零。",
+        "机制控制：关键胜利必须写出机制理由与代价，不用纯光环碾压。",
+        "连载互动：保留一个可讨论分歧点，强化下章追更动机。"
+      ],
+      "checklist": [
+        {
+          "id": "readability_loop",
+          "label": "段落可读性闭环（动作→结果→情绪）",
+          "weight": 1.1,
+          "required": true,
+          "source": "reader_signal.review_trend",
+          "verify_hint": "抽查3段，均包含动作结果闭环。"
+        },
+        {
+          "id": "genre_anchor_consistency",
+          "label": "题材锚定一致性（悬疑）",
+          "weight": 1.1,
+          "required": true,
+          "source": "genre_profile.genre",
+          "verify_hint": "主冲突与题材核心承诺保持一致。"
+        },
+        {
+          "id": "methodology_next_reason",
+          "label": "方法论：下章动机需可复述（章末或后段均可）",
+          "weight": 1.0,
+          "required": false,
+          "source": "methodology.next_reason",
+          "verify_hint": "提炼一句“为什么要点下一章”的动机句。"
+        },
+        {
+          "id": "methodology_power_guard",
+          "label": "方法论：越级与破局给出机制理由与代价",
+          "weight": 1.0,
+          "required": false,
+          "source": "methodology.power_guard",
+          "verify_hint": "至少写清1个机制理由与1个代价。"
+        },
+        {
+          "id": "methodology_antagonist_pressure",
+          "label": "方法论：反派行动具备目标-手段-代价",
+          "weight": 1.0,
+          "required": false,
+          "source": "methodology.antagonist",
+          "verify_hint": "反派不是工具人推进，需有可解释行动逻辑。"
+        },
+        {
+          "id": "guidance_item_1",
+          "label": "题材锚定：按“悬疑”叙事主线推进，保持题材读者预期稳定兑现。",
+          "weight": 1.0,
+          "required": false,
+          "source": "writing_guidance.guidance_items",
+          "verify_hint": "完成后可在正文中定位对应段落。"
+        }
+      ],
+      "checklist_score": {
+        "chapter": 7,
+        "score": 88.6,
+        "completion_rate": 0.8333,
+        "weighted_completion_rate": 0.8387,
+        "required_completion_rate": 1.0,
+        "total_items": 6,
+        "required_items": 2,
+        "completed_items": 5,
+        "completed_required": 2,
+        "total_weight": 6.2,
+        "completed_weight": 5.2,
+        "pending_items": [
+          "题材锚定：按“悬疑”叙事主线推进，保持题材读者预期稳定兑现。"
+        ],
+        "trend_window": 10
+      },
+      "methodology": {
+        "enabled": true,
+        "framework": "digital-serial-v1",
+        "pilot": "mystery",
+        "genre_profile_key": "mystery",
+        "chapter_stage": "",
+        "emotion_anchor": {
+          "pressure_source": "线索缺失/规则冲突",
+          "release_target": "给出可验证的新线索并保留未知区",
+          "position_hint": "前段设压，中后段释放，避免固定字位打点"
+        },
+        "long_arc_controls": {
+          "map_transition": "阶段切换承接既有资产与关系账本，避免能力与收益归零",
+          "power_guard": "关键胜利必须给机制理由（信息/资源/代价/策略）",
+          "antagonist_model": "反派需具备目标-手段-代价三要素，避免工具人推进"
+        },
+        "serialization_ops": {
+          "next_reason": "章末或后段给出可复述的下一章动机句",
+          "interaction_note": "保留一个可讨论分歧点，便于连载互动反馈"
+        },
+        "observability": {
+          "next_reason_clarity": 78.0,
+          "anchor_effectiveness": 72.0,
+          "rhythm_naturalness": 65.0
+        },
+        "signals": {
+          "dominant_hook": "",
+          "dominant_pattern": "",
+          "risk_flags": []
+        }
+      },
+      "signals_used": {
+        "has_low_score_ranges": false,
+        "hook_types": [],
+        "top_patterns": [],
+        "genre": "悬疑",
+        "methodology_enabled": true
+      }
+    }
+  },
+  "advisory_constraints": {
+    "story_craft": {
+      "rhythm_curve": {
+        "last_emotion_peak_chapter": 0,
+        "chapters_since_peak": 0,
+        "warning_threshold": 3,
+        "block_threshold": 5,
+        "history": []
+      },
+      "foreshadow_chain": [
+        {
+          "id": "FS-001",
+          "type": "对话双关",
+          "depth": "表层",
+          "content": "老周反复强调“我只负责看站，不负责记录”",
+          "buried_chapter": 3,
+          "expected_payoff_chapter": 15,
+          "payoff_method": "第15章老周情绪失控说出“那天我不在站上”，坐实全站无人对记录负责",
+          "linked_entities": [
+            "老周"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-002",
+          "type": "对话双关",
+          "depth": "表层",
+          "content": "郑培说“十年前的月报，你手上应该也有一份吧”",
+          "buried_chapter": 4,
+          "expected_payoff_chapter": 11,
+          "payoff_method": "第11章郑培主动给调度摘要，暴露他两头下注的立场",
+          "linked_entities": [
+            "郑培"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-003",
+          "type": "物谶",
+          "depth": "表层",
+          "content": "月报封底有一行不是许知远笔迹的铅笔小字",
+          "buried_chapter": 5,
+          "expected_payoff_chapter": 20,
+          "payoff_method": "第20章追补页操作记录，确认小字来自补页人",
+          "linked_entities": [
+            "许知远"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-004",
+          "type": "习惯",
+          "depth": "表层",
+          "content": "老周的岗位补贴十年来一直按“在岗”发放",
+          "buried_chapter": 10,
+          "expected_payoff_chapter": 20,
+          "payoff_method": "第20章揭示老周十年守站的真实动机：替人守着一个谎言",
+          "linked_entities": [
+            "老周"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-005",
+          "type": "对话双关",
+          "depth": "表层",
+          "content": "同事提醒“当年查过的人，都调走了”",
+          "buried_chapter": 13,
+          "expected_payoff_chapter": 16,
+          "payoff_method": "第16章许知远本人被借调出档案科，应验这句话",
+          "linked_entities": [
+            "许知远"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-006",
+          "type": "物谶",
+          "depth": "中层",
+          "content": "旧潮位站值班记录本上多出一行十年前的笔迹",
+          "buried_chapter": 1,
+          "expected_payoff_chapter": 9,
+          "payoff_method": "第9章笔迹比对认出作者；原件随后被登记“已销毁”",
+          "linked_entities": [
+            "旧潮位站",
+            "许知远"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-007",
+          "type": "对话双关",
+          "depth": "中层",
+          "content": "梁沐提到“那批设备是事故之后统一换的”",
+          "buried_chapter": 2,
+          "expected_payoff_chapter": 17,
+          "payoff_method": "第17章墙后备件序列号证明通信中断是人为关机而非设备故障",
+          "linked_entities": [
+            "梁沐"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-008",
+          "type": "物谶",
+          "depth": "中层",
+          "content": "许知远本人经手归档的潮位观测月报缺了事故当天那一页",
+          "buried_chapter": 5,
+          "expected_payoff_chapter": 21,
+          "payoff_method": "第21章在墙内找到原始值班记录本，补全证据链",
+          "linked_entities": [
+            "许知远"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        },
+        {
+          "id": "FS-009",
+          "type": "物谶",
+          "depth": "深层",
+          "content": "匿名信只有一行：一个日期，和一个已停用十年的潮位站编号，没有署名",
+          "buried_chapter": 1,
+          "expected_payoff_chapter": 20,
+          "payoff_method": "第20章揭示寄信人是老周，动机是让人替他把记录本的事说出去",
+          "linked_entities": [
+            "老周",
+            "旧潮位站"
+          ],
+          "status": "active",
+          "buried_quality": null,
+          "payoff_chapter": null,
+          "payoff_quality": null
+        }
+      ],
+      "timed_locks": [
+        {
+          "id": "TL-001",
+          "description": "Midpoint 必须发生",
+          "trigger_chapter": null,
+          "deadline_chapter": 12,
+          "status": "active",
+          "fulfilled_chapter": null
+        },
+        {
+          "id": "TL-002",
+          "description": "All Is Lost 必须到达",
+          "trigger_chapter": null,
+          "deadline_chapter": 18,
+          "status": "active",
+          "fulfilled_chapter": null
+        },
+        {
+          "id": "TL-003",
+          "description": "卷末新钩子必须留",
+          "trigger_chapter": null,
+          "deadline_chapter": 24,
+          "status": "active",
+          "fulfilled_chapter": null
+        },
+        {
+          "id": "TL-004",
+          "description": "第1章内主角必须接触到匿名信（悬疑开局定时锁）",
+          "trigger_chapter": null,
+          "deadline_chapter": 1,
+          "status": "fulfilled",
+          "fulfilled_chapter": 1,
+          "fulfilled_evidence": "日期是 2016 年 3 月 17 日。编号是 临潮07。",
+          "fulfilled_evidence_sha256": "caf07aaf24d82bf167038f3c2fbee1a178c190b58cd78a55059dc70c019ab7ff"
+        },
+        {
+          "id": "TL-005",
+          "description": "第6章内必须建立与梁沐的合作关系（B 线开局）",
+          "trigger_chapter": null,
+          "deadline_chapter": 6,
+          "status": "active",
+          "fulfilled_chapter": null
+        }
+      ],
+      "thematic_echoes": [
+        {
+          "id": "TE-001",
+          "premise": "可复算的才可信——记录会被人修订，但自然规律不会",
+          "echoes": [
+            {
+              "chapter": 5,
+              "manifestation": "自己经手归档的月报缺页：记录会变，这是他第一次被迫承认"
+            },
+            {
+              "chapter": 12,
+              "manifestation": "Midpoint 反转：靠泊记录上的签名是他自己，连“自己的档案”也不可信"
+            },
+            {
+              "chapter": 19,
+              "manifestation": "All Is Lost 后重建信仰：他不需要被相信，只需要让公开数据自己说话"
+            },
+            {
+              "chapter": 24,
+              "manifestation": "Final Image：他把补页过程完整留痕——区别不在于改不改记录，而在于改得可追溯"
+            }
+          ]
+        }
+      ],
+      "character_arc": {
+        "name": "许知远",
+        "starting_state": "只信纸面证据，怀疑所有人，独来独往；把“归档之后就不会变”当作职业信仰",
+        "ending_state": "仍然谨慎、仍然多疑，但学会信任人并验证人；承认记录可以被修订，把信仰换成“可复算的才可信”",
+        "transformation": "经历三次职业信仰动摇（发现归档被动过 → 发现自己被借名 → 发现记录可被合法修订），从“信任记录”转向“信任可复算的东西”，并在此过程中第一次真正依赖他人",
+        "key_moments": [
+          {
+            "chapter": 5,
+            "event": "发现自己经手归档的月报缺页"
+          },
+          {
+            "chapter": 6,
+            "event": "第一次把判断权分给梁沐"
+          },
+          {
+            "chapter": 12,
+            "event": "Midpoint：靠泊记录归档签名是他自己"
+          },
+          {
+            "chapter": 19,
+            "event": "重建信仰：从“记录可信”转为“可复算的才可信”"
+          },
+          {
+            "chapter": 24,
+            "event": "Finale：补回缺页并完整留痕"
+          }
+        ]
+      },
+      "volume_beat": {
+        "volume": 1,
+        "total_chapters": 24,
+        "beats": [
+          {
+            "name": "Opening Image",
+            "chapter": 1,
+            "filled": true,
+            "notes": "旧潮位站清点：许知远按流程办事的日常，与那封不该存在的信"
+          },
+          {
+            "name": "Theme Stated",
+            "chapter": 2,
+            "filled": true,
+            "notes": "梁沐一句“那批设备是事故之后统一换的”点出主题：记录是可以被换掉的"
+          },
+          {
+            "name": "Setup",
+            "chapter": 3,
+            "filled": true,
+            "notes": "老周“只负责看站，不负责记录”——全站无人对记录负责"
+          },
+          {
+            "name": "Catalyst",
+            "chapter": 4,
+            "filled": true,
+            "notes": "郑培当面点破“十年前的月报，你手上应该也有一份吧”，调查被迫转入公开对抗"
+          },
+          {
+            "name": "Debate",
+            "chapter": 5,
+            "filled": true,
+            "notes": "自己经手归档的月报缺了一页：要不要上报，等于要不要承认自己的档案出了问题"
+          },
+          {
+            "name": "Break Into Two",
+            "chapter": 6,
+            "filled": true,
+            "notes": "许知远第一次把判断权分给别人，与梁沐结成只交换可验证信息的合作"
+          },
+          {
+            "name": "B Story",
+            "chapter": 6,
+            "filled": true,
+            "notes": "B 线（梁沐）建立：外部视角成为许知远职业偏执的镜像"
+          },
+          {
+            "name": "Fun and Games",
+            "chapter": 9,
+            "filled": true,
+            "notes": "用公开潮汐数据独立复算、反推船位、识破笔迹——“可复算”带来的第一波快感"
+          },
+          {
+            "name": "Midpoint",
+            "chapter": 12,
+            "filled": true,
+            "notes": "中段反转：靠泊记录的归档签名是他自己，而他的入职日期比事故晚三个月"
+          },
+          {
+            "name": "Bad Guys Close In",
+            "chapter": 16,
+            "filled": true,
+            "notes": "被借调出档案科、失去全部查阅权限；对手开始主动投喂假线索"
+          },
+          {
+            "name": "All Is Lost",
+            "chapter": 18,
+            "filled": true,
+            "notes": "梁沐被举报停工，两人证据全部失效，旧潮位站进入拆除倒计时"
+          },
+          {
+            "name": "Dark Night of the Soul",
+            "chapter": 19,
+            "filled": true,
+            "notes": "只剩一组自己算出来的潮位数字：他决定不靠被相信，而靠可复算"
+          },
+          {
+            "name": "Break Into Three",
+            "chapter": 20,
+            "filled": true,
+            "notes": "寄信人是老周；墙是十年前就砌好的——目标从翻案转为让数据自己说话"
+          },
+          {
+            "name": "Finale",
+            "chapter": 22,
+            "filled": true,
+            "notes": "完整证据链还原事故当夜时间线，公开可复算说明，程序无法再拖"
+          },
+          {
+            "name": "Final Image",
+            "chapter": 24,
+            "filled": true,
+            "notes": "把缺的那一页补回去并留痕：记录可以被修订，潮汐不会"
+          }
+        ]
+      },
+      "volume_anchors": {
+        "version": 1,
+        "anchors": []
+      },
+      "event_matrix_state": {
+        "version": 1,
+        "types": {},
+        "history": [],
+        "gentle_window": 5,
+        "max_consecutive_fast": 2
+      },
+      "pacing_history": {
+        "version": 1,
+        "history": [],
+        "rules": {
+          "max_consecutive_fast": 1,
+          "slow_per_4_chapters_min": 1
+        }
+      },
+      "reader_contract": {
+        "version": 1,
+        "expectation_debt": [],
+        "causal_credits": {
+          "protagonist_actions_used_without_setup": []
+        },
+        "endgame_reserves": [],
+        "swap_debts": []
+      },
+      "derived_views": {
+        "version": 1
+      }
+    },
+    "writing_guidance": {
+      "chapter": 7,
+      "guidance_items": [
+        "题材锚定：按“悬疑”叙事主线推进，保持题材读者预期稳定兑现。",
+        "题材加权：线索必须可回收，优先以规则冲突制造悬念。",
+        "方法论策略（通用/mystery）：保持压力-破局-余波的完整链路。",
+        "长线控制：换图承接旧资产，避免主角进入新地图后能力与资源归零。",
+        "机制控制：关键胜利必须写出机制理由与代价，不用纯光环碾压。",
+        "连载互动：保留一个可讨论分歧点，强化下章追更动机。"
+      ],
+      "checklist": [
+        {
+          "id": "readability_loop",
+          "label": "段落可读性闭环（动作→结果→情绪）",
+          "weight": 1.1,
+          "required": true,
+          "source": "reader_signal.review_trend",
+          "verify_hint": "抽查3段，均包含动作结果闭环。"
+        },
+        {
+          "id": "genre_anchor_consistency",
+          "label": "题材锚定一致性（悬疑）",
+          "weight": 1.1,
+          "required": true,
+          "source": "genre_profile.genre",
+          "verify_hint": "主冲突与题材核心承诺保持一致。"
+        },
+        {
+          "id": "methodology_next_reason",
+          "label": "方法论：下章动机需可复述（章末或后段均可）",
+          "weight": 1.0,
+          "required": false,
+          "source": "methodology.next_reason",
+          "verify_hint": "提炼一句“为什么要点下一章”的动机句。"
+        },
+        {
+          "id": "methodology_power_guard",
+          "label": "方法论：越级与破局给出机制理由与代价",
+          "weight": 1.0,
+          "required": false,
+          "source": "methodology.power_guard",
+          "verify_hint": "至少写清1个机制理由与1个代价。"
+        },
+        {
+          "id": "methodology_antagonist_pressure",
+          "label": "方法论：反派行动具备目标-手段-代价",
+          "weight": 1.0,
+          "required": false,
+          "source": "methodology.antagonist",
+          "verify_hint": "反派不是工具人推进，需有可解释行动逻辑。"
+        },
+        {
+          "id": "guidance_item_1",
+          "label": "题材锚定：按“悬疑”叙事主线推进，保持题材读者预期稳定兑现。",
+          "weight": 1.0,
+          "required": false,
+          "source": "writing_guidance.guidance_items",
+          "verify_hint": "完成后可在正文中定位对应段落。"
+        }
+      ],
+      "checklist_score": {
+        "chapter": 7,
+        "score": 88.6,
+        "completion_rate": 0.8333,
+        "weighted_completion_rate": 0.8387,
+        "required_completion_rate": 1.0,
+        "total_items": 6,
+        "required_items": 2,
+        "completed_items": 5,
+        "completed_required": 2,
+        "total_weight": 6.2,
+        "completed_weight": 5.2,
+        "pending_items": [
+          "题材锚定：按“悬疑”叙事主线推进，保持题材读者预期稳定兑现。"
+        ],
+        "trend_window": 10
+      },
+      "methodology": {
+        "enabled": true,
+        "framework": "digital-serial-v1",
+        "pilot": "mystery",
+        "genre_profile_key": "mystery",
+        "chapter_stage": "",
+        "emotion_anchor": {
+          "pressure_source": "线索缺失/规则冲突",
+          "release_target": "给出可验证的新线索并保留未知区",
+          "position_hint": "前段设压，中后段释放，避免固定字位打点"
+        },
+        "long_arc_controls": {
+          "map_transition": "阶段切换承接既有资产与关系账本，避免能力与收益归零",
+          "power_guard": "关键胜利必须给机制理由（信息/资源/代价/策略）",
+          "antagonist_model": "反派需具备目标-手段-代价三要素，避免工具人推进"
+        },
+        "serialization_ops": {
+          "next_reason": "章末或后段给出可复述的下一章动机句",
+          "interaction_note": "保留一个可讨论分歧点，便于连载互动反馈"
+        },
+        "observability": {
+          "next_reason_clarity": 78.0,
+          "anchor_effectiveness": 72.0,
+          "rhythm_naturalness": 65.0
+        },
+        "signals": {
+          "dominant_hook": "",
+          "dominant_pattern": "",
+          "risk_flags": []
+        }
+      },
+      "signals_used": {
+        "has_low_score_ranges": false,
+        "hook_types": [],
+        "top_patterns": [],
+        "genre": "悬疑",
+        "methodology_enabled": true
+      }
+    },
+    "anti_patterns": [
+      "谜底提前透光",
+      "规则写得像背景板",
+      "处罚没有代价",
+      "规则写得像氛围诗，读者不知道能不能照做，也无法参与推理。",
+      "单纯作死",
+      "所有人都劝还硬送",
+      "死亡没有任何信息价值",
+      "公告过长像设定说明",
+      "宣告后无即时后果",
+      "主角和旁观者都反应过慢",
+      "直接给答案",
+      "试错重复无信息",
+      "破解后规则失去威胁",
+      "规则过于文学化无法执行",
+      "每条都只会吓人",
+      "没有条件和后果",
+      "一上来就满篇怪力乱神",
+      "格式松散像随笔",
+      "异常内容多到没有对比基础",
+      "线索不公平",
+      "侦探神启",
+      "规则没有惩罚"
+    ],
+    "policy": "ADVISORY_ONLY: Craft and methodology heuristics must not be treated as blocking gates."
+  },
+  "chapter_planning": {
+    "chapter_meta": {
+      "beat_position": "Fun and Games",
+      "hook_type": "信息投放式",
+      "scene_goal": "用公开潮汐数据独立复算事故当夜的真实潮位。",
+      "scene_conflict": "公开潮汐表只有逐日值，没有逐时值；逐时数据要付费且需单位介绍信。",
+      "scene_setback": "用插值法得到的数据来源“不正规”，日后很难作为证据。",
+      "scene_resolution": "用潮汐周期规律加相邻两站数据插值，反推出当夜逐时潮位。",
+      "sequel_reaction": "第一次感到“数据比人可靠”这件事是有力量的",
+      "sequel_dilemma": "想要可验证的结论 vs 能拿到的只有不完整的公开数据。",
+      "sequel_decision": "复算结果与官方记录差近一米，是算法问题还是记录问题 → 下章目标",
+      "villain_tier": "无（数据与技术壁垒）",
+      "CBN": "许知远 | 复算事故当夜潮位 | 公开表无逐时值",
+      "CPNs": [
+        "许知远 | 用周期规律与邻站插值 | 得到当夜逐时潮位"
+      ],
+      "CEN": "许知远 | 比对官方记录 | 发现差近一米",
+      "must_cover": [
+        "CBN + CEN"
+      ],
+      "forbidden": [
+        "不得引入超自然力量或系统",
+        "不得让主角凭直觉跳过证据链",
+        "不得出现无记录支撑的“超期信息”"
+      ],
+      "_source": {
+        "authority": "chapter_outline",
+        "outline_digest": "6880b9b660964c9d760927fcf180ecda7bc0533d2461411d4a17e88c5fa12ed8",
+        "synced_at": "2026-10-23T13:16:40+00:00"
+      },
+      "goal": "用公开潮汐数据独立复算事故当夜的真实潮位。",
+      "conflict": "想要可验证的结论 vs 能拿到的只有不完整的公开数据。",
+      "cost": "用插值法得到的数据来源“不正规”，日后很难作为证据。",
+      "hook": "复算出的当夜潮位，比官方记录低了将近一米。",
+      "chapter_change": "用潮汐周期规律加相邻两站数据插值，反推出当夜逐时潮位。",
+      "chapter_end_open_question": "复算结果与官方记录差近一米，是算法问题还是记录问题？"
+    },
+    "plot_structure": {
+      "cbn": "许知远 | 复算事故当夜潮位 | 公开表无逐时值",
+      "cpns": [
+        "许知远 | 用周期规律与邻站插值 | 得到当夜逐时潮位"
+      ],
+      "cen": "许知远 | 比对官方记录 | 发现差近一米",
+      "mandatory_nodes": [
+        "CBN + CEN"
+      ],
+      "prohibitions": [
+        "不得引入超自然力量或系统",
+        "不得让主角凭直觉跳过证据链",
+        "不得出现无记录支撑的“超期信息”"
+      ],
+      "source": "chapter_outline"
+    },
+    "forbidden_zones": [
+      "不得引入超自然力量或系统",
+      "不得让主角凭直觉跳过证据链",
+      "不得出现无记录支撑的“超期信息”"
+    ],
+    "must_check_nodes": [
+      "CBN + CEN"
+    ],
+    "blocking_rules": [
+      "不得引入超自然力量或系统",
+      "不得让主角凭直觉跳过证据链",
+      "不得出现无记录支撑的“超期信息”"
+    ]
+  },
+  "review_contract": {
+    "meta": {
+      "schema_version": "story-system/v1",
+      "contract_type": "REVIEW_CONTRACT",
+      "generator_version": "phase2",
+      "source_trace": []
+    },
+    "must_check": [
+      "CBN + CEN"
+    ],
+    "blocking_rules": [
+      "不得引入超自然力量或系统",
+      "不得让主角凭直觉跳过证据链",
+      "不得出现无记录支撑的“超期信息”"
+    ],
+    "genre_specific_risks": [
+      "规则动物园"
+    ],
+    "anti_patterns": [
+      "谜底提前透光",
+      "规则写得像背景板",
+      "处罚没有代价",
+      "规则写得像氛围诗，读者不知道能不能照做，也无法参与推理。",
+      "用童年悲惨一笔洗净所有恶行",
+      "真相揭露后所有后果自动消失",
+      "反派突然变圣人",
+      "直接给答案",
+      "试错重复无信息",
+      "破解后规则失去威胁",
+      "歧义太牵强像抬杠",
+      "任务根本无法理解",
+      "陷阱全靠作者事后解释",
+      "规则过于文学化无法执行",
+      "每条都只会吓人",
+      "没有条件和后果",
+      "一上来就满篇怪力乱神",
+      "格式松散像随笔",
+      "异常内容多到没有对比基础",
+      "线索不公平",
+      "侦探神启",
+      "规则没有惩罚"
+    ],
+    "system_constraints": [
+      "高压克制"
+    ],
+    "review_thresholds": {
+      "blocking_count": 0,
+      "missed_nodes": 0
+    },
+    "overrides": {
+      "locked": {},
+      "append_only": {},
+      "override_allowed": {}
+    }
+  },
+  "convergence_context": {
+    "has_previous_review": false,
+    "previous_review_status": "chapter_mismatch:review_results.json",
+    "previous_finding_count": 0,
+    "previous_findings": [],
+    "high_or_critical_findings": [],
+    "instruction": "这是本章的首次审查，请从头完整独立检查全部 8 个维度。"
+  },
+  "auto_revision_budget": {
+    "enforced": false,
+    "max_rounds": 2,
+    "rounds_used": 0,
+    "round_being_requested": 1,
+    "rounds_remaining": 2,
+    "exhausted": false
+  }
+}

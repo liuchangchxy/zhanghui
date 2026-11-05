@@ -340,6 +340,104 @@ def test_writer_prompt_renders_only_translated_guidance(tmp_path):
     assert 0 < len(with_skills) - len(without) < 1200
 
 
+def test_writer_receives_one_principle_sentence_not_the_skill_document(tmp_path):
+    """The Writer gets name + one principle + relevance. Not the method, not the examples."""
+    from data_modules.writing_skill_registry import attach_skill_bodies
+
+    root = _base_project(tmp_path)
+    _write_skill(
+        root / ".webnovel" / "writing-skills",
+        "emotion-interiority",
+        name="情绪与内心",
+        purpose="情绪从人物自己的处境里长出来，不由叙述者命名。",
+        guidance="情绪从人物此刻的处境里自己浮现。\n直接写念头是正当的。\n不要每段都写完整的心理过程。",
+    )
+    skills = discover_writing_skills(project_root=root)
+    catalog = build_router_catalog(skills)
+    result = validate_selection(
+        {
+            "selected_skills": [
+                {
+                    "id": "emotion-interiority",
+                    "reason": "情绪容易直陈",
+                    "chapter_guidance": "本章的情绪容易由叙述者说破；让念头和误判自己出现。",
+                }
+            ]
+        },
+        catalog,
+    )
+    rendered = "\n".join(
+        render_writer_skills(attach_skill_bodies(result["selected_skills"], skills))
+    )
+
+    # What the Writer needs: which method, what it is, why it fits here.
+    assert "【情绪与内心】" in rendered
+    assert "情绪从人物自己的处境里长出来，不由叙述者命名。" in rendered
+    assert "本章相关：本章的情绪容易由叙述者说破" in rendered
+    assert "不是执行步骤" in rendered
+    # The document stays out: no bullet list, no examples, no applicability rules.
+    assert "直接写念头是正当的" not in rendered
+    assert "不要每段都写完整的心理过程" not in rendered
+    assert "正例" not in rendered and "反例" not in rendered
+    assert "短正例。" not in rendered
+    # Identity and the audit-only reason stay out.
+    assert "emotion-interiority" not in rendered
+    assert "情绪容易直陈" not in rendered
+
+
+def test_skill_principles_share_one_budget_and_carry_no_examples(tmp_path):
+    """Selecting five skills must not multiply the Writer's prompt.
+
+    The 2026-10-23 hard-facts A/B measured 1,597-1,738 chars per chapter for
+    "principle + one example", still 2-2.7x arm A. The budget now covers the rendered
+    section and carries one sentence per skill: the more skills, the smaller each share.
+    """
+    from data_modules.writing_skill_registry import (
+        TOTAL_SKILL_CONTENT_BUDGET,
+        attach_skill_bodies,
+    )
+
+    root = tmp_path / "skills"
+    ids = [f"skill-{i}" for i in range(1, 6)]
+    for skill_id in ids:
+        _write_skill(
+            root,
+            skill_id,
+            purpose="这一项原则写得很长。" * 40,
+            guidance="原则。" * 400,
+        )
+    skills = discover_writing_skills(roots=[root])
+    selection = [
+        {"id": skill_id, "chapter_guidance": "本章需要这一项。"} for skill_id in ids
+    ]
+
+    bodies = attach_skill_bodies(selection, skills)
+    assert len(bodies) == 5
+    total = sum(len(body.get("principle", "")) for body in bodies)
+    assert total <= TOTAL_SKILL_CONTENT_BUDGET
+    for body in bodies:
+        assert body["principle"]
+        assert "example" not in body and "anti_example" not in body
+    # The budget is the whole rendered section, not just the principle text.
+    rendered = "\n".join(render_writer_skills(bodies))
+    body_lines = [
+        line for line in rendered.splitlines() if line.startswith(("1.", "2.", "3.", "4.", "5.", "   本章相关"))
+    ]
+    assert sum(len(line.strip()) for line in body_lines) < TOTAL_SKILL_CONTENT_BUDGET + 300
+
+
+def test_overlong_relevance_is_rejected_not_truncated(tmp_path):
+    """120 chars is a hard gate: a 500-char direction must not reach the Writer."""
+    result = validate_selection(
+        {"selected_skills": [{"id": "alpha", "chapter_guidance": "动" * 500}]},
+        _catalog(tmp_path, "alpha"),
+    )
+
+    assert result["ok"] is False
+    assert result["selected_skills"] == []
+    assert any("hard limit" in e for e in result["errors"])
+
+
 def test_skills_are_bound_into_the_package_fingerprint_and_status(tmp_path):
     root = _base_project(tmp_path)
     runtime = ChapterRuntime(root)
@@ -355,6 +453,31 @@ def test_skills_are_bound_into_the_package_fingerprint_and_status(tmp_path):
     assert status.is_writer_package_stale is False
     assert status.writing_skill_ids == ["voice-style"]
     assert sealed.meta["writing_skill_ids"] == ["voice-style"]
+
+
+def test_continuity_facts_are_bound_into_the_fingerprint_and_status(tmp_path, monkeypatch):
+    """The status/ingest recompute must include the continuity fingerprint.
+
+    Regression: the continuity block is part of the sealed package, but `get_status`
+    recomputed the fingerprint without it, so every chapter with accepted continuity
+    facts read as stale and could never be ingested again.
+    """
+    from data_modules import chapter_runtime as cr
+
+    monkeypatch.setattr(
+        cr,
+        "select_continuity_facts",
+        lambda *args, **kwargs: [{"kind": "setting", "text": "旧报库在报社后院。"}],
+    )
+    root = _base_project(tmp_path)
+    runtime = cr.ChapterRuntime(root)
+    sealed = runtime.attach_creative_brief(1, "【任务书】")
+
+    assert sealed.continuity_facts == [{"kind": "setting", "text": "旧报库在报社后院。"}]
+    assert sealed.continuity_facts_fingerprint
+    status = runtime.get_status(1)
+    assert status.package_fingerprint == sealed.package_fingerprint
+    assert status.is_writer_package_stale is False
 
 
 def test_render_writer_skills_ignores_empty_entries():

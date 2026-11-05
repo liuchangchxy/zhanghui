@@ -66,11 +66,17 @@ OWNER_PROSE_EDIT = "PROSE_EDIT"
 OWNER_ARTIFACT_REPAIR = "ARTIFACT_REPAIR"
 OWNER_GOVERNANCE_REPAIR = "GOVERNANCE_REPAIR"
 OWNER_ADVISORY = "ADVISORY"
+# Fact / Canon findings are not editor work. A polisher that rewrites a key's origin or a
+# character's injury status to "fix" a continuity finding is exactly how Step 4 drifted.
+# They are surfaced to the caller and handled by the Canon gate / a declared fact correction,
+# never inside the style-only Step 4 pass.
+OWNER_FACT_REVIEW = "FACT_REVIEW"
 
 OWNER_REPAIR_HINTS = {
     OWNER_ARTIFACT_REPAIR: "重新生成/补齐缺失的产物文件（例如重跑 review 主流程生成 do_not_copy_check.json），不要改正文。",
     OWNER_GOVERNANCE_REPAIR: "在账本/治理数据层修复（伏笔登记、loop 关联、元数据补全），不要改正文。",
     OWNER_ADVISORY: "仅记录建议；如需采纳请显式 `--include-advisory`，不要为了清零 advisory 反复改写正文。",
+    OWNER_FACT_REVIEW: "事实/Canon 问题不在 Step 4 纯表达润色中修改：硬冲突由 Canon gate 阻断，软问题记录为 advisory，或走定向事实纠错路径。",
 }
 
 # Craft & methodology heuristics are advisory by construction (reviewer.md §1/§4 make them
@@ -151,7 +157,7 @@ def _ledger_vocabulary(text: str) -> bool:
     return bool(_GOVERNANCE_RE.search(text))
 
 
-def classify_finding_owner(issue: Dict[str, Any]) -> str:
+def classify_finding_owner(issue: Dict[str, Any], *, style_only: bool = False) -> str:
     """Route one Reviewer finding to the layer that can actually fix it.
 
     Only `PROSE_EDIT` findings belong in a targeted prose revision. Everything else is
@@ -197,9 +203,17 @@ def classify_finding_owner(issue: Dict[str, Any]) -> str:
     if _craft_identity(category, authority, gate_id, checker_id):
         return OWNER_GOVERNANCE_REPAIR if _ledger_vocabulary(text) else OWNER_ADVISORY
 
+    if style_only and category not in _STYLE_CATEGORIES:
+        # Step 4 is a pure-expression pass. `setting` / `timeline` / `continuity` /
+        # `character` / `logic` findings can only be "fixed" by changing a fact, which is
+        # outside its contract. Defer them instead of handing the editor a rewrite licence.
+        return OWNER_FACT_REVIEW
+
     if _prose_identity(category, gate_id):
         return OWNER_PROSE_EDIT
 
+    if style_only:
+        return OWNER_FACT_REVIEW
     return OWNER_GOVERNANCE_REPAIR if _ledger_vocabulary(text) else OWNER_PROSE_EDIT
 
 _SECTION_HEADING_RE = re.compile(r"^##\s+(§\d+)\b", re.MULTILINE)
@@ -545,6 +559,121 @@ def _deferred_entry(issue: Dict[str, Any], owner: str) -> Dict[str, Any]:
     }
 
 
+_DIAGNOSIS_SPAN_TYPES = frozenset({
+    "stock_phrase", "narrator_over_explanation", "repetitive_sentence_shape",
+    "dialogue_exposition", "character_voice_flattening", "micro_action_template",
+    "show_then_explain",
+})
+
+
+_REPEATED_PHRASE_RE = re.compile(r"「([^」]{1,10})」出现\s*(\d+)\s*次")
+# A repeated-phrase observation is chapter-wide, but it can still be acted on: point the
+# editor at a few concrete paragraphs instead of asking for a whole-chapter rewrite.
+_REPEATED_PHRASE_MAX_TARGETS = 3
+
+
+def _without_dialogue(paragraph: str) -> str:
+    return re.sub(r"“[^”]*”|「[^」]*」|\"[^\"]*\"", "", paragraph)
+
+
+def _repeated_phrase_targets(
+    item: Dict[str, Any], paragraphs: list[str], seen_locations: set[str]
+) -> list[Dict[str, Any]]:
+    match = _REPEATED_PHRASE_RE.search(str(item.get("excerpt") or ""))
+    if not match:
+        return []
+    word, raw_count = match.group(1), match.group(2)
+    hits = [idx for idx, para in enumerate(paragraphs, 1) if word in para]
+    if len(hits) < 2:
+        return []
+    # A name inside dialogue cannot be replaced without changing what a character says.
+    # Prefer paragraphs that repeat it in narration, where pronoun/subject variation is a
+    # real expression edit; fall back to dialogue-only paragraphs only when nothing else
+    # exists.
+    scored = []
+    for idx in hits[1:]:
+        paragraph = paragraphs[idx - 1]
+        narration_hits = _without_dialogue(paragraph).count(word)
+        scored.append((narration_hits, paragraph.count(word), idx, paragraph))
+    scored.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    out: list[Dict[str, Any]] = []
+    for narration_hits, _total, idx, paragraph in scored:
+        if len(out) >= _REPEATED_PHRASE_MAX_TARGETS:
+            break
+        if narration_hits < 1:
+            continue
+        location = f"第{idx}段"
+        if location in seen_locations:
+            continue
+        seen_locations.add(location)
+        identity = hashlib.sha256(
+            f"repeat:{word}:{location}:{paragraph}".encode("utf-8")
+        ).hexdigest()[:8]
+        out.append({
+            "issue_id": f"diagnosis-repeat-{identity}",
+            "severity": "medium",
+            "category": "ai_flavor",
+            "location": location,
+            "description": f"词语「{word}」全章出现 {raw_count} 次，本段叙述再次点名，读感重复",
+            "evidence": paragraph,
+            "fix_hint": f"改写本段叙述措辞，避免重复点名「{word}」；可用代词、动作主语或句式调整，不得改变人物、对白与事件。",
+            "blocking": False,
+        })
+    return out
+
+
+def diagnosis_issues_to_review(
+    diagnosis: Dict[str, Any] | None, draft_text: str = ""
+) -> list[Dict[str, Any]]:
+    """Convert `prose diagnose` findings into STYLE_ONLY review-shaped issues.
+
+    Step 4 needs concrete sentence-level targets. The Reviewer is a fact reviewer and
+    mostly reports continuity problems, so without this the expression pass has nothing
+    to do and either no-ops or invents a rewrite. Only span-locatable diagnosis types are
+    converted; whole-chapter observations (rhythm, compression, word frequency) cannot be
+    turned into a bounded edit and stay advisory — except a repeated-phrase observation,
+    which is mapped onto the paragraphs that actually repeat the word.
+    """
+    if not isinstance(diagnosis, dict):
+        return []
+    paragraphs = [p.strip() for p in draft_text.split("\n\n") if p.strip()]
+    issues: list[Dict[str, Any]] = []
+    seen_locations: set[str] = set()
+    for item in diagnosis.get("issues") or []:
+        if not isinstance(item, dict):
+            continue
+        issue_type = str(item.get("issue_type") or item.get("category") or "")
+        if issue_type == "book_specific_repeated_phrase":
+            issues.extend(_repeated_phrase_targets(item, paragraphs, seen_locations))
+            continue
+        if issue_type not in _DIAGNOSIS_SPAN_TYPES:
+            continue
+        location = str(item.get("location") or "")
+        excerpt = str(item.get("excerpt") or "")
+        if not location.startswith("第") or not location.endswith("段"):
+            continue
+        if location in seen_locations:
+            # Two detectors on the same paragraph produce one bounded edit target, not two
+            # overlapping replacements.
+            continue
+        seen_locations.add(location)
+        description = str(item.get("evidence") or excerpt or issue_type)
+        identity = hashlib.sha256(
+            f"diagnosis:{issue_type}:{location}:{excerpt}".encode("utf-8")
+        ).hexdigest()[:8]
+        issues.append({
+            "issue_id": f"diagnosis-{identity}",
+            "severity": "medium",
+            "category": "ai_flavor",
+            "location": location,
+            "description": description,
+            "evidence": excerpt,
+            "fix_hint": str(item.get("suggested_intervention") or ""),
+            "blocking": False,
+        })
+    return issues
+
+
 def _issue_id(issue: Dict[str, Any], index: int = 0) -> str:
     """Revision-target ID for one finding.
 
@@ -736,6 +865,14 @@ def locate_issue(text: str, issue: Dict[str, Any], *, index: int = 0) -> Revisio
 
     candidates: List[Tuple[str, Optional[RevisionTarget], str]] = []
 
+    # Several independently cited locations cannot safely be collapsed to one edit.
+    # The reviewer may use physical line numbers while calling them paragraphs.
+    # In that case a bare numeric reference is not enough to select a target.
+    if len(list(_PARAGRAPH_REF_RE.finditer(location))) > 1 or len(list(_LINE_REF_RE.finditer(location))) > 1:
+        base.resolvable = False
+        base.ambiguity = "multiple_locations_require_explicit_quotes"
+        return base
+
     # 1) legacy §N section reference
     section_match = _SECTION_REF_RE.search(location)
     if section_match:
@@ -786,8 +923,14 @@ def locate_issue(text: str, issue: Dict[str, Any], *, index: int = 0) -> Revisio
         target = _span_for_file_lines(base, text, paragraphs, lo, hi, LOC_LINE)
         candidates.append((LOC_LINE, target, "" if target else "line_out_of_range"))
 
-    # 4) exact quote carried by the finding (description / fix_hint / structured evidence)
-    for quote in _extract_quotes(description, fix_hint, json.dumps(issue.get("structured_evidence") or [], ensure_ascii=False)):
+    # 4) exact quote carried by the finding (description / fix_hint / structured evidence / excerpt)
+    for quote in _extract_quotes(
+        str(issue.get("evidence") or ""),
+        str(issue.get("anchor_quote") or ""),
+        str(issue.get("excerpt") or ""),
+        description,
+        json.dumps(issue.get("structured_evidence") or [], ensure_ascii=False),
+    ):
         target, ambiguity = _expand_quote_span(base, text, paragraphs, quote)
         if target is not None:
             candidates.append((LOC_QUOTE, target, ""))
@@ -813,6 +956,13 @@ def locate_issue(text: str, issue: Dict[str, Any], *, index: int = 0) -> Revisio
                 "",
             )
         )
+
+    if (not any(target is not None and locator != LOC_QUOTE for locator, target, _ in candidates)
+            and any(locator == LOC_QUOTE and ambiguity == "ambiguous_quote"
+                    for locator, target, ambiguity in candidates if target is None)):
+        base.resolvable = False
+        base.ambiguity = "ambiguous_quote"
+        return base
 
     resolved = [(locator, target) for locator, target, _ in candidates if target is not None]
     if resolved:
@@ -871,6 +1021,8 @@ def build_revision_plan(
     rejected: bool = False,
     active_draft: Optional[Dict[str, Any]] = None,
     require_review_binding: bool = True,
+    style_only: bool = False,
+    diagnosis: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Turn Reviewer output into a targeted revision plan.
 
@@ -973,7 +1125,7 @@ def build_revision_plan(
     for issue in issues:
         if not isinstance(issue, dict):
             continue
-        owner = classify_finding_owner(issue)
+        owner = classify_finding_owner(issue, style_only=style_only)
         if owner == OWNER_ADVISORY and not include_advisory:
             deferred.append(_deferred_entry(issue, owner))
             continue
@@ -983,6 +1135,10 @@ def build_revision_plan(
         if blocking_only and not issue.get("blocking"):
             continue
         selected.append({**issue, "_owner": owner})
+
+    diagnosis_issues = diagnosis_issues_to_review(diagnosis, draft_text) if style_only else []
+    for issue in diagnosis_issues:
+        selected.append({**issue, "_owner": OWNER_PROSE_EDIT})
 
     targets: List[RevisionTarget] = []
     for index, issue in enumerate(selected):
@@ -1002,6 +1158,7 @@ def build_revision_plan(
         "draft_identity": identity,
         "review_binding": review_binding,
         "include_advisory": include_advisory,
+        "style_only": style_only,
         "targets": [t.to_dict() for t in targets],
         "editable_spans": [{"start": s, "end": e} for s, e in spans],
         "deferred": deferred,
@@ -1019,12 +1176,14 @@ def build_revision_plan(
                 for kind in (KIND_STYLE_ONLY, KIND_LOCAL_FACT, KIND_STRUCTURAL, KIND_CANON_HISTORY)
             },
             "deferred": len(deferred),
+            "diagnosis_targets": len(diagnosis_issues),
             "deferred_by_owner": {
                 owner: sum(1 for item in deferred if item.get("owner") == owner)
                 for owner in (
                     OWNER_ARTIFACT_REPAIR,
                     OWNER_GOVERNANCE_REPAIR,
                     OWNER_ADVISORY,
+                    OWNER_FACT_REVIEW,
                 )
             },
         },
@@ -1068,8 +1227,13 @@ def apply_edits(
         target = targets.get(target_id)
         if target is None:
             raise RevisionApplyError(f"unknown target_id: {target_id!r}")
+        if not target.get("resolvable") or target.get("locator") == LOC_CHAPTER:
+            raise RevisionApplyError(f"target {target_id} is not a resolvable local span")
         new_text = str(edit.get("new_text") or "")
         start, end = int(target["start"]), int(target["end"])
+        if end <= start or not any(int(span["start"]) <= start and end <= int(span["end"])
+                                   for span in plan.get("editable_spans") or []):
+            raise RevisionApplyError(f"target {target_id} lies outside editable spans")
         before = str(target["before_text"])
         current = text[start:end]
         if current != before:

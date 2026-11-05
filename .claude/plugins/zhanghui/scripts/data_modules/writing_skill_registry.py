@@ -10,10 +10,15 @@ central list, or registration call to edit.
 Two audiences, deliberately separated:
 
 * the **router** (an AI step) sees the method — purpose, applicability, anti-patterns,
-  guidance body — and decides which skills this chapter actually needs, then translates
-  each into a chapter-specific instruction;
-* the **Writer** sees only that translation ("本章创作方法"), never the theory, the skill
-  id, the score, or why the skill was picked.
+  guidance body — and decides which skills this chapter actually needs. It states *why
+  this chapter* needs each one, in a single sentence. It does not rewrite the method into
+  actions, dialogue, or a shot list;
+* the **Writer** sees the skill's own principles, its short positive/negative examples,
+  and that one-sentence relevance note ("本章创作方法"). The skill id, the score and the
+  router's audit reason stay out.
+
+The principles are passed through from ``SKILL.md`` rather than re-translated, so a
+literary method reaches the Writer once, not twice.
 
 Discovery scans without a cache. Files are small and read once per chapter, so a stale
 cache would only buy a hot-reload bug.
@@ -33,7 +38,26 @@ PROJECT_SKILLS_REL = Path(".webnovel") / "writing-skills"
 
 DEFAULT_MAX_SKILLS = 5
 DEFAULT_MIN_SKILLS = 2
-MAX_GUIDANCE_CHARS = 600
+# The router writes one relevance sentence, not a direction. The 2026-10-23 A/B found
+# the old 240-char "cap" only warned and every one of 11 guidance lines came in at
+# 133-180 characters, so the sentence limit never took effect. It is now a hard reject.
+MAX_GUIDANCE_CHARS = 120
+MIN_GUIDANCE_CHARS = 40
+# The Writer gets a skill's name, its one-sentence principle and the router's relevance
+# sentence — not the skill document. The 2026-10-23 hard-facts A/B measured 1,597-1,738
+# chars per chapter for the "core principle + one example" form, still 2-2.7x arm A's
+# 630-801 chars, and both inverted rubric items ("too many rules", "mechanically
+# executing technique") scored worse than A. TOTAL_SKILL_CONTENT_BUDGET now covers the
+# whole rendered section: adding a fifth skill shrinks each share, it never grows the
+# prompt. MAX_PRINCIPLE_CHARS is a ceiling on the principle line, not a target.
+MAX_PRINCIPLE_CHARS = 160
+MIN_PRINCIPLE_CHARS = 40
+TOTAL_SKILL_CONTENT_BUDGET = 700
+# Heading plus the one-line "principles, not steps" preamble. Counted against the
+# budget so the budget describes what the Writer actually reads.
+SKILL_SECTION_FRAMING_CHARS = 80
+# "N. 【名称】" and "   本章相关：" per entry.
+SKILL_ENTRY_OVERHEAD_CHARS = 14
 
 REQUIRED_FIELDS = ("id", "name", "purpose", "applies_when", "avoid_when")
 
@@ -368,18 +392,30 @@ def validate_selection(
             continue
         guidance = item["chapter_guidance"]
         if not guidance:
-            errors.append(f"{skill_id}: chapter_guidance is required (theory alone must not reach the Writer)")
+            errors.append(
+                f"{skill_id}: chapter_guidance is required (say why this chapter needs the skill; "
+                "the skill body itself is passed through separately)"
+            )
             continue
         leak = next((tok for tok in THEORY_LEAK_TOKENS if tok in guidance.lower()), None)
         if leak:
             errors.append(
                 f"{skill_id}: chapter_guidance leaks meta/theory token {leak!r}; "
-                "translate it into what to write, not which method is being used"
+                "state why this chapter needs it, not which method is being used"
             )
             continue
         if len(guidance) > MAX_GUIDANCE_CHARS:
-            warnings.append(f"{skill_id}: chapter_guidance truncated to {MAX_GUIDANCE_CHARS} chars")
-            guidance = guidance[:MAX_GUIDANCE_CHARS].rstrip()
+            errors.append(
+                f"{skill_id}: chapter_guidance is {len(guidance)} chars, over the "
+                f"{MAX_GUIDANCE_CHARS}-char hard limit; write one relevance sentence "
+                "(why this chapter needs the skill), not a scene direction"
+            )
+            continue
+        if len(guidance) < MIN_GUIDANCE_CHARS:
+            warnings.append(
+                f"{skill_id}: chapter_guidance is only {len(guidance)} chars; "
+                f"aim for {MIN_GUIDANCE_CHARS}-{MAX_GUIDANCE_CHARS} so the relevance is concrete"
+            )
         seen.add(skill_id)
         selected.append(
             {
@@ -408,9 +444,104 @@ def validate_selection(
     }
 
 
+def _first_sentence(text: Any, limit: int) -> str:
+    """The skill's one-line principle: its first sentence, whole.
+
+    ``purpose`` in SKILL.md is already written as one sentence, so this is a read, not a
+    summary — no second LLM call, no new field to maintain. If that sentence is longer
+    than the ceiling, the first clause is used; a principle cut mid-clause is still a
+    principle, whereas a truncated bullet list reads like a half-finished instruction.
+    """
+    value = " ".join(str(text or "").split())
+    if not value:
+        return ""
+    if len(value) <= limit:
+        return value
+    # Prefer a whole sentence, then a whole clause, then the hard ceiling.
+    for sep in ("。", "；", "，", "、"):
+        idx = value.find(sep)
+        if 0 < idx < limit:
+            return value[: idx + 1]
+    return value[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _clip_to_clause(text: Any, limit: int) -> str:
+    """Shorten at a clause boundary, never mid-clause.
+
+    Used for the router's relevance sentence when the shared budget is tight. The
+    preference order is the author's: the principle is never cut, the relevance is.
+    """
+    value = " ".join(str(text or "").split())
+    if len(value) <= limit or limit <= 0:
+        return value if len(value) <= limit else ""
+    for sep in ("。", "；", "，", "、"):
+        cut = value.rfind(sep, 0, limit)
+        if cut > limit // 2:
+            return value[: cut + 1]
+    return value
+
+
+def attach_skill_bodies(
+    selection: Sequence[Mapping[str, Any]],
+    skills: Sequence[Mapping[str, Any]],
+    *,
+    total_budget: int = TOTAL_SKILL_CONTENT_BUDGET,
+) -> List[Dict[str, Any]]:
+    """Attach the one-sentence principle the Writer needs — not the skill document.
+
+    The Writer already gets the router's relevance sentence. What a skill can add is the
+    principle behind it: one sentence, in the skill's own words, never its bullets, its
+    examples or its applicability rules. One shared budget is divided across the selected
+    skills before they are filled in, so selecting five skills does not multiply the
+    prompt — it gives each skill a smaller share.
+
+    When a share is tight the relevance sentence is shortened and the principle is not:
+    the relevance is already a restatement of something the Writer can read in the
+    chapter material, while the principle exists nowhere else in the prompt.
+    """
+    by_id = {str(skill.get("id") or ""): skill for skill in skills}
+    count = max(1, len(selection))
+    # The budget bounds the rendered section, so the fixed heading and its one-line
+    # preamble come off the top before anything is divided.
+    spendable = max(0, int(total_budget) - SKILL_SECTION_FRAMING_CHARS)
+    per_skill = max(1, spendable // count)
+    enriched: List[Dict[str, Any]] = []
+    for item in selection:
+        entry = dict(item)
+        skill = by_id.get(str(item.get("id") or ""))
+        if skill:
+            entry["name"] = str(skill.get("name") or "").strip()
+            # Numbering and 【名称】 are what the Writer reads too, so they come off the
+            # share as well.
+            overhead = len(entry["name"]) + SKILL_ENTRY_OVERHEAD_CHARS
+            # ``purpose`` is the skill's own one-sentence statement of what it is for.
+            # ``guidance`` is the bullet list, which is what made the Writer read a
+            # checklist; it is deliberately not sent.
+            principle = _first_sentence(
+                skill.get("purpose") or skill.get("guidance"),
+                max(MIN_PRINCIPLE_CHARS, min(MAX_PRINCIPLE_CHARS, per_skill - overhead)),
+            )
+            if principle:
+                entry["principle"] = principle
+                room = per_skill - overhead - len(principle)
+                relevance = str(item.get("chapter_guidance") or "").strip()
+                if len(relevance) > room:
+                    relevance = _clip_to_clause(relevance, room)
+                if relevance:
+                    entry["chapter_guidance"] = relevance
+        enriched.append(entry)
+    return enriched
+
+
 def selection_fingerprint(selection: Sequence[Mapping[str, Any]]) -> str:
     payload = [
-        {"id": item.get("id", ""), "guidance": item.get("chapter_guidance", "")}
+        {
+            "id": item.get("id", ""),
+            "guidance": item.get("chapter_guidance", ""),
+            "principle": item.get("principle", ""),
+            "example": item.get("example", ""),
+            "anti_example": item.get("anti_example", ""),
+        }
         for item in selection
     ]
     return hashlib.sha256(
@@ -418,22 +549,46 @@ def selection_fingerprint(selection: Sequence[Mapping[str, Any]]) -> str:
     ).hexdigest()
 
 
-def render_writer_skills(selection: Sequence[Mapping[str, Any]]) -> List[str]:
-    """Render only the chapter-specific instructions, never the skill identity."""
-    guidance = [
-        str(item.get("chapter_guidance") or "").strip()
+def render_writer_skills(
+    selection: Sequence[Mapping[str, Any]],
+    *,
+    heading: str = "本章创作方法",
+) -> List[str]:
+    """Render each selected skill as a principle and why it fits this chapter.
+
+    Two lines per skill: ``【名称】原则`` then ``本章相关：…``. No bullets, no examples,
+    no applicability rules — those are what turned a writing principle into a checklist
+    the Writer executed step by step. Without an attached principle (legacy callers),
+    the guidance-only rendering is preserved.
+    """
+    entries = [
+        item
         for item in selection
-        if isinstance(item, Mapping) and str(item.get("chapter_guidance") or "").strip()
+        if isinstance(item, Mapping)
+        and (
+            str(item.get("chapter_guidance") or "").strip()
+            or str(item.get("principle") or "").strip()
+        )
     ]
-    if not guidance:
+    if not entries:
         return []
     lines = [
         "",
-        "## 本章创作方法",
-        "（以下方法只在本章素材允许的范围内执行；与 Canon、作者意图、本章禁区冲突时，一律以后者为准。）",
+        f"## {heading}",
+        "（这些是写作原则，不是执行步骤；具体动作、对白和细节由你根据本章材料自己决定。"
+        "与 Canon、作者意图、本章禁区冲突时，一律以后者为准。）",
     ]
-    for idx, text in enumerate(guidance, start=1):
-        lines.append(f"{idx}. {text}")
+    for idx, item in enumerate(entries, start=1):
+        relevance = str(item.get("chapter_guidance") or "").strip()
+        principle = str(item.get("principle") or "").strip()
+        name = str(item.get("name") or "").strip()
+        if not principle:
+            lines.append(f"{idx}. {relevance}")
+            continue
+        head = f"{idx}. 【{name}】{principle}" if name else f"{idx}. {principle}"
+        lines.append(head)
+        if relevance:
+            lines.append(f"   本章相关：{relevance}")
     return lines
 
 
@@ -518,11 +673,11 @@ def build_router_input(
             "only_if": "the skill changes how this chapter is actually written",
             "never_override": ["canon", "author_intent", "chapter_forbidden_zones"],
             "writer_already_receives": [
-                "场景四问（目标/阻力/被迫选择/场景后变化）",
-                "追读三问（期待/当章回报/新期待）",
-                "章纲结构与人物状态",
+                "章纲硬事实（数值、方向、本章变化、必须节点、禁区）",
+                "人物当前状态与前文事实",
+                "创作方向（Context Agent 的 Creative Brief）",
             ],
-            "do_not_restate": "若选择 scene-sequel 或 reader-pull，不要复述四问/三问；把它们翻译成本章的具体写法。",
+            "do_not_restate": "不要复述硬事实或创作方向；只说明这项方法落在本章的哪一个真实风险上。",
             "output": {"selected_skills": [{"id": "...", "reason": "...", "chapter_guidance": "..."}]},
         },
     }

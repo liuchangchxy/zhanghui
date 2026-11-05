@@ -1,0 +1,101 @@
+{
+  "chapter": 6,
+  "draft_id": "draft-006-2a2fed5d",
+  "draft_fingerprint": "ba759a587498bb6d20108da28aa046647daf320dcac5a14080945a011e7256b8",
+  "review_subject_fingerprint": "faff445de8bf6c7e95a18acf26d09157a35a5830846063e46092bedd85ae67eb",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "medium",
+      "category": "timeline",
+      "location": "第5段 / 第129段",
+      "description": "章内时长与时间线表不一致：正文 14:05 进站、15:40 离站，实际 1 小时 35 分；第1卷时间线表第6章标注“章内跨度 3小时”，chapter_changes 又写“约两小时（14:05进站，15:40离站）”。同一章出现三个互不相符的时长口径。",
+      "evidence": "「十四日下午两点零五分，他又站在旧潮位站的铁门口」/「三点四十，他签了离站时间」 vs 时间线表第6章「章内跨度 3小时」",
+      "fix_hint": "统一口径：或把离站时间后移补足三小时，或按实际时长回写时间线表与 chapter_changes。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "setting",
+      "location": "第93段 / 第105-107段",
+      "description": "2016年9月整批更换与本作“旧潮位站已于2016年3月停用十年”的既有设定相冲突：设定集写明旧潮位站“同期停用”（事故同期），第1章也写“十年前的封条，早在那年停用时就启过了”。正文却让两人把“换的时候站里停不停”当作有意义的问题（说明该站当时仍在运转/停测口径上存在操作），且一个已停用半年的站仍被“一条线上的站一起换”覆盖；正文没有任何一句交代这层异常，以多疑见长的主角对此也没有任何察觉。",
+      "evidence": "「二〇一六年。九月。」「换设备不停。」「检修才停。」 vs 设定集「旧潮位站同期停用」、第1章「十年前的封条，早在那年停用时就启过了」",
+      "fix_hint": "补一句交代已停用站为何仍在批次内（线路整批更换含停用站/停用发生在2016年9月之后），或写出主角对“停用的站为什么还换设备”的追问——后者更符合人设与推理链。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "第161段",
+      "description": "章末把“停测无记录”与“通信设备故障”强行接成一条因果链：“通信设备故障”是公开记载对事故原因的认定（第2章旧报），并非由潮位观测数据推出；停测所缺的是潮位记录，与设备故障结论之间没有已建立的因果。此处属主角凭一次联想把两头接上，已逼近本章禁区“不得让主角凭直觉跳过证据链”（作为意图偏差报告，blocking=false）。",
+      "evidence": "「现在有人告诉他，那天本来就不该有记录。那么“通信设备故障”这个结论，是从哪一份数上来的。」",
+      "fix_hint": "把落点改回数据本身（官方那份潮位记录/当夜潮位数据是从哪来的），让两句话并排而不接因果；这一改写与第7章复算目标也更贴合。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "beat_compliance",
+      "location": "第111-127段",
+      "description": "sequel_reaction 未落地：大纲要求本章收束后写“发现自己第一次把判断权分给了别人，很不习惯”，正文在合作关系成立后直接转入信息核对（默认刻度被推翻）与离场，没有反应拍。CBN（试探被缩回工单）、CPNs（交出编号换信任）、CEN（约定只交换可验证信息）均已达成，缺的是这一拍的失落/不适感。",
+      "evidence": "「许知远把本子合上，指腹压了压刚写过的那一页。他原先默认的是几天……现在这个默认不成立了」，紧接转入「换的时候，站里停不停？」",
+      "fix_hint": "在两人定下规矩之后加一拍极短的反应（如他发现自己已经把决定权递出去、下意识想收回），用一个动作落地，不写心理总结。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "continuity",
+      "location": "第159-161段",
+      "description": "章末“他在台阶上站了一会儿”指向不明：全章唯一的台阶是“平房后面有六级台阶……下去是水尺”，属站内；此时许知远已签名离站、铁门在身后关上、人在站外，脚下并没有交代过任何台阶，与站内水尺台阶易混。",
+      "evidence": "「平房后面有六级台阶，长了青苔，下去是水尺」 vs 「他在台阶上站了一会儿」",
+      "fix_hint": "改为“他在门口站了一会儿”，或明确写出站外台阶的位置。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "foreshadow_compliance",
+      "location": "第61段",
+      "description": "出现一条未登记的疑似线索：“堤脚的黑泥上有一道拖痕，是绳子磨出来的，边缘已经干了”。本章大纲与 chapter_planning 均写 foreshadow_buried 为“无”，并明令本章不新埋伏笔；chapter_changes 的 foreshadowing_actions 也为空。该细节具备线索形态但没有任何回收安排，需确认是有意留下的可回收物证还是纯环境描写。",
+      "evidence": "「堤脚的黑泥上有一道拖痕，是绳子磨出来的，边缘已经干了」 vs 详细大纲第6章「foreshadow_buried：无」",
+      "fix_hint": "若只是环境质感，弱化为背景描述；若作为线索保留，登记入伏笔表并指定预期回收章。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 6,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "发现1个问题：2016年9月整批更换与“旧潮位站2016年3月停用十年”的设定张力，正文未交代且主角无反应"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "发现1个问题：章内实际1小时35分，与时间线表3小时、chapter_changes约两小时不符；倒计时D-25正确"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "发现1个问题：章末“台阶”在站外语境下指向不明；与第5章封底铅笔字钩子、第2章梁沐线衔接正常"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "发现1个问题：章末把“停测无记录”与“通信设备故障”接成因果，推理跳跃；CBN/CPNs/CEN 均已发生，无白拿增益"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "发现1个问题：sequel_reaction 未落地，其余 Scene/Sequel 节点与 Break Into Two 定位达成"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "发现1个问题：新增“绳磨拖痕”疑似线索未登记；TL-005 本章已满足，无逾期伏笔"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "summary": "6个问题：0个 reviewer 自行赋予的阻断，0个 high/critical，3个 medium，3个 low。首次审查（无上轮 high/critical 需闭环）。CBN+CPNs+CEN 全部兑现，TL-005 已在第6章内满足，禁止项未触碰超自然/系统，章末钩子与大纲原句一致且无未来时态；主要事实性问题是章内时长口径三处不一致与2016年9月换设备同“停用十年”的设定张力。do_not_copy_check.json 存在且 violations 为空，无需转录。"
+}

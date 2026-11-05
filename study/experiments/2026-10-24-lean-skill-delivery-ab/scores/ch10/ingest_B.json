@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "chapter": 10,
+  "status": "draft_ingested",
+  "draft_id": "draft-010-3715e16f",
+  "draft_fingerprint": "e6b8b02f43e4a9c68fb13392875c336e4a1743e5fe83f6a4a2300fa432f2de18",
+  "review_subject_fingerprint": "3a718915c5de0afbbddf681dafc99d62166c6c96a9402140798224ed521b4e50",
+  "package_fingerprint": "0b2d2a6e25ddd6cf3ccf749e45de5ded7efb3744c3d68f434ede42bc2b55fe0e",
+  "next_required_action": "review_and_extract",
+  "required_artifacts": [
+    "review_result",
+    "extraction_result",
+    "fulfillment_result",
+    "disambiguation_result",
+    "reconciliation_result"
+  ],
+  "error_code": null,
+  "error": null
+}

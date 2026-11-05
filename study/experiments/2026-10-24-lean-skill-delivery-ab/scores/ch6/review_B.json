@@ -1,0 +1,59 @@
+{
+  "chapter": 6,
+  "draft_id": "draft-006-2eee8d42",
+  "draft_fingerprint": "07849f4b037cd05d2254c667575dc58242ffc63f158339a28fe6fbb9386c26df",
+  "review_subject_fingerprint": "7caf6123a51b99361892237f0d7f99a26ddb61f435d97314f8d67d9bd5bd5e58",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "medium",
+      "category": "timeline",
+      "location": "第49行「这半个月查到的东西摊在别人面前。这半个月他每一页都只写给自己看」",
+      "description": "调查时长的自述与卷级时间线不符：本章距第1章仅数日，正文却称已积累「半个月」的记录。",
+      "evidence": "正文「这半个月」 vs 大纲/第1卷-时间线.md：第1章 10月9日 → 第6章 10月14日，共6个日历日；且调查起点是第1章的匿名信。",
+      "fix_hint": "改为「这几天」「这一周」等与6日跨度相符的说法；若要保留半个月，需同步调整时间线表的章节间隔。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "timeline",
+      "location": "第3行「隔了一天。」",
+      "description": "本章时间锚点存在两种读法，其中一种与时间线表及下一章相撞。",
+      "evidence": "时间线表：第5章 10月13日上午 → 第6章 10月14日下午（D-25）；草稿自身 chapter_changes 写「接上一章夜里，隔一天后的当日下午两点」，按此读法落到 10/15，与第7章 10/15 及倒计时推进冲突。",
+      "fix_hint": "把「隔了一天」改为「第二天」，或直接给出日期锚点（如「十四号上午」），使跨夜推进无歧义。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "continuity",
+      "location": "第53-57行「二〇一五年九月，港务局资产调拨公示，第三批，型号 TX-2015，十一台……编号段 081 到 091」",
+      "description": "作为交换筹码的核心证据在本章首次出现即已是「已抄录、已三处核对」的状态，其获取时点在前文与章内均无交代。",
+      "evidence": "canon_authority · xu_zhiyuan.known_evidence（第2章）只收录：夹层对折纸、卷宗目录卡片、《临港市志》大事记、旧报 03-18 与 03-24，无该调拨公示；第5章章纲亦无此证据节点；本章开篇只写他去旧报库复查合订本，未写查公示。",
+      "fix_hint": "在开篇或递纸前补一句获取路径与时点（如「前天在资产科公开页面上翻到的」），或让该公示与清点单补记编号同源，使证据链起点可追溯。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "continuity",
+      "location": "第5-7行（全章开篇）",
+      "description": "上章章末钩子在本章无任何回应或提及，转向人证的动机只由「旧报没多出一个字」承接。",
+      "evidence": "第5章钩子「他在月报封底看到一行铅笔小字，不是他的笔迹」（FS-003）；本章开篇直接写「上午他又去了旧报库……没多出一个字」，全章未出现月报、缺页或铅笔小字。",
+      "fix_hint": "开篇补一句他对那行小字的处置（带去比对/暂时压下），或说明为何先放下物证转找人证，把两章因果接上。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 4,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {"dimension": "setting", "conclusion": "pass"},
+    {"dimension": "timeline", "conclusion": "发现2个问题：调查时长「这半个月」与6日跨度不符；「隔了一天」与时间线表10/14锚点存在第二种读法并撞上第7章"},
+    {"dimension": "continuity", "conclusion": "发现2个问题：2015年9月资产调拨公示的获取时点无交代；上章封底铅笔小字钩子全章无回应"},
+    {"dimension": "character", "conclusion": "pass"},
+    {"dimension": "logic", "conclusion": "pass"},
+    {"dimension": "beat_compliance", "conclusion": "pass"},
+    {"dimension": "foreshadow_compliance", "conclusion": "pass"},
+    {"dimension": "do_not_copy_violation", "conclusion": "pass"}
+  ],
+  "summary": "4个问题：0个 reviewer 自行赋予的阻断，0个高优，2个中优（均为时间锚点与证据来源类事实问题）"
+}

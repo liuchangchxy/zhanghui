@@ -1,0 +1,119 @@
+{
+  "chapter": 7,
+  "draft_id": "draft-007-c42363fc",
+  "draft_fingerprint": "95f6da92446f5602b8ffbb305f5b73cbc9e7be440b05133417be6411d20ad404",
+  "review_subject_fingerprint": "7cc0126becb5a4e78ad593653ac19b2163083864084f3cb95717228805b77c2a",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "medium",
+      "category": "timeline",
+      "location": "第33行",
+      "description": "正文称“十天前他不递调阅申请”，但按卷时间线，不递调阅申请发生在第2章（10月9日），到本章10月15日只隔六天。",
+      "evidence": "正文：“十天前他不递调阅申请” vs 《第1卷-时间线.md》：第2章 10月9日、第7章 10月15日",
+      "fix_hint": "改为“六天前”或“上周”。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "第103行、第107行",
+      "description": "插值起算点（三月十六日二十一点十一分、零点四零米）未标出处，且疑似直接沿用登载的临潮07数据；正文对逐时格逐一标注“邻站值，经潮时差与振幅比折算”，唯独这个锚点没有标注，与他全章坚持的“每格标出处”标准不一致。",
+      "evidence": "正文：“前一个低潮在三月十六日晚上九点十一分，零点四零米”（无出处标注） vs 同段“他在每一格旁边标出处：邻站值，经潮时差与振幅比折算，插值”",
+      "fix_hint": "补一句锚点来源；若为登载值，需交代他为何在这一处采信登载的临潮07数据。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "logic",
+      "location": "第123–127行",
+      "description": "三遍重算中两处与所述方法不自洽：按余弦插值，高潮时刻移到三点十四分时潮高应约二点四八米而非二点五二米；第三遍把“两邻站平均”标定出的振幅比零点九六直接乘东邻站单站潮高，与标定口径不同。",
+      "evidence": "正文：“高潮时刻变成三点十四分，潮高按新时刻重取，二点五二米” / “二点五六乘零点九六，二点四六米”",
+      "fix_hint": "统一重算口径，或让主角明说这两次只是粗估。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "logic",
+      "location": "第61–69行、第133行",
+      "description": "他手上有三月一日至十七日的临潮07登载数据，但标定与异常判定只用了一月数据，未用最近的三月一日至十六日数据交叉验证“三点零二米从未出现过”。",
+      "evidence": "正文：“三月抄到十七日那一行” vs “一月那二十六天里……三点零二米，一次都没有出现过”",
+      "fix_hint": "补一句他为何只用一月，或加一行三月一日至十六日的潮差核对。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "logic",
+      "location": "chapter_changes 第4条 new_plot_points",
+      "description": "变更记录写“登载的当日潮差3.02米超出该站全年最大值2.24米”，正文依据只有一月二十六天，未覆盖全年；该表述会作为事实进入后续 canon。",
+      "evidence": "正文：“一月那二十六天里，临潮07的潮差最大二点二四米” vs 变更记录：“超出该站全年最大值2.24米”",
+      "fix_hint": "把“全年最大值”改为“一月观测到的最大值”。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "beat_compliance",
+      "location": "第139–143行（章末）",
+      "description": "规划的 sequel_reaction（“第一次感到数据比人可靠这件事是有力量的”）未在正文落实，比对结果出现后只写了“坐着没动”“把手放在方格本上”，没有可辨认的认知转折。",
+      "evidence": "规划 sequel_reaction vs 正文：“他坐着没动。窗外天已经黑透……他把手放在方格本上，压了一会儿。”",
+      "fix_hint": "在比对结果后补一处内心落点，不必外化。",
+      "blocking": false
+    },
+    {
+      "severity": "low",
+      "category": "beat_compliance",
+      "location": "第153–157行",
+      "description": "章末 Decision 指向“问报社：这行数字是谁送去的”，与规划的 sequel_decision（“是算法问题还是记录问题→下章目标”）不一致；正文已用三遍重算自行排除算法问题，规划设定的下章悬念在章内被提前关闭。",
+      "evidence": "正文：“问报社：这行数字是谁送去的。” vs 规划 sequel_decision：“复算结果与官方记录差近一米，是算法问题还是记录问题”",
+      "fix_hint": "保留一处“也可能是我算错”的余量，或调整下章目标衔接。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "foreshadow_compliance",
+      "location": "全章（状态账本）",
+      "description": "限时锁 TL-005“第6章内必须建立与梁沐的合作关系”截止第6章，第7章仍为 active、未标记完成；第6章正文已建立该关系，属账本未闭合。",
+      "evidence": "advisory_constraints.timed_locks：TL-005 deadline_chapter=6、status=active、fulfilled_chapter=null；第6章正文已约定只交换可核信息",
+      "fix_hint": "在第6章提交时补记 TL-005 完成。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 8,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "发现1个问题：“十天前”与第2章10月9日的实际间隔（六天）不符"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "发现4个问题：插值锚点无出处、重算口径不自洽、未用三月同期数据交叉验证、变更记录“全年”越界"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "发现2个问题：sequel_reaction 未落实、章末 Decision 与规划不一致（CBN+CEN 均已覆盖）"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "发现1个问题：TL-005 逾期未闭合"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "summary": "8个问题：0个 reviewer 自行赋予的阻断（blocking 全为 false），4个中优、4个低优，无 critical。CBN+CEN 均覆盖，禁区未触碰。"
+}

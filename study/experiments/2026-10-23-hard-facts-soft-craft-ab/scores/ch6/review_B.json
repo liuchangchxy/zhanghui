@@ -1,0 +1,41 @@
+{
+  "chapter": 6,
+  "draft_id": "draft-006-04fc9ce1",
+  "draft_fingerprint": "862d113d38d5cdc19a996985945be936ca4d3b0745c483259cfb8ac2b92e347a",
+  "review_subject_fingerprint": "7888ce6e166bbe4a1b46e1ca1ae64d99a0a39f03f7b024e30210a1cd7d97ee31",
+  "review_mode": "full",
+  "issues": [
+    {
+      "severity": "medium",
+      "category": "character",
+      "location": "ch006:line 36、line 45、line 63；对照 canon evt-ch2-003",
+      "description": "第二章 canon 记录梁沐已“主动透露”“那批设备是事故之后统一换的”，且 canon 关系条目写明许知远是其“信息提供者”；本章梁沐对同一问题全程守口（“我按单子干活”“你问站里”），许知远也从未回溯该已知说法，双方都当作首次接触这个话题处理。人物姿态与前章 canon 之间没有交代转变缘由。",
+      "evidence": "canon ch2：“那批设备啊，是事故之后统一换的”（关系条目：“主动透露”）vs 正文：“我按单子干活。单子上写换什么，我换什么”；“这台什么时候换的？”",
+      "fix_hint": "加一句回溯（例如许知远提“上次你说过是事故之后换的”，或梁沐解释为何上次随口、这次不敢说），把人物姿态的变化接上；若第3-5章已交代其态度转变，则在本章用半句呼应。",
+      "blocking": false
+    },
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "ch006:line 5、line 63-65、line 133",
+      "description": "安装/验收/公示日期这条线索链内部不自洽，且关键日期值缺失。梁沐先用“验收单”回应“装是什么时候？”（暗示验收单能回答安装时间），随后却说“公示上那个日子是验收，不是安装”，把两份文件的时间性质混在一起；同时公示为“二〇一五年度”，而安装被指在2016年3月，正文自始至终没有写出公示日期具体值，读者无法核对“公示日期=验收”这一章末推断。",
+      "evidence": "“验收单上有”（答“装是什么时候？”）；“这台就是那时候换的。公示上那个日子是验收，不是安装”；“二〇一五年度……公示日期”",
+      "fix_hint": "明写公示日期数值，并让“2015年度”“2016年3月安装”“验收日期”三者可同时成立（例如公示为补报、或日期在检修结束之后）；把验收单能证明的内容与公示能证明的内容分开表述。",
+      "blocking": false
+    }
+  ],
+  "issues_count": 2,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "dimension_results": [
+    {"dimension": "setting", "conclusion": "pass"},
+    {"dimension": "timeline", "conclusion": "pass"},
+    {"dimension": "continuity", "conclusion": "pass"},
+    {"dimension": "character", "conclusion": "发现1个问题：梁沐对换机时间的守口姿态与第二章 canon“主动透露”不一致，且未处理该已知信息"},
+    {"dimension": "logic", "conclusion": "发现1个问题：验收单/公示日期/安装时间三者关系不自洽，公示日期具体值缺失"},
+    {"dimension": "beat_compliance", "conclusion": "pass"},
+    {"dimension": "foreshadow_compliance", "conclusion": "pass"},
+    {"dimension": "do_not_copy_violation", "conclusion": "pass"}
+  ],
+  "summary": "2个问题：0个 reviewer 自行赋予的阻断，0个高优，2个中优。八维全部检查：CBN（试探梁沐、对方回避只谈工单）与 CEN（约定只交换可核信息、合作关系建立）均已落地，Break Into Two 与 TL-005 在正文中兑现，章末 hook 与规划 hook 一致且无未来时态泄露，禁区三条（超自然/直觉跳证据/无记录超期信息）均未触碰；do_not_copy_check.json violations 为空。"
+}
