@@ -679,6 +679,60 @@ def _before_has_action(
     return False
 
 
+def _detect_local_added_beats(before_text: str, after_text: str) -> List[SemanticDriftItem]:
+    """Inspect added diff spans, accounting for equivalent beats removed elsewhere."""
+    duration = re.compile(r"(?:压|按|握|抓|等|停|站|坐|看|沉默)(?:了|着)?(?:很久|许久|好久|半晌)")
+    patterns = (duration, re.compile(r"搁下|放下"), re.compile(r"合上|关上|关闭"))
+    # Paragraph alignment bounds character-level work for normal chapter-length prose.
+    # For an unusually long unbroken paragraph, retain difflib's repetition guard.
+    before_lines = before_text.splitlines(keepends=True)
+    after_lines = after_text.splitlines(keepends=True)
+    before_offsets = [0]
+    after_offsets = [0]
+    for line in before_lines:
+        before_offsets.append(before_offsets[-1] + len(line))
+    for line in after_lines:
+        after_offsets.append(after_offsets[-1] + len(line))
+    changes = []
+    for tag, i, j, k, l in difflib.SequenceMatcher(None, before_lines, after_lines, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        left = before_text[before_offsets[i]:before_offsets[j]]
+        right = after_text[after_offsets[k]:after_offsets[l]]
+        matcher = difflib.SequenceMatcher(None, left, right, autojunk=max(len(left), len(right)) > 4000)
+        changes.extend((op, a + before_offsets[i], b + before_offsets[i], c + after_offsets[k], d + after_offsets[k])
+                       for op, a, b, c, d in matcher.get_opcodes() if op != "equal")
+    def changed_matches(pattern: re.Pattern, text: str, ranges: List[Tuple[int, int]]) -> List[re.Match]:
+        return [match for match in pattern.finditer(text) if any(
+            start < match.end() and match.start() < end for start, end in ranges
+        )]
+
+    before_ranges = [(i, j) for _, i, j, _, _ in changes if i < j]
+    after_ranges = [(i, j) for _, _, _, i, j in changes if i < j]
+    findings: List[SemanticDriftItem] = []
+    for pattern in patterns:
+        removed = changed_matches(pattern, before_text, before_ranges)
+        added = changed_matches(pattern, after_text, after_ranges)
+        surplus = len(added) - len(removed)
+        if surplus <= 0:
+            continue
+        for match in added:
+            start = max(after_text.rfind(mark, 0, match.start()) for mark in "。！？\n") + 1
+            ends = [after_text.find(mark, match.end()) for mark in "。！？\n"]
+            end = min((pos for pos in ends if pos >= 0), default=len(after_text))
+            excerpt = after_text[start:end].strip()
+            findings.append(SemanticDriftItem(
+                dimension="event_outcome", evidence_type="added_action_not_in_before",
+                original_excerpt="(改动中无对应动作)", edited_excerpt=excerpt,
+                description=f"候选稿新增动作或持续时长「{match.group()}」，需要保留原稿。",
+                severity="blocking",
+            ))
+            surplus -= 1
+            if not surplus:
+                break
+    return findings
+
+
 def detect_added_events(before_text: str, after_text: str) -> List[SemanticDriftItem]:
     """Find material actions/events/causal links the candidate added.
 
@@ -690,7 +744,7 @@ def detect_added_events(before_text: str, after_text: str) -> List[SemanticDrift
     """
     before_clauses = [_action_norm(clause) for clause in _action_clauses(before_text)]
     before_norm = _action_norm(before_text)
-    findings: List[SemanticDriftItem] = []
+    findings: List[SemanticDriftItem] = _detect_local_added_beats(before_text, after_text)
 
     for clause in _action_clauses(after_text):
         norm = _action_norm(clause)

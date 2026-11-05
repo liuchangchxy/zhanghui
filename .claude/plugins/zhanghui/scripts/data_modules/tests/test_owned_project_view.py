@@ -571,6 +571,12 @@ def test_generation_state_matches_legacy_reducer_and_context_semantics(tmp_path)
                            "event_type": "open_loop_created", "subject": "hero",
                            "payload": {"description": "旧约"}})
         if chapter == 3:
+            events.append({"event_id": "state-event", "chapter": chapter,
+                           "event_type": "character_state_changed", "subject": "hero",
+                           "payload": {"field": "mood", "new": "临时紧张"}})
+            events.append({"event_id": "breakthrough-event", "chapter": chapter,
+                           "event_type": "power_breakthrough", "subject": "hero",
+                           "payload": {"field": "power.level", "new": "二层"}})
             events.append({"event_id": "loop-close", "chapter": chapter,
                            "event_type": "open_loop_closed", "subject": "hero",
                            "payload": {"loop_id": "loop-create", "description": "旧约"}})
@@ -606,6 +612,13 @@ def test_generation_state_matches_legacy_reducer_and_context_semantics(tmp_path)
     assert {k: v for k, v in actual["progress"].items() if k != "last_updated"} == {
         k: v for k, v in legacy["progress"].items() if k != "last_updated"}
     assert "last_updated" not in actual["progress"]
+    assert "mood" not in actual["entity_state"]["hero"]
+    assert "power" not in actual["entity_state"]["hero"]
+    assert "mood" not in actual["protagonist_state"]
+    assert "power" not in actual["protagonist_state"]
+    assert {event["event_id"] for event in EventLogStore(tmp_path).read_events(3)} == {
+        "state-event", "breakthrough-event", "loop-close",
+    }
     context = ContextManager(DataModulesConfig.from_project_root(tmp_path)).build_context(4)
     assert context["core"]["protagonist_snapshot"]["name"] == "林青"
     assert context["scene"]["location_context"]["city"] == "天都"

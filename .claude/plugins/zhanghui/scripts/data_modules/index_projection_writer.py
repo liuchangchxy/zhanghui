@@ -402,58 +402,6 @@ class IndexProjectionWriter:
             for delta in extraction_list(commit_payload, "state_deltas")
             if isinstance(delta, dict)
         ]
-        seen = {
-            (
-                str(delta.get("entity_id") or "").strip(),
-                str(delta.get("field") or "").strip(),
-                self._safe_int(delta.get("chapter") or commit_payload.get("meta", {}).get("chapter")),
-            )
-            for delta in deltas
-        }
-
-        for event in extraction_list(commit_payload, "accepted_events"):
-            if not isinstance(event, dict):
-                continue
-            event_type = str(event.get("event_type") or "").strip()
-            payload = dict(event.get("payload") or {})
-            if event_type == "power_breakthrough":
-                field = str(payload.get("field") or payload.get("field_path") or "realm").strip()
-            elif event_type == "character_state_changed":
-                field = str(payload.get("field") or payload.get("field_path") or "").strip()
-            else:
-                continue
-            entity_id = str(payload.get("entity_id") or event.get("subject") or "").strip()
-            chapter = self._safe_int(event.get("chapter") or commit_payload.get("meta", {}).get("chapter"))
-            key = (entity_id, field, chapter)
-            if not entity_id or not field or key in seen:
-                continue
-            seen.add(key)
-            deltas.append(
-                {
-                    "entity_id": entity_id,
-                    "field": field,
-                    "old": (
-                        payload.get("old")
-                        if "old" in payload
-                        else payload.get("from")
-                        if "from" in payload
-                        else payload.get("old_value")
-                        if "old_value" in payload
-                        else payload.get("previous_state")
-                    ),
-                    "new": (
-                        payload.get("new")
-                        if "new" in payload
-                        else payload.get("to")
-                        if "to" in payload
-                        else payload.get("new_value")
-                        if "new_value" in payload
-                        else payload.get("new_state")
-                    ),
-                    "reason": event_type,
-                    "chapter": chapter,
-                }
-            )
         return deltas
 
     def _normalize_state_delta(self, delta: dict) -> dict:
