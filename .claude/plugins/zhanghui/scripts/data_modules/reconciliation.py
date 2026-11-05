@@ -812,6 +812,7 @@ def reconcile_changes(proposed_changes: Any, observed_changes: Any, *, chapter_t
 
     matched, proposed_not_observed, unproposed_observed = [], [], []
     matched_observed_sources: set[tuple[str, int]] = set()
+    confirmed_state_indices: set[int] = set()
 
     for key, declarations_for_key in sorted(proposals_by_key.items(), key=lambda x: x[0]):
         resolved_key = _resolve_ownership_key(key, declarations_for_key, observed_by_key)
@@ -838,6 +839,8 @@ def reconcile_changes(proposed_changes: Any, observed_changes: Any, *, chapter_t
                     entry["entity_alias"] = entity_alias
                 matched.append(entry)
                 matched_observed_sources.update((fact["source_type"], fact["source_index"]) for fact in hits)
+                confirmed_state_indices.update(fact["source_index"] for fact in hits
+                                               if fact["source_type"] == "state_deltas")
         proposal_values = [item["value"] for item in declarations_for_key]
         unmatched = [
             (item["value"], item["kind"])
@@ -911,22 +914,32 @@ def reconcile_changes(proposed_changes: Any, observed_changes: Any, *, chapter_t
                                                   "reason": "no deterministic observed mapping"})
 
     for source, index in sorted((fact["source_type"], fact["source_index"]) for fact in facts):
-        if (source, index) not in matched_observed_sources:
+        if ((source == "state_deltas" and index not in confirmed_state_indices)
+                or (source != "state_deltas" and (source, index) not in matched_observed_sources)):
             unproposed_observed.append({"observed": {"source": source, "index": index},
                                         "reason": "final-prose observation has no deterministic proposal match"})
 
+    # State mutations require both a prose extraction and a matched writer declaration.
+    # Other observed types retain their existing acceptance semantics.
+    accepted_indices = {
+        field: [index for index, _ in enumerate(observed[field])
+                if field != "state_deltas" or index in confirmed_state_indices]
+        for field in ("accepted_events", "state_deltas", "entity_deltas")
+    }
     status = "conflict" if conflicts else "passed"
     return {
         "schema_version": "story-reconciliation/v1", "status": status,
         "coverage": {"deterministic_mappings": SUPPORTED_MAPPINGS, "opaque_categories": OPAQUE_CATEGORIES},
         "matched": matched, "proposed_not_observed": proposed_not_observed,
         "unproposed_observed": unproposed_observed, "conflicts": conflicts,
-        "accepted_payload": {key: observed[key] for key in ("accepted_events", "state_deltas", "entity_deltas")},
+        "accepted_payload": {field: [observed[field][index] for index in indices]
+                             for field, indices in accepted_indices.items()},
         "accepted_sources": [
-            {"accepted": {"field": field, "index": index}, "observed": {"source": field, "index": index},
+            {"accepted": {"field": field, "index": accepted_index},
+             "observed": {"source": field, "index": observed_index},
              "prose_sha256": _digest(_changes_document(chapter_text).prose_only)}
-            for field in ("accepted_events", "state_deltas", "entity_deltas")
-            for index, _ in enumerate(observed[field])
+            for field, indices in accepted_indices.items()
+            for accepted_index, observed_index in enumerate(indices)
         ],
         "proposed_sha256": _digest(proposed),
         "observed_sha256": _digest(observed), "chapter_sha256": _digest(chapter_text),
@@ -952,6 +965,14 @@ def verify_observed_payload(result: dict[str, Any], observed_changes: Any) -> di
         raise ValueError("stale reconciliation: extraction_result changed after reconciliation")
     accepted = result.get("accepted_payload")
     fields = ("accepted_events", "state_deltas", "entity_deltas")
-    if not isinstance(accepted, dict) or any(accepted.get(field) != observed[field] for field in fields):
+    matched_states = {
+        item.get("index") for match in result.get("matched", [])
+        if match.get("reason") == "normalized entity and field match with paraphrase-equivalent value"
+        for item in match.get("observed", []) if item.get("source") == "state_deltas"
+    }
+    expected = {field: observed[field] for field in fields}
+    expected["state_deltas"] = [delta for index, delta in enumerate(observed["state_deltas"])
+                                if index in matched_states]
+    if not isinstance(accepted, dict) or any(accepted.get(field) != expected[field] for field in fields):
         raise ValueError("reconciliation accepted payload does not match observed extraction")
-    return {field: observed[field] for field in fields}
+    return expected

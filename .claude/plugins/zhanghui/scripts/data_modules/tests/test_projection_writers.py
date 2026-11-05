@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from data_modules.tests.commit_helpers import build_commit_with_reconciliation
+from data_modules.tests.commit_helpers import EMPTY_PROPOSAL, build_commit_with_reconciliation
 from data_modules.chapter_commit_service import ChapterCommitService
 from data_modules.config import DataModulesConfig
 from data_modules.index_manager import IndexManager
@@ -443,6 +443,7 @@ def test_accepted_commit_updates_state_json_end_to_end(tmp_path):
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": ["发现陷阱"], "covered_nodes": ["发现陷阱"], "missed_nodes": [], "extra_nodes": []},
         disambiguation_result={"pending": []},
+        proposed_changes={**EMPTY_PROPOSAL, "character_state_changes": [{"entity_id": "x", "field": "realm", "new": "斗者"}]},
         extraction_result={"state_deltas": [{"entity_id": "x", "field": "realm", "new": "斗者"}], "entity_deltas": [], "accepted_events": []},
     )
 
@@ -608,6 +609,7 @@ def test_accepted_commit_writes_chapter_index_tables(tmp_path):
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
         disambiguation_result={"pending": []},
+        proposed_changes={**EMPTY_PROPOSAL, "character_state_changes": [{"entity_id": "xiaoyan", "field": "realm", "new": "斗师"}]},
         extraction_result={
             "summary_text": "本章摘要",
             "state_deltas": [{"entity_id": "xiaoyan", "field": "realm", "old": "斗者", "new": "斗师"}],
@@ -654,6 +656,7 @@ def test_index_projection_writer_is_idempotent_for_replay(tmp_path):
         review_result={"blocking_count": 0},
         fulfillment_result={"planned_nodes": [], "covered_nodes": [], "missed_nodes": [], "extra_nodes": []},
         disambiguation_result={"pending": []},
+        proposed_changes={**EMPTY_PROPOSAL, "character_state_changes": [{"entity_id": "xiaoyan", "field": "realm", "new": "斗师"}]},
         extraction_result={
             "summary_text": "本章摘要",
             "state_deltas": [{"entity_id": "xiaoyan", "field": "realm", "old": "斗者", "new": "斗师"}],

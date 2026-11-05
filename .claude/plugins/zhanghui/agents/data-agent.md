@@ -118,7 +118,7 @@ hook_strength: "strong"
 ### 7.1 字段命名
 
 - **state_deltas 子项**：`entity_id` + `field` + `old` + `new`。简单字段直接写（`realm`），嵌套用点号（`power.realm`、`location.current`），投影器自动展开。`old` 必须取自 `state_file` 中该实体当前的字段值（不是索引里的旧状态，也不是上一章摘要）；`new` 以完整最终正文为依据，按正文时间顺序核对同一事实的后续行动，写出章末实际状态，不得把中途状态当成最终状态。保留未改变的既有事实，但不得把旧状态或提案当作本章新增事实的证据。正文没有证明某字段发生变化时，不要为它生成 delta。
-- 对口述、记录和证据资格分别提取：写下某人的口述不等于该口述已获证实或存在原始纸面证据；标注“口述、无纸面”也不等于没有写入记录。核对后续是否实际记入记录本，不能因为先前只记在心里或尚待验证，就断言最后未记录或不能记录。
+- 分别提取正文明确支持的事实及其状态和资格；区分事件发生、记录、验证等不同状态，不得由其中一种推断另一种。对同一事实按全文时间顺序核对后续变化，以章末状态为准。
 - **entity_deltas 子项**：`entity_id` + `action` + `entity_type`（值为 `角色|组织|地点|物品|势力`，非默认 `"角色"`）+ `payload`；`is_protagonist: true` 标主角（同步到 `state.protagonist_state`）。
 - **accepted_events 子项**：每条必含 `event_id`（章内稳定 ID 如 `evt-ch100-001`）+ `chapter`（当前章号）+ `event_type`（枚举见下）+ `subject`（主体 entity_id，非中文名）+ `payload`。
 - **event_type 枚举**：`character_state_changed`、`power_breakthrough`、`relationship_changed`、`world_rule_revealed`、`world_rule_broken`、`open_loop_created`、`open_loop_closed`、`promise_created`、`promise_paid_off`、`artifact_obtained`。

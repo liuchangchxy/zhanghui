@@ -48,13 +48,55 @@ def test_proposal_without_observation_is_not_accepted():
     assert not result["accepted_payload"]["state_deltas"]
 
 
-def test_observation_without_proposal_is_accepted_as_advisory():
+def test_observation_without_proposal_is_excluded_as_advisory():
     observed = observation()
     result = reconcile_changes(change(state="情绪振奋"), observed, chapter_text="final")
 
     assert result["status"] == "passed"
     assert result["unproposed_observed"]
-    assert result["accepted_payload"]["state_deltas"] == observed["state_deltas"]
+    assert result["accepted_payload"]["state_deltas"] == []
+
+
+def test_mixed_state_deltas_preserve_original_source_indices_and_other_types():
+    from data_modules.reconciliation import verify_observed_payload
+
+    observed = observation()
+    observed["state_deltas"].insert(0, {"entity_id": "other", "field": "mood", "new": "calm"})
+    observed["accepted_events"] = [{"event_type": "unmapped", "subject": "other", "payload": {}}]
+    observed["entity_deltas"] = [{"entity_id": "other", "patch": {"mood": "calm"}}]
+    result = reconcile_changes(change(), observed, chapter_text="final")
+
+    assert result["accepted_payload"]["state_deltas"] == observed["state_deltas"][1:]
+    assert result["accepted_payload"]["accepted_events"] == observed["accepted_events"]
+    assert result["accepted_payload"]["entity_deltas"] == observed["entity_deltas"]
+    source = next(s for s in result["accepted_sources"] if s["accepted"]["field"] == "state_deltas")
+    assert source["accepted"]["index"] == 0
+    assert source["observed"]["index"] == 1
+    assert verify_observed_payload(result, observed) == result["accepted_payload"]
+
+
+@pytest.mark.parametrize("source", ["new_plot_points", "unresolved_questions", "character_state_changes"])
+def test_free_text_match_cannot_confirm_state_delta(source):
+    from data_modules.reconciliation import verify_observed_payload
+
+    text = "许知远与梁沐建立只交换可验证信息的合作。"
+    proposed = change("情绪平稳")
+    proposed["character_state_changes"] = []
+    if source == "character_state_changes":
+        proposed[source] = [{"entity_id": "lin-xuan", "new_state": text}]
+    else:
+        proposed[source] = [{"description" if source == "new_plot_points" else "question": text}]
+    observed = {"accepted_events": [], "entity_deltas": [], "state_deltas": [
+        {"entity_id": "lin-xuan", "field": "known_evidence", "new": text + "随后又自行离开。"}
+    ]}
+    result = reconcile_changes(proposed, observed, chapter_text="final")
+    assert result["matched"]
+    assert result["accepted_payload"]["state_deltas"] == []
+    assert result["unproposed_observed"] == [{
+        "observed": {"source": "state_deltas", "index": 0},
+        "reason": "final-prose observation has no deterministic proposal match",
+    }]
+    assert verify_observed_payload(result, observed)["state_deltas"] == []
 
 
 def test_structured_conflict_blocks_reconciliation():
