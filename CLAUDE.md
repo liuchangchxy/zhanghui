@@ -2,6 +2,14 @@
 
 本文件在每次 Claude 会话启动时自动加载。规则优先级：用户指令 > 本文件 > 默认行为。
 
+## 0. 写作系统改动前必读（强制）
+
+修改 Zhanghui 写作链、Writer 输入、Writing Skill、Reviewer、Literary Finalizer、semantic acceptance，
+或开展写作质量实验 / benchmark 前，必须先读取 `study/VALIDATED_WRITING_SYSTEM_PRINCIPLES.md`。
+
+已标记 CONFIRMED / REJECTED 的结论，没有新的直接反证时不得重新推翻或重复实验。
+实验必须先定义 `PRIMARY QUESTION`，并按该问题决定证据优先级。
+
 ## 1. 参考工具的存放（最重要）
 
 > **永远不要把 reference 工具下载/clone 到 `/Users/chang/` 下的任何目录。**
