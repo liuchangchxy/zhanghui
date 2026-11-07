@@ -1,0 +1,12 @@
+{
+  "ch03": {
+    "j1_gemini": {
+      "甲": "RAW",
+      "乙": "CANDIDATE"
+    },
+    "j2_proxy": {
+      "甲": "CANDIDATE",
+      "乙": "RAW"
+    }
+  }
+}
