@@ -1,0 +1,73 @@
+{
+  "ch03": {
+    "status": "FALLBACK_RAW",
+    "evaluated_arm": "candidate_rejected",
+    "gate_reasons": [
+      "SEMANTIC_GATE_REJECTED：status=ROLLEDBACK, semantic_outcome=SEMANTIC_CHANGE_PROPOSED；触发事实安全红线回滚：Semantic Judge 判定检测到 2 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。"
+    ],
+    "source_body_chars": 3422,
+    "output_body_chars": 3132,
+    "length_ratio": 0.9153,
+    "numbers_missing": {},
+    "numbers_added": {},
+    "codes_missing": {},
+    "codes_added": {},
+    "dates_missing": {},
+    "dates_added": {},
+    "quoted_segments_source": 61,
+    "quoted_segments_output": 61,
+    "quoted_segments_missing": [],
+    "paragraphs_source": 74,
+    "paragraphs_output": 70,
+    "last_paragraph_8char_retention": 0.0,
+    "last_two_paragraphs_8char_retention": 0.1667
+  },
+  "ch05": {
+    "status": "FALLBACK_RAW",
+    "evaluated_arm": "candidate_rejected",
+    "gate_reasons": [
+      "SEMANTIC_GATE_REJECTED：status=ROLLEDBACK, semantic_outcome=SEMANTIC_CHANGE_PROPOSED；触发事实安全红线回滚：Semantic Judge 判定检测到 6 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。"
+    ],
+    "source_body_chars": 2955,
+    "output_body_chars": 2679,
+    "length_ratio": 0.9066,
+    "numbers_missing": {},
+    "numbers_added": {},
+    "codes_missing": {},
+    "codes_added": {},
+    "dates_missing": {
+      "八月八日": 1
+    },
+    "dates_added": {},
+    "quoted_segments_source": 49,
+    "quoted_segments_output": 49,
+    "quoted_segments_missing": [],
+    "paragraphs_source": 72,
+    "paragraphs_output": 68,
+    "last_paragraph_8char_retention": 1.0,
+    "last_two_paragraphs_8char_retention": 0.0588
+  },
+  "ch07": {
+    "status": "FALLBACK_RAW",
+    "evaluated_arm": "candidate_rejected",
+    "gate_reasons": [
+      "SEMANTIC_GATE_REJECTED：status=ROLLEDBACK, semantic_outcome=SEMANTIC_CHANGE_PROPOSED；触发事实安全红线回滚：Semantic Judge 判定检测到 4 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。"
+    ],
+    "source_body_chars": 2393,
+    "output_body_chars": 2247,
+    "length_ratio": 0.939,
+    "numbers_missing": {},
+    "numbers_added": {},
+    "codes_missing": {},
+    "codes_added": {},
+    "dates_missing": {},
+    "dates_added": {},
+    "quoted_segments_source": 45,
+    "quoted_segments_output": 45,
+    "quoted_segments_missing": [],
+    "paragraphs_source": 60,
+    "paragraphs_output": 59,
+    "last_paragraph_8char_retention": 1.0,
+    "last_two_paragraphs_8char_retention": 1.0
+  }
+}

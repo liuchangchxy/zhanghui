@@ -1,6 +1,6 @@
 ---
 name: webnovel-fast-write
-description: 快车道写章节（跳过非必需的文风适配与定向润色环节，运行最小核心审查）。必须通过受治理运行时事实提交与正式发布门禁。Use when you trust the direction of a single chapter and want a fast-track workflow. Runs Step 0/1/2A/3(core)/4.5/4.6/5/5.5/6.
+description: 快车道写章节（跳过非必需的文学减法定稿与定向问题修复环节，运行最小核心审查）。必须通过受治理运行时事实提交与正式发布门禁。Use when you trust the direction of a single chapter and want a fast-track workflow. Runs Step 0/1/2A/3(core)/4.5/4.6/5/5.5/6.
 allowed-tools: Read Write Edit Grep Bash Agent
 ---
 
@@ -9,7 +9,7 @@ allowed-tools: Read Write Edit Grep Bash Agent
 ## 目标
 
 以高吞吐流程快速产出可发布章节：
-- **跳过非必需环节**：跳过 Step 2B（文风适配）与 Step 4（定向润色）；
+- **跳过非必需环节**：跳过 Step 2B（文学减法定稿）与 Step 4（定向问题修复）；
 - **保留必要审查与治理门禁**：运行 Step 3 的核心 3 维客观审查（统一 Reviewer 的 `mode=core`：setting、continuity、character），杜绝跳过审查引发的提交拒收与伪造审查风险；
 - **严格遵守事务权威**：工作草稿严格隔离，草稿由 `runtime ingest-draft` 登记，经 `runtime commit` 事实提交 accepted 后，由 `runtime publish-draft` 剥离协议发布 100% 纯正文到 `正文/` 目录；
 - **严禁双重权威**：不得发明第二套 commit 或 publication 绕过机制。
@@ -23,8 +23,8 @@ allowed-tools: Read Write Edit Grep Bash Agent
 ## 不适用场景
 
 - 第一次写新项目（先跑 `/webnovel-write` 摸清边界）
-- 重大高潮、卷末高光或复杂多线交汇章（建议使用 `/webnovel-write`，开启完整审查与文风调优）
-- 用户明确要求"严格全维审查"或"深度润色"
+- 重大高潮、卷末高光或复杂多线交汇章（建议使用 `/webnovel-write`，开启完整审查与文学定稿）
+- 用户明确要求"严格全维审查"或"完整文学定稿"
 
 > **共享命令契约**：本文件内联的 `runtime ingest-draft` / `runtime reviewer-context` /
 > `review-pipeline` / `revise verify` / `runtime commit` / `runtime publish-draft` 命令，
@@ -108,9 +108,9 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
    ```
    记录返回的 `draft_id` 与 `draft_fingerprint`。后续审查、提炼、对账与提交均严格绑定此 `draft_id`。
 
-### 跳过 Step 2B（文风适配与候选门禁）
+### 跳过 Step 2B（文学减法定稿）
 
-快车道跳过 2B 风格微调，直接进入 Step 3。
+快车道跳过 2B 文学减法，直接进入 Step 3。
 
 ### Step 3：快车道审查（统一 Reviewer 的 `mode=core`）
 
@@ -166,9 +166,9 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
    ```
 5. Craft advisory 约束：所有 raw findings 保持 `blocking=false`，Craft 建议不阻断提交。
 
-### 跳过 Step 4（定向安全润色）
+### 跳过 Step 4（定向问题修复）
 
-快车道跳过 Step 4 诊断与定向润色。
+快车道跳过 Step 4 的问题修复与事实纠错。
 
 ### Step 4.5：刷新 ProposedChanges 并校验协议
 

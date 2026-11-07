@@ -1,0 +1,25 @@
+{
+  "schema_version": "semantic-judge/v1",
+  "kind": "verdict",
+  "chapter": 3,
+  "outcome": "SEMANTIC_CHANGE_PROPOSED",
+  "changes": [
+    {
+      "dimension": "epistemic",
+      "before": "林越认为缺页的事不能说，因为“那是他自己瞒下的”。",
+      "after": "林越仍认为缺页的事不能说，但删去了他自己隐瞒缺页事实的说明。",
+      "reason": "修改后保留了林越当下不愿透露缺页的意图，但不再明确交代他此前已自行隐瞒这一事实，人物的知情与隐瞒状态信息有所缺失。"
+    },
+    {
+      "dimension": "epistemic",
+      "before": "林越回想韩策的话时，明确表示自己不觉得韩策在撒谎，疑点在于说法无法核实。",
+      "after": "林越只想到各条说法无法核实，并怀疑韩策说得过于完整、像备过课；他是否认为韩策在撒谎不再明确。",
+      "reason": "修改删去了林越对韩策是否说谎的明确判断，改变了读者能够确定的人物认知状态。"
+    }
+  ],
+  "before_sha256": "2b3de98787b237ab2be5fe822b2612f9a342a150d9e3aace60cd4e4258db386b",
+  "after_sha256": "ce816ee94aa9eb73e52f194e602566394c67d43948e98b0c6bf7905dea68410d",
+  "request_id": "8fb19e169fc4dce963ace93f359b012888631d1eba2b58cf33862248028cb100",
+  "source": "host",
+  "association": "request"
+}

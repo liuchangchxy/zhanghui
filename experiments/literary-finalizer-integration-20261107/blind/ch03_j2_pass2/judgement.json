@@ -1,0 +1,36 @@
+{
+  "chapter": 3,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "RIGHT",
+      "confidence": 0.85,
+      "evidence": "RIGHT版删除了LEFT中冗余的破折号心理说明与庙后对话要点的机械复述，叙事利落紧凑，悬疑质感更为冷峻。"
+    },
+    "READING_APPEAL": {
+      "winner": "RIGHT",
+      "confidence": 0.8,
+      "evidence": "RIGHT版剔除了关帝庙对谈后林越对前文信息的二次回嚼，推进干脆，结尾以具体的修补动作收束，悬念张力更强。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "RIGHT",
+      "confidence": 0.95,
+      "evidence": "LEFT版多次出现‘韩策说的不是问句’‘像林越说了什么很对的话’‘林越听出了毛病’等替读者下结论的解释，RIGHT版均将其克制删去。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "RIGHT",
+      "confidence": 0.8,
+      "evidence": "RIGHT版化解了LEFT中多处突兀的破折号插入语与心理标签，结尾段动作与思绪重组后呼吸节奏更为顺畅自然。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "RIGHT",
+      "confidence": 0.75,
+      "evidence": "RIGHT版舍弃了结尾‘脑子里的另一根弦绷着没松’的抽象概念，让视线稳定落回揣笔记本、为第67页补纸的微观物理动作中，临场感更扎实。"
+    },
+    "SUBTEXT": {
+      "winner": "RIGHT",
+      "confidence": 0.9,
+      "evidence": "在韩策的交锋中，RIGHT版删去了‘像是要确认他把话听到了什么程度’等意图揭底，仅保留眼神与停顿，使人物试探与未尽之言更具回味。"
+    }
+  },
+  "overall_rationale": "RIGHT版在保留相同情节骨架与环境质感的基础上，精准剔除了LEFT版中大量作者越位的总结性断语与信息复述。通过删去‘韩策说的不是问句’等说破潜台词的冗笔，韩策的深沉与林越的戒备在客观动作与留白中自然流露。文本节奏更显紧凑冷峻，结尾收束于补纸动作也远比抽象的心绪描述更具小说质感。"
+}

@@ -1,0 +1,221 @@
+{
+  "ch03": {
+    "chapter": 3,
+    "status": "FALLBACK_RAW",
+    "gate_exit_code": 1,
+    "accepted": false,
+    "reasons": [
+      "SEMANTIC_GATE_REJECTED：status=ROLLEDBACK, semantic_outcome=SEMANTIC_CHANGE_PROPOSED；触发事实安全红线回滚：Semantic Judge 判定检测到 2 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。"
+    ],
+    "length_ratio": 0.915,
+    "before_body_chars": 3413,
+    "after_body_chars": 3123,
+    "missing_numbers": [],
+    "added_numbers": [],
+    "missing_dates": [],
+    "added_dates": [],
+    "missing_codes": [],
+    "added_codes": [],
+    "semantic_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "gate_status": "ROLLEDBACK",
+    "judge_binding": "ok",
+    "judge_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "judge_changes": [
+      {
+        "dimension": "epistemic",
+        "before": "林越认为缺页的事不能说，因为“那是他自己瞒下的”。",
+        "after": "林越仍认为缺页的事不能说，但删去了他自己隐瞒缺页事实的说明。",
+        "reason": "修改后保留了林越当下不愿透露缺页的意图，但不再明确交代他此前已自行隐瞒这一事实，人物的知情与隐瞒状态信息有所缺失。"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越回想韩策的话时，明确表示自己不觉得韩策在撒谎，疑点在于说法无法核实。",
+        "after": "林越只想到各条说法无法核实，并怀疑韩策说得过于完整、像备过课；他是否认为韩策在撒谎不再明确。",
+        "reason": "修改删去了林越对韩策是否说谎的明确判断，改变了读者能够确定的人物认知状态。"
+      }
+    ],
+    "editor_model": "group/mac-deepseek4.1-gpt[1m]",
+    "judge_model": "codex/gpt-6.1-terra",
+    "editor_attempts": [
+      {
+        "attempt": 1,
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 75,
+          "output_tokens": 8794,
+          "cache_read_input_tokens": 4096,
+          "cache_creation_input_tokens": 0
+        },
+        "raw_sha256": "6afeebd918d4134299619d36cefaf6604c0c665657a0272a34ec76876a2f891c",
+        "cleaned_chars": 3132
+      }
+    ],
+    "editor_stop_reason": "end_turn",
+    "clean_notes": {
+      "heading_prepended": false,
+      "dedup_removed_chars": 0
+    },
+    "source_sha256": "2b3de98787b237ab2be5fe822b2612f9a342a150d9e3aace60cd4e4258db386b",
+    "candidate_sha256": "ce816ee94aa9eb73e52f194e602566394c67d43948e98b0c6bf7905dea68410d",
+    "prompt_sha256": "0f774691d3518a898ba0e0e46448c5a73dfb42406055c52e05dc1b280b5b3ea1",
+    "created_at": "2026-11-07T09:02:45.935174+00:00"
+  },
+  "ch05": {
+    "chapter": 5,
+    "status": "FALLBACK_RAW",
+    "gate_exit_code": 1,
+    "accepted": false,
+    "reasons": [
+      "SEMANTIC_GATE_REJECTED：status=ROLLEDBACK, semantic_outcome=SEMANTIC_CHANGE_PROPOSED；触发事实安全红线回滚：Semantic Judge 判定检测到 6 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。"
+    ],
+    "length_ratio": 0.9064,
+    "before_body_chars": 2948,
+    "after_body_chars": 2672,
+    "missing_numbers": [],
+    "added_numbers": [],
+    "missing_dates": [],
+    "added_dates": [],
+    "missing_codes": [],
+    "added_codes": [],
+    "semantic_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "gate_status": "ROLLEDBACK",
+    "judge_binding": "ok",
+    "judge_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "judge_changes": [
+      {
+        "dimension": "epistemic",
+        "before": "林越知道自己关于手伤的解释没有糊弄过去，梅叔只是暂时没有追问，将此事记下了。",
+        "after": "仅保留梅叔看了林越左手两秒后继续穿线的动作，删去了林越对梅叔反应的判断。",
+        "reason": "删去了林越明确认为梅叔没有相信其解释、并已将此事存疑记下的知情状态；保留的动作不足以完整表达这一判断。"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越听懂了系统记录可能被后续版本合法覆盖，而纸面记录须经人为撕、擦、裁等动作才会改变。",
+        "after": "保留乔宁关于系统覆盖和纸面记录的说明，但删去林越听懂后的明确理解。",
+        "reason": "删去了林越对系统覆盖机制及纸面记录特性的明确认知，不能仅凭乔宁说过就确定林越已形成同样的理解。"
+      },
+      {
+        "dimension": "relationship",
+        "before": "林越认为乔宁前一天是在防备生人，当天则是在辨认对手。",
+        "after": "仅保留乔宁看了林越一眼，删去林越对乔宁态度变化的判断。",
+        "reason": "删去了林越感知到的两人关系变化：乔宁从防备陌生人转为把林越视作对手。"
+      },
+      {
+        "dimension": "backstory",
+        "before": "乔宁走到林越面前压低声音，这是林越所见乔宁第一次这样做。",
+        "after": "乔宁走到林越面前压低声音，删去这是第一次的说明。",
+        "reason": "删去了对乔宁此前在林越面前表现方式的明确限定，以及此次行为的首次发生属性。"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越离开时明确记住了系统中不存在的铅笔字，并认识到乔宁承认纸面记录和系统覆盖，却未承认与铅笔字有关，同时要求林越不要泄露是他让其调查。",
+        "after": "只交代林越带着插销和医疗单离开，删去这段总结。",
+        "reason": "删去了林越离开时对线索、乔宁承认范围及保密条件的明确认知。此前对话仍保留相关信息，但不能完全替代此处对林越理解的确认。"
+      },
+      {
+        "dimension": "motivation",
+        "before": "林越明确决定寻找不会被同步改掉、进网之前就已填写的手写纸质交接班登记簿。",
+        "after": "仅以“交接班登记簿”结尾。",
+        "reason": "结尾仍指向登记簿，但删去了林越寻找它的明确决定，以及他选择该线索的具体理由。"
+      }
+    ],
+    "editor_model": "group/mac-deepseek4.1-gpt[1m]",
+    "judge_model": "codex/gpt-6.1-terra",
+    "editor_attempts": [
+      {
+        "attempt": 1,
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 28,
+          "output_tokens": 8280,
+          "cache_read_input_tokens": 3840,
+          "cache_creation_input_tokens": 0
+        },
+        "raw_sha256": "99412e8aa4415dab81682db7e18ee37d30ba8a87161602751083bc64bc0e2d2b",
+        "cleaned_chars": 2679
+      }
+    ],
+    "editor_stop_reason": "end_turn",
+    "clean_notes": {
+      "heading_prepended": false,
+      "dedup_removed_chars": 0
+    },
+    "source_sha256": "37d919bc49892526c8cb0f1b6908066c433a830587100d85ed2780d213151eb6",
+    "candidate_sha256": "00019971727c90900d4905bf717e3bfc539907d02b00bfcec6428ca3c2cd2890",
+    "prompt_sha256": "45e575be9dbfc18e4e607ac7b1d90cc6769347ed1b3000502664f2656bf32357",
+    "created_at": "2026-11-07T09:03:59.569278+00:00"
+  },
+  "ch07": {
+    "chapter": 7,
+    "status": "FALLBACK_RAW",
+    "gate_exit_code": 1,
+    "accepted": false,
+    "reasons": [
+      "SEMANTIC_GATE_REJECTED：status=ROLLEDBACK, semantic_outcome=SEMANTIC_CHANGE_PROPOSED；触发事实安全红线回滚：Semantic Judge 判定检测到 4 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。"
+    ],
+    "length_ratio": 0.9388,
+    "before_body_chars": 2386,
+    "after_body_chars": 2240,
+    "missing_numbers": [],
+    "added_numbers": [],
+    "missing_dates": [],
+    "added_dates": [],
+    "missing_codes": [],
+    "added_codes": [],
+    "semantic_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "gate_status": "ROLLEDBACK",
+    "judge_binding": "ok",
+    "judge_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "judge_changes": [
+      {
+        "dimension": "causality",
+        "before": "缺页的事没登记，也没法登记，因为一登记就等于当众揭了梅叔的盖子。",
+        "after": "缺页的事没登记，也没法登记，但未说明原因。",
+        "reason": "删除了不能登记缺页与暴露梅叔所隐瞒之事之间的明确因果关系。"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越认定不止他一个人在盯柜子，并觉得这句话没处说去。",
+        "after": "林越仍认定不止他一个人在盯柜子，但未提及他觉得无处诉说。",
+        "reason": "删去了林越对自身处境及无法向人诉说这一情况的明确判断。"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越听出乔宁的顾虑已经是讨价的第一步。",
+        "after": "只保留钥匙仍在台面上、乔宁没有将其推回的描写。",
+        "reason": "删去了林越识别出乔宁正在讨价的明确知情状态；保留的动作可以暗示这一点，但不能确定林越已作出该判断。"
+      },
+      {
+        "dimension": "clue",
+        "before": "钥匙是唯一能带出档案屋的实物。",
+        "after": "保留了钥匙交给乔宁的经过，但删除了钥匙作为唯一可带出档案屋实物的说明。",
+        "reason": "删去了关于可带出档案屋的实物范围及钥匙独特性的明确事实。"
+      }
+    ],
+    "editor_model": "group/mac-deepseek4.1-gpt[1m]",
+    "judge_model": "codex/gpt-6.1-terra",
+    "editor_attempts": [
+      {
+        "attempt": 1,
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 3523,
+          "output_tokens": 5031,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 0
+        },
+        "raw_sha256": "75281a84bc7d7fad9dfc839e964022efacd3fe0d306cd965612be71fd0d8107f",
+        "cleaned_chars": 2247
+      }
+    ],
+    "editor_stop_reason": "end_turn",
+    "clean_notes": {
+      "heading_prepended": false,
+      "dedup_removed_chars": 0
+    },
+    "source_sha256": "80ad500c22ade6028414d0426fa6e22939880e4bb0c5a62361ee81ad2c1889e4",
+    "candidate_sha256": "0bafd02d6508a22a999a1100d807eb45afa34f6131fde2e64c755c831ae7f54b",
+    "prompt_sha256": "cf08185a16bbc071ceb2b7262dcb9446a2f0f0b853db72c2bfc21619802c17d9",
+    "created_at": "2026-11-07T09:04:47.667477+00:00"
+  }
+}

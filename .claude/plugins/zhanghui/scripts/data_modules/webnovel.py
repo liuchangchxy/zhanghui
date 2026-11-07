@@ -676,6 +676,191 @@ def cmd_prose(args: argparse.Namespace) -> int:
             print(vt.format_prompt_block())
         return 0
 
+    if action == "literary-finalize-prompt":
+        from .chapter_runtime import ChapterRuntime
+        from .literary_finalizer import (
+            FINALIZER_VERSION,
+            build_constraints,
+            build_finalizer_prompt,
+            first_sentences,
+        )
+        from .prose_voice_target import build_voice_target
+
+        chapter = getattr(args, "chapter", 0) or 0
+        if not chapter:
+            print("ERROR: --chapter is required", file=sys.stderr)
+            return 2
+        draft_path = Path(getattr(args, "draft_file", "") or "")
+        if not draft_path.is_file():
+            print(f"ERROR: draft file not found: {draft_path}", file=sys.stderr)
+            return 2
+        source = draft_path.read_text(encoding="utf-8")
+        from .literary_finalizer import strip_packaging
+        from .reconciliation import prose_only_text
+
+        editor_source = strip_packaging(prose_only_text(source))
+
+        ctx_path = getattr(args, "governed_context", "") or ""
+        if ctx_path:
+            try:
+                ctx = json.loads(Path(ctx_path).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"ERROR: governed context unreadable: {exc}", file=sys.stderr)
+                return 2
+        else:
+            ctx = ChapterRuntime(root).get_governed_context(chapter=chapter)
+
+        identity = ctx.get("story_identity") or {}
+        outline = str((ctx.get("current_intent") or {}).get("outline") or "").strip()
+        constraints = build_constraints(ctx)
+
+        next_opening = ""
+        next_opening_file = getattr(args, "next_opening_file", "") or ""
+        if next_opening_file:
+            p = Path(next_opening_file)
+            if p.is_file():
+                next_opening = first_sentences(p.read_text(encoding="utf-8"))
+        else:
+            try:
+                from chapter_outline_loader import load_chapter_outline
+
+                next_outline = load_chapter_outline(root, chapter + 1, max_chars=None)
+                next_opening = first_sentences(next_outline or "")
+            except Exception:
+                next_opening = ""
+
+        voice_path = getattr(args, "voice_target_file", "") or ""
+        if voice_path and Path(voice_path).is_file():
+            voice_target = Path(voice_path).read_text(encoding="utf-8").strip()
+        else:
+            voice_target = build_voice_target(root, chapter=chapter).format_prompt_block()
+
+        try:
+            prompt = build_finalizer_prompt(
+                source=editor_source,
+                outline=outline,
+                constraints=constraints,
+                next_opening=next_opening,
+                voice_target=voice_target,
+                title=str(identity.get("title") or ""),
+                chapter=chapter,
+                genre=str(identity.get("genre") or ""),
+            )
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+
+        out = getattr(args, "output", "") or ""
+        if out:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
+            Path(out).write_text(prompt, encoding="utf-8")
+        prompt_out = getattr(args, "prompt_output", "") or ""
+        if prompt_out:
+            Path(prompt_out).parent.mkdir(parents=True, exist_ok=True)
+            Path(prompt_out).write_text(prompt, encoding="utf-8")
+        source_out = getattr(args, "source_output", "") or ""
+        if source_out:
+            Path(source_out).parent.mkdir(parents=True, exist_ok=True)
+            Path(source_out).write_text(editor_source, encoding="utf-8")
+        meta_out = getattr(args, "meta_output", "") or ""
+        if meta_out:
+            import hashlib
+
+            meta = {
+                "version": FINALIZER_VERSION,
+                "chapter": chapter,
+                "draft_file": str(draft_path),
+                "draft_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+                "editor_source_sha256": hashlib.sha256(editor_source.encode("utf-8")).hexdigest(),
+                "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                "outline_sha256": hashlib.sha256(outline.encode("utf-8")).hexdigest(),
+                "constraints_sha256": hashlib.sha256(constraints.encode("utf-8")).hexdigest(),
+                "next_opening_sha256": hashlib.sha256(next_opening.encode("utf-8")).hexdigest(),
+            }
+            Path(meta_out).parent.mkdir(parents=True, exist_ok=True)
+            Path(meta_out).write_text(
+                json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+        if args.format == "json":
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "version": FINALIZER_VERSION,
+                        "chapter": chapter,
+                        "prompt_chars": len(prompt),
+                        "prompt_file": out or prompt_out,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        else:
+            print(prompt)
+        return 0
+
+    if action == "literary-finalize-validate":
+        from .literary_finalizer import decide_finalizer_candidate, strip_packaging
+        from .reconciliation import prose_only_text
+
+        before_text = _read_prose_arg(
+            getattr(args, "before", "") or "", getattr(args, "before_file", "") or ""
+        )
+        after_text = _read_prose_arg(
+            getattr(args, "after", "") or "", getattr(args, "after_file", "") or ""
+        )
+        if not before_text or not after_text:
+            print("ERROR: before/after text required (use --before-file/--after-file)", file=sys.stderr)
+            return 2
+
+        gate_before = strip_packaging(prose_only_text(before_text))
+        raw_draft_text = None
+        raw_draft_file = getattr(args, "raw_draft_file", "") or ""
+        if raw_draft_file:
+            rp = Path(raw_draft_file)
+            if not rp.is_file():
+                print(f"ERROR: raw draft file not found: {rp}", file=sys.stderr)
+                return 2
+            raw_draft_text = rp.read_text(encoding="utf-8")
+
+        terms = [t.strip() for t in (getattr(args, "term", None) or []) if t.strip()]
+        terms_file = getattr(args, "terms_file", "") or ""
+        if terms_file and Path(terms_file).is_file():
+            raw_terms = Path(terms_file).read_text(encoding="utf-8").strip()
+            if raw_terms.startswith("["):
+                terms += [str(t).strip() for t in json.loads(raw_terms) if str(t).strip()]
+            else:
+                terms += [line.strip() for line in raw_terms.splitlines() if line.strip()]
+
+        judge_callable, judge_binding = _build_judge_callable(args, gate_before, after_text)
+        decision = decide_finalizer_candidate(
+            before_text,
+            after_text,
+            chapter=getattr(args, "chapter", 0) or 0,
+            semantic_judge=judge_callable,
+            min_length_ratio=getattr(args, "min_ratio", 0.90),
+            protected_terms=terms,
+            raw_draft_text=raw_draft_text,
+        )
+        payload = decision.to_dict()
+        payload["judge_binding"] = judge_binding
+        out = getattr(args, "output", "") or ""
+        if out:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
+            Path(out).write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+        if args.format == "json":
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(
+                f"Accepted: {decision.accepted} | length={decision.length_ratio:.2%} | "
+                f"semantic={decision.semantic_outcome or '-'}"
+            )
+            for reason in decision.reasons:
+                print(f"  - {reason}")
+        return 0 if decision.accepted else 1
+
     if action == "diagnose":
         text = ""
         if getattr(args, "file", None):
@@ -2013,6 +2198,47 @@ def build_parser() -> argparse.ArgumentParser:
     p_prose_vt.add_argument("--chapter", type=int, default=1, help="章节号")
     p_prose_vt.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_prose_vt.set_defaults(func=cmd_prose)
+
+    p_prose_lf = prose_sub.add_parser(
+        "literary-finalize-prompt", help="生成文学减法定稿 prompt（宿主模型执行，Step 2B）"
+    )
+    p_prose_lf.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_prose_lf.add_argument("--draft-file", required=True, help="Writer 工作草稿路径")
+    p_prose_lf.add_argument(
+        "--governed-context", default="", help="受治理上下文 JSON；缺省则从 Runtime 重新构建"
+    )
+    p_prose_lf.add_argument("--next-opening-file", default="", help="下一章开头文本（可选覆盖）")
+    p_prose_lf.add_argument("--voice-target-file", default="", help="VoiceTarget 文本（可选覆盖）")
+    p_prose_lf.add_argument("--output", default="", help="prompt 输出路径")
+    p_prose_lf.add_argument("--prompt-output", default="", help="仅 prompt 文本输出路径（同 --output）")
+    p_prose_lf.add_argument(
+        "--source-output", default="", help="仅正文（已剥离 CHANGES/封包指纹）输出路径，供 Judge 绑定使用"
+    )
+    p_prose_lf.add_argument("--meta-output", default="", help="prompt 元数据 JSON 输出路径")
+    p_prose_lf.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_prose_lf.set_defaults(func=cmd_prose)
+
+    p_prose_lfv = prose_sub.add_parser(
+        "literary-finalize-validate", help="文学减法定稿的确定性护栏与语义门禁"
+    )
+    p_prose_lfv.add_argument("--before", default="", help="Writer 原稿内容")
+    p_prose_lfv.add_argument("--before-file", default="", help="Writer 原稿文件")
+    p_prose_lfv.add_argument("--after", default="", help="定稿候选内容")
+    p_prose_lfv.add_argument("--after-file", default="", help="定稿候选文件")
+    p_prose_lfv.add_argument(
+        "--raw-draft-file", default="", help="完整工作草稿（含 CHANGES）；拒绝时原样保留它"
+    )
+    p_prose_lfv.add_argument("--chapter", type=int, default=0, help="章节号")
+    p_prose_lfv.add_argument("--judge-result", default="", help="已绑定的 Semantic Judge 裁决 JSON 字符串")
+    p_prose_lfv.add_argument("--judge-file", default="", help="已绑定的 Semantic Judge 裁决 JSON 文件")
+    p_prose_lfv.add_argument("--min-ratio", type=float, default=0.90, help="正文长度下限（默认 0.90）")
+    p_prose_lfv.add_argument(
+        "--term", action="append", default=[], help="受保护术语（可重复；出现即不得删除或替换）"
+    )
+    p_prose_lfv.add_argument("--terms-file", default="", help="受保护术语文件（JSON 数组或每行一个）")
+    p_prose_lfv.add_argument("--output", default="", help="裁决报告 JSON 输出路径")
+    p_prose_lfv.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_prose_lfv.set_defaults(func=cmd_prose)
 
     p_prose_diag = prose_sub.add_parser("diagnose", help="定向诊断章节正文瑕疵 (Diagnose First)")
     p_prose_diag.add_argument("--file", default="", help="章节正文文件路径")

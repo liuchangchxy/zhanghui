@@ -1,0 +1,36 @@
+{
+  "chapter": 3,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.88,
+      "evidence": "LEFT叙事克制冷峻，没有RIGHT诸如“林越听出了毛病”或庙后大段案情摘要式的冗余复述，整体阅读体验更加紧凑利落。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.85,
+      "evidence": "RIGHT在庙后以“乔宁。安全阀被人手动开过……”机械复盘既有信息打断了情绪连贯性，而LEFT紧扣核心疑点迅速转场，悬疑张力更强。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.95,
+      "evidence": "RIGHT频繁插入“这个由头不算牵强”、“韩策说的不是问句”、“那是他自己瞒下的”等保姆式注解，而LEFT完全摒弃了这类作者替读者总结点题的冗笔。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.86,
+      "evidence": "LEFT断句干净利落，而RIGHT频繁添加破折号解释与“脑子里的另一根弦绷着没松”等俗套过渡句，阻滞了句段的自然流转与呼吸感。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.82,
+      "evidence": "LEFT让视角紧贴阴冷档案屋与荒凉关帝庙的现场感，RIGHT过多的抽象逻辑分析与心理补丁则将读者频繁从具体情境中抽离出来。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT让台词神态自显分量，而RIGHT偏要点明“韩策说的不是问句”、“整段话搭在另一个人的记忆上，而那个人已经死了”，将言外之意尽数说破。"
+    }
+  },
+  "overall_rationale": "两版核心主干完全一致，但RIGHT有着极其明显的“过度解释”与“保姆式写作”痕迹，多处用旁白替读者定性语气、剖析漏洞，甚至在中段插入冗长的逻辑复盘，严重损害了悬疑小说的节奏与留白。LEFT行文冷峻简净，善于通过动作细节与克制对话传递机锋，潜台词充沛，整体文学质感显著优于RIGHT。"
+}

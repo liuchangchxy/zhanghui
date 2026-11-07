@@ -1,0 +1,320 @@
+{
+  "ch03_j1_pass1": {
+    "chapter": 3,
+    "judge": "j1",
+    "pass": 1,
+    "left_arm": "B",
+    "prompt_sha256": "497a6ada4e0c6baec1ecbbfb0992fad4581a5013af2ff2ba3bbc59919c5cf94e",
+    "raw_sha256": "d2eecbcb3838082da999779c356bf2d0cc95681957df250bc16d0d2b40f068ce",
+    "created_at": "2026-11-07T09:07:20.522007+00:00",
+    "call": {
+      "backend": "local-anthropic-proxy",
+      "base_url": "http://127.0.0.1:3425",
+      "requested_model": "codex/gpt-6.1-terra",
+      "response_model": "codex/gpt-6.1-terra",
+      "temperature": 0.2,
+      "max_tokens": 8000,
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 6456,
+        "output_tokens": 577,
+        "cache_read_input_tokens": 3968,
+        "cache_creation_input_tokens": 0
+      },
+      "elapsed_ms": 15216,
+      "attempt": 1,
+      "prompt_sha256": "497a6ada4e0c6baec1ecbbfb0992fad4581a5013af2ff2ba3bbc59919c5cf94e",
+      "created_at": "2026-11-07T09:07:20.519029+00:00"
+    }
+  },
+  "ch03_j1_pass2": {
+    "chapter": 3,
+    "judge": "j1",
+    "pass": 2,
+    "left_arm": "A",
+    "prompt_sha256": "3fe8d6aed6651a2732155911f99a8e78e53c736d518aa71611492f8a8cea0b14",
+    "raw_sha256": "2ec5bc82f23ca9d31249b967ffeaa374ea55eaab94c7e023d16e0ceb6edd9371",
+    "created_at": "2026-11-07T09:07:34.695670+00:00",
+    "call": {
+      "backend": "local-anthropic-proxy",
+      "base_url": "http://127.0.0.1:3425",
+      "requested_model": "codex/gpt-6.1-terra",
+      "response_model": "codex/gpt-6.1-terra",
+      "temperature": 0.2,
+      "max_tokens": 8000,
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 6456,
+        "output_tokens": 558,
+        "cache_read_input_tokens": 3968,
+        "cache_creation_input_tokens": 0
+      },
+      "elapsed_ms": 14171,
+      "attempt": 1,
+      "prompt_sha256": "3fe8d6aed6651a2732155911f99a8e78e53c736d518aa71611492f8a8cea0b14",
+      "created_at": "2026-11-07T09:07:34.694349+00:00"
+    }
+  },
+  "ch03_j2_pass1": {
+    "chapter": 3,
+    "judge": "j2",
+    "pass": 1,
+    "left_arm": "B",
+    "prompt_sha256": "497a6ada4e0c6baec1ecbbfb0992fad4581a5013af2ff2ba3bbc59919c5cf94e",
+    "raw_sha256": "5d13977375d3c926019c50e7479670735abd08ec249d138f84aa87051783bb7e",
+    "created_at": "2026-11-07T09:08:26.248457+00:00",
+    "call": {
+      "backend": "antigravity-agentapi",
+      "model_flag": "flash",
+      "human_runtime": "Gemini 3.8 Flash (Medium)",
+      "machine_runtime": "MODEL_PLACEHOLDER_M322",
+      "model_id_verifiability": "PARTIAL_INTERNAL_LABEL_ONLY",
+      "project": "outside-of-project",
+      "ls_address": "127.0.0.1:49193",
+      "conversation_id": "439306ca-71cb-4508-9011-a05be8d481c6",
+      "input_tokens": 15950,
+      "output_tokens": 6532,
+      "elapsed_ms": 51306,
+      "attempt": 1,
+      "prompt_sha256": "497a6ada4e0c6baec1ecbbfb0992fad4581a5013af2ff2ba3bbc59919c5cf94e",
+      "created_at": "2026-11-07T09:08:26.246522+00:00"
+    }
+  },
+  "ch03_j2_pass2": {
+    "chapter": 3,
+    "judge": "j2",
+    "pass": 2,
+    "left_arm": "A",
+    "prompt_sha256": "3fe8d6aed6651a2732155911f99a8e78e53c736d518aa71611492f8a8cea0b14",
+    "raw_sha256": "e4808708e0b23d3acdbfc9b417efd1f16eec2a89876f37da3b1aeef973c43335",
+    "created_at": "2026-11-07T09:09:10.742366+00:00",
+    "call": {
+      "backend": "antigravity-agentapi",
+      "model_flag": "flash",
+      "human_runtime": "Gemini 3.8 Flash (Medium)",
+      "machine_runtime": "MODEL_PLACEHOLDER_M322",
+      "model_id_verifiability": "PARTIAL_INTERNAL_LABEL_ONLY",
+      "project": "outside-of-project",
+      "ls_address": "127.0.0.1:49193",
+      "conversation_id": "a0a3e9a1-106d-4ab2-b7d4-afe737cd2ee1",
+      "input_tokens": 15945,
+      "output_tokens": 4936,
+      "elapsed_ms": 44260,
+      "attempt": 1,
+      "prompt_sha256": "3fe8d6aed6651a2732155911f99a8e78e53c736d518aa71611492f8a8cea0b14",
+      "created_at": "2026-11-07T09:09:10.741228+00:00"
+    }
+  },
+  "ch05_j1_pass1": {
+    "chapter": 5,
+    "judge": "j1",
+    "pass": 1,
+    "left_arm": "A",
+    "prompt_sha256": "0af04dad3319495d3887a5e17cf72ba92b31b71e4a5ee532dbf40a88225c69e6",
+    "raw_sha256": "101acf99d5d8a42538313a42955f2cfc19fb2a0b4e67504a7dfdeac683ab8dc7",
+    "created_at": "2026-11-07T09:09:25.560480+00:00",
+    "call": {
+      "backend": "local-anthropic-proxy",
+      "base_url": "http://127.0.0.1:3425",
+      "requested_model": "codex/gpt-6.1-terra",
+      "response_model": "codex/gpt-6.1-terra",
+      "temperature": 0.2,
+      "max_tokens": 8000,
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 5643,
+        "output_tokens": 584,
+        "cache_read_input_tokens": 3968,
+        "cache_creation_input_tokens": 0
+      },
+      "elapsed_ms": 14814,
+      "attempt": 1,
+      "prompt_sha256": "0af04dad3319495d3887a5e17cf72ba92b31b71e4a5ee532dbf40a88225c69e6",
+      "created_at": "2026-11-07T09:09:25.559048+00:00"
+    }
+  },
+  "ch05_j1_pass2": {
+    "chapter": 5,
+    "judge": "j1",
+    "pass": 2,
+    "left_arm": "B",
+    "prompt_sha256": "955a79e5a405a64991e034e2f08c36db6ae047560f84d63f1b8694caac4166d2",
+    "raw_sha256": "4ed5e892c8f81a3d7314eedf0359a43ffc0dd59ed55edb0b7099b9d9531efa35",
+    "created_at": "2026-11-07T09:09:38.816927+00:00",
+    "call": {
+      "backend": "local-anthropic-proxy",
+      "base_url": "http://127.0.0.1:3425",
+      "requested_model": "codex/gpt-6.1-terra",
+      "response_model": "codex/gpt-6.1-terra",
+      "temperature": 0.2,
+      "max_tokens": 8000,
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 5643,
+        "output_tokens": 573,
+        "cache_read_input_tokens": 3968,
+        "cache_creation_input_tokens": 0
+      },
+      "elapsed_ms": 13254,
+      "attempt": 1,
+      "prompt_sha256": "955a79e5a405a64991e034e2f08c36db6ae047560f84d63f1b8694caac4166d2",
+      "created_at": "2026-11-07T09:09:38.815519+00:00"
+    }
+  },
+  "ch05_j2_pass1": {
+    "chapter": 5,
+    "judge": "j2",
+    "pass": 1,
+    "left_arm": "A",
+    "prompt_sha256": "0af04dad3319495d3887a5e17cf72ba92b31b71e4a5ee532dbf40a88225c69e6",
+    "raw_sha256": "5bf0e849a9d9a5a5a9e17cf840f5fb82190a6bf08a404316cd26349d80bdab9e",
+    "created_at": "2026-11-07T09:10:05.272799+00:00",
+    "call": {
+      "backend": "antigravity-agentapi",
+      "model_flag": "flash",
+      "human_runtime": "Gemini 3.8 Flash (Medium)",
+      "machine_runtime": "MODEL_PLACEHOLDER_M322",
+      "model_id_verifiability": "PARTIAL_INTERNAL_LABEL_ONLY",
+      "project": "outside-of-project",
+      "ls_address": "127.0.0.1:49193",
+      "conversation_id": "665b5d98-3526-436a-b41b-0c42e22dffe3",
+      "input_tokens": 15254,
+      "output_tokens": 2794,
+      "elapsed_ms": 26232,
+      "attempt": 1,
+      "prompt_sha256": "0af04dad3319495d3887a5e17cf72ba92b31b71e4a5ee532dbf40a88225c69e6",
+      "created_at": "2026-11-07T09:10:05.270931+00:00"
+    }
+  },
+  "ch05_j2_pass2": {
+    "chapter": 5,
+    "judge": "j2",
+    "pass": 2,
+    "left_arm": "B",
+    "prompt_sha256": "955a79e5a405a64991e034e2f08c36db6ae047560f84d63f1b8694caac4166d2",
+    "raw_sha256": "c01386ac1e57cabf6b9b50019abd07c00088bbc774ed56a00c2f884171b32b0a",
+    "created_at": "2026-11-07T09:10:45.875572+00:00",
+    "call": {
+      "backend": "antigravity-agentapi",
+      "model_flag": "flash",
+      "human_runtime": "Gemini 3.8 Flash (Medium)",
+      "machine_runtime": "MODEL_PLACEHOLDER_M322",
+      "model_id_verifiability": "PARTIAL_INTERNAL_LABEL_ONLY",
+      "project": "outside-of-project",
+      "ls_address": "127.0.0.1:49193",
+      "conversation_id": "f90dedac-f033-4d24-9f4f-4a6da09185ed",
+      "input_tokens": 15247,
+      "output_tokens": 4353,
+      "elapsed_ms": 40374,
+      "attempt": 1,
+      "prompt_sha256": "955a79e5a405a64991e034e2f08c36db6ae047560f84d63f1b8694caac4166d2",
+      "created_at": "2026-11-07T09:10:45.874618+00:00"
+    }
+  },
+  "ch07_j1_pass1": {
+    "chapter": 7,
+    "judge": "j1",
+    "pass": 1,
+    "left_arm": "B",
+    "prompt_sha256": "64fc19998747cfe14c6cdba0b230e6ed1c29100ddea2989d7431b9c2ee2ec6ee",
+    "raw_sha256": "f352421f18373e9abc09c6d4efd7fbd3bc76127b7e35365f3ebd7afc631e2fe2",
+    "created_at": "2026-11-07T09:11:00.505512+00:00",
+    "call": {
+      "backend": "local-anthropic-proxy",
+      "base_url": "http://127.0.0.1:3425",
+      "requested_model": "codex/gpt-6.1-terra",
+      "response_model": "codex/gpt-6.1-terra",
+      "temperature": 0.2,
+      "max_tokens": 8000,
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 4937,
+        "output_tokens": 616,
+        "cache_read_input_tokens": 3968,
+        "cache_creation_input_tokens": 0
+      },
+      "elapsed_ms": 14626,
+      "attempt": 1,
+      "prompt_sha256": "64fc19998747cfe14c6cdba0b230e6ed1c29100ddea2989d7431b9c2ee2ec6ee",
+      "created_at": "2026-11-07T09:11:00.504346+00:00"
+    }
+  },
+  "ch07_j1_pass2": {
+    "chapter": 7,
+    "judge": "j1",
+    "pass": 2,
+    "left_arm": "A",
+    "prompt_sha256": "8bc4b1e8f36f20cf2c22d7d0c3ca325045d8ea827acdc710e7c691b054f740be",
+    "raw_sha256": "f7ebf0d42e3dacd72b44516e511b466c8cc529cff71c44d7c5cfd1bde370104e",
+    "created_at": "2026-11-07T09:11:14.515859+00:00",
+    "call": {
+      "backend": "local-anthropic-proxy",
+      "base_url": "http://127.0.0.1:3425",
+      "requested_model": "codex/gpt-6.1-terra",
+      "response_model": "codex/gpt-6.1-terra",
+      "temperature": 0.2,
+      "max_tokens": 8000,
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 4937,
+        "output_tokens": 586,
+        "cache_read_input_tokens": 3968,
+        "cache_creation_input_tokens": 0
+      },
+      "elapsed_ms": 14007,
+      "attempt": 1,
+      "prompt_sha256": "8bc4b1e8f36f20cf2c22d7d0c3ca325045d8ea827acdc710e7c691b054f740be",
+      "created_at": "2026-11-07T09:11:14.514016+00:00"
+    }
+  },
+  "ch07_j2_pass1": {
+    "chapter": 7,
+    "judge": "j2",
+    "pass": 1,
+    "left_arm": "A",
+    "prompt_sha256": "8bc4b1e8f36f20cf2c22d7d0c3ca325045d8ea827acdc710e7c691b054f740be",
+    "raw_sha256": "7d3e70126119ad39caca3412863b1f1d4f242c75c06805660d2932fc84858984",
+    "created_at": "2026-11-07T09:11:55.121069+00:00",
+    "call": {
+      "backend": "antigravity-agentapi",
+      "model_flag": "flash",
+      "human_runtime": "Gemini 3.8 Flash (Medium)",
+      "machine_runtime": "MODEL_PLACEHOLDER_M322",
+      "model_id_verifiability": "PARTIAL_INTERNAL_LABEL_ONLY",
+      "project": "outside-of-project",
+      "ls_address": "127.0.0.1:49193",
+      "conversation_id": "23503aa2-648f-42b0-a8cf-c257603bbe1f",
+      "input_tokens": 14559,
+      "output_tokens": 5262,
+      "elapsed_ms": 40366,
+      "attempt": 1,
+      "prompt_sha256": "8bc4b1e8f36f20cf2c22d7d0c3ca325045d8ea827acdc710e7c691b054f740be",
+      "created_at": "2026-11-07T09:11:55.120201+00:00"
+    }
+  },
+  "ch07_j2_pass2": {
+    "chapter": 7,
+    "judge": "j2",
+    "pass": 2,
+    "left_arm": "B",
+    "prompt_sha256": "64fc19998747cfe14c6cdba0b230e6ed1c29100ddea2989d7431b9c2ee2ec6ee",
+    "raw_sha256": "bc3ebe089ceb3af422eb2854aeff3a2d3fe7ebd6a7668c2c194aba52d7ecb45b",
+    "created_at": "2026-11-07T09:12:34.658432+00:00",
+    "call": {
+      "backend": "antigravity-agentapi",
+      "model_flag": "flash",
+      "human_runtime": "Gemini 3.8 Flash (Medium)",
+      "machine_runtime": "MODEL_PLACEHOLDER_M322",
+      "model_id_verifiability": "PARTIAL_INTERNAL_LABEL_ONLY",
+      "project": "outside-of-project",
+      "ls_address": "127.0.0.1:49193",
+      "conversation_id": "3afd5f5c-9024-487e-b7bb-884a08745422",
+      "input_tokens": 14561,
+      "output_tokens": 4433,
+      "elapsed_ms": 39344,
+      "attempt": 1,
+      "prompt_sha256": "64fc19998747cfe14c6cdba0b230e6ed1c29100ddea2989d7431b9c2ee2ec6ee",
+      "created_at": "2026-11-07T09:12:34.656986+00:00"
+    }
+  }
+}
