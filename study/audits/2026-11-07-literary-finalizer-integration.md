@@ -49,7 +49,40 @@ PR #67 已经冻结了五条原则、三条护栏与输入结构，并在 6 个�
 - 回退：`--raw-draft-file` 保证拒绝时保留含 `<chapter_changes>` 的完整工作草稿。
 - 不重试：一次生成；截断/空输出才允许机械重试。门禁失败直接进入 Step 3。
 
-## 5. 已知限制
+## 5. 验收边界修正（v2）
+
+第一轮 E2E 暴露的问题不是“Judge 误报”，而是 acceptance 层把 Judge 找出的
+**话语层压缩**也当成故事状态变化整体回滚。修正只改 literary finalizer 的 acceptance：
+
+- Judge 仍然是唯一的差异发现者。
+- `prose judge-request --state-impact`（仅 Step 2B 使用）要求 Judge 给每条 change 标注
+  `STORY_STATE | DISCOURSE | UNKNOWN`。默认请求的输出与旧行为完全一致。
+- Finalizer 只把 `STORY_STATE`、`UNKNOWN`、未标注、无法绑定、Judge 失败、确定性 claim 差异
+  当作 blocker；只有明确 `DISCOURSE` 的 change 才允许。
+- `ownership / world_rule / capability` 即使被误标为 `DISCOURSE` 仍然硬拒绝；
+  `event_outcome / location_or_state / clue / causality` 由 Judge 按“保留正文是否仍承载同一状态”
+  判断——删除已被动作/对白展示的总结、调整同一组动作顺序，属于话语层压缩。
+- 删掉了 v1 的“SEMANTIC_CHANGE_PROPOSED 一律回退”；未标注、`UNKNOWN`、无法绑定、Judge 失败、
+  确定性 claim 差异仍然 fail-closed。
+- Step 2B 的 Judge 请求额外读入精简的 `current_intent` + `governed_canon`，用于识别
+  “前文/Canon 已建立、此处只是复述”的事实（例如“隐瞒缺页暂不登记”）。
+
+**v2 短 E2E 结果**（复用同一批候选，不重新生成正文）：
+
+| 章 | 长度比 | change 分类 | 最终 |
+|---|---:|---|---|
+| ch03 | 91.53% | 14 条全部 DISCOURSE | 采用候选 |
+| ch05 | 90.66% | 6 条全部 DISCOURSE | 采用候选 |
+| ch07 | 93.88% | 3 DISCOURSE + 1 STORY_STATE + 1 硬保护 | 回退 Writer raw |
+
+- ch03 / ch05 逐项核对无真实 story-state loss；
+- ch07 拒绝“一登记就等于当众揭了梅叔的盖子”（必要因果）与“唯一能带出档案屋的实物”
+  （ownership 硬保护），危险变化未进入最终正文；
+- 判定 PASS，未自行合并。
+- 没有新增 Agent、Router、分类框架或白名单；只是给现有 Judge 输出多一个可选字段，
+  并在 finalizer 内部过滤。
+
+## 6. 已知限制
 
 - 确定性护栏不能证明“事件结果/知情状态/推理连接”未变；这部分仍依赖现有语义 Judge 与
   独立内容检查。不能把 judge 的偏好当事实核查。

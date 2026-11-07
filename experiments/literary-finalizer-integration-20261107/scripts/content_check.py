@@ -11,10 +11,13 @@ from __future__ import annotations
 import difflib
 import json
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SUFFIX = ("_" + sys.argv[1]) if len(sys.argv) > 1 else ""
+OUT_SUFFIX = "_V2" if SUFFIX else ""
 
 
 def clean(text: str) -> str:
@@ -76,14 +79,20 @@ def tail_retention(a: str, b: str) -> dict:
 
 
 def main() -> None:
-    records = json.loads((ROOT / "results" / "run_records.json").read_text(encoding="utf-8"))
+    records = json.loads(
+        (ROOT / "results" / f"run_records{SUFFIX}.json").read_text(encoding="utf-8")
+    )
     report = {}
     diff_lines = ["# Writer raw → finalizer diff", ""]
     for key in sorted(records):
         rec = records[key]
         accepted = rec.get("status") == "ACCEPTED"
         arm = "final" if accepted else "candidate_rejected"
-        artifact = ROOT / "outputs" / f"{key}_{'final' if accepted else 'candidate'}.md"
+        artifact = (
+            ROOT / "outputs" / f"{key}_final{SUFFIX}.md"
+            if accepted
+            else ROOT / "outputs" / f"{key}_candidate.md"
+        )
         if not artifact.exists():
             report[key] = {"status": rec.get("status"), "reasons": rec.get("reasons", [])}
             continue
@@ -124,10 +133,12 @@ def main() -> None:
             )
         )
         diff_lines += [f"## {key} ({arm})", "", "```diff", *diff, "```", ""]
-    (ROOT / "analysis" / "CONTENT_CHECK_AUTO.json").write_text(
+    (ROOT / "analysis" / f"CONTENT_CHECK{OUT_SUFFIX}_AUTO.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    (ROOT / "analysis" / "DIFFS.md").write_text("\n".join(diff_lines) + "\n", encoding="utf-8")
+    (ROOT / "analysis" / f"DIFFS{OUT_SUFFIX}.md").write_text(
+        "\n".join(diff_lines) + "\n", encoding="utf-8"
+    )
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 

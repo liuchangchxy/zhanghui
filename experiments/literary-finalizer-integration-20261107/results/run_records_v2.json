@@ -1,0 +1,491 @@
+{
+  "ch03": {
+    "chapter": 3,
+    "status": "ACCEPTED",
+    "gate_exit_code": 0,
+    "accepted": true,
+    "reasons": [],
+    "length_ratio": 0.915,
+    "before_body_chars": 3413,
+    "after_body_chars": 3123,
+    "missing_numbers": [],
+    "added_numbers": [],
+    "missing_dates": [],
+    "added_dates": [],
+    "missing_codes": [],
+    "added_codes": [],
+    "semantic_outcome": "STYLE_ONLY_SAFE",
+    "gate_status": "ACCEPTED",
+    "gate_details": {
+      "rollback_reason": null,
+      "staccato_score": 0.020090732339598218,
+      "edit_footprint_ratio": 0.0582,
+      "required_actions": [],
+      "discourse_only": true,
+      "allowed_changes": [
+        {
+          "dimension": "motivation",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "说去东街配点鱼胶——修纸用，这个由头不算牵强。",
+          "edited_excerpt": "说去东街配点鱼胶，修纸用。",
+          "description": "删除了对出门由头是否牵强的评价；林越购买修纸用鱼胶并借机调查的行动仍然保留。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "event_outcome",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "他没问。脚下一转，出了巷子。",
+          "edited_excerpt": "脚下一转，出了巷子。",
+          "description": "删除了没有追问柜锁刮痕的明示；紧接着转身离开的动作仍呈现同一选择。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "他意识到这片地界上大小事都收在一个人手里，没有别的门路。",
+          "edited_excerpt": "这片地界上大小事都收在一个人手里，没有别的门路。",
+          "description": "删除“他意识到”后，该句仍紧接林越原本不打算找巡防队的想法，联系老板的话语，可读作林越当时的判断，没有足够依据认定它被改成客观确认事实。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "relationship",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "目光在他脸上停了一瞬，不重，但够用。",
+          "edited_excerpt": "目光在他脸上停了一瞬，不重。",
+          "description": "删除了对目光效果的程度注解；韩策注意到林越及随后主动搭话的行为未变。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "“你来找人问白塔的事。”韩策说的不是问句。",
+          "edited_excerpt": "“你来找人问白塔的事。”",
+          "description": "删除了对陈述语气的说明；韩策所说的内容和林越没有否认的反应均保留。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "causality",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "缺页的事不能说，那是他自己瞒下的。纤维残根也不能提。",
+          "edited_excerpt": "缺页的事不能说，纤维残根也不能提。",
+          "description": "删除了对隐瞒缺页原因的重述；林越此前私下瞒报缺页的既有事实仍在 Canon 中，正文也保留了他不向韩策透露缺页和纤维的选择。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "relationship",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "然后点了点头，像林越说了什么很对的话。",
+          "edited_excerpt": "然后点了点头。",
+          "description": "删除了对韩策点头意味的旁白注解；点头动作及他随后说林越问到点子上的对白仍在。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "梅叔没提过，报告里他翻过的那部分也没出现过。一个凭空掉下来的名字。",
+          "edited_excerpt": "梅叔没提过，报告里他翻过的那部分也没出现过。",
+          "description": "删除了对乔宁这个名字突然出现的总结；林越没听过此名、梅叔没提过以及已翻阅部分未出现此名的知情状态均保留。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "motivation",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "他看了林越一眼，像是要确认他把话听到了什么程度。",
+          "edited_excerpt": "他看了林越一眼。",
+          "description": "删除了对韩策目光意图的推测；停顿、看向林越及随后解释的动作和对白不变。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "林越听出了毛病——韩策说的是“我师父看过”，不是“我看过”。他本人没经手过原件。整段话搭在另一个人的记忆上，而那个人已经死了。",
+          "edited_excerpt": "韩策说的是“我师父看过”，不是“我看过”。他本人没经手过原件。",
+          "description": "删除了林越发现问题的提示和对证言依赖已故师父记忆的总结；保留的文字仍明确区分韩策与师父的见证，师父已故也在前文保留。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "林越在庙里又站了一会儿，把刚才的话在脑子里过了一遍。乔宁。安全阀被人手动开过。值班确认单不见了。移交单上有记录，但移交单也在那批东西里。",
+          "edited_excerpt": "林越在庙里又站了一会儿。",
+          "description": "删除了对刚发生的对白和线索的复盘；相关信息仍在韩策的叙述中，移交单也仍是林越计划调查的线索。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "林越没觉得他在撒谎，至少他说那些话的时候语气是稳的。",
+          "edited_excerpt": "该句被删除；后文保留“韩策说得太完整了”及林越对其时机的疑问。",
+          "description": "删除了林越对韩策是否撒谎及其语气的即时主观判断；他仍对韩策的说法和时机抱有疑虑，未增删其实际掌握的证据。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "clue",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "师父死了，原件没了，调令没登记。所有能作证的东西都不在。唯一可能还存在的物证，就是那张移交单。",
+          "edited_excerpt": "师父死了，原件没了，调令没登记。唯一可能还存在的物证，就是那张移交单。",
+          "description": "删除了对证据难以核实的概括；具体障碍和可能存在的移交单均保留。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "motivation",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "手上做着修复的活儿，脑子里的另一根弦绷着没松——明天他得找个不显眼的由头，问梅叔一句：那批东西里有没有散页的移交单。问得太直白就露了。他得想个说法。",
+          "edited_excerpt": "明天他得找个不显眼的由头，问梅叔一句：那批东西里有没有散页的移交单。问得太直白就露了。林越把笔记本揣回内兜，开始给第67页补纸。",
+          "description": "删除了持续紧张的心理比喻和需要斟酌说法的重复提示，并调整了补纸动作与计划的叙述顺序；收起笔记本、补纸、明天询问梅叔及避免问得直白的决定均保留。",
+          "severity": "blocking"
+        }
+      ],
+      "blocking_changes": []
+    },
+    "judge_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "judge_changes": [
+      {
+        "dimension": "motivation",
+        "before": "说去东街配点鱼胶——修纸用，这个由头不算牵强。",
+        "after": "说去东街配点鱼胶，修纸用。",
+        "reason": "删除了对出门由头是否牵强的评价；林越购买修纸用鱼胶并借机调查的行动仍然保留。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "event_outcome",
+        "before": "他没问。脚下一转，出了巷子。",
+        "after": "脚下一转，出了巷子。",
+        "reason": "删除了没有追问柜锁刮痕的明示；紧接着转身离开的动作仍呈现同一选择。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "他意识到这片地界上大小事都收在一个人手里，没有别的门路。",
+        "after": "这片地界上大小事都收在一个人手里，没有别的门路。",
+        "reason": "删除“他意识到”后，该句仍紧接林越原本不打算找巡防队的想法，联系老板的话语，可读作林越当时的判断，没有足够依据认定它被改成客观确认事实。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "relationship",
+        "before": "目光在他脸上停了一瞬，不重，但够用。",
+        "after": "目光在他脸上停了一瞬，不重。",
+        "reason": "删除了对目光效果的程度注解；韩策注意到林越及随后主动搭话的行为未变。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "“你来找人问白塔的事。”韩策说的不是问句。",
+        "after": "“你来找人问白塔的事。”",
+        "reason": "删除了对陈述语气的说明；韩策所说的内容和林越没有否认的反应均保留。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "causality",
+        "before": "缺页的事不能说，那是他自己瞒下的。纤维残根也不能提。",
+        "after": "缺页的事不能说，纤维残根也不能提。",
+        "reason": "删除了对隐瞒缺页原因的重述；林越此前私下瞒报缺页的既有事实仍在 Canon 中，正文也保留了他不向韩策透露缺页和纤维的选择。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "relationship",
+        "before": "然后点了点头，像林越说了什么很对的话。",
+        "after": "然后点了点头。",
+        "reason": "删除了对韩策点头意味的旁白注解；点头动作及他随后说林越问到点子上的对白仍在。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "梅叔没提过，报告里他翻过的那部分也没出现过。一个凭空掉下来的名字。",
+        "after": "梅叔没提过，报告里他翻过的那部分也没出现过。",
+        "reason": "删除了对乔宁这个名字突然出现的总结；林越没听过此名、梅叔没提过以及已翻阅部分未出现此名的知情状态均保留。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "motivation",
+        "before": "他看了林越一眼，像是要确认他把话听到了什么程度。",
+        "after": "他看了林越一眼。",
+        "reason": "删除了对韩策目光意图的推测；停顿、看向林越及随后解释的动作和对白不变。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越听出了毛病——韩策说的是“我师父看过”，不是“我看过”。他本人没经手过原件。整段话搭在另一个人的记忆上，而那个人已经死了。",
+        "after": "韩策说的是“我师父看过”，不是“我看过”。他本人没经手过原件。",
+        "reason": "删除了林越发现问题的提示和对证言依赖已故师父记忆的总结；保留的文字仍明确区分韩策与师父的见证，师父已故也在前文保留。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越在庙里又站了一会儿，把刚才的话在脑子里过了一遍。乔宁。安全阀被人手动开过。值班确认单不见了。移交单上有记录，但移交单也在那批东西里。",
+        "after": "林越在庙里又站了一会儿。",
+        "reason": "删除了对刚发生的对白和线索的复盘；相关信息仍在韩策的叙述中，移交单也仍是林越计划调查的线索。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越没觉得他在撒谎，至少他说那些话的时候语气是稳的。",
+        "after": "该句被删除；后文保留“韩策说得太完整了”及林越对其时机的疑问。",
+        "reason": "删除了林越对韩策是否撒谎及其语气的即时主观判断；他仍对韩策的说法和时机抱有疑虑，未增删其实际掌握的证据。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "clue",
+        "before": "师父死了，原件没了，调令没登记。所有能作证的东西都不在。唯一可能还存在的物证，就是那张移交单。",
+        "after": "师父死了，原件没了，调令没登记。唯一可能还存在的物证，就是那张移交单。",
+        "reason": "删除了对证据难以核实的概括；具体障碍和可能存在的移交单均保留。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "motivation",
+        "before": "手上做着修复的活儿，脑子里的另一根弦绷着没松——明天他得找个不显眼的由头，问梅叔一句：那批东西里有没有散页的移交单。问得太直白就露了。他得想个说法。",
+        "after": "明天他得找个不显眼的由头，问梅叔一句：那批东西里有没有散页的移交单。问得太直白就露了。林越把笔记本揣回内兜，开始给第67页补纸。",
+        "reason": "删除了持续紧张的心理比喻和需要斟酌说法的重复提示，并调整了补纸动作与计划的叙述顺序；收起笔记本、补纸、明天询问梅叔及避免问得直白的决定均保留。",
+        "impact": "DISCOURSE"
+      }
+    ],
+    "judge_model": "codex/gpt-6.1-terra",
+    "judge_stop_reason": "end_turn",
+    "source_sha256": "2b3de98787b237ab2be5fe822b2612f9a342a150d9e3aace60cd4e4258db386b",
+    "candidate_sha256": "ce816ee94aa9eb73e52f194e602566394c67d43948e98b0c6bf7905dea68410d",
+    "request_id": "8fb19e169fc4dce963ace93f359b012888631d1eba2b58cf33862248028cb100",
+    "created_at": "2026-11-07T10:35:13.047277+00:00"
+  },
+  "ch05": {
+    "chapter": 5,
+    "status": "ACCEPTED",
+    "gate_exit_code": 0,
+    "accepted": true,
+    "reasons": [],
+    "length_ratio": 0.9064,
+    "before_body_chars": 2948,
+    "after_body_chars": 2672,
+    "missing_numbers": [],
+    "added_numbers": [],
+    "missing_dates": [],
+    "added_dates": [],
+    "missing_codes": [],
+    "added_codes": [],
+    "semantic_outcome": "STYLE_ONLY_SAFE",
+    "gate_status": "ACCEPTED",
+    "gate_details": {
+      "rollback_reason": null,
+      "staccato_score": 0.044008124576844984,
+      "edit_footprint_ratio": 0.048,
+      "required_actions": [],
+      "discourse_only": true,
+      "allowed_changes": [
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "不问比问更压人，林越知道这事没糊过去，只是被存下了。",
+          "edited_excerpt": "保留梅叔查看林越的手、继续穿线的动作，删除林越对梅叔反应的判断。",
+          "description": "梅叔的反应及两人此前的对话仍在，删除的是林越对眼前互动的解读，没有改变可确认的知情事实。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "林越听懂了。放在网上的东西，上一秒是真的，下一秒可能被合法地覆盖成另一个样子。而纸上的东西，除非有人动手撕、动手擦、动手裁，否则它就在那儿。",
+          "edited_excerpt": "删除林越的理解确认和对网络记录、纸质记录差异的复述。",
+          "description": "此前乔宁关于同步覆盖的解释和两人说的“纸不会”均保留；后文乔宁也说明纸不会自己改、但人会动手。世界规则及林越据此继续追问的行动仍成立。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "relationship",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "那眼神和昨天在泵房门口完全不同——昨天是防备一个生人，今天是辨认一个对手。",
+          "edited_excerpt": "保留“乔宁看了他一眼”，删除对眼神及两人互动的解释。",
+          "description": "乔宁面对追问的反应和随后承认签字的对白仍在；删除的是对眼神潜台词的点破，没有改写两人的决定或行动。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "relationship",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "他走到林越面前，压低了声音——这在乔宁身上是头一回。",
+          "edited_excerpt": "他走到林越面前，压低了声音。",
+          "description": "保留压低声音的动作，删除强调这一刻的“头一回”；没有显示后续关系或行动因此改变。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "clue",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "脑子里多了一条能往下钉的钉子：一九九九年八月八日，七号泵房，系统记录上不存在的一行铅笔字。乔宁承认纸上有东西，也承认系统会盖，但他没承认自己跟那行字有任何关系，还划了线——别跟人说是我让你查的。",
+          "edited_excerpt": "删除章末对铅笔字、乔宁回应及保密条件的总结。",
+          "description": "铅笔字的日期、地点和内容，以及乔宁关于纸质记录、同步覆盖和保密条件的对白均在前文保留。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "motivation",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "他得找到那种不会被同步改掉的东西。手写的。纸做的。进网之前就填好的。交接班登记簿。",
+          "edited_excerpt": "交接班登记簿。",
+          "description": "乔宁此前已明确要求林越查找手写交接班登记簿，并解释其在进网前填好、同步改不动；章末仍保留该调查方向，行动理由可以从保留对白中恢复。",
+          "severity": "blocking"
+        }
+      ],
+      "blocking_changes": []
+    },
+    "judge_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "judge_changes": [
+      {
+        "dimension": "epistemic",
+        "before": "不问比问更压人，林越知道这事没糊过去，只是被存下了。",
+        "after": "保留梅叔查看林越的手、继续穿线的动作，删除林越对梅叔反应的判断。",
+        "reason": "梅叔的反应及两人此前的对话仍在，删除的是林越对眼前互动的解读，没有改变可确认的知情事实。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越听懂了。放在网上的东西，上一秒是真的，下一秒可能被合法地覆盖成另一个样子。而纸上的东西，除非有人动手撕、动手擦、动手裁，否则它就在那儿。",
+        "after": "删除林越的理解确认和对网络记录、纸质记录差异的复述。",
+        "reason": "此前乔宁关于同步覆盖的解释和两人说的“纸不会”均保留；后文乔宁也说明纸不会自己改、但人会动手。世界规则及林越据此继续追问的行动仍成立。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "relationship",
+        "before": "那眼神和昨天在泵房门口完全不同——昨天是防备一个生人，今天是辨认一个对手。",
+        "after": "保留“乔宁看了他一眼”，删除对眼神及两人互动的解释。",
+        "reason": "乔宁面对追问的反应和随后承认签字的对白仍在；删除的是对眼神潜台词的点破，没有改写两人的决定或行动。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "relationship",
+        "before": "他走到林越面前，压低了声音——这在乔宁身上是头一回。",
+        "after": "他走到林越面前，压低了声音。",
+        "reason": "保留压低声音的动作，删除强调这一刻的“头一回”；没有显示后续关系或行动因此改变。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "clue",
+        "before": "脑子里多了一条能往下钉的钉子：一九九九年八月八日，七号泵房，系统记录上不存在的一行铅笔字。乔宁承认纸上有东西，也承认系统会盖，但他没承认自己跟那行字有任何关系，还划了线——别跟人说是我让你查的。",
+        "after": "删除章末对铅笔字、乔宁回应及保密条件的总结。",
+        "reason": "铅笔字的日期、地点和内容，以及乔宁关于纸质记录、同步覆盖和保密条件的对白均在前文保留。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "motivation",
+        "before": "他得找到那种不会被同步改掉的东西。手写的。纸做的。进网之前就填好的。交接班登记簿。",
+        "after": "交接班登记簿。",
+        "reason": "乔宁此前已明确要求林越查找手写交接班登记簿，并解释其在进网前填好、同步改不动；章末仍保留该调查方向，行动理由可以从保留对白中恢复。",
+        "impact": "DISCOURSE"
+      }
+    ],
+    "judge_model": "codex/gpt-6.1-terra",
+    "judge_stop_reason": "end_turn",
+    "source_sha256": "37d919bc49892526c8cb0f1b6908066c433a830587100d85ed2780d213151eb6",
+    "candidate_sha256": "00019971727c90900d4905bf717e3bfc539907d02b00bfcec6428ca3c2cd2890",
+    "request_id": "0945a8796c514c7e09f8cacd5d9cd0dee7115817362cf796ed2c80a5b5b2a7c2",
+    "created_at": "2026-11-07T10:35:31.816151+00:00"
+  },
+  "ch07": {
+    "chapter": 7,
+    "status": "FALLBACK_RAW",
+    "gate_exit_code": 1,
+    "accepted": false,
+    "reasons": [
+      "SEMANTIC_GATE_REJECTED：status=ROLLEDBACK, semantic_outcome=SEMANTIC_CHANGE_PROPOSED；触发事实安全红线回滚：Semantic Judge 判定检测到 5 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。"
+    ],
+    "length_ratio": 0.9388,
+    "before_body_chars": 2386,
+    "after_body_chars": 2240,
+    "missing_numbers": [],
+    "added_numbers": [],
+    "missing_dates": [],
+    "added_dates": [],
+    "missing_codes": [],
+    "added_codes": [],
+    "semantic_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "gate_status": "ROLLEDBACK",
+    "gate_details": {
+      "rollback_reason": "触发事实安全红线回滚：Semantic Judge 判定检测到 5 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。",
+      "staccato_score": 0.0,
+      "edit_footprint_ratio": 0.0,
+      "required_actions": [],
+      "discourse_only": false,
+      "allowed_changes": [
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "不止他一个人在盯这只柜子。但这句话他没处说去。",
+          "edited_excerpt": "不止他一个人在盯这只柜子。",
+          "description": "删除了林越觉得无处诉说的心理落点；他对柜子刮痕的判断仍保留，未改变已知事实或实际行动。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "epistemic",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "林越听出来了，这已经是讨价的第一步。钥匙还在台面上，乔宁的手没把它推回来。",
+          "edited_excerpt": "钥匙还在台面上，乔宁的手没把它推回来。",
+          "description": "删除了对乔宁话语潜台词的点破；此前乔宁提出顾虑，随后双方继续商谈条件，交涉过程和林越的应对均保留。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "clue",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "明天三点之前，乔宁会对着那组齿口轮廓去翻旧图纸，看它像不像站里九八年改造前某一套系统上的东西。能对上什么，对不上什么，乔宁不会替他扛。",
+          "edited_excerpt": "删除该句。",
+          "description": "此前对白已保留乔宁对照九八年设备改造前旧图纸、尽量在林越次日来取钥匙前查找的安排，以及查不出来便不要纠缠他的条件；删除的是章末复述。章末追问未正式入册图纸相关事项的下一步方向仍然保留。",
+          "severity": "blocking"
+        }
+      ],
+      "blocking_changes": [
+        {
+          "dimension": "causality",
+          "evidence_type": "semantic_judge_finding",
+          "original_excerpt": "缺页的事没登记，也没法登记——一登记就等于当众揭了梅叔的盖子。",
+          "edited_excerpt": "缺页的事没登记，也没法登记。",
+          "description": "删除了林越不登记缺页会当众揭露梅叔的具体解释。保留正文只说明他没有登记，无法唯一恢复这一顾虑；治理设定中虽有登记上报的规程和梅叔否认人为撕页的态度，也没有明确给出林越的这一理由。",
+          "severity": "blocking"
+        },
+        {
+          "dimension": "ownership",
+          "evidence_type": "semantic_judge_discourse",
+          "original_excerpt": "钥匙不在他身上了。唯一能带出档案屋的实物，现在装在别人的工装口袋里。",
+          "edited_excerpt": "删除该句。",
+          "description": "这是对钥匙交接状态的复述。保留正文已明确写出林越将钥匙推给乔宁、乔宁将其放进工装口袋，以及林越离开时口袋空了；次日下午归还的约定也仍在。",
+          "severity": "blocking"
+        }
+      ]
+    },
+    "judge_outcome": "SEMANTIC_CHANGE_PROPOSED",
+    "judge_changes": [
+      {
+        "dimension": "epistemic",
+        "before": "不止他一个人在盯这只柜子。但这句话他没处说去。",
+        "after": "不止他一个人在盯这只柜子。",
+        "reason": "删除了林越觉得无处诉说的心理落点；他对柜子刮痕的判断仍保留，未改变已知事实或实际行动。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "causality",
+        "before": "缺页的事没登记，也没法登记——一登记就等于当众揭了梅叔的盖子。",
+        "after": "缺页的事没登记，也没法登记。",
+        "reason": "删除了林越不登记缺页会当众揭露梅叔的具体解释。保留正文只说明他没有登记，无法唯一恢复这一顾虑；治理设定中虽有登记上报的规程和梅叔否认人为撕页的态度，也没有明确给出林越的这一理由。",
+        "impact": "STORY_STATE"
+      },
+      {
+        "dimension": "epistemic",
+        "before": "林越听出来了，这已经是讨价的第一步。钥匙还在台面上，乔宁的手没把它推回来。",
+        "after": "钥匙还在台面上，乔宁的手没把它推回来。",
+        "reason": "删除了对乔宁话语潜台词的点破；此前乔宁提出顾虑，随后双方继续商谈条件，交涉过程和林越的应对均保留。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "ownership",
+        "before": "钥匙不在他身上了。唯一能带出档案屋的实物，现在装在别人的工装口袋里。",
+        "after": "删除该句。",
+        "reason": "这是对钥匙交接状态的复述。保留正文已明确写出林越将钥匙推给乔宁、乔宁将其放进工装口袋，以及林越离开时口袋空了；次日下午归还的约定也仍在。",
+        "impact": "DISCOURSE"
+      },
+      {
+        "dimension": "clue",
+        "before": "明天三点之前，乔宁会对着那组齿口轮廓去翻旧图纸，看它像不像站里九八年改造前某一套系统上的东西。能对上什么，对不上什么，乔宁不会替他扛。",
+        "after": "删除该句。",
+        "reason": "此前对白已保留乔宁对照九八年设备改造前旧图纸、尽量在林越次日来取钥匙前查找的安排，以及查不出来便不要纠缠他的条件；删除的是章末复述。章末追问未正式入册图纸相关事项的下一步方向仍然保留。",
+        "impact": "DISCOURSE"
+      }
+    ],
+    "judge_model": "codex/gpt-6.1-terra",
+    "judge_stop_reason": "end_turn",
+    "source_sha256": "80ad500c22ade6028414d0426fa6e22939880e4bb0c5a62361ee81ad2c1889e4",
+    "candidate_sha256": "0bafd02d6508a22a999a1100d807eb45afa34f6131fde2e64c755c831ae7f54b",
+    "request_id": "3238202963c6b7f3348ddcf7e6cc8d093642b724a60f6cbd5dda7befcfdc994e",
+    "created_at": "2026-11-07T10:35:48.224038+00:00"
+  }
+}

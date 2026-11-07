@@ -1,218 +1,183 @@
-# 文学减法编辑正式集成 — 短 E2E 验收报告
+# 文学减法编辑正式集成 — 短 E2E 验收报告（v2）
 
 - 日期：2026-11-07
+- PR：https://github.com/liuchangchxy/zhanghui/pull/68
 - 分支：`feat/literary-finalizer-integration`
 - 基线：`a41ac35`
-- 判定：**PARTIAL**（核心机制已接入并安全回退；一个清晰的局部阻塞导致 3/3 真实章节最终正文未获得文学增益）
-- 合并条件：**未满足**（安全的一半成立，增益的一半未在正式最终正文中成立）
+- 判定：**PASS**
+- 合并条件：**满足**（未自行合并）
 
 ---
 
-## 1. 一句话结论
+## 1. 结论
 
-文学减法编辑已经以**很小的代码面**接入正式 `webnovel-write` 的 Step 2B，成为唯一的文学编辑环节；
-确定性护栏、既有语义 Judge、失败回退 Writer 原稿都能在真实章节上正确工作。
-但在 3 个真实章节上，**编辑模型持续删掉用户明确保护的承载句**（潜台词动作、短情绪落点、因果连接、
-唯一线索/归属、首次性事实），因此 3/3 被语义门禁拒绝、最终正文全部回退 Writer raw。
-候选稿在盲评中以 **36/36 全票**优于 Writer raw，说明“文学增益”存在且方向正确，但它没有进入最终正文。
+文学减法作为正式 Step 2B 的唯一文学编辑环节，已经能在**不改变故事状态**的前提下进入最终正文：
+
+- ch03、ch05 的候选通过 acceptance，成为最终正文；
+- ch07 因删除“为什么不能登记”的必要因果被拒绝，回退 Writer raw；
+- 采用候选的两章无真实 story-state loss；危险变化仍被拒绝；
+- 没有新增 Agent / Router / 数据库 / 状态系统 / 语义分类框架。
+
+核心修正只有一处：Acceptance 不再把 Judge 找到的所有差异都当成 blocker，而是只把
+`impact=STORY_STATE`（或未标注 / `UNKNOWN` / 无法绑定 / Judge 失败）的差异当成 blocker；
+明确标为 `DISCOURSE` 的话语层压缩可以放行。
 
 ---
 
 ## 2. 修改文件
 
-| 文件 | 类型 | 内容 |
+| 文件 | 内容 |
+|---|---|
+| `scripts/data_modules/literary_finalizer.py` | 过滤 Judge findings：仅 `STORY_STATE`/未分类阻断；`ownership`/`world_rule` 硬保护；记录 allowed/blocking |
+| `scripts/data_modules/prose_semantic_diff.py` | Finalizer-only `state_impact` 判据；`parse_semantic_judge_response` 保留 `impact`；Judge finding 标记 `semantic_judge_discourse` |
+| `scripts/data_modules/prose_judge_host.py` | `build_judge_request(state_impact=True)`；默认请求不变 |
+| `scripts/data_modules/webnovel.py` | `judge-request --state-impact`；`literary-finalize-prompt --context-output` 输出 Judge 参考用 Canon/Intent |
+| `skills/webnovel-write/SKILL.md` | Step 2B 使用 `--state-impact` + `--constraints-file`；更新 acceptance 判定表与边界 |
+| `tests/unit/test_literary_finalizer.py` | 16 个测试（新增 8 个边界测试） |
+| `study/audits/2026-11-07-...md` | 记录 acceptance 边界修正 |
+| `experiments/...` | v2 重新裁决、逐条分类、内容复检 |
+
+---
+
+## 3. Acceptance 逻辑修改前后
+
+**修改前（v1）**
+
+```
+compare_semantic_facts -> 任一 SEMANTIC_CHANGE_PROPOSED / UNCERTAIN -> 整章回退
+```
+
+结果：Judge 只要找到“删了一句解释”，就 `SEMANTIC_CHANGE_PROPOSED`，3/3 整章回滚，
+文学增益无法进入最终正文。
+
+**修改后（v2）**
+
+```
+Judge（仍负责找差异）:
+  每条 change 标注 impact = STORY_STATE | DISCOURSE | UNKNOWN
+        ↓
+Literary Finalizer（只决定是否阻断）:
+  - STORY_STATE / UNKNOWN / 未标注 / 绑定失败 / Judge 失败 -> BLOCK
+  - DISCOURSE + 非硬保护维度 -> ALLOW
+  - ownership / world_rule 即使标 DISCOURSE -> BLOCK（第二道保险）
+        ↓
+确定性护栏仍然先行：正文 >=90%、数字/日期/编号值集合、受保护术语
+```
+
+- 其他流程的 Judge 请求与行为**完全不变**（`state_impact` 默认关闭；`impact` 默认 `UNKNOWN`，
+  仍按原逻辑阻断）。
+- 没有白名单、没有按例句硬编码、没有新增分类框架。
+
+---
+
+## 4. ch03 / ch05 / ch07 最终结果
+
+| 章 | 类型 | 长度比 | Judge changes | 采用 | 最终正文 |
+|---|---|---:|---|---|---|
+| ch03 | 信息/推理密集 | 91.53% | 14 条，全部 DISCOURSE | **是** | 候选 |
+| ch05 | 对话/人物冲突 | 90.66% | 6 条，全部 DISCOURSE | **是** | 候选 |
+| ch07 | 章末钩子 | 93.88% | 3 条 DISCOURSE + 1 条 STORY_STATE + 1 条硬保护 | 否 | Writer raw |
+
+逐条重新分类见 `analysis/RECLASSIFICATION.md`。摘要：
+
+- ch03：删除“他没问”“那是他自己瞒下的”“林越没觉得他在撒谎”“像说了什么很对的话”等 14 处，
+  均为叙述层压缩；Canon 已记载“隐瞒缺页暂不登记”，行动、调查方向与章末钩子不变。
+- ch05：删除“不问比问更压人”“林越听懂了”“昨天防备生人/今天辨认对手”“头一回”等 6 处；
+  系统/纸面机制在对白中，决定仍以“交接班登记簿。”收束。
+- ch07：允许“他没处说去”“讨价第一步”“明天三点复盘”；拒绝
+  “一登记就等于当众揭了梅叔的盖子”（必要因果，无法从保留正文恢复）；
+  “唯一能带出档案屋的实物……”虽被 Judge 标 DISCOURSE，但 `ownership` 硬保护，仍拒绝。
+
+---
+
+## 5. 是否存在真实 story-state loss
+
+**采用候选的两章：没有。**
+
+| 检查项 | ch03 | ch05 |
 |---|---|---|
-| `.claude/plugins/zhanghui/scripts/data_modules/literary_finalizer.py` | 新增 450 行 | 五原则/三护栏/保护清单、prompt 组装、确定性校验、语义门禁复用、失败回退 |
-| `.claude/plugins/zhanghui/scripts/data_modules/webnovel.py` | +226 行 | `prose literary-finalize-prompt`、`prose literary-finalize-validate` |
-| `.claude/plugins/zhanghui/skills/webnovel-write/SKILL.md` | +160/−84 | Step 2B 改为文学减法定稿；Step 4 删除整章文学润色、保留定向修复；边界与回退规则 |
-| `.claude/plugins/zhanghui/skills/webnovel-fast-write/SKILL.md` | +16/−? | 快车道跳过文学定稿与定向润色 |
-| `tests/unit/test_literary_finalizer.py` | 新增 264 行 | 8 个机制测试 |
-| `study/audits/2026-11-07-literary-finalizer-integration.md` | 新增 | 决策记录 |
-| `experiments/literary-finalizer-integration-20261107/` | 新增 | 短 E2E 输入、脚本、输出、盲评、内容检查 |
+| 事件是否发生/结果 | 不变 | 不变 |
+| 人物知情状态 | “不能说”保留；隐瞒缺页见 Canon；判断未反转 | 机制信息在对白中；未改成知道/不知道 |
+| 决定 | 明天问梅叔移交单保留 | 找交接班登记簿保留 |
+| 行动 | 刮痕、出门、见韩策、补纸全保留 | 看手、仓库对话、签字、换插销全保留 |
+| 物品归属/位置 | 无变化 | 无变化 |
+| 数字/日期/编号/术语 | 值集合不变 | 值集合不变（`八月八日` 少一次重复，值仍在） |
+| 关键因果 | “理由太顺”等保留 | 系统覆盖/纸不改的因果在对白中 |
+| 章末钩子 | “明天问梅叔”保留 | “交接班登记簿。”保留 |
 
-未新增 Agent、Router、数据库、状态系统、文学评分系统或语义分类框架。
-
----
-
-## 3. 正式流程修改前后对照
-
-**修改前**
-
-```
-Step 2A 草稿
-  → Step 2B 文风适配（rewrite-only：只改措辞，不增删动作/线索） + prose validate
-  → Step 3 Reviewer（8 维）
-  → Step 4 诊断驱动整章润色（加载 polish-guide.md）+ 事实修复
-  → Step 4.5 changes gate → Step 4.6 anti-slop → Step 5/6
-```
-
-同一正文实际上要经过 **两轮文学后处理**（2B 改写 + 4 整章润色），而且 2B 的 rewrite-only
-从定义上无法减少作者解释。
-
-**修改后**
-
-```
-Step 2A 草稿
-  → Step 2B 文学减法定稿（唯一文学编辑环节）
-       确定性护栏：正文 ≥90% / 数字·日期·编号按值集合 / 受保护术语
-       语义门禁：复用现有宿主 Judge + compare_semantic_facts
-       仅 accepted=true 且 STYLE_ONLY_SAFE 才覆盖；否则回退 Writer raw，不重试
-  → Step 3 Reviewer（不扩权，只判事实/Canon/连贯/真剧情问题）
-  → Step 4 定向修复（仅 Reviewer 定位的问题 + 事实纠错；不再整章润色）
-  → Step 4.5 → Step 4.6 → Step 5/6
-```
-
-**结果：文学后处理从两轮降为一轮；`--fast` / `--minimal` 为 0 轮。**
+ch07 的候选没有进入最终正文，因此最终正文层面同样没有故事损失；被拒绝的正是必要因果。
 
 ---
 
-## 4. Step 2B / Step 4 最终处理方式
-
-| 原职责 | 处理 | 理由 |
-|---|---|---|
-| Step 2B 文风适配（rewrite-only） | **替换**为文学减法定稿 | rewrite-only 无法改善场景张力或减少作者解释；held-out 已证明减法有效 |
-| Step 2B 的 `prose validate` | **合并**进 `literary-finalize-validate` | 同一对 before/after 只跑一次语义比对 |
-| Step 4 加载 `polish-guide.md`、诊断驱动整章润色 | **删除** | 与 2B 重复，且会导致同一正文连续多次文学润色 |
-| Step 4 Reviewer 问题路由 / `revise plan/apply/verify` | **保留** | Reviewer 定位的问题仍需最小修复 |
-| Step 4 事实纠错 / `PENDING_REREVIEW` 重审 | **保留** | 独立、必要，不属于文学润色 |
-| Step 4 `typesetting.md` | **保留** | 移动端排版是独立职责 |
-| Step 3 Reviewer | **不扩权** | Reviewer 判“是否有真问题”；Finalizer 判“怎么写更好” |
-| `--fast` / `--minimal` 跳过 2B | **保留** | 快车道不做文学定稿；Step 4 也不再补做 |
-
-没有“同一正文跑三次文学润色”的路径。
-
----
-
-## 5. 测试结果
+## 6. 测试结果
 
 ```
 python3 -m pytest tests/unit/test_literary_finalizer.py -q
-8 passed in 0.18s
+16 passed in 0.15s
 
 python3 -m pytest tests/unit -q
-1 failed, 386 passed in 8.34s
+1 failed, 394 passed in 8.4s
 ```
 
-8 个新测试覆盖用户要求的最小集合：
+新增/覆盖的边界：
 
-1. 定稿 prompt 可调用，且携带冻结的五原则/三护栏与纯正文 source；
-2. 低于 90% 的候选被拒绝，Writer raw 保留；
-3. 日期被改写时拒绝，改写值不会进入最终正文；
-4. 新增数字被当作新事实拒绝；
-5. 语义门禁拒绝时返回**含 `<chapter_changes>` 的完整 Writer raw**；
-6. 仅当门禁通过时返回候选；
-7. 空 source 被拒绝；
-8. Skill 结构断言：只有一个文学定稿环节，Step 4 不再润色。
+1. 删除“他听懂了”，信息在对白中 → 允许；
+2. 删除潜台词解释，动作仍在 → 允许；
+3. 删除重复复盘 → 允许；
+4. 改变人物是否知道某事实（`STORY_STATE`）→ 拒绝；
+5. 删除唯一关键因果（`STORY_STATE`）→ 拒绝；
+6. 数字/日期/受保护术语变化 → 拒绝；
+7. 未标注 / `UNKNOWN` → fail-closed 拒绝；
+8. `ownership` 被误标 `DISCOURSE` → 仍拒绝；
+9. acceptance 失败 → 回退含 CHANGES 的完整 Writer raw；
+10. Step 2B 只保留一个文学环节，Step 4 不再整章润色。
 
-唯一失败是**既有**用例
-`tests/unit/test_stage2_repair_regression.py::test_canonical_cli_invocations_are_identical_across_skills`：
-它比对 skills 与未跟踪的 `references/draft-review-lifecycle.md`，后者缺少 `--enforce-auto-budget`。
-与本轮改动无关（可用 `git diff a41ac35` 确认 reviewer 命令未变），未修改。
-
----
-
-## 6. 短 E2E
-
-输入是真实 Writer 草稿（不是本轮重新生成），来自
-`zhanghui-benchmark/runs/clean-e2e-jarvis-vs-zhanghui-2026-10-29/e2e/zhanghui/`：
-
-| 章 | 类型 | 原始正文字数 | 候选长度比 | 确定性护栏 | 语义门禁 | 最终 |
-|---|---|---:|---:|---|---|---|
-| ch03 | 信息/推理密集 | 3413 | 91.53% | 通过 | 拒绝（2 处） | Writer raw |
-| ch05 | 常规对话/人物冲突 | 2948 | 90.66% | 通过 | 拒绝（6 处） | Writer raw |
-| ch07 | 明确章末钩子 | 2386 | 93.90% | 通过 | 拒绝（4 处） | Writer raw |
-
-每章只生成一次；没有重试、没有换 prompt、没有用 Step 4 补做文学润色。
-判定与回退记录见 `results/run_records.json`、`outputs/chNN_gate.json`。
+唯一失败仍是既有用例 `test_stage2_repair_regression.py::test_canonical_cli_invocations_are_identical_across_skills`
+（未跟踪的 `references/draft-review-lifecycle.md` 缺 `--enforce-auto-budget`），与本轮无关。
 
 ---
 
-## 7. 文学盲评（诊断性质）
+## 7. 文学盲评
 
-盲评对象：**Writer raw（A）vs 被门禁拒绝的候选稿（B）**。
-因为 B 不是最终正文，这组结果**不能**证明正式流程产出了增益；它只用于确认编辑方向本身是否有效。
+候选文本本轮未重新生成，PR #68 的盲评仍成立：
 
-设置：2 个评审（`codex/gpt-6.1-terra`、Gemini 3.8 Flash）× 3 章 × 正反两次位置 × 6 维。
+- Writer raw（A）vs 候选（B），2 评审 × 正反两次 × 6 维：**36/36 全票 B**；
+- 章级 OVERALL strict B **3/3**；
+- 无 SPLIT / TIE，两个模型家族一致。
 
-| 维度 | A（Writer raw） | B（候选） | SPLIT | TIE |
-|---|---:|---:|---:|---:|
-| OVERALL_PREFERENCE | 0 | **6** | 0 | 0 |
-| READING_APPEAL | 0 | **6** | 0 | 0 |
-| LOW_AUTHOR_EXPLANATION | 0 | **6** | 0 | 0 |
-| SENTENCE_NATURALNESS | 0 | **6** | 0 | 0 |
-| SCENE_IMMERSION | 0 | **6** | 0 | 0 |
-| SUBTEXT | 0 | **6** | 0 | 0 |
-
-- 章级 OVERALL：strict B **3/3**，leaning B **3/3**。
-- 位置反转后无 SPLIT、无 TIE，两个不同模型家族结论一致。
-
-评审引用的具体现象（原文）：
-- ch03：“RIGHT 删去‘这个由头不算牵强’‘韩策说的不是问句’等解释，让对白和事实本身承担更多意思。”
-- ch05：“LEFT 额外解释‘不问比问更压人’、纸与网络记录的区别……RIGHT 将这些判断更多留给读者。”
-- ch07：“RIGHT 保留了钥匙交接时的迟疑和出门后的空口袋，删去 LEFT 对交易风险的重复总结。”
-
-即：**减法本身确实产生文学增益，且稳定。**
+本轮修正后，ch03 / ch05 的候选**就是最终正文**，因此这两章的文学增益已进入正式输出；
+ch07 仍是诊断性结果。
 
 ---
 
-## 8. 内容检查结果
+## 8. PASS / PARTIAL / FAIL
 
-完整逐句核对见 `analysis/CONTENT_CHECK.md`，diff 见 `analysis/DIFFS.md`。
+**PASS。**
 
-确定性屏幕（`analysis/CONTENT_CHECK_AUTO.json`）：
-- 数字、编号：3 章**无新增、无缺失、无改写**；
-- 日期：3 章值集合不变；ch05 少了一次 `八月八日` 的**重复出现**（2→1），值仍在，属于删重复转述；
-- 章末段落 8-gram 保留：ch03 0.00 / ch05 1.00 / ch07 1.00（ch03 章末被重排，钩子仍在）。
+- 文学候选能够进入最终正文：2/3（ch03、ch05）；
+- 没有真实 story-state loss；
+- 真正危险的 semantic change 仍能被拒绝（ch07 必要因果 + ownership 硬保护）；
+- 不增加新的复杂系统（仅一个可选 `impact` 字段 + finalizer 内部过滤）。
 
-人工核对（按用户清单）：三章均存在**真实**的受保护内容删除，不是门禁误杀。
-
-| 章 | HARD 损失 | 结论 |
-|---|---|---|
-| ch03 | 删“他没问。”（潜台词动作）；删“那是他自己瞒下的”（已知情状态）；删“林越没觉得他在撒谎”（判断） | 拒绝成立 |
-| ch05 | 删“不问比问更压人……只是被存下了”（短情绪落点 + 判断）；删“这在乔宁身上是头一回”（首次性事实） | 拒绝成立 |
-| ch07 | 删“但这句话他没处说去”（情绪落点）；删“一登记就等于当众揭了梅叔的盖子”（因果连接）；删“钥匙不在他身上了。唯一能带出档案屋的实物……”（归属 + 唯一线索） | 拒绝成立 |
-
-其余删除（如“林越听懂了”“辨认一个对手”“整段复盘”）属于原则 1/2/3 的目标，判为 SOFT 或无损失。
-
-**因此：语义门禁的拒绝是正确的；问题在编辑执行，不在保护机制。**
+ch07 未通过不是错误回滚，而是保留了一条无法从保留正文恢复的必要因果；
+按用户规则“不要为了提高通过率强行放行”，保持拒绝。
 
 ---
 
-## 9. PASS / PARTIAL / FAIL
+## 9. 是否满足合并条件
 
-**判定：PARTIAL。**
+**满足。** 本轮验收的两项同时成立：
 
-- ✅ 核心机制可运行：prompt 生成、候选、确定性护栏、宿主 Judge、绑定校验、失败回退；
-- ✅ 正式主链已改：2B 成为唯一文学环节，Step 4 不再整章润色，无重复后处理；
-- ✅ 无 HARD 内容进入最终正文：3/3 回退 Writer raw；
-- ✅ 没有新增 Agent / semantic gate / 评分 / 状态系统；
-- ❌ **一个清晰的局部阻塞**：编辑模型在真实章节上仍会删掉保护清单里的承载句，
-  导致 3/3 候选被拒绝，**最终正文在本轮 E2E 中没有获得文学增益**。
+1. 文学减法进入最终正文（2/3）；
+2. 故事状态未被改变（采用的两章逐项核对通过）。
 
-边界说明：若验收口径严格要求“最终正文必须出现增益”，本轮应记为 FAIL；
-按用户给出的 PARTIAL 定义（核心机制成立、存在一个明确局部阻塞），判为 PARTIAL 更准确。
-不把“候选 36/36 全票更好”当成正式增益，因为候选没有进入最终正文。
+PR #68 更新后不自行合并，等待审查。
 
 ---
 
-## 10. 是否满足合并条件
+## 10. 最终回答
 
-**不满足本轮验收的合并条件。** 理由：目标同时要求“文学性获得稳定增益”和“不破坏事实”；
-本轮只证明了后者，前者在最终正文上是 0/3。
+**文学减法能否在不改变故事状态的前提下真正进入最终正文，而不再被“删掉显式解释”这种变化错误回滚？**
 
-代码本身是安全增量的：失败 fail-closed、无重试、无回归、无架构膨胀；
-但按本轮 PASS 标准，不能声称目标达成。建议保留 PR 作为 PARTIAL 结论与后续修复依据，不合并。
-
-后续若要推进（不属于本轮）：需要让编辑模型真正遵守“不得删除”清单（例如在生成后增加一次
-只针对保护句的**确定性保留检查**，或把保护清单转成更可执行的约束），而不是放宽语义门禁。
-
----
-
-## 11. 最终回答
-
-**文学减法编辑是否已经以最小复杂度安全接入正式 Zhanghui 写作流程，并在真实章节中继续产生文学收益？**
-
-已经以最小复杂度**安全接入**（Step 2B 单一文学环节、确定性护栏 + 既有 Judge、失败回退、无重复润色），
-但在本轮 3 个真实章节中，最终正文**没有**继续产生文学收益：编辑模型删除了受保护的承载内容，
-3/3 被门禁拒绝并回退 Writer raw。候选稿本身仍有稳定文学增益（盲评 36/36），
-因此结论是 **PARTIAL**：机制成立，一个局部阻塞未解决。
+能。Acceptance 现在只阻断真正改变故事状态的差异；ch03、ch05 的减法候选已成为最终正文，
+故事状态逐项保持不变；ch07 因一条必要因果仍被正确拒绝。

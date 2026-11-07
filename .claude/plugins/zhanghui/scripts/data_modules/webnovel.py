@@ -781,6 +781,29 @@ def cmd_prose(args: argparse.Namespace) -> int:
             Path(meta_out).write_text(
                 json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
+        context_out = getattr(args, "context_output", "") or ""
+        if context_out:
+            # Compact judge-side context: established canon (including facts committed by
+            # earlier chapters) plus this chapter's intent. Step 2B passes this to
+            # `prose judge-request --constraints-file` so a deletion that only restates an
+            # already-established fact is not mistaken for a new story-state change.
+            compact = {
+                "chapter": chapter,
+                "current_intent": {
+                    "outline": (ctx.get("current_intent") or {}).get("outline") or "",
+                    "directive": (ctx.get("current_intent") or {}).get("directive") or {},
+                },
+                "governed_canon": {
+                    "canon_items": ((ctx.get("governed_canon") or {}).get("canon_items") or []),
+                    "appearing_characters": (
+                        (ctx.get("governed_canon") or {}).get("appearing_characters") or []
+                    ),
+                },
+            }
+            Path(context_out).parent.mkdir(parents=True, exist_ok=True)
+            Path(context_out).write_text(
+                json.dumps(compact, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
         if args.format == "json":
             print(
                 json.dumps(
@@ -981,7 +1004,11 @@ def cmd_prose(args: argparse.Namespace) -> int:
                 canon_constraints = Path(constraints_file).read_text(encoding="utf-8")
 
         request = build_judge_request(
-            before_text, after_text, chapter=getattr(args, "chapter", 0) or 0, canon_constraints=canon_constraints
+            before_text,
+            after_text,
+            chapter=getattr(args, "chapter", 0) or 0,
+            canon_constraints=canon_constraints,
+            state_impact=bool(getattr(args, "state_impact", False)),
         )
         out = getattr(args, "output", "") or ""
         if out:
@@ -2215,6 +2242,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--source-output", default="", help="仅正文（已剥离 CHANGES/封包指纹）输出路径，供 Judge 绑定使用"
     )
     p_prose_lf.add_argument("--meta-output", default="", help="prompt 元数据 JSON 输出路径")
+    p_prose_lf.add_argument(
+        "--context-output",
+        default="",
+        help="Judge 参考用精简受治理上下文（current_intent + governed_canon）输出路径",
+    )
     p_prose_lf.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_prose_lf.set_defaults(func=cmd_prose)
 
@@ -2282,6 +2314,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_prose_judge_req.add_argument("--chapter", type=int, default=0, help="章节号")
     p_prose_judge_req.add_argument(
         "--constraints-file", default="", help="受治理约束 JSON（Canon/Intent/禁区）"
+    )
+    p_prose_judge_req.add_argument(
+        "--state-impact",
+        action="store_true",
+        help="（仅文学定稿）要求 Judge 为每条 change 标注 STORY_STATE / DISCOURSE / UNKNOWN",
     )
     p_prose_judge_req.add_argument("--output", default="", help="请求 JSON 输出路径")
     p_prose_judge_req.add_argument("--prompt-output", default="", help="仅输出 prompt 文本的路径")

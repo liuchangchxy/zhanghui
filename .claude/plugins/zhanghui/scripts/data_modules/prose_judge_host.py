@@ -74,11 +74,26 @@ def build_judge_request(
     *,
     chapter: int = 0,
     canon_constraints: Optional[Any] = None,
+    state_impact: bool = False,
 ) -> Dict[str, Any]:
-    """Build the host-facing judge request: prompt + binding + the exact answer schema."""
-    prompt = build_semantic_judge_prompt(before_text, after_text, canon_constraints=canon_constraints)
+    """Build the host-facing judge request: prompt + binding + the exact answer schema.
+
+    `state_impact=True` is finalizer-only: the judge additionally tags each change as
+    STORY_STATE / DISCOURSE / UNKNOWN. Default requests are unchanged.
+    """
+    prompt = build_semantic_judge_prompt(
+        before_text, after_text, canon_constraints=canon_constraints, state_impact=state_impact
+    )
     before_hash = sha256_text(before_text)
     after_hash = sha256_text(after_text)
+    change_schema = {
+        "dimension": "<one of dimensions>",
+        "before": "...",
+        "after": "...",
+        "reason": "...",
+    }
+    if state_impact:
+        change_schema["impact"] = "STORY_STATE | DISCOURSE | UNKNOWN"
     return {
         "schema_version": SCHEMA_VERSION,
         "kind": "request",
@@ -87,11 +102,10 @@ def build_judge_request(
         "before_sha256": before_hash,
         "after_sha256": after_hash,
         "dimensions": list(SEMANTIC_JUDGE_DIMENSIONS),
+        "state_impact": bool(state_impact),
         "response_schema": {
             "outcome": "STYLE_ONLY_SAFE | SEMANTIC_CHANGE_PROPOSED | UNCERTAIN",
-            "changes": [
-                {"dimension": "<one of dimensions>", "before": "...", "after": "...", "reason": "..."}
-            ],
+            "changes": [change_schema],
             "before_sha256": "<copy from this request>",
             "after_sha256": "<copy from this request>",
             "request_id": "<copy from this request>",

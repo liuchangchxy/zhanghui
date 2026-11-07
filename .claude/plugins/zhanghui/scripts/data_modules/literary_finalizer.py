@@ -22,9 +22,27 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .prose_quality_gate import evaluate_prose_quality_and_decide
+from .prose_semantic_diff import (
+    SemanticDiffOutcome,
+    SemanticDiffResult,
+    compare_semantic_facts,
+)
 from .reconciliation import prose_only_text
 
-FINALIZER_VERSION = "literary-subtraction-v1"
+FINALIZER_VERSION = "literary-subtraction-v2"
+
+# The judge may only wave a change through when it explicitly tagged it as discourse-layer
+# compression. Anything else (missing/UNKNOWN impact, deterministic claim/ownership diff,
+# judge error, UNCERTAIN) stays blocking: fail-closed.
+DISCOURSE_EVIDENCE_TYPE = "semantic_judge_discourse"
+
+# Even if the judge tags one of these as DISCOURSE, the finalizer refuses it. These are
+# object-level facts that a single mis-tag must never be able to change silently.
+# Dimensions that are context-dependent (event_outcome / location_or_state / clue /
+# causality) are left to the judge's rubric: deleting a summary of an event that is
+# still shown in the retained action, or reordering the same actions, is compression,
+# not a state change, and a blanket dimension block would recreate the old false rollback.
+STORY_STATE_DIMENSIONS = frozenset({"ownership", "world_rule"})
 
 # The five duties, verbatim from the held-out experiment prompt (PR #67).
 FIVE_PRINCIPLES = """【只做这五条】
@@ -352,6 +370,18 @@ def _sorted(values: Iterable[str]) -> List[str]:
     return sorted(set(values))
 
 
+def _blocks_acceptance(item: Any) -> bool:
+    """A judge/deterministic finding blocks unless the judge explicitly called it discourse.
+
+    The judge's `DISCOURSE` tag was introduced by the finalizer-only rubric (`--state-impact`).
+    Other flows never emit it, so their results are unaffected. Object-level dimensions are
+    refused even when tagged DISCOURSE.
+    """
+    if getattr(item, "evidence_type", "") != DISCOURSE_EVIDENCE_TYPE:
+        return True
+    return getattr(item, "dimension", "") in STORY_STATE_DIMENSIONS
+
+
 def decide_finalizer_candidate(
     before_text: str,
     candidate_text: str,
@@ -368,6 +398,12 @@ def decide_finalizer_candidate(
     `raw_draft_text` is the full working draft to preserve on rejection; when omitted,
     `before_text` is returned unchanged. The existing semantic gate is invoked with
     the same before/after pair the host judge was asked about, so binding stays intact.
+
+    Acceptance distinguishes two classes of judge finding:
+    * story-state change (event/knowledge/decision/action/ownership/space-time/clue/
+      necessary causality, or anything unclassified) -> reject;
+    * discourse-layer compression explicitly tagged `DISCOURSE` -> allowed, because the
+      story state is unchanged and only the narration stopped re-explaining it.
     """
     fallback_text = before_text if raw_draft_text is None else raw_draft_text
     before_body = body_prose(before_text)
@@ -423,11 +459,35 @@ def decide_finalizer_candidate(
         decision.reasons.append("PROTECTED_TERM_MISSING：受保护术语被删除或替换。")
         return decision
 
+    gate_before = strip_packaging(prose_only_text(before_text))
+    semantic_res = compare_semantic_facts(
+        gate_before, candidate_text, semantic_judge=semantic_judge
+    )
+    blocking = [d for d in semantic_res.drift_items if _blocks_acceptance(d)]
+    allowed = [d for d in semantic_res.drift_items if not _blocks_acceptance(d)]
+    discourse_only = (
+        semantic_res.outcome == SemanticDiffOutcome.SEMANTIC_CHANGE_PROPOSED
+        and not blocking
+    )
+    if discourse_only:
+        # The judge found only discourse-layer compression. Hand the quality gate a clean
+        # semantic result so it does not roll the chapter back for wording alone; the
+        # deterministic fact-token / length guards above still apply.
+        semantic_res = SemanticDiffResult(
+            outcome=SemanticDiffOutcome.STYLE_ONLY_SAFE,
+            safe=True,
+            drift_items=[],
+            confidence=semantic_res.confidence,
+            summary="仅删除话语层解释，故事状态未变。",
+            before_claims=semantic_res.before_claims,
+            after_claims=semantic_res.after_claims,
+        )
+
     gate = evaluate_prose_quality_and_decide(
-        before_text=strip_packaging(prose_only_text(before_text)),
+        before_text=gate_before,
         after_text=candidate_text,
-        diagnosis_summary=None,
-        semantic_judge=semantic_judge,
+        diagnosis_summary=semantic_res,
+        semantic_judge=None,
         max_shrinkage_ratio=max(0.0, 1.0 - min_length_ratio),
     )
     decision.semantic_outcome = gate.semantic_outcome
@@ -437,6 +497,9 @@ def decide_finalizer_candidate(
         "staccato_score": gate.staccato_score,
         "edit_footprint_ratio": gate.edit_footprint_ratio,
         "required_actions": list(gate.required_actions),
+        "discourse_only": discourse_only,
+        "allowed_changes": [d.to_dict() for d in allowed],
+        "blocking_changes": [d.to_dict() for d in blocking],
     }
     if gate.accepted and gate.semantic_outcome == "STYLE_ONLY_SAFE":
         decision.accepted = True

@@ -82,6 +82,26 @@ def _fake_judge(outcome: str = "STYLE_ONLY_SAFE"):
     return _judge
 
 
+def _fake_impact_judge(dimension: str, impact: str, before: str = "", after: str = "", reason: str = ""):
+    """Judge verdict as produced by the finalizer-only `--state-impact` rubric."""
+
+    def _judge(_before: str, _after: str) -> dict:
+        return {
+            "outcome": "SEMANTIC_CHANGE_PROPOSED",
+            "changes": [
+                {
+                    "dimension": dimension,
+                    "before": before or "原文判断句",
+                    "after": after or "改动后保留动作/对白",
+                    "reason": reason or "测试用裁决",
+                    "impact": impact,
+                }
+            ],
+        }
+
+    return _judge
+
+
 # --------------------------------------------------------------------------- #
 # 1. callable prompt
 # --------------------------------------------------------------------------- #
@@ -106,6 +126,17 @@ def test_finalizer_prompt_is_callable_and_carries_the_frozen_contract(tmp_path: 
                     "directive": {"goal": "林越追查纸背数字", "forbidden_zones": []},
                 },
                 "constraints": {"system_constraints": []},
+                "governed_canon": {
+                    "canon_items": [
+                        {
+                            "content": {
+                                "entity_id": "林越",
+                                "field": "合规风险",
+                                "value": "隐瞒缺页暂不登记，私藏纤维样本自行查证",
+                            }
+                        }
+                    ]
+                },
             },
             ensure_ascii=False,
         ),
@@ -115,6 +146,7 @@ def test_finalizer_prompt_is_callable_and_carries_the_frozen_contract(tmp_path: 
     voice.write_text("=== 文风锚 ===\n克制、短句、动作推进。\n", encoding="utf-8")
     prompt_file = project / "prompt.txt"
     source_file = project / "source.md"
+    context_file = project / "context.json"
 
     argv = [
         "webnovel",
@@ -134,6 +166,8 @@ def test_finalizer_prompt_is_callable_and_carries_the_frozen_contract(tmp_path: 
         str(prompt_file),
         "--source-output",
         str(source_file),
+        "--context-output",
+        str(context_file),
         "--format",
         "json",
     ]
@@ -155,6 +189,8 @@ def test_finalizer_prompt_is_callable_and_carries_the_frozen_contract(tmp_path: 
     assert "<chapter_changes>" not in prompt
     assert source_file.is_file()
     assert "<chapter_changes>" not in source_file.read_text(encoding="utf-8")
+    assert context_file.is_file()
+    assert "隐瞒缺页暂不登记" in context_file.read_text(encoding="utf-8")
 
 
 def test_prompt_builder_rejects_empty_source():
@@ -241,7 +277,131 @@ def test_accepted_candidate_is_returned_only_when_the_gate_passes():
 
 
 # --------------------------------------------------------------------------- #
-# 5. no duplicate old literary polish in the formal skill
+# 5. acceptance boundary: story-state change vs discourse-layer compression
+# --------------------------------------------------------------------------- #
+
+
+def test_deleted_understood_explanation_is_allowed_when_judge_tags_discourse():
+    """`他听懂了` restates the dialogue; later action still uses the information."""
+    decision = decide_finalizer_candidate(
+        _source(), _candidate(), semantic_judge=_fake_impact_judge("epistemic", "DISCOURSE")
+    )
+
+    assert decision.accepted is True
+    assert decision.final_text == _candidate()
+    assert decision.gate_details["discourse_only"] is True
+    assert decision.gate_details["allowed_changes"]
+    assert not decision.gate_details["blocking_changes"]
+
+
+def test_deleted_subtext_explanation_is_allowed_when_action_is_retained():
+    before = _source().replace(
+        "乔宁没有立刻回答。", "乔宁没有立刻回答。昨天是防备一个生人，今天是辨认一个对手。"
+    )
+    candidate = before.split("<chapter_changes>")[0].replace(
+        "昨天是防备一个生人，今天是辨认一个对手。", ""
+    )
+
+    decision = decide_finalizer_candidate(
+        before, candidate, semantic_judge=_fake_impact_judge("relationship", "DISCOURSE")
+    )
+
+    assert decision.accepted is True
+    assert "乔宁没有立刻回答。" in decision.final_text
+
+
+def test_deleted_repeated_recap_is_allowed_when_information_stays_in_the_scene():
+    before = _source().replace(
+        "外面的雨还在下",
+        "他把刚才的话又想了一遍：系统会被覆盖，纸不会，手写的才可靠。\n\n外面的雨还在下",
+    )
+    candidate = before.split("<chapter_changes>")[0].replace(
+        "他把刚才的话又想了一遍：系统会被覆盖，纸不会，手写的才可靠。\n\n", ""
+    )
+
+    decision = decide_finalizer_candidate(
+        before, candidate, semantic_judge=_fake_impact_judge("epistemic", "DISCOURSE")
+    )
+
+    assert decision.accepted is True
+
+
+def test_changed_knowledge_state_is_rejected():
+    before = _source().replace(
+        "林越听懂了。这说明乔宁早就知道这两个数字的含义。",
+        "林越不知道这两个数字是谁写的。",
+    )
+    candidate = before.split("<chapter_changes>")[0].replace(
+        "林越不知道这两个数字是谁写的。", "林越知道这两个数字是谁写的。"
+    )
+
+    decision = decide_finalizer_candidate(
+        before, candidate, semantic_judge=_fake_impact_judge("epistemic", "STORY_STATE")
+    )
+
+    assert decision.accepted is False
+    assert decision.final_text == before
+    assert decision.gate_details["discourse_only"] is False
+    assert decision.gate_details["blocking_changes"]
+
+
+def test_deleted_necessary_causal_link_is_rejected():
+    before = _source().replace(
+        "乔宁没有立刻回答。",
+        "缺页的事没登记，也没法登记——一登记就等于当众揭了梅叔的盖子。乔宁没有立刻回答。",
+    )
+    candidate = before.split("<chapter_changes>")[0].replace(
+        "缺页的事没登记，也没法登记——一登记就等于当众揭了梅叔的盖子。", ""
+    )
+
+    decision = decide_finalizer_candidate(
+        before, candidate, semantic_judge=_fake_impact_judge("causality", "STORY_STATE")
+    )
+
+    assert decision.accepted is False
+    assert decision.final_text == before
+
+
+def test_unclassified_judge_change_fails_closed():
+    decision = decide_finalizer_candidate(
+        _source(), _candidate(), semantic_judge=_fake_impact_judge("epistemic", "UNKNOWN")
+    )
+
+    assert decision.accepted is False
+    assert decision.final_text == _source()
+
+
+def test_story_state_dimension_is_rejected_even_if_judge_tags_discourse():
+    """A wrong DISCOURSE tag cannot wave through ownership/clue/event changes."""
+    decision = decide_finalizer_candidate(
+        _source(),
+        _candidate(),
+        semantic_judge=_fake_impact_judge("ownership", "DISCOURSE"),
+    )
+
+    assert decision.accepted is False
+    assert decision.final_text == _source()
+
+
+def test_protected_term_deletion_is_rejected_even_if_judge_tags_discourse():
+    before = _source()
+    candidate = _candidate().replace("纸质的交接班登记簿", "纸质的记录")
+
+    decision = decide_finalizer_candidate(
+        before,
+        candidate,
+        semantic_judge=_fake_impact_judge("clue", "DISCOURSE"),
+        protected_terms=("交接班登记簿",),
+    )
+
+    assert decision.accepted is False
+    assert decision.missing_terms == ["交接班登记簿"]
+    assert any("PROTECTED_TERM_MISSING" in r for r in decision.reasons)
+    assert decision.final_text == before
+
+
+# --------------------------------------------------------------------------- #
+# 6. no duplicate old literary polish in the formal skill
 # --------------------------------------------------------------------------- #
 
 
@@ -255,6 +415,10 @@ def test_skill_has_one_literary_pass_and_step4_no_longer_polishes():
     step2b = text[text.index("### Step 2B："): text.index("### Step 3：")]
     step4 = text[text.index("### Step 4："): text.index("### Step 4.5：")]
     assert "不得对同一章重复生成" in step2b
+    assert "--state-impact" in step2b
+    assert "--constraints-file" in step2b
+    assert "--context-output" in step2b
+    assert "impact=DISCOURSE" in step2b
     assert "不再承担整章文学润色" in step4
     assert "references/polish-guide.md" not in step4
     assert "只处理 Step 3 Reviewer 定位的" in step4

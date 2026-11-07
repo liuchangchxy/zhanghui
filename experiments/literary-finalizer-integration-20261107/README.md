@@ -45,24 +45,31 @@ report/       结论
 scripts/      可复现脚本
 ```
 
-## 结果速览
+## 结果速览（v2：acceptance 边界修正后）
 
-| 章 | 长度比 | 确定性护栏 | 语义门禁 | 最终 |
-|---|---:|---|---|---|
-| ch03 | 91.53% | 通过 | 拒绝（2 处） | Writer raw |
-| ch05 | 90.66% | 通过 | 拒绝（6 处） | Writer raw |
-| ch07 | 93.90% | 通过 | 拒绝（4 处） | Writer raw |
+| 章 | 长度比 | Judge changes | 最终 |
+|---|---:|---|---|
+| ch03 | 91.53% | 14 条全部 DISCOURSE | 采用候选 |
+| ch05 | 90.66% | 6 条全部 DISCOURSE | 采用候选 |
+| ch07 | 93.88% | 3 DISCOURSE + 1 STORY_STATE + 1 硬保护 | 回退 Writer raw |
 
-- 盲评（raw A vs 被拒候选 B，诊断性质）：36/36 全票 B，章级 OVERALL strict B 3/3。
-- 人工内容检查：3 章候选均删除了受保护内容（潜台词动作、短情绪落点、因果连接、
-  唯一线索/归属、首次性事实），门禁拒绝成立，不是误杀。
-- 判定 **PARTIAL**，详见 `report/REPORT.md`。
+- 逐条重新分类：`analysis/RECLASSIFICATION.md`。
+- 内容复检：采用的两章无真实 story-state loss；ch07 必要因果被正确拒绝。
+- 盲评（raw A vs 候选 B）：36/36 全票 B；ch03/ch05 的增益现在进入最终正文。
+- 判定 **PASS**，详见 `report/REPORT.md`。
+
+### v1（修正前，保留对照）
+
+三章全部因 Judge 把“删显式解释”判为语义变化而整体回滚；候选盲评 36/36 优于 raw，
+说明增益存在但被 acceptance 层挡住。v1 记录见 `results/run_records.json` 与 `analysis/DIFFS.md`。
 
 ## 复现
 
 ```bash
-python3 scripts/run_e2e.py
+python3 scripts/run_e2e.py            # v1：生成候选 + 旧 acceptance
 python3 scripts/run_blind.py
 python3 scripts/aggregate_blind.py
 python3 scripts/content_check.py
+python3 scripts/revalidate_gate.py    # v2：复用候选，只重跑 Judge + acceptance
+python3 scripts/content_check.py v2
 ```

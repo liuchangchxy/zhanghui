@@ -471,6 +471,7 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
   --draft-file "${PROJECT_ROOT}/.webnovel/tmp/chapter_{chapter_padded}_working.md" \
   --output "${PROJECT_ROOT}/.webnovel/tmp/step2b_finalizer_prompt_{chapter_padded}.txt" \
   --source-output "${PROJECT_ROOT}/.webnovel/tmp/step2b_finalizer_source_{chapter_padded}.md" \
+  --context-output "${PROJECT_ROOT}/.webnovel/tmp/step2b_finalizer_context_{chapter_padded}.json" \
   --meta-output "${PROJECT_ROOT}/.webnovel/tmp/step2b_finalizer_meta_{chapter_padded}.json"
 ```
 `step2b_finalizer_source_{chapter_padded}.md` 是已剥离 `<chapter_changes>` 与封包指纹的纯正文；
@@ -496,15 +497,17 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 
 2）语义裁决：沿用现有宿主 Judge 回环（不是新语义框架）。在调用上面的 validate 之前，先完成：
 ```bash
-# 1) 生成裁决请求
+# 1) 生成裁决请求（--state-impact 仅用于文学定稿，要求 Judge 区分故事状态变化与话语层压缩）
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" prose judge-request \
   --before-file "${PROJECT_ROOT}/.webnovel/tmp/step2b_finalizer_source_{chapter_padded}.md" \
   --after-file "${PROJECT_ROOT}/.webnovel/tmp/step2b_candidate_{chapter_padded}.md" \
   --chapter {chapter_num} \
+  --constraints-file "${PROJECT_ROOT}/.webnovel/tmp/step2b_finalizer_context_{chapter_padded}.json" \
+  --state-impact \
   --output "${PROJECT_ROOT}/.webnovel/tmp/judge_request_{chapter_padded}.json" \
   --prompt-output "${PROJECT_ROOT}/.webnovel/tmp/judge_prompt_{chapter_padded}.txt"
 
-# 2) 主流程读取 prompt，用当前模型产出裁决 JSON（11 项事实维度），原样写入：
+# 2) 主流程读取 prompt，用当前模型产出裁决 JSON（11 项事实维度 + 每条 change 的 impact），原样写入：
 #    ${PROJECT_ROOT}/.webnovel/tmp/judge_response_{chapter_padded}.json
 #    必须回填 request_id 与 before_sha256 / after_sha256。
 
@@ -523,10 +526,14 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" pr
 | `accepted` / `semantic_outcome` | 处理 |
 |---|---|
 | `true` + `STYLE_ONLY_SAFE` | 定稿通过：候选正文覆盖回工作草稿，重刷 `<chapter_changes>` 并重新 `runtime ingest-draft` 取得新 `draft_id` / `draft_fingerprint` |
-| `false`（长度/数字/术语/语义任一未过） | **保留 Writer 原稿**，记录 `reasons` 与审计；**不得对同一章重复生成、不得换 prompt 重试、不得用 Step 4 再补一轮文学润色**。直接进入 Step 3 |
+| Judge 全部 change 的 `impact=DISCOURSE` 且不涉及受保护状态维度 | 视为话语层压缩，`literary-finalize-validate` 返回 `accepted=true`；按上一行处理 |
+| `false`（长度/数字/术语/事实状态任一未过） | **保留 Writer 原稿**，记录 `reasons` 与审计；**不得对同一章重复生成、不得换 prompt 重试、不得用 Step 4 再补一轮文学润色**。直接进入 Step 3 |
 
-- 低于 90%、事实令牌变化、受保护术语缺失、`SEMANTIC_CHANGE_PROPOSED`、`UNCERTAIN` 一律回退，不做例外。
-- **严禁伪造 Judge 裁决**：没有真正裁决就 fail-closed 回退；不允许手写 `STYLE_ONLY_SAFE`。
+- 低于 90%、事实令牌变化、受保护术语缺失、未被 Judge 标为 `DISCOURSE` 的语义变化、`UNCERTAIN` 一律回退，不做例外。
+- **只有 Judge 明确标为 `impact=DISCOURSE` 的 change 可以放行**；没有 impact、`UNKNOWN`、无法绑定、Judge 失败一律按故事状态变化回退。
+- Literary Finalizer 对 `ownership` / `world_rule` / `capability` 保留硬拒绝：即使 Judge 标成 `DISCOURSE` 也不放行。`event_outcome` / `location_or_state` / `clue` / `causality` 由 Judge 按“保留正文是否仍承载同一状态”判断——删除已被动作/对白展示的总结、或调整同一组动作的顺序，属于话语层压缩。
+- 删除“他听懂了”“这是讨价的第一步”“昨天防备生人，今天辨认对手”这类**话语层**解释，只要故事状态不变，不再回滚整章；删除知情/归属/线索/必要因果等故事状态，仍然拒绝。
+- **严禁伪造 Judge 裁决**：没有真正裁决就 fail-closed 回退；不允许手写 `STYLE_ONLY_SAFE` 或 `DISCOURSE`。
 - `judge-bind` 必须带 `--request-file`；`request_id` / `before_sha256` / `after_sha256` 任一不一致即拒绝。
 - 本步只处理“怎么写更好”；事实错误不在这里修，交给 Step 4 的定向修复路径。
 
