@@ -28,6 +28,7 @@ allowed-tools: Read Write Edit Grep Bash Agent
 3. 参考资料严格按步骤按需加载，不一次性灌入全部文档。
 4. Step 2B 与 Step 4 职责分离：2B 是唯一的文学减法定稿环节（“怎么写更好”）；4 只修 Reviewer 定位的问题与事实错误（“是否有真问题”），不再做整章文学润色。
 5. 任一步失败优先做最小回滚，不重跑全流程；同一章的文学定稿失败后不得反复重生成。
+6. 进行写作系统实验或修改本流程前，先读仓库根目录的 `study/VALIDATED_WRITING_SYSTEM_PRINCIPLES.md`；它是 CONFIRMED / REJECTED / OPEN 的唯一权威副本，本 Skill 不复制其内容。
 
 ## 模式定义
 
