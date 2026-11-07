@@ -1,0 +1,42 @@
+{
+  "frozen_at": "2026-11-07T07:23:43.914942+00:00",
+  "git_head": "a41ac353ffa2c5d9aba6f2e49e499db7208a3079",
+  "branch": "feat/jarvis-literary-heldout-20261107",
+  "files": {
+    "SAMPLE_SELECTION.md": "322931adc8c5440bf047b12fa25e0fd9f4d28425fe34f1ca0c21575a9e74a72b",
+    "prompts/editor_zh_heldout.md": "090a4d9d76edb5cc3286e5c51cdedc6c99710403c8d2c1e9c373ab442b4fcd12",
+    "inputs/ch01_source.md": "6e6360082b88eebb617e43771c141e85268dfa572dd6167883ab5aac6bd1667f",
+    "inputs/context/ch01_outline.md": "4f02acc345aea848b9066b68ef248529c8745812639259abfa3d824dbb83a4e2",
+    "inputs/context/ch01_constraints.md": "a1699dad21ec2959a1d5b3958b560ed5afe17d7764773b118ac3be4647e3e577",
+    "inputs/context/ch01_next_opening.md": "8de6e73a9f6d05164142cdcea5bef1f281d7093c1ee96e0443e4793c5a76e9fb",
+    "inputs/ch02_source.md": "7de16783a2d2c008baa4d9285d6f4d62a76d50605d35a5a3a211e3b6836c4c7e",
+    "inputs/context/ch02_outline.md": "6b014c11bb9a51533d1ca151437e527fafe0208a12f76b86ef6aa0b23982a455",
+    "inputs/context/ch02_constraints.md": "587cd8c2fef968b365a98aebad108d58b8499f9601c57dcf97f789b3c3c08564",
+    "inputs/context/ch02_next_opening.md": "ef4561e2f5dfa93fcc4ae0ff36253d1c4b21fe2e2be38d983bb961e44498b9da",
+    "inputs/ch06_source.md": "9fa8c89917c36cad954af6689434f3970aa08daa27455b3595bb554541945f68",
+    "inputs/context/ch06_outline.md": "42da2f9d194207c06ddca57cbb4cd586cf997ee2249773d2451edaec690b1e03",
+    "inputs/context/ch06_constraints.md": "e40f872368b755cb018278eb441281d0dc348e719426c34421225bb18ce4a89c",
+    "inputs/context/ch06_next_opening.md": "e06ee111a75fd216e3acb1bfcc6fe0b5489dd9d65402a212ca548bfeba2abd77",
+    "inputs/ch07_source.md": "8d1ed475567fe47577e2176b10f3e478313c05b9532e5e05bbbdbd957f0782e2",
+    "inputs/context/ch07_outline.md": "779fc51d458cf0077813908d1e7fccca0f14424ea8b808e01f6b8bdc29eeb208",
+    "inputs/context/ch07_constraints.md": "2af3d36c60f130c4022a61fd0ec429c119304929967b28e399c2b6a06a67aa01",
+    "inputs/context/ch07_next_opening.md": "a32812d69f80f5fb974770529e4219d9b8d8af26e250955fd48f64856d35a46f",
+    "inputs/ch09_source.md": "250ba6eb999aab30603f8906e29a61b60f8a904f3f640657ca260080852a45e0",
+    "inputs/context/ch09_outline.md": "cd4e2a540e12722d8f8968ccfcd3ac0860f1e653be966388992d92b9f4cad28b",
+    "inputs/context/ch09_constraints.md": "692d6c904bff1932b31093a1a5818156a5f0a8d8e1b9277e53e5e541877f5dea",
+    "inputs/context/ch09_next_opening.md": "cfcaa327e961a1c9f179e71fe86ec60e563117ee3883b407fb156c9f90426e77",
+    "inputs/ch10_source.md": "6a9b2ba529795c60bd8dc0e0e30de5ab1648f39877de9e2231b88fe3685d8fa3",
+    "inputs/context/ch10_outline.md": "06ee8bc92e331d4872dc45c9c15ff81bef16a2f7f7b6d2e9627f446c3e93ac03",
+    "inputs/context/ch10_constraints.md": "0ed332a789b8e189c834ce762b72cbd0bdbca72d81758c529227a401f0c542d9",
+    "inputs/context/ch10_next_opening.md": "bd98de8f59fccbe03e075a5f9d8c316db781e97c554d6d747df0acb923b6049b"
+  },
+  "chapters": [
+    "ch01",
+    "ch02",
+    "ch06",
+    "ch07",
+    "ch09",
+    "ch10"
+  ],
+  "note": "Written before any held-out editor generation. See SAMPLE_SELECTION.md."
+}
