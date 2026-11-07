@@ -1,0 +1,36 @@
+{
+  "chapter": 7,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.92,
+      "evidence": "LEFT以“口袋空了”和胶盒硌手收束交付钥匙的场面，RIGHT随后又复述钥匙去向和查图计划，削弱了余味。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.84,
+      "evidence": "LEFT从乔宁拍口袋直接转到雾中的旧巷，保留钥匙交出去后的悬念；RIGHT插入一段已知事项的回顾，使推进稍有停顿。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.98,
+      "evidence": "RIGHT在锁上刮痕后补出“不止他一个人在盯这只柜子”，又将乔宁的反应解释为“讨价的头一步”，LEFT均留给读者判断。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.88,
+      "evidence": "RIGHT的“钥匙不在他身上了”紧接“口袋空了”，并再次交代明天查图的安排，重复拖慢了段落节奏。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.83,
+      "evidence": "LEFT让日光灯的嗡鸣、掌根被胶盒硌住的触感和后门外的潮气连续出现；RIGHT在其间插入情况说明，打断了感官上的行进。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.97,
+      "evidence": "LEFT让乔宁的顾虑通过添机油、盯油尺和追问登记显现，RIGHT额外点明“这是讨价的头一步”，把对话中的试探说破了。"
+    }
+  },
+  "overall_rationale": "两版的核心场面与人物对话基本一致，乔宁一面防备牵连、一面留下钥匙查图的矛盾都写得清楚。LEFT更信任动作和物件传递信息，RIGHT新增的推断与回顾多次解释已有线索，使悬念和场景节奏略受影响。"
+}

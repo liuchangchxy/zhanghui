@@ -1,0 +1,36 @@
+{
+  "chapter": 10,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.93,
+      "evidence": "LEFT保留了签工单、查看鞋印和下井等关键动作的张力，也省去了RIGHT中“梅叔在递话，也在赶人”等多余解说。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.76,
+      "evidence": "LEFT让梅叔拖长的尾音和林越对锁孔的留意自行引出疑问，叙事推进比RIGHT反复补充人物心意更利落。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.99,
+      "evidence": "RIGHT在工单风险已说清后又补上“他那另一半可否认性，就在这一笔里”，LEFT没有这句总结。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.95,
+      "evidence": "LEFT的“他检查得很慢”干净顺畅，RIGHT接上的“像知道自己不该验收却不得不在单子上落字”显得拖沓且突兀。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.72,
+      "evidence": "两版共有潮纸、锈层和井下水渍等具体细节，但LEFT较少插入“心里存了个数”之类的概括，读者更容易停留在人物动作中。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.99,
+      "evidence": "梅叔开窗、提醒收拾东西并拖长尾音，已足以暗示他的态度；RIGHT再写“林越听明白了，梅叔在递话，也在赶人”，削弱了言外之意。"
+    }
+  },
+  "overall_rationale": "两版的主要情节和场景细节几乎相同，差别集中在RIGHT增加的几处心理判断和解释。LEFT让动作、停顿与对话承担更多意义，因此人物关系更耐人寻味，句段也更利落；不过两版都保留了一些直接归纳线索和处境的文字。"
+}
