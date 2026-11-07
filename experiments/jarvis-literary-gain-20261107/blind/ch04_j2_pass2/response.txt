@@ -1,0 +1,36 @@
+{
+  "chapter": 4,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT通篇保持克制冷峻的叙事腔调，以伤口跳痛与封存门的新旧锁自然收束，比RIGHT多处直白的心理剖析与线索复盘更具文学质感。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.85,
+      "evidence": "LEFT保留了让读者自行将此前暗记的“19”与“7”对应到七号泵房与十九号阀的顿悟感，而RIGHT在末尾将线索对应关系直接点破，冲淡了悬疑抓人感。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.95,
+      "evidence": "RIGHT在文中多出“不是怕。林越看得出来，是烦……”以及结尾“缺页边上那两个数字……现在有门，有阀”两处极具说明性的作者视角提炼，LEFT完全没有此类越俎代庖的解释。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.8,
+      "evidence": "LEFT结尾从封存门、左手跳痛顺畅过渡到如何向档案屋交差，语流一气呵成；RIGHT插入“原值班室他进不去。第二张单子也不会有”等解释性断句，节奏显得滞涩。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.8,
+      "evidence": "LEFT始终将感知锚定在潮湿、白雾散尽、积灰旧锁与手背烫伤的现场生理体验中，而RIGHT中途抽离为主角脑海中的线索盘点，打断了具体的时空沉浸。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT仅凭“笔尖把纸戳出一个印子”便将乔宁的抗拒与隐火尽数收于动作之下，RIGHT却直白写出“不是怕……是烦”，将极具张力的潜台词直接说破。"
+    }
+  },
+  "overall_rationale": "两版主体高度一致，核心差异在于RIGHT增加了两处心理与线索的直接解释。RIGHT试图帮读者划重点，反而破坏了悬疑小说应有的克制留白与言外之意；LEFT则恪守客观叙事与动作白描，凭感官细节自然聚拢线索，文学水准与阅读体验明显更优。"
+}
