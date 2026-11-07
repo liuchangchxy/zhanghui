@@ -1,0 +1,41 @@
+{
+  "schema_version": "revision-verify/v1",
+  "changed": true,
+  "plan_draft_sha256": "035e1f0c89a378be4f2fd4b92e91d6d56a38ac2094b120ac515a0a6c0b0d573c",
+  "before_sha256_matches_plan": true,
+  "draft_version_error": "",
+  "spans": [
+    {
+      "start": 1562,
+      "end": 1598
+    },
+    {
+      "start": 1781,
+      "end": 1850
+    },
+    {
+      "start": 1877,
+      "end": 1892
+    },
+    {
+      "start": 3973,
+      "end": 4024
+    }
+  ],
+  "out_of_scope_changes": [],
+  "boundary_ok": true,
+  "resolved_targets": [
+    "issue-80700f6e",
+    "issue-f0952712",
+    "issue-94ebbf22",
+    "issue-de08cb36"
+  ],
+  "untouched_targets": [],
+  "before_sha256": "035e1f0c89a378be4f2fd4b92e91d6d56a38ac2094b120ac515a0a6c0b0d573c",
+  "after_sha256": "74301b06e85990bd5da58f982946f9f1d6945cfcd1ba77b5a08019ebe201c063",
+  "before_prose_sha256": "5ea06fb32bd9d1b2d89b251c61c169b08d22fd78088d9ecd2b8816826e8b7890",
+  "after_prose_sha256": "83bac2bb3a7271ed00807d54ca48029a323d770445b057462abbbbca2b91f48a",
+  "revision_round": null,
+  "ok": true,
+  "report_file": "/Users/chang/Desktop/根源牌序/.webnovel/tmp/verify_minimal_edit.json"
+}
