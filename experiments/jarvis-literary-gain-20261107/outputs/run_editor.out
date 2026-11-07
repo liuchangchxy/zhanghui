@@ -1,0 +1,5 @@
+ch05 retry: truncated=True empty=False ratio=0.885
+ch03 ok 3246 -> 2983 0.919
+ch04 ok 2067 -> 2005 0.970
+ch05 ok 2955 -> 2592 0.877
+ch08 ok 2871 -> 2630 0.916

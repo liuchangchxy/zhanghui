@@ -1,0 +1,36 @@
+{
+  "chapter": 8,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.95,
+      "evidence": "LEFT通篇保持克制冷峻的叙事质感，物象与行动紧凑有力；RIGHT多处插入如同任务备忘录般的复盘与总结，严重削弱了小说的文学张力。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT在证词矛盾处以‘两句话对不上’迅速切入锁门的档案屋，悬疑钩子干脆利落；RIGHT加入‘要么...要么...’的穷举推演，稀释了紧迫感。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.98,
+      "evidence": "RIGHT频繁出现作者代读者总结的说明性语句（如‘方向有了’、‘乔宁的名字只出现在这一页上’及文末整段阶段性陈词），LEFT则毫无此类冗余交代。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.92,
+      "evidence": "LEFT结尾从‘缺了齿的小梳子’的投影自然过渡到镊子托纸与潮水涌动，起伏有致；RIGHT在此处横插一段大白话概括，严重阻断了句段节奏。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT始终将读者钉在柴油余味、微温黄铜、图纸压痕与潮湿阴冷的时空细节中；RIGHT多次抽离肉身感去进行抽象思维梳理，破坏了现场沉浸感。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.95,
+      "evidence": "LEFT通过不写名字、不点破僵局留足冰山底下的意图；RIGHT却直白道出‘乔宁不说，韩策不知道，梅叔的嘴撬不开’，将潜台词全数讲透讲死。"
+    }
+  },
+  "overall_rationale": "两版核心情节与动作完全一致，但RIGHT在多处节点添加了作者代劳式的心理复盘与剧情小结，把原本借由器物触感与克制行动构筑的含蓄潜台词全数说破。LEFT充分信任读者的理解力，以冷峻干练的剪辑节奏让物象与线索自行咬合，整体艺术质感明显优于RIGHT。"
+}

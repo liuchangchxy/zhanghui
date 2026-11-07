@@ -1,0 +1,58 @@
+{
+  "ch03": {
+    "source_body_chars": 3246,
+    "output_body_chars": 2983,
+    "length_ratio": 0.919,
+    "numbers_missing": {},
+    "numbers_added": {},
+    "protected_terms_missing": [],
+    "term_replacement_guard": {},
+    "quoted_segments_source": 62,
+    "quoted_segments_output": 62,
+    "paragraphs_source": 74,
+    "paragraphs_output": 72
+  },
+  "ch04": {
+    "source_body_chars": 2067,
+    "output_body_chars": 1932,
+    "length_ratio": 0.9347,
+    "numbers_missing": {
+      "19": 1,
+      "1999.10": 1,
+      "7": 1
+    },
+    "numbers_added": {},
+    "protected_terms_missing": [],
+    "term_replacement_guard": {},
+    "quoted_segments_source": 55,
+    "quoted_segments_output": 54,
+    "paragraphs_source": 59,
+    "paragraphs_output": 55
+  },
+  "ch05": {
+    "source_body_chars": 2955,
+    "output_body_chars": 2592,
+    "length_ratio": 0.8772,
+    "numbers_missing": {},
+    "numbers_added": {},
+    "protected_terms_missing": [],
+    "term_replacement_guard": {},
+    "quoted_segments_source": 49,
+    "quoted_segments_output": 49,
+    "paragraphs_source": 72,
+    "paragraphs_output": 65
+  },
+  "ch08": {
+    "source_body_chars": 2871,
+    "output_body_chars": 2630,
+    "length_ratio": 0.9161,
+    "numbers_missing": {},
+    "numbers_added": {},
+    "protected_terms_missing": [],
+    "term_replacement_guard": {},
+    "quoted_segments_source": 49,
+    "quoted_segments_output": 49,
+    "paragraphs_source": 53,
+    "paragraphs_output": 52
+  }
+}
