@@ -1,0 +1,899 @@
+你现在是网文事实安全裁决员（Semantic Judge）。
+请对比以下【修改前正文】与【修改后正文】，严格审查是否存在任何故事事实、设定或逻辑漂移。
+
+【审查的 11 项事实维度】：
+1. 人物履历 (backstory)
+2. 能力 (capability)
+3. 关系 (relationship)
+4. 动机 (motivation)
+5. 事件结果 (event_outcome)
+6. 因果 (causality)
+7. 所有权 (ownership)
+8. 地点/状态 (location_or_state)
+9. 世界规则 (world_rule)
+10. 线索 (clue)
+11. 知情状态 (epistemic)
+
+【本章受治理约束（Canon / Intent / 禁区）】
+{
+  "chapter": 5,
+  "current_intent": {
+    "outline": "# 第5章\n\n## 章节定位与目标\n- 目标：两人调查一段旧维护记录。乔宁解释城市网络记录可能被后续同步覆盖，但纸质档案不会被自动改写。\n- 故事目标：推进调查但不给出白塔事故责任人。\n- 关键变化：推进核心调查\n- 本章禁区：推翻纸质档案不被网络改写规则、直接确认白塔责任人\n- 章末未闭合问题：下一步调查线索\n",
+    "directive": {
+      "goal": "两人调查一段旧维护记录。乔宁解释城市网络记录可能被后续同步覆盖，但纸质档案不会被自动改写。",
+      "forbidden_zones": [
+        "推翻纸质档案不被网络改写规则",
+        "直接确认白塔责任人"
+      ],
+      "chapter_end_open_question": "下一步调查线索",
+      "source": "chapter_outline"
+    }
+  },
+  "governed_canon": {
+    "canon_items": [
+      {
+        "content": {
+          "entity_id": "林越",
+          "field": "任务",
+          "value": "奉命在梅叔档案屋修复一批受潮旧档，工期七八天"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "林越",
+          "任务"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "entity_id": "林越",
+          "field": "location.current",
+          "value": "梅叔的档案屋（临汐城旧巷）"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "林越",
+          "location.current"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "entity_id": "林越",
+          "field": "知识.白塔档案",
+          "value": "确认第68页（事故当日值班名单）遭人为撕走，相邻纸背有铅笔数字19与7"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "林越",
+          "知识.白塔档案"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "entity_id": "林越",
+          "field": "合规风险",
+          "value": "隐瞒缺页暂不登记，私藏纤维样本自行查证"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "林越",
+          "合规风险"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "entity_id": "梅叔",
+          "field": "对林越.态度",
+          "value": "否认缺页为人为并禁止林越触碰铁皮柜"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "梅叔",
+          "对林越.态度"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "from_entity": "林越",
+          "to_entity": "梅叔",
+          "relationship": "雇工与老档案员（初次共事，互相试探）"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "relationship",
+          "林越",
+          "梅叔"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "白塔事故档案",
+          "payload": {
+            "content": "《白塔能源站运行事故调查记录·一九九九年》第68页——事故当日值班人员名单——被人从装订线内侧整页扯走，撕口毛边朝外、残根被压平，手法老到但不够彻底",
+            "loop_type": "悬疑主线",
+            "unanswered_question": "是谁撕走了事故当日值班名单？名单上写着谁，需要被抹掉？",
+            "urgency": 85,
+            "planted_chapter": 1,
+            "expected_payoff": "查到撕页者身份或名单内容"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-007"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "白塔事故档案",
+          "payload": {
+            "content": "缺页相邻纸背各有极浅铅笔划痕：第67页背面是“19”，第69页正面是“7”，字迹很轻，像是翻页时随手记下",
+            "loop_type": "线索谜题",
+            "unanswered_question": "“19”与“7”分别指什么——日期、页码、时间还是人员编号？写下的人与撕页的人是不是同一人？",
+            "urgency": 70,
+            "planted_chapter": 1,
+            "expected_payoff": "数字所指对象被解码"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-008"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "梅叔",
+          "payload": {
+            "content": "梅叔称这批旧档“上头让我烧”，因他腿摔后坚持“烧了可惜”才改为找人定期来修；他对缺页的反应说明他知道内情却不肯说，并叮嘱修完再说",
+            "loop_type": "人物秘密",
+            "unanswered_question": "“上头”是谁？为什么要烧掉这批档案？梅叔知道多少内情？",
+            "urgency": 75,
+            "planted_chapter": 1,
+            "expected_payoff": "梅叔松口或“上头”身份揭露"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-009"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "铁皮柜",
+          "payload": {
+            "content": "墙角铁皮柜锁眼插着缠褪色红绳的黄铜钥匙，梅叔朝柜子努嘴明令：“那柜子里的东西，别动。修你的纸就行。”",
+            "loop_type": "伏笔道具",
+            "unanswered_question": "铁皮柜里存着什么？梅叔为何随身留着钥匙却不许人碰？",
+            "urgency": 60,
+            "planted_chapter": 1,
+            "expected_payoff": "铁皮柜被打开或内容被间接揭示"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-010"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "皮面笔记本",
+          "payload": {
+            "content": "梅叔窗台上压着一本皮面笔记本，翻开那页写着几个铅笔日期，其中一个日期旁标注“白塔”；林越只扫了一眼，打算明天找机会再看",
+            "loop_type": "线索物件",
+            "unanswered_question": "笔记本上的日期与“白塔”对应何事？笔记本是否属于梅叔？",
+            "urgency": 65,
+            "planted_chapter": 1,
+            "expected_payoff": "林越再次翻阅笔记本并读出日期含义"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-011"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "林越",
+          "payload": {
+            "content": "林越在档案系统里查自己的调令，签发栏是空白的——没有人签字，没有人负责；旧站事故后他先被调到修复室，又被派到梅叔处修旧档",
+            "loop_type": "身世/阴谋线",
+            "unanswered_question": "调令为什么无人签发？是谁在背后安排林越的岗位变动？",
+            "urgency": 55,
+            "planted_chapter": 1,
+            "expected_payoff": "调令签发来源被追出"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-012"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "event_type": "world_rule_revealed",
+          "subject": "临汐城",
+          "payload": {
+            "rule_content": "临汐城的档案网络已铺到市政、能源、航运，但仍有角落维持纸质、未贴系统条码、未入网，由个人私下保管",
+            "rule_category": "城市与档案体系",
+            "scope": "临汐城全城"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-013"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "event_type": "artifact_obtained",
+          "subject": "林越",
+          "payload": {
+            "artifact_id": "纤维残根",
+            "name": "装订线夹缝中的纤维残根（沾深蓝色钢笔墨迹，仅剩半个笔画）",
+            "owner": "林越",
+            "detail": "林越用尖头镊子从装订线夹缝挑出，封进随身样本袋并藏入工具箱暗格"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-014"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      },
+      {
+        "content": {
+          "event_type": "world_rule_revealed",
+          "subject": "档案修复规程",
+          "payload": {
+            "rule_content": "档案修复规程要求：发现缺页须登记上报，由档案组判定性质；上报后该卷宗即脱离修复人手中",
+            "rule_category": "职业规程",
+            "scope": "修复室/档案组"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:4",
+        "chapter": 4,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:4"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-015"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:4",
+        "scope": "chapter:4"
+      }
+    ],
+    "appearing_characters": [
+      {
+        "entity_id": "林越",
+        "name": "林越",
+        "type": "角色",
+        "last_chapter": 10,
+        "total": 10,
+        "state": [
+          {
+            "field": "location.current",
+            "value": "梅叔的档案屋（临汐城旧巷）"
+          },
+          {
+            "field": "任务",
+            "value": "奉命在梅叔档案屋修复一批受潮旧档，工期七八天"
+          },
+          {
+            "field": "关系.乔宁",
+            "value": "有限合作：乔宁以三联工单署名担责并在上方守着，林越签见证；乔宁要求他尽快给出下一步，别把工单开成流水"
+          }
+        ]
+      },
+      {
+        "entity_id": "梅叔",
+        "name": "梅叔",
+        "type": "角色",
+        "last_chapter": 10,
+        "total": 10,
+        "state": [
+          {
+            "field": "对林越.态度",
+            "value": "否认缺页为人为并禁止林越触碰铁皮柜"
+          },
+          {
+            "field": "状态",
+            "value": "保管一批未数字化旧档案、行动不便"
+          },
+          {
+            "field": "身份",
+            "value": "退休档案员"
+          }
+        ]
+      },
+      {
+        "entity_id": "梅叔的档案屋",
+        "name": "梅叔的档案屋",
+        "type": "地点",
+        "last_chapter": 10,
+        "total": 10
+      },
+      {
+        "entity_id": "乔宁",
+        "name": "乔宁",
+        "type": "角色",
+        "last_chapter": 10,
+        "total": 3,
+        "state": [
+          {
+            "field": "关系.林越",
+            "value": "合作（以工单为凭）：'我帮你，但每次动这条路，得有一条解释得通的记录'"
+          },
+          {
+            "field": "状态",
+            "value": "以维护间工程师身份签署三联工单、为三通段路线担责，成为稳定合作方；同时被韩策当面提起安全阀旧案"
+          },
+          {
+            "field": "身份",
+            "value": "能源工程师"
+          }
+        ]
+      },
+      {
+        "entity_id": "旧维护轨道",
+        "name": "旧维护轨道",
+        "type": "地点",
+        "last_chapter": 10,
+        "total": 3
+      },
+      {
+        "entity_id": "三号泵房",
+        "name": "三号泵房",
+        "type": "地点",
+        "last_chapter": 10,
+        "total": 2
+      },
+      {
+        "entity_id": "巡防",
+        "name": "巡防",
+        "type": "组织",
+        "last_chapter": 10,
+        "total": 2
+      },
+      {
+        "entity_id": "三联维护工单",
+        "name": "三联维护工单",
+        "type": "物品",
+        "last_chapter": 10,
+        "total": 1
+      },
+      {
+        "entity_id": "十九号检修段隔断",
+        "name": "十九号检修段隔断",
+        "type": "地点",
+        "last_chapter": 10,
+        "total": 1
+      },
+      {
+        "entity_id": "新弹子锁",
+        "name": "新弹子锁",
+        "type": "物品",
+        "last_chapter": 10,
+        "total": 1
+      }
+    ]
+  }
+}
+裁决时必须同时检查改动是否违反上述约束；违反即 SEMANTIC_CHANGE_PROPOSED。
+
+【本次额外要求：区分“故事状态变化”与“话语层压缩”】
+这是文学减法定稿，不是事实纠错。逐条判断每个 change 是否真的改变了故事状态。
+
+判断标准是“故事状态是否不同”，不是“这句话是否被删除”。先看保留的正文是否仍让同一事件、同一行动、同一知情状态、同一因果关系成立。
+
+impact = "DISCOURSE"（故事状态不变，只是叙述层压缩）：
+- 删除“他听懂了 / 他明白了 / 这说明……”这类对刚发生对白的理解确认，而对白或动作仍完整保留；
+- 删除“昨天是防备一个生人，今天是辨认一个对手”“这是讨价的第一步”这类潜台词点破；
+- 删除对前文已出现信息的重复总结、逐条复盘、章末再复述；
+- 删除语气/程度/动机的旁白注解（如“不重，但够用”“像备过课”“像说了什么很对的话”）；
+- 删除短情绪判断或心理落点，而动作、身体反应、对白仍稳定呈现同一情绪；
+- 删除“第一次/头一回/从没”这类强调性限定，如果它只用于强调当下这一刻，不改变后续关系或行动；
+- 删除与已建立 Canon/前文一致的复述或提醒（受治理上下文里已有的事实，被再次说明一次）；
+- 删除对“没有做某事”的点明，而保留的动作仍表明同一选择（例如“他没问。脚下一转，出了巷子”删成“脚下一转，出了巷子”）；
+- 删除的内容已经被保留正文中的动作/对白明确展示（例如后文仍写“把钥匙放进工装口袋”“口袋空了”，再删“钥匙装在别人工装口袋里”的总结）；
+- 只调整同一组动作/句子的先后顺序，动作和结果没有变化；
+- 删除对原因/动机的追加解释，但当前行动、下一行动及其选择理由仍可由保留正文唯一理解。
+
+impact = "STORY_STATE"（故事状态真的改变，无法从保留正文恢复）：
+- 事件是否发生或事件结果改变；
+- 人物实际知道/不知道的事实内容改变（不是“不再点明他知道”，而是“他知道的内容变了”）；
+- 决定或行动被改成另一个决定/行动，或删除后无法从保留正文确定人物做了什么；
+- 物品归属、时间/地点、数字/日期/编号、专业术语、线索是否存在发生改变；
+- 删除后读者无法理解当前或后续行动的原因，且后续剧情依赖该原因。
+- 删除更短的独立短钩子、明确的下一步动作/调查方向，导致后续行动缺少必要约束。
+
+impact = "UNKNOWN"：无法确定。系统会按 STORY_STATE 处理。
+注意：只要 changes 非空，outcome 仍输出 "SEMANTIC_CHANGE_PROPOSED"；是否阻断由 impact 决定。不要为了让整章通过而把 STORY_STATE 写成 DISCOURSE，也不要把纯叙述压缩写成 STORY_STATE。
+
+【输出要求】：
+必须且仅输出以下 JSON 格式（不要包含任何其他文字或多余解释）：
+{
+  "outcome": "STYLE_ONLY_SAFE | SEMANTIC_CHANGE_PROPOSED | UNCERTAIN",
+  "changes": [
+    {
+      "dimension": "...",
+      "before": "...",
+      "after": "...",
+      "reason": "...",
+      "impact": "STORY_STATE | DISCOURSE | UNKNOWN"
+    }
+  ]
+}
+
+- 若所有事实、设定、因果与知情状态均完全保全，仅为语言表达润色：outcome 为 "STYLE_ONLY_SAFE"，changes 为 []。（本次启用 impact 标注时，只要删除了正文句子就应在 changes 中列出并标注 impact。）
+- 若存在任何事实漂移、反转或新事实编造：outcome 为 "SEMANTIC_CHANGE_PROPOSED"，并在 changes 中详细列出各项漂移。
+- 若改写幅度过大或语义严重模糊无法判断：outcome 为 "UNCERTAIN"。
+
+=== 修改前正文 ===
+## 第五章 同步
+
+林越回到档案屋时，手上的纱布已经洇出一点黄渍。
+
+梅叔照旧坐在窗边，膝盖上摊着一册线装旧志，手里拿针，在穿一根发黑的棉线。他没抬头，鼻翼动了一下，像是闻到什么。
+
+“修纸修到锅炉房去了？”
+
+林越把手往袖口里缩了缩。“热水管爆了，帮忙关阀，溅了一下。”
+
+“你倒是热心。”梅叔把针扎进纸脊，拉线的动作不急。“修纸的手去碰铁，以后哪个馆子敢收你。”
+
+“本来看见了不管，水漫到东墙，那批纸全完。”
+
+这话倒也不全是编的。梅叔终于抬了抬眼皮，目光在他左手上停了两秒，然后继续穿线。不问比问更压人，林越知道这事没糊过去，只是被存下了。
+
+他坐到工作台前，把昨天没压完的那叠散页摊开。右手还能用，左手只能虚虚按着。压板推了两下，他停了。
+
+梅叔在身后说：“今天别碰那批白塔的，手不干净，纸会记。”
+
+“我知道。”他答得规矩。手不干净，纸会记。这句话他记下了。
+
+他换了一册，从东墙第三架抽出一本《临汐城东区给排水维护台账·一九九八至二〇〇〇》。封面磨得发白，装订线松了，订口处有反复翻折的软痕。这册不在梅叔划给他的修复范围里，但也不在铁皮柜里。
+
+梅叔没拦。只是在他翻到第三页时，补了一句：“那本不用修，原本就是干的。”
+
+林越手指沿着纸页边缘滑过去。七号泵房，一九九九年八月。他停住了。
+
+八月八日，七号泵房，三号泵地脚螺栓更换，施工人一栏填着两个字：乔宁。笔画短，收笔干脆，像是写的人不太愿意多费墨。同一行右侧的备注栏里，有一行铅笔字，淡得几乎和纸纹混在一起：填料微漏，值班说先记着。
+
+但旁边的“处理结果”栏是空的。没有任何人签销。
+
+林越把纸页翘起来，对着窗缝的光看。铅笔字没有压痕，写得很轻，像是用指甲尖捏着笔杆蹭上去的，没打算给谁看。他又翻下一页，八月十五日，同一泵房，填料更换完成，签销人：乔宁。
+
+中间隔了七天。
+
+他把这页记在脑子里，然后合上台账，放回原处。梅叔的针线在背后一进一出，没再开口。
+
+第二天上午，他找了个说得通的由头。
+
+档案屋的窗户插销锈断了，梅叔让他去东区综合站问一下有没有备件。东区综合站就是乔宁的机房。临时医疗单上盖的章来自“站区安全联控”，签认人乔宁，有效期三天。今天是最后一天。
+
+他走进设备间时，乔宁正蹲在一台电机旁边，袖子卷到肘弯，手里捏着测温枪。听到脚步声，头也没回：“领配件找窗口三，我在忙。”
+
+“窗插销，档案屋的。梅叔说你这有备件。”
+
+乔宁站起来，在裤子上蹭了蹭手，这才看了他一眼，目光往下落到他右手捏着的那张医疗单上。“手怎么样。”
+
+“皮外伤。”
+
+“你昨天没在档案屋待着？”
+
+“回去了。今天来领配件。”
+
+乔宁领着他往仓库走，路过一排控制柜时，林越从内兜里掏出一张折叠的纸条。上面抄着台账里那两行字，日期、施工人、备注栏的铅笔字，一字不差。
+
+“乔工，这个我想问一下。”
+
+乔宁接过纸条，扫了两眼，脚步没停。“哪来的？”
+
+“档案屋的旧台账。一九九九年八月，七号泵房。这行铅笔字写着‘填料微漏，值班说先记着’，但处理结果栏空着，没人签销。下一周你才换了填料，签销了。”
+
+乔宁把纸条还给他，脸上的表情没怎么变，但嘴角紧了紧。“你想问什么。”
+
+“系统里的记录和这个对不上。我查过综合站前厅的公示屏，七号泵房那年八月的维护记录，八月八日当天没有备注栏，处理结果直接写着‘已完成，无异常’。”
+
+乔宁在仓库门口停下来，从兜里摸出一把钥匙，开了锁。他没急着进去，手扶在门框上，像是在算一道题。
+
+“公示屏的维护记录是后来同步上去的。系统每三十天跑一次全量同步，从各个站点的临时缓存里抓数据往上盖。抓的时候只认录入字段，备注栏如果没有按规定格式填进表格，同步一次就没了，再同步还被覆盖，一直覆盖到终态。”
+
+“纸不会。”林越说。
+
+“纸不会。”乔宁重复了一遍，语气像在确认一条物理定律。“你手上那册东西，谁写的、什么时候写的、用的什么铅笔，笔迹轻重都在。系统里的东西，上一版被下一版盖了，你连盖掉的痕迹都看不见。除非有人专门去调版本日志——”
+
+他停了一下。
+
+“——但版本日志也在系统里。”
+
+林越听懂了。放在网上的东西，上一秒是真的，下一秒可能被合法地覆盖成另一个样子。而纸上的东西，除非有人动手撕、动手擦、动手裁，否则它就在那儿。
+
+“那这行铅笔字，”林越晃了晃手里的纸条，“是谁写的？”
+
+乔宁的目光从纸条上移开，落到仓库里一排排货架上。“这我不能跟你说。”
+
+“我没问别的。就问这行字是谁写的。”
+
+“你问的就是别的。”乔宁走进仓库，从第三排货架顶层抽下一只纸盒，翻出两副窗插销，扔进林越手里。“这个拿回去。插销孔对不上就锉一下。”
+
+林越接过插销，没走。“乔工，七号泵房八月的台账，系统里那版‘已完成，无异常’，是你签的吗？”
+
+乔宁看了他一眼。那眼神和昨天在泵房门口完全不同——昨天是防备一个生人，今天是辨认一个对手。
+
+“我签的。”他说。“八月十五日填料换完之后签的。之前那一周的记录，我管不着。系统里公示的版本是后来同步的，我签的时候没细看备注栏——就算细看了，备注栏空着，我也只能照空签。”
+
+“也就是说，那行铅笔字在系统里从来没存在过。”
+
+“没存在过。”乔宁把纸盒塞回货架，拍了拍手上的灰。“但纸上有。你手上那张纸就是证据——证明有人在系统之外，单独记了一笔。”
+
+林越把插销揣进兜里，左手虎口被纸盒边缘蹭了一下，疼得他缩了缩。
+
+乔宁注意到了这个动作。“你手到底怎么弄的？”
+
+“关阀烫的。”
+
+“泵房关阀烫的？”
+
+“七号泵房，昨天。”
+
+乔宁沉默了两秒。林越看见他喉结动了一下，像是在咽半句话回去。
+
+“你昨天在七号泵房，看见什么了？”乔宁问。
+
+“看见一个没法归零的泵，和一张说‘已完成，无异常’的系统记录。”
+
+乔宁把仓库门关上，挂锁咔嗒一声扣死。他走到林越面前，压低了声音——这在乔宁身上是头一回。
+
+“我跟你讲清楚。这话我只说一遍，你听完了自己掂量。第一，系统里的记录，过了三十天同步期，只要没人调版本日志，你说什么都没用，因为它看起来就是对的。第二，纸不会自己改，但人会动手。你手上那张纸能证明系统被覆盖过，但不能证明是谁覆盖的。第三——”
+
+他停顿了一下。
+
+“第三，你下次要查什么，别去公示屏。公示屏是给外面人看的。你直接来设备间后门，找贴绿色标签的柜子，里面是同步之前的数据副本。别让人看见你翻。”
+
+“条件呢？”
+
+乔宁嘴角动了一下。“你倒是懂规矩。条件就一个：你从哪里拿到这册台账的，别跟任何人说是我让你查的。我下个月还要在这站混。”
+
+他把钥匙收回兜里，往机房方向走了两步，又回头补了一句：
+
+“还有，那个‘值班说先记着’——你找找那年八月七号泵房谁在值班。系统里的值班表我也给你指条路，别去公示屏，去找手写的交接班登记簿。那个进网之前就填好了，同步改不动它。”
+
+林越走出东区综合站时，左手纱布边上又洇深了一圈。风从穹顶换气口灌下来，带着海水的咸和管廊里的铁锈味。
+
+他兜里揣着两副插销、一张过期的医疗单，脑子里多了一条能往下钉的钉子：一九九九年八月八日，七号泵房，系统记录上不存在的一行铅笔字。乔宁承认纸上有东西，也承认系统会盖，但他没承认自己跟那行字有任何关系，还划了线——别跟人说是我让你查的。
+
+梅叔那边，窗插销换上之前，他得想好怎么解释多出来的那一截锉刀痕。
+
+还有一件事乔宁没提，林越也没问。七号泵房的值班表上，八月八日那一栏如果也进了网，它现在被同步成了什么样子。
+
+他得找到那种不会被同步改掉的东西。
+
+手写的。纸做的。进网之前就填好的。
+
+交接班登记簿。
+
+
+=== 修改后正文 ===
+## 第五章 同步
+
+林越回到档案屋时，手上的纱布已经洇出一点黄渍。
+
+梅叔照旧坐在窗边，膝盖上摊着一册线装旧志，手里拿针，在穿一根发黑的棉线。他没抬头，鼻翼动了一下，像是闻到什么。
+
+“修纸修到锅炉房去了？”
+
+林越把手往袖口里缩了缩。“热水管爆了，帮忙关阀，溅了一下。”
+
+“你倒是热心。”梅叔把针扎进纸脊，拉线的动作不急。“修纸的手去碰铁，以后哪个馆子敢收你。”
+
+“本来看见了不管，水漫到东墙，那批纸全完。”
+
+这话倒也不全是编的。梅叔终于抬了抬眼皮，目光在他左手上停了两秒，然后继续穿线。
+
+他坐到工作台前，把昨天没压完的那叠散页摊开。右手还能用，左手只能虚虚按着。压板推了两下，他停了。
+
+梅叔在身后说：“今天别碰那批白塔的，手不干净，纸会记。”
+
+“我知道。”他答得规矩。手不干净，纸会记。这句话他记下了。
+
+他换了一册，从东墙第三架抽出一本《临汐城东区给排水维护台账·一九九八至二〇〇〇》。封面磨得发白，装订线松了，订口处有反复翻折的软痕。这册不在梅叔划给他的修复范围里，但也不在铁皮柜里。
+
+梅叔没拦。只是在他翻到第三页时，补了一句：“那本不用修，原本就是干的。”
+
+林越手指沿着纸页边缘滑过去。七号泵房，一九九九年八月。他停住了。
+
+八月八日，七号泵房，三号泵地脚螺栓更换，施工人一栏填着两个字：乔宁。笔画短，收笔干脆，像是写的人不太愿意多费墨。同一行右侧的备注栏里，有一行铅笔字，淡得几乎和纸纹混在一起：填料微漏，值班说先记着。
+
+但旁边的“处理结果”栏是空的。没有任何人签销。
+
+林越把纸页翘起来，对着窗缝的光看。铅笔字没有压痕，写得很轻，像是用指甲尖捏着笔杆蹭上去的，没打算给谁看。他又翻下一页，八月十五日，同一泵房，填料更换完成，签销人：乔宁。
+
+中间隔了七天。
+
+他把这页记在脑子里，然后合上台账，放回原处。梅叔的针线在背后一进一出，没再开口。
+
+第二天上午，他找了个说得通的由头。
+
+档案屋的窗户插销锈断了，梅叔让他去东区综合站问一下有没有备件。东区综合站就是乔宁的机房。临时医疗单上盖的章来自“站区安全联控”，签认人乔宁，有效期三天。今天是最后一天。
+
+他走进设备间时，乔宁正蹲在一台电机旁边，袖子卷到肘弯，手里捏着测温枪。听到脚步声，头也没回：“领配件找窗口三，我在忙。”
+
+“窗插销，档案屋的。梅叔说你这有备件。”
+
+乔宁站起来，在裤子上蹭了蹭手，这才看了他一眼，目光往下落到他右手捏着的那张医疗单上。“手怎么样。”
+
+“皮外伤。”
+
+“你昨天没在档案屋待着？”
+
+“回去了。今天来领配件。”
+
+乔宁领着他往仓库走，路过一排控制柜时，林越从内兜里掏出一张折叠的纸条。上面抄着台账里那两行字，日期、施工人、备注栏的铅笔字，一字不差。
+
+“乔工，这个我想问一下。”
+
+乔宁接过纸条，扫了两眼，脚步没停。“哪来的？”
+
+“档案屋的旧台账。一九九九年八月，七号泵房。这行铅笔字写着‘填料微漏，值班说先记着’，但处理结果栏空着，没人签销。下一周你才换了填料，签销了。”
+
+乔宁把纸条还给他，脸上的表情没怎么变，但嘴角紧了紧。“你想问什么。”
+
+“系统里的记录和这个对不上。我查过综合站前厅的公示屏，七号泵房那年八月的维护记录，八月八日当天没有备注栏，处理结果直接写着‘已完成，无异常’。”
+
+乔宁在仓库门口停下来，从兜里摸出一把钥匙，开了锁。他没急着进去，手扶在门框上，像是在算一道题。
+
+“公示屏的维护记录是后来同步上去的。系统每三十天跑一次全量同步，从各个站点的临时缓存里抓数据往上盖。抓的时候只认录入字段，备注栏如果没有按规定格式填进表格，同步一次就没了，再同步还被覆盖，一直覆盖到终态。”
+
+“纸不会。”林越说。
+
+“纸不会。”乔宁重复了一遍，语气像在确认一条物理定律。“你手上那册东西，谁写的、什么时候写的、用的什么铅笔，笔迹轻重都在。系统里的东西，上一版被下一版盖了，你连盖掉的痕迹都看不见。除非有人专门去调版本日志——”
+
+他停了一下。
+
+“——但版本日志也在系统里。”
+
+“那这行铅笔字，”林越晃了晃手里的纸条，“是谁写的？”
+
+乔宁的目光从纸条上移开，落到仓库里一排排货架上。“这我不能跟你说。”
+
+“我没问别的。就问这行字是谁写的。”
+
+“你问的就是别的。”乔宁走进仓库，从第三排货架顶层抽下一只纸盒，翻出两副窗插销，扔进林越手里。“这个拿回去。插销孔对不上就锉一下。”
+
+林越接过插销，没走。“乔工，七号泵房八月的台账，系统里那版‘已完成，无异常’，是你签的吗？”
+
+乔宁看了他一眼。“我签的。”他说。“八月十五日填料换完之后签的。之前那一周的记录，我管不着。系统里公示的版本是后来同步的，我签的时候没细看备注栏——就算细看了，备注栏空着，我也只能照空签。”
+
+“也就是说，那行铅笔字在系统里从来没存在过。”
+
+“没存在过。”乔宁把纸盒塞回货架，拍了拍手上的灰。“但纸上有。你手上那张纸就是证据——证明有人在系统之外，单独记了一笔。”
+
+林越把插销揣进兜里，左手虎口被纸盒边缘蹭了一下，疼得他缩了缩。
+
+乔宁注意到了这个动作。“你手到底怎么弄的？”
+
+“关阀烫的。”
+
+“泵房关阀烫的？”
+
+“七号泵房，昨天。”
+
+乔宁沉默了两秒。林越看见他喉结动了一下，像是在咽半句话回去。
+
+“你昨天在七号泵房，看见什么了？”乔宁问。
+
+“看见一个没法归零的泵，和一张说‘已完成，无异常’的系统记录。”
+
+乔宁把仓库门关上，挂锁咔嗒一声扣死。他走到林越面前，压低了声音。
+
+“我跟你讲清楚。这话我只说一遍，你听完了自己掂量。第一，系统里的记录，过了三十天同步期，只要没人调版本日志，你说什么都没用，因为它看起来就是对的。第二，纸不会自己改，但人会动手。你手上那张纸能证明系统被覆盖过，但不能证明是谁覆盖的。第三——”
+
+他停顿了一下。
+
+“第三，你下次要查什么，别去公示屏。公示屏是给外面人看的。你直接来设备间后门，找贴绿色标签的柜子，里面是同步之前的数据副本。别让人看见你翻。”
+
+“条件呢？”
+
+乔宁嘴角动了一下。“你倒是懂规矩。条件就一个：你从哪里拿到这册台账的，别跟任何人说是我让你查的。我下个月还要在这站混。”
+
+他把钥匙收回兜里，往机房方向走了两步，又回头补了一句：
+
+“还有，那个‘值班说先记着’——你找找那年八月七号泵房谁在值班。系统里的值班表我也给你指条路，别去公示屏，去找手写的交接班登记簿。那个进网之前就填好了，同步改不动它。”
+
+林越走出东区综合站时，左手纱布边上又洇深了一圈。风从穹顶换气口灌下来，带着海水的咸和管廊里的铁锈味。
+
+他兜里揣着两副插销、一张过期的医疗单。
+
+梅叔那边，窗插销换上之前，他得想好怎么解释多出来的那一截锉刀痕。
+
+还有一件事乔宁没提，林越也没问。七号泵房的值班表上，八月八日那一栏如果也进了网，它现在被同步成了什么样子。
+
+交接班登记簿。
+

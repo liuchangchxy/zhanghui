@@ -1,0 +1,44 @@
+{
+  "ch03_j1": {
+    "pass1_left": "B",
+    "chapter": 3,
+    "judge": "j1",
+    "A": "writer_raw",
+    "B": "finalizer_candidate_rejected"
+  },
+  "ch03_j2": {
+    "pass1_left": "B",
+    "chapter": 3,
+    "judge": "j2",
+    "A": "writer_raw",
+    "B": "finalizer_candidate_rejected"
+  },
+  "ch05_j1": {
+    "pass1_left": "A",
+    "chapter": 5,
+    "judge": "j1",
+    "A": "writer_raw",
+    "B": "finalizer_candidate_rejected"
+  },
+  "ch05_j2": {
+    "pass1_left": "A",
+    "chapter": 5,
+    "judge": "j2",
+    "A": "writer_raw",
+    "B": "finalizer_candidate_rejected"
+  },
+  "ch07_j1": {
+    "pass1_left": "B",
+    "chapter": 7,
+    "judge": "j1",
+    "A": "writer_raw",
+    "B": "finalizer_candidate_rejected"
+  },
+  "ch07_j2": {
+    "pass1_left": "A",
+    "chapter": 7,
+    "judge": "j2",
+    "A": "writer_raw",
+    "B": "finalizer_candidate_rejected"
+  }
+}

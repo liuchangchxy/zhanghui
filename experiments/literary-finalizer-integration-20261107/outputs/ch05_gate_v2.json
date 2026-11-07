@@ -1,0 +1,75 @@
+{
+  "accepted": true,
+  "reasons": [],
+  "length_ratio": 0.9064,
+  "before_body_chars": 2948,
+  "after_body_chars": 2672,
+  "missing_numbers": [],
+  "added_numbers": [],
+  "missing_dates": [],
+  "added_dates": [],
+  "missing_codes": [],
+  "added_codes": [],
+  "missing_terms": [],
+  "semantic_outcome": "STYLE_ONLY_SAFE",
+  "gate_status": "ACCEPTED",
+  "gate_details": {
+    "rollback_reason": null,
+    "staccato_score": 0.044008124576844984,
+    "edit_footprint_ratio": 0.048,
+    "required_actions": [],
+    "discourse_only": true,
+    "allowed_changes": [
+      {
+        "dimension": "epistemic",
+        "evidence_type": "semantic_judge_discourse",
+        "original_excerpt": "不问比问更压人，林越知道这事没糊过去，只是被存下了。",
+        "edited_excerpt": "保留梅叔查看林越的手、继续穿线的动作，删除林越对梅叔反应的判断。",
+        "description": "梅叔的反应及两人此前的对话仍在，删除的是林越对眼前互动的解读，没有改变可确认的知情事实。",
+        "severity": "blocking"
+      },
+      {
+        "dimension": "epistemic",
+        "evidence_type": "semantic_judge_discourse",
+        "original_excerpt": "林越听懂了。放在网上的东西，上一秒是真的，下一秒可能被合法地覆盖成另一个样子。而纸上的东西，除非有人动手撕、动手擦、动手裁，否则它就在那儿。",
+        "edited_excerpt": "删除林越的理解确认和对网络记录、纸质记录差异的复述。",
+        "description": "此前乔宁关于同步覆盖的解释和两人说的“纸不会”均保留；后文乔宁也说明纸不会自己改、但人会动手。世界规则及林越据此继续追问的行动仍成立。",
+        "severity": "blocking"
+      },
+      {
+        "dimension": "relationship",
+        "evidence_type": "semantic_judge_discourse",
+        "original_excerpt": "那眼神和昨天在泵房门口完全不同——昨天是防备一个生人，今天是辨认一个对手。",
+        "edited_excerpt": "保留“乔宁看了他一眼”，删除对眼神及两人互动的解释。",
+        "description": "乔宁面对追问的反应和随后承认签字的对白仍在；删除的是对眼神潜台词的点破，没有改写两人的决定或行动。",
+        "severity": "blocking"
+      },
+      {
+        "dimension": "relationship",
+        "evidence_type": "semantic_judge_discourse",
+        "original_excerpt": "他走到林越面前，压低了声音——这在乔宁身上是头一回。",
+        "edited_excerpt": "他走到林越面前，压低了声音。",
+        "description": "保留压低声音的动作，删除强调这一刻的“头一回”；没有显示后续关系或行动因此改变。",
+        "severity": "blocking"
+      },
+      {
+        "dimension": "clue",
+        "evidence_type": "semantic_judge_discourse",
+        "original_excerpt": "脑子里多了一条能往下钉的钉子：一九九九年八月八日，七号泵房，系统记录上不存在的一行铅笔字。乔宁承认纸上有东西，也承认系统会盖，但他没承认自己跟那行字有任何关系，还划了线——别跟人说是我让你查的。",
+        "edited_excerpt": "删除章末对铅笔字、乔宁回应及保密条件的总结。",
+        "description": "铅笔字的日期、地点和内容，以及乔宁关于纸质记录、同步覆盖和保密条件的对白均在前文保留。",
+        "severity": "blocking"
+      },
+      {
+        "dimension": "motivation",
+        "evidence_type": "semantic_judge_discourse",
+        "original_excerpt": "他得找到那种不会被同步改掉的东西。手写的。纸做的。进网之前就填好的。交接班登记簿。",
+        "edited_excerpt": "交接班登记簿。",
+        "description": "乔宁此前已明确要求林越查找手写交接班登记簿，并解释其在进网前填好、同步改不动；章末仍保留该调查方向，行动理由可以从保留对白中恢复。",
+        "severity": "blocking"
+      }
+    ],
+    "blocking_changes": []
+  },
+  "judge_binding": "bound_file:/Users/chang/Desktop/Code/zhanghui/experiments/literary-finalizer-integration-20261107/judge/ch05_verdict_v2.json"
+}

@@ -1,0 +1,36 @@
+{
+  "chapter": 3,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "RIGHT",
+      "confidence": 0.88,
+      "evidence": "RIGHT保留锁鼻刮痕、烟盒停顿和移交单等悬念，同时删去多处解释，情节推进更利落。"
+    },
+    "READING_APPEAL": {
+      "winner": "RIGHT",
+      "confidence": 0.78,
+      "evidence": "RIGHT在韩策离开后直接切入线索无法核实的问题，少了LEFT先复述乔宁、安全阀和移交单的停顿。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "RIGHT",
+      "confidence": 0.97,
+      "evidence": "RIGHT删去“这个由头不算牵强”“整段话搭在另一个人的记忆上”等解释，让对白和事实本身承担更多意思。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "RIGHT",
+      "confidence": 0.78,
+      "evidence": "RIGHT用“韩策没马上接。他看了林越一眼”留出停顿，省去LEFT随后对他意图的揣测，句段更干净。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "RIGHT",
+      "confidence": 0.68,
+      "evidence": "两版都有潮湿旧城和庙外板车声，RIGHT结尾以林越收起笔记本、开始补纸收束，比LEFT另用“另一根弦绷着”解释心境更贴近现场。"
+    },
+    "SUBTEXT": {
+      "winner": "RIGHT",
+      "confidence": 0.91,
+      "evidence": "RIGHT保留韩策看林越一眼的动作，却删去“像是要确认他把话听到了什么程度”，让试探意味留在停顿里。"
+    }
+  },
+  "overall_rationale": "RIGHT在保留主要情节、人物动作和环境细节的同时，减少了对动机与悬念的直接说明，使韩策的试探和林越的戒备更有余味。两版的场景和对白大体相同，差距主要体现在叙述的节制与节奏上；RIGHT仍保留了若干对线索的明确归纳。"
+}

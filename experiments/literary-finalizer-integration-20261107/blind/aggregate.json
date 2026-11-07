@@ -1,0 +1,554 @@
+{
+  "diagnostic": true,
+  "b_arm": "finalizer_candidate_rejected",
+  "accepted_chapters": [],
+  "all_chapters": [
+    "ch03",
+    "ch05",
+    "ch07"
+  ],
+  "evaluated_chapters": [
+    "ch03",
+    "ch05",
+    "ch07"
+  ],
+  "fallback_or_missing": [],
+  "judges": [
+    "j1",
+    "j2"
+  ],
+  "dims": [
+    "OVERALL_PREFERENCE",
+    "READING_APPEAL",
+    "LOW_AUTHOR_EXPLANATION",
+    "SENTENCE_NATURALNESS",
+    "SCENE_IMMERSION",
+    "SUBTEXT"
+  ],
+  "verdicts": {
+    "ch03": {
+      "j1": {
+        "OVERALL_PREFERENCE": "B",
+        "READING_APPEAL": "B",
+        "LOW_AUTHOR_EXPLANATION": "B",
+        "SENTENCE_NATURALNESS": "B",
+        "SCENE_IMMERSION": "B",
+        "SUBTEXT": "B"
+      },
+      "j2": {
+        "OVERALL_PREFERENCE": "B",
+        "READING_APPEAL": "B",
+        "LOW_AUTHOR_EXPLANATION": "B",
+        "SENTENCE_NATURALNESS": "B",
+        "SCENE_IMMERSION": "B",
+        "SUBTEXT": "B"
+      }
+    },
+    "ch05": {
+      "j1": {
+        "OVERALL_PREFERENCE": "B",
+        "READING_APPEAL": "B",
+        "LOW_AUTHOR_EXPLANATION": "B",
+        "SENTENCE_NATURALNESS": "B",
+        "SCENE_IMMERSION": "B",
+        "SUBTEXT": "B"
+      },
+      "j2": {
+        "OVERALL_PREFERENCE": "B",
+        "READING_APPEAL": "B",
+        "LOW_AUTHOR_EXPLANATION": "B",
+        "SENTENCE_NATURALNESS": "B",
+        "SCENE_IMMERSION": "B",
+        "SUBTEXT": "B"
+      }
+    },
+    "ch07": {
+      "j1": {
+        "OVERALL_PREFERENCE": "B",
+        "READING_APPEAL": "B",
+        "LOW_AUTHOR_EXPLANATION": "B",
+        "SENTENCE_NATURALNESS": "B",
+        "SCENE_IMMERSION": "B",
+        "SUBTEXT": "B"
+      },
+      "j2": {
+        "OVERALL_PREFERENCE": "B",
+        "READING_APPEAL": "B",
+        "LOW_AUTHOR_EXPLANATION": "B",
+        "SENTENCE_NATURALNESS": "B",
+        "SCENE_IMMERSION": "B",
+        "SUBTEXT": "B"
+      }
+    }
+  },
+  "summary_by_judge": {
+    "j1": {
+      "OVERALL_PREFERENCE": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "READING_APPEAL": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "LOW_AUTHOR_EXPLANATION": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "SENTENCE_NATURALNESS": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "SCENE_IMMERSION": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "SUBTEXT": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      }
+    },
+    "j2": {
+      "OVERALL_PREFERENCE": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "READING_APPEAL": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "LOW_AUTHOR_EXPLANATION": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "SENTENCE_NATURALNESS": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "SCENE_IMMERSION": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      },
+      "SUBTEXT": {
+        "A": 0,
+        "B": 3,
+        "SPLIT": 0,
+        "TIE": 0
+      }
+    }
+  },
+  "pooled": {
+    "OVERALL_PREFERENCE": {
+      "A": 0,
+      "B": 6,
+      "SPLIT": 0,
+      "TIE": 0
+    },
+    "READING_APPEAL": {
+      "A": 0,
+      "B": 6,
+      "SPLIT": 0,
+      "TIE": 0
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "A": 0,
+      "B": 6,
+      "SPLIT": 0,
+      "TIE": 0
+    },
+    "SENTENCE_NATURALNESS": {
+      "A": 0,
+      "B": 6,
+      "SPLIT": 0,
+      "TIE": 0
+    },
+    "SCENE_IMMERSION": {
+      "A": 0,
+      "B": 6,
+      "SPLIT": 0,
+      "TIE": 0
+    },
+    "SUBTEXT": {
+      "A": 0,
+      "B": 6,
+      "SPLIT": 0,
+      "TIE": 0
+    }
+  },
+  "chapter_overall": {
+    "ch03": {
+      "judge_verdicts": [
+        "B",
+        "B"
+      ],
+      "strict_b": true,
+      "leaning_b": true
+    },
+    "ch05": {
+      "judge_verdicts": [
+        "B",
+        "B"
+      ],
+      "strict_b": true,
+      "leaning_b": true
+    },
+    "ch07": {
+      "judge_verdicts": [
+        "B",
+        "B"
+      ],
+      "strict_b": true,
+      "leaning_b": true
+    }
+  },
+  "strict_overall_b_count": 3,
+  "leaning_overall_b_count": 3,
+  "raw_pass": {
+    "ch03_j1_OVERALL_PREFERENCE": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT保留了韩策的停顿、烟盒动作和林越的疑心，同时删去RIGHT中“一个凭空掉下来的名字”等重复解释，读起来更利落。",
+      "p2_evidence": "RIGHT保留锁鼻刮痕、烟盒停顿和移交单等悬念，同时删去多处解释，情节推进更利落。",
+      "p1_conf": 0.93,
+      "p2_conf": 0.88
+    },
+    "ch03_j1_READING_APPEAL": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT在韩策离开后直接落到线索无法核实的疑点，再以“完整到像备过课”推进悬念；RIGHT先复述一遍线索，削弱了紧迫感。",
+      "p2_evidence": "RIGHT在韩策离开后直接切入线索无法核实的问题，少了LEFT先复述乔宁、安全阀和移交单的停顿。",
+      "p1_conf": 0.84,
+      "p2_conf": 0.78
+    },
+    "ch03_j1_LOW_AUTHOR_EXPLANATION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT多出“韩策说的不是问句”“整段话搭在另一个人的记忆上”等说明，LEFT让语气和信息来源自行显现。",
+      "p2_evidence": "RIGHT删去“这个由头不算牵强”“整段话搭在另一个人的记忆上”等解释，让对白和事实本身承担更多意思。",
+      "p1_conf": 0.98,
+      "p2_conf": 0.97
+    },
+    "ch03_j1_SENTENCE_NATURALNESS": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT的“理由太顺了，林越后脊梁有点发紧”一气呵成，RIGHT拆成“这个理由太顺了。顺得让林越后脊梁有点发紧”，强调稍显刻意。",
+      "p2_evidence": "RIGHT用“韩策没马上接。他看了林越一眼”留出停顿，省去LEFT随后对他意图的揣测，句段更干净。",
+      "p1_conf": 0.9,
+      "p2_conf": 0.78
+    },
+    "ch03_j1_SCENE_IMMERSION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "两版共有湿香灰、板车声和烟盒等细节，但LEFT较少插入“一个凭空掉下来的名字”之类的概括，场景中的注意力更连贯。",
+      "p2_evidence": "两版都有潮湿旧城和庙外板车声，RIGHT结尾以林越收起笔记本、开始补纸收束，比LEFT另用“另一根弦绷着”解释心境更贴近现场。",
+      "p1_conf": 0.76,
+      "p2_conf": 0.68
+    },
+    "ch03_j1_SUBTEXT": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT让韩策看林越一眼后再纠正说法，保留试探的余地；RIGHT补上“像是要确认他把话听到了什么程度”，把这一层意思说得更明。",
+      "p2_evidence": "RIGHT保留韩策看林越一眼的动作，却删去“像是要确认他把话听到了什么程度”，让试探意味留在停顿里。",
+      "p1_conf": 0.95,
+      "p2_conf": 0.91
+    },
+    "ch03_j2_OVERALL_PREFERENCE": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT叙事克制冷峻，没有RIGHT诸如“林越听出了毛病”或庙后大段案情摘要式的冗余复述，整体阅读体验更加紧凑利落。",
+      "p2_evidence": "RIGHT版删除了LEFT中冗余的破折号心理说明与庙后对话要点的机械复述，叙事利落紧凑，悬疑质感更为冷峻。",
+      "p1_conf": 0.88,
+      "p2_conf": 0.85
+    },
+    "ch03_j2_READING_APPEAL": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT在庙后以“乔宁。安全阀被人手动开过……”机械复盘既有信息打断了情绪连贯性，而LEFT紧扣核心疑点迅速转场，悬疑张力更强。",
+      "p2_evidence": "RIGHT版剔除了关帝庙对谈后林越对前文信息的二次回嚼，推进干脆，结尾以具体的修补动作收束，悬念张力更强。",
+      "p1_conf": 0.85,
+      "p2_conf": 0.8
+    },
+    "ch03_j2_LOW_AUTHOR_EXPLANATION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT频繁插入“这个由头不算牵强”、“韩策说的不是问句”、“那是他自己瞒下的”等保姆式注解，而LEFT完全摒弃了这类作者替读者总结点题的冗笔。",
+      "p2_evidence": "LEFT版多次出现‘韩策说的不是问句’‘像林越说了什么很对的话’‘林越听出了毛病’等替读者下结论的解释，RIGHT版均将其克制删去。",
+      "p1_conf": 0.95,
+      "p2_conf": 0.95
+    },
+    "ch03_j2_SENTENCE_NATURALNESS": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT断句干净利落，而RIGHT频繁添加破折号解释与“脑子里的另一根弦绷着没松”等俗套过渡句，阻滞了句段的自然流转与呼吸感。",
+      "p2_evidence": "RIGHT版化解了LEFT中多处突兀的破折号插入语与心理标签，结尾段动作与思绪重组后呼吸节奏更为顺畅自然。",
+      "p1_conf": 0.86,
+      "p2_conf": 0.8
+    },
+    "ch03_j2_SCENE_IMMERSION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT让视角紧贴阴冷档案屋与荒凉关帝庙的现场感，RIGHT过多的抽象逻辑分析与心理补丁则将读者频繁从具体情境中抽离出来。",
+      "p2_evidence": "RIGHT版舍弃了结尾‘脑子里的另一根弦绷着没松’的抽象概念，让视线稳定落回揣笔记本、为第67页补纸的微观物理动作中，临场感更扎实。",
+      "p1_conf": 0.82,
+      "p2_conf": 0.75
+    },
+    "ch03_j2_SUBTEXT": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT让台词神态自显分量，而RIGHT偏要点明“韩策说的不是问句”、“整段话搭在另一个人的记忆上，而那个人已经死了”，将言外之意尽数说破。",
+      "p2_evidence": "在韩策的交锋中，RIGHT版删去了‘像是要确认他把话听到了什么程度’等意图揭底，仅保留眼神与停顿，使人物试探与未尽之言更具回味。",
+      "p1_conf": 0.9,
+      "p2_conf": 0.9
+    },
+    "ch05_j1_OVERALL_PREFERENCE": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT保留了纸本台账、仓库对话和伤口等关键细节，删去LEFT对人物眼神及线索意义的反复解说，整体更有余味。",
+      "p2_evidence": "LEFT让梅叔的目光、乔宁的停顿和最后的“交接班登记簿”自行承载意味，RIGHT则多次补充解释人物关系与线索含义。",
+      "p1_conf": 0.93,
+      "p2_conf": 0.97
+    },
+    "ch05_j1_READING_APPEAL": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT在乔宁说完“但版本日志也在系统里”后直接转入追问，结尾又以“交接班登记簿”收束，悬念推进更利落。",
+      "p2_evidence": "LEFT从乔宁避谈铅笔字推进到寻找登记簿，结尾直接落在线索上；RIGHT在途中和结尾反复归纳，稍稍减缓了悬念的推进。",
+      "p1_conf": 0.85,
+      "p2_conf": 0.89
+    },
+    "ch05_j1_LOW_AUTHOR_EXPLANATION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT额外解释“不问比问更压人”、纸与网络记录的区别，以及乔宁承认和隐瞒了什么，RIGHT均将这些判断更多留给读者。",
+      "p2_evidence": "RIGHT增加了“不问比问更压人”和“林越听懂了”等说明，直接解释了梅叔的态度及纸质记录与系统记录的区别，LEFT均未作这些补充。",
+      "p1_conf": 0.99,
+      "p2_conf": 0.99
+    },
+    "ch05_j1_SENTENCE_NATURALNESS": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT让“乔宁看了他一眼”直接接上“我签的”，避开LEFT“昨天是防备一个生人，今天是辨认一个对手”的刻意阐释，句段衔接更顺。",
+      "p2_evidence": "LEFT的“乔宁看了他一眼”直接接上回答，节奏利落；RIGHT插入“辨认一个对手”的判词，显得较刻意。",
+      "p1_conf": 0.91,
+      "p2_conf": 0.9
+    },
+    "ch05_j1_SCENE_IMMERSION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT保留了针线穿纸、仓库挂锁和海水铁锈味，同时删去对视线及局势的总结，让注意力更集中在现场动作上。",
+      "p2_evidence": "两版都有针线、测温枪和挂锁等具体细节，但RIGHT在动作间插入“林越听懂了”及记录机制的总结，削弱了身处现场的感觉。",
+      "p1_conf": 0.79,
+      "p2_conf": 0.83
+    },
+    "ch05_j1_SUBTEXT": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "梅叔看一眼伤手便继续穿线、乔宁看一眼林越便承认签字，RIGHT让动作和对话自行传递戒备，LEFT则直接说明怀疑与对手关系。",
+      "p2_evidence": "LEFT只写梅叔目光停在伤手上又继续穿线，留下怀疑的余地；RIGHT明确说破“这事没糊过去”，并把乔宁的眼神解释为“辨认一个对手”。",
+      "p1_conf": 0.96,
+      "p2_conf": 0.98
+    },
+    "ch05_j2_OVERALL_PREFERENCE": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT删除了多处作者替读者总结与说破心理的冗余段落，叙事节奏干净冷峻，留白高级，小说质感显著优于LEFT。",
+      "p2_evidence": "LEFT文风冷峻利落且充分尊重读者智商，省去了RIGHT中多处对人物博弈与规则隐喻的直白提炼，小说质感显著更胜一筹。",
+      "p1_conf": 0.92,
+      "p2_conf": 0.92
+    },
+    "ch05_j2_READING_APPEAL": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT结尾删除了对乔宁对话的重复复盘，直接利落定格在“交接班登记簿”，悬念与推力更足。",
+      "p2_evidence": "LEFT以紧凑冷峻的暗流推着读者主动追索真相，而RIGHT在末尾直接复盘“脑子里多了一条能往下钉的钉子”并划重点，削弱了探案悬疑的吸引力。",
+      "p1_conf": 0.88,
+      "p2_conf": 0.85
+    },
+    "ch05_j2_LOW_AUTHOR_EXPLANATION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT存在大量作者下场点题（如“不问比问更压人”、“林越听懂了。放在网上的东西……”、“辨认一个对手”及末尾复盘），RIGHT将这些解释悉数剔除。",
+      "p2_evidence": "RIGHT频繁插入“林越听懂了”、“辨认一个对手”以及篇末对对话意图的归纳复述，LEFT则完全摒弃此类作者维度的总结与下结论。",
+      "p1_conf": 0.98,
+      "p2_conf": 0.95
+    },
+    "ch05_j2_SENTENCE_NATURALNESS": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT去掉了结尾“他得找到那种不会被同步改掉的东西。手写的。纸做的……”这种略显生硬刻意的强调句群，落笔更自然有力。",
+      "p2_evidence": "LEFT的对白与动作交替紧凑流畅，而RIGHT在乔宁话音刚落时强行切入大段抽象解释（“林越听懂了。放在网上的东西…”），打乱了硬朗自然的叙事节奏。",
+      "p1_conf": 0.86,
+      "p2_conf": 0.88
+    },
+    "ch05_j2_SCENE_IMMERSION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT没有被抽象的概念阐释（如“上一秒是真的，下一秒可能被合法地覆盖”）打断当下情境，读者始终沉浸在仓库交接配件的紧绷物理时空中。",
+      "p2_evidence": "LEFT始终将读者锁定在线头穿孔、换气口海咸味与锉刀痕等具象时空细节中，RIGHT多处脱离现场的心理独白与复盘抽离了沉浸感。",
+      "p1_conf": 0.85,
+      "p2_conf": 0.82
+    },
+    "ch05_j2_SUBTEXT": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT将梅叔的沉默直白解释为“只是被存下了”、将乔宁眼神点破为“辨认一个对手”，RIGHT只留“目光停了两秒继续穿线”与“看了他一眼”，将暗涌完全交给潜台词。",
+      "p2_evidence": "梅叔的停顿与乔宁的防备在LEFT中全凭两秒注视与喉结微动含蓄立住，RIGHT却直白道出“不问比问更压人”“今天是辨认一个对手”，将潜台词全盘说破。",
+      "p1_conf": 0.95,
+      "p2_conf": 0.92
+    },
+    "ch07_j1_OVERALL_PREFERENCE": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT让乔宁未推回钥匙和林越离开时的“口袋空了”自行传递风险，RIGHT则多次补充解释，削弱了场面的余味。",
+      "p2_evidence": "RIGHT保留了钥匙交接时的迟疑和出门后的空口袋，删去LEFT对交易风险的重复总结，让悬念更有余味。",
+      "p1_conf": 0.94,
+      "p2_conf": 0.9
+    },
+    "ch07_j1_READING_APPEAL": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT从“口袋空了”直接推进到站区后门和未问出口的疑点，悬念延续更紧；RIGHT插入一段对钥匙去向和查图计划的复述，放缓了推进。",
+      "p2_evidence": "RIGHT从“纸盒棱角硌着掌根”直接转到雾中的旧巷和紧闭的窗，离场更利落，也更想让人追看三点的约定。",
+      "p1_conf": 0.84,
+      "p2_conf": 0.82
+    },
+    "ch07_j1_LOW_AUTHOR_EXPLANATION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT新增“这已经是讨价的第一步”和“钥匙不在他身上了”等判断与说明，LEFT省去了这些对动作和已知信息的解释。",
+      "p2_evidence": "LEFT额外解释“一登记就等于当众揭了梅叔的盖子”和“这已经是讨价的第一步”，RIGHT让前后情境和人物动作自行传达这些意思。",
+      "p1_conf": 0.99,
+      "p2_conf": 0.99
+    },
+    "ch07_j1_SENTENCE_NATURALNESS": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT用“口袋空了。蛋白胶还攥在手里”形成简短有力的节奏，RIGHT紧接着再说“钥匙不在他身上了”，语意重复。",
+      "p2_evidence": "RIGHT以“钥匙还在台面上，乔宁的手没把它推回来”单独成段，比LEFT先点明“讨价的第一步”再接动作更自然有力。",
+      "p1_conf": 0.9,
+      "p2_conf": 0.87
+    },
+    "ch07_j1_SCENE_IMMERSION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT从闪烁的灯管、硌手的纸盒自然转入后门的潮气和雾中灰瓦，RIGHT插入对次日查图的概述，短暂抽离了现场感。",
+      "p2_evidence": "RIGHT离开维护间后接续灯管、空口袋、潮气与灰瓦等感官细节，少了LEFT对钥匙去向和查图计划的概述，场景更连贯。",
+      "p1_conf": 0.82,
+      "p2_conf": 0.8
+    },
+    "ch07_j1_SUBTEXT": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "LEFT让乔宁的推辞与“手没把它推回来”共同暗示他愿意谈条件，RIGHT加入“这已经是讨价的第一步”，直接说破了这层意思。",
+      "p2_evidence": "乔宁抱怨林越进站留下记录，却没有把钥匙推回去；RIGHT不替读者点破这是讨价，让他的戒备和松动同时留在动作里。",
+      "p1_conf": 0.97,
+      "p2_conf": 0.94
+    },
+    "ch07_j2_OVERALL_PREFERENCE": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT 精准删减了 4 处多余的作者阐释与事后盘点，以纯粹的器物细节和动作交锋推进，整体叙事冷峻克制、质感更纯粹。",
+      "p2_evidence": "LEFT 整体笔触克制凝练，未像 RIGHT 那样塞入“这已经是讨价的第一步”等点题冗笔，悬疑冷峻的文学质感明显更高。",
+      "p1_conf": 0.95,
+      "p2_conf": 0.92
+    },
+    "ch07_j2_READING_APPEAL": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT 删去了结尾复述乔宁协议条款的段落，使林越交出钥匙后的失落感直接撞上门外的湿冷空气，悬念紧凑未被泄力。",
+      "p2_evidence": "RIGHT 在交接钥匙出门后插入一整段对图纸与立场的总结复盘，打断了紧绷的交涉余味，LEFT 保持了物象与行动推进的悬念张力。",
+      "p1_conf": 0.9,
+      "p2_conf": 0.88
+    },
+    "ch07_j2_LOW_AUTHOR_EXPLANATION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT 剔除了“一登记就等于当众揭了梅叔的盖子”与“这已经是讨价的第一步”等直白替读者下结论和拆解动机的解释句。",
+      "p2_evidence": "RIGHT 频繁以“一登记就等于当众揭了梅叔的盖子”、“这已经是讨价的第一步”替读者下结论，LEFT 则完全留给情境本身。",
+      "p1_conf": 0.98,
+      "p2_conf": 0.96
+    },
+    "ch07_j2_SENTENCE_NATURALNESS": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT 删去文末累赘的回顾段落后，从纸盒棱角硌手到后门潮气扑面衔接自然，段落呼应与镜头转场干脆利落。",
+      "p2_evidence": "LEFT 从“纸盒棱角硌着掌根”顺畅连缀至“走出站区后门，潮气扑面”，身体感官自然流转，RIGHT 插入心理归纳段后显得滞涩拖沓。",
+      "p1_conf": 0.88,
+      "p2_conf": 0.86
+    },
+    "ch07_j2_SCENE_IMMERSION": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "RIGHT 避免了角色在出门时跳脱时空的思维盘点，让感官焦点紧锁在灯管嗡鸣、空口袋触感与雾中灰瓦等物理实感上。",
+      "p2_evidence": "LEFT 读者始终紧贴桌前黄铜反光、日光灯嗡鸣与巷口薄雾等物理时空，RIGHT 离开维护间时抽离到脑内复盘，削弱了临场压迫感。",
+      "p1_conf": 0.88,
+      "p2_conf": 0.85
+    },
+    "ch07_j2_SUBTEXT": {
+      "pass1": "B",
+      "pass2": "B",
+      "verdict": "B",
+      "p1_evidence": "在乔宁并未推回钥匙处，RIGHT 隐去“这已经是讨价的第一步”，只留“钥匙还在台面上，乔宁的手没把它推回来”，言外之意尽在不言中。",
+      "p2_evidence": "LEFT 仅写“钥匙还在台面上，乔宁的手没把它推回来”，机锋全在动作留白里，RIGHT 却直白点破“林越听出来了，这已经是讨价的第一步”，破坏了言外之意。",
+      "p1_conf": 0.96,
+      "p2_conf": 0.94
+    }
+  }
+}

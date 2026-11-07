@@ -1,0 +1,25 @@
+{
+  "accepted": false,
+  "reasons": [
+    "SEMANTIC_GATE_REJECTED：status=ROLLEDBACK, semantic_outcome=SEMANTIC_CHANGE_PROPOSED；触发事实安全红线回滚：Semantic Judge 判定检测到 4 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。"
+  ],
+  "length_ratio": 0.9388,
+  "before_body_chars": 2386,
+  "after_body_chars": 2240,
+  "missing_numbers": [],
+  "added_numbers": [],
+  "missing_dates": [],
+  "added_dates": [],
+  "missing_codes": [],
+  "added_codes": [],
+  "missing_terms": [],
+  "semantic_outcome": "SEMANTIC_CHANGE_PROPOSED",
+  "gate_status": "ROLLEDBACK",
+  "gate_details": {
+    "rollback_reason": "触发事实安全红线回滚：Semantic Judge 判定检测到 4 处事实漂移 (SEMANTIC_CHANGE_PROPOSED)。",
+    "staccato_score": 0.0,
+    "edit_footprint_ratio": 0.0,
+    "required_actions": []
+  },
+  "judge_binding": "bound_file:/Users/chang/Desktop/Code/zhanghui/experiments/literary-finalizer-integration-20261107/judge/ch07_verdict.json"
+}

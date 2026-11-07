@@ -96,11 +96,17 @@ def build_semantic_judge_prompt(
     before_prose: str,
     after_prose: str,
     canon_constraints: Any = None,
+    *,
+    state_impact: bool = False,
 ) -> str:
     """Construct structured semantic judge prompt for LLM host.
 
     `canon_constraints` (optional) is rendered into the prompt so the judge reasons against the
     chapter's governing facts, not just the two text blobs.
+
+    `state_impact` is opt-in and used **only by the Literary Finalizer**. It asks the judge to
+    tag each detected change as a real story-state change or a discourse-layer compression.
+    Default output is unchanged for every other caller.
     """
     constraints_block = ""
     if canon_constraints:
@@ -117,6 +123,41 @@ def build_semantic_judge_prompt(
             f"{rendered}\n"
             "裁决时必须同时检查改动是否违反上述约束；违反即 SEMANTIC_CHANGE_PROPOSED。\n"
         )
+    impact_rule = ""
+    impact_field = ""
+    if state_impact:
+        impact_rule = """
+【本次额外要求：区分“故事状态变化”与“话语层压缩”】
+这是文学减法定稿，不是事实纠错。逐条判断每个 change 是否真的改变了故事状态。
+
+判断标准是“故事状态是否不同”，不是“这句话是否被删除”。先看保留的正文是否仍让同一事件、同一行动、同一知情状态、同一因果关系成立。
+
+impact = "DISCOURSE"（故事状态不变，只是叙述层压缩）：
+- 删除“他听懂了 / 他明白了 / 这说明……”这类对刚发生对白的理解确认，而对白或动作仍完整保留；
+- 删除“昨天是防备一个生人，今天是辨认一个对手”“这是讨价的第一步”这类潜台词点破；
+- 删除对前文已出现信息的重复总结、逐条复盘、章末再复述；
+- 删除语气/程度/动机的旁白注解（如“不重，但够用”“像备过课”“像说了什么很对的话”）；
+- 删除短情绪判断或心理落点，而动作、身体反应、对白仍稳定呈现同一情绪；
+- 删除“第一次/头一回/从没”这类强调性限定，如果它只用于强调当下这一刻，不改变后续关系或行动；
+- 删除与已建立 Canon/前文一致的复述或提醒（受治理上下文里已有的事实，被再次说明一次）；
+- 删除对“没有做某事”的点明，而保留的动作仍表明同一选择（例如“他没问。脚下一转，出了巷子”删成“脚下一转，出了巷子”）；
+- 删除的内容已经被保留正文中的动作/对白明确展示（例如后文仍写“把钥匙放进工装口袋”“口袋空了”，再删“钥匙装在别人工装口袋里”的总结）；
+- 只调整同一组动作/句子的先后顺序，动作和结果没有变化；
+- 删除对原因/动机的追加解释，但当前行动、下一行动及其选择理由仍可由保留正文唯一理解。
+
+impact = "STORY_STATE"（故事状态真的改变，无法从保留正文恢复）：
+- 事件是否发生或事件结果改变；
+- 人物实际知道/不知道的事实内容改变（不是“不再点明他知道”，而是“他知道的内容变了”）；
+- 决定或行动被改成另一个决定/行动，或删除后无法从保留正文确定人物做了什么；
+- 物品归属、时间/地点、数字/日期/编号、专业术语、线索是否存在发生改变；
+- 删除后读者无法理解当前或后续行动的原因，且后续剧情依赖该原因。
+- 删除更短的独立短钩子、明确的下一步动作/调查方向，导致后续行动缺少必要约束。
+
+impact = "UNKNOWN"：无法确定。系统会按 STORY_STATE 处理。
+注意：只要 changes 非空，outcome 仍输出 "SEMANTIC_CHANGE_PROPOSED"；是否阻断由 impact 决定。不要为了让整章通过而把 STORY_STATE 写成 DISCOURSE，也不要把纯叙述压缩写成 STORY_STATE。
+"""
+        impact_field = ',\n      "impact": "STORY_STATE | DISCOURSE | UNKNOWN"'
+
     return f"""你现在是网文事实安全裁决员（Semantic Judge）。
 请对比以下【修改前正文】与【修改后正文】，严格审查是否存在任何故事事实、设定或逻辑漂移。
 
@@ -132,7 +173,7 @@ def build_semantic_judge_prompt(
 9. 世界规则 (world_rule)
 10. 线索 (clue)
 11. 知情状态 (epistemic)
-{constraints_block}
+{constraints_block}{impact_rule}
 【输出要求】：
 必须且仅输出以下 JSON 格式（不要包含任何其他文字或多余解释）：
 {{
@@ -142,12 +183,12 @@ def build_semantic_judge_prompt(
       "dimension": "...",
       "before": "...",
       "after": "...",
-      "reason": "..."
+      "reason": "..."{impact_field}
     }}
   ]
 }}
 
-- 若所有事实、设定、因果与知情状态均完全保全，仅为语言表达润色：outcome 为 "STYLE_ONLY_SAFE"，changes 为 []。
+- 若所有事实、设定、因果与知情状态均完全保全，仅为语言表达润色：outcome 为 "STYLE_ONLY_SAFE"，changes 为 []。{'（本次启用 impact 标注时，只要删除了正文句子就应在 changes 中列出并标注 impact。）' if state_impact else ''}
 - 若存在任何事实漂移、反转或新事实编造：outcome 为 "SEMANTIC_CHANGE_PROPOSED"，并在 changes 中详细列出各项漂移。
 - 若改写幅度过大或语义严重模糊无法判断：outcome 为 "UNCERTAIN"。
 
@@ -194,11 +235,15 @@ def parse_semantic_judge_response(response: Any) -> Dict[str, Any]:
     norm_changes = []
     for c in changes:
         if isinstance(c, dict):
+            impact = str(c.get("impact", "")).strip().upper()
+            if impact not in ("STORY_STATE", "DISCOURSE", "UNKNOWN"):
+                impact = "UNKNOWN"
             norm_changes.append({
                 "dimension": str(c.get("dimension", "semantic_drift")),
                 "before": str(c.get("before", "")),
                 "after": str(c.get("after", "")),
                 "reason": str(c.get("reason", "")),
+                "impact": impact,
             })
         else:
             raise ValueError("Each change item must be an object")
@@ -795,10 +840,18 @@ def compare_semantic_facts(
     if j_outcome == "SEMANTIC_CHANGE_PROPOSED":
         judge_drifts = []
         for c in judge_data.get("changes", []):
+            # `DISCOURSE` is only ever emitted by the opt-in finalizer rubric. It marks a
+            # change the judge itself classified as not touching story state. Every other
+            # caller sees `impact=UNKNOWN`, so this branch never weakens their gate.
+            evidence = (
+                "semantic_judge_discourse"
+                if c.get("impact") == "DISCOURSE"
+                else "semantic_judge_finding"
+            )
             judge_drifts.append(
                 SemanticDriftItem(
                     dimension=c.get("dimension", "semantic_drift"),
-                    evidence_type="semantic_judge_finding",
+                    evidence_type=evidence,
                     original_excerpt=c.get("before", "(原文)"),
                     edited_excerpt=c.get("after", "(改动)"),
                     description=c.get("reason", "Semantic Judge 判定发现故事事实漂移"),

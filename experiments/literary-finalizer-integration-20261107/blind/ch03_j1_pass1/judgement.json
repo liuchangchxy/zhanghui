@@ -1,0 +1,36 @@
+{
+  "chapter": 3,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.93,
+      "evidence": "LEFT保留了韩策的停顿、烟盒动作和林越的疑心，同时删去RIGHT中“一个凭空掉下来的名字”等重复解释，读起来更利落。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.84,
+      "evidence": "LEFT在韩策离开后直接落到线索无法核实的疑点，再以“完整到像备过课”推进悬念；RIGHT先复述一遍线索，削弱了紧迫感。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.98,
+      "evidence": "RIGHT多出“韩策说的不是问句”“整段话搭在另一个人的记忆上”等说明，LEFT让语气和信息来源自行显现。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT的“理由太顺了，林越后脊梁有点发紧”一气呵成，RIGHT拆成“这个理由太顺了。顺得让林越后脊梁有点发紧”，强调稍显刻意。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.76,
+      "evidence": "两版共有湿香灰、板车声和烟盒等细节，但LEFT较少插入“一个凭空掉下来的名字”之类的概括，场景中的注意力更连贯。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.95,
+      "evidence": "LEFT让韩策看林越一眼后再纠正说法，保留试探的余地；RIGHT补上“像是要确认他把话听到了什么程度”，把这一层意思说得更明。"
+    }
+  },
+  "overall_rationale": "两版的主要情节和场景细节相同，差别集中在叙述是否反复替读者解释。LEFT更信任对话、动作和线索本身，因此韩策的可疑与林越的警觉显得更含蓄，悬念推进也更流畅。"
+}

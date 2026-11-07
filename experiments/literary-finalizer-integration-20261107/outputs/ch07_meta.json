@@ -1,0 +1,11 @@
+{
+  "version": "literary-subtraction-v1",
+  "chapter": 7,
+  "draft_file": "/Users/chang/Desktop/Code/zhanghui/experiments/literary-finalizer-integration-20261107/inputs/ch07_raw.md",
+  "draft_sha256": "ddf1c43331a6fcea9456c754c2c9bca7c17151e7cf61bdcc9d9817bde0ae296f",
+  "editor_source_sha256": "80ad500c22ade6028414d0426fa6e22939880e4bb0c5a62361ee81ad2c1889e4",
+  "prompt_sha256": "cf08185a16bbc071ceb2b7262dcb9446a2f0f0b853db72c2bfc21619802c17d9",
+  "outline_sha256": "5ab359926c823d890ffd07869990058ea945c2af24be2a0b2e10181ae7595b9f",
+  "constraints_sha256": "2af3d36c60f130c4022a61fd0ec429c119304929967b28e399c2b6a06a67aa01",
+  "next_opening_sha256": "6101315b91db83fce47b90ea48c1c3826ab67b9d6e7cdc3d52ad70a1fec60c88"
+}

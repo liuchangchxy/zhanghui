@@ -1,0 +1,549 @@
+{
+  "chapter": 7,
+  "current_intent": {
+    "outline": "# 第7章\n\n## 章节定位与目标\n- 目标：回到现在时。林越左手伤势仍在但有所缓解；他把黄铜钥匙暂时交给乔宁检查材质，乔宁承诺次日归还。\n- 故事目标：\n- 关键变化：黄铜钥匙从林越暂时转移给乔宁、林越左手状态从轻度灼伤变为恢复中\n- 本章禁区：遗忘林越左手伤势、章末钥匙归属混乱\n- 章末未闭合问题：下一步调查线索\n",
+    "directive": {
+      "goal": "回到现在时。林越左手伤势仍在但有所缓解；他把黄铜钥匙暂时交给乔宁检查材质，乔宁承诺次日归还。",
+      "forbidden_zones": [
+        "遗忘林越左手伤势",
+        "章末钥匙归属混乱"
+      ],
+      "chapter_end_open_question": "下一步调查线索",
+      "source": "chapter_outline"
+    }
+  },
+  "governed_canon": {
+    "canon_items": [
+      {
+        "content": {
+          "entity_id": "林越",
+          "field": "任务",
+          "value": "奉命在梅叔档案屋修复一批受潮旧档，工期七八天"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "林越",
+          "任务"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "entity_id": "林越",
+          "field": "location.current",
+          "value": "梅叔的档案屋（临汐城旧巷）"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "林越",
+          "location.current"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "entity_id": "林越",
+          "field": "知识.白塔档案",
+          "value": "确认第68页（事故当日值班名单）遭人为撕走，相邻纸背有铅笔数字19与7"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "林越",
+          "知识.白塔档案"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "entity_id": "林越",
+          "field": "合规风险",
+          "value": "隐瞒缺页暂不登记，私藏纤维样本自行查证"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "林越",
+          "合规风险"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "entity_id": "梅叔",
+          "field": "对林越.态度",
+          "value": "否认缺页为人为并禁止林越触碰铁皮柜"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "梅叔",
+          "对林越.态度"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "from_entity": "林越",
+          "to_entity": "梅叔",
+          "relationship": "雇工与老档案员（初次共事，互相试探）"
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "relationship",
+          "林越",
+          "梅叔"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "白塔事故档案",
+          "payload": {
+            "content": "《白塔能源站运行事故调查记录·一九九九年》第68页——事故当日值班人员名单——被人从装订线内侧整页扯走，撕口毛边朝外、残根被压平，手法老到但不够彻底",
+            "loop_type": "悬疑主线",
+            "unanswered_question": "是谁撕走了事故当日值班名单？名单上写着谁，需要被抹掉？",
+            "urgency": 85,
+            "planted_chapter": 1,
+            "expected_payoff": "查到撕页者身份或名单内容"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-007"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "白塔事故档案",
+          "payload": {
+            "content": "缺页相邻纸背各有极浅铅笔划痕：第67页背面是“19”，第69页正面是“7”，字迹很轻，像是翻页时随手记下",
+            "loop_type": "线索谜题",
+            "unanswered_question": "“19”与“7”分别指什么——日期、页码、时间还是人员编号？写下的人与撕页的人是不是同一人？",
+            "urgency": 70,
+            "planted_chapter": 1,
+            "expected_payoff": "数字所指对象被解码"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-008"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "梅叔",
+          "payload": {
+            "content": "梅叔称这批旧档“上头让我烧”，因他腿摔后坚持“烧了可惜”才改为找人定期来修；他对缺页的反应说明他知道内情却不肯说，并叮嘱修完再说",
+            "loop_type": "人物秘密",
+            "unanswered_question": "“上头”是谁？为什么要烧掉这批档案？梅叔知道多少内情？",
+            "urgency": 75,
+            "planted_chapter": 1,
+            "expected_payoff": "梅叔松口或“上头”身份揭露"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-009"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "铁皮柜",
+          "payload": {
+            "content": "墙角铁皮柜锁眼插着缠褪色红绳的黄铜钥匙，梅叔朝柜子努嘴明令：“那柜子里的东西，别动。修你的纸就行。”",
+            "loop_type": "伏笔道具",
+            "unanswered_question": "铁皮柜里存着什么？梅叔为何随身留着钥匙却不许人碰？",
+            "urgency": 60,
+            "planted_chapter": 1,
+            "expected_payoff": "铁皮柜被打开或内容被间接揭示"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-010"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "皮面笔记本",
+          "payload": {
+            "content": "梅叔窗台上压着一本皮面笔记本，翻开那页写着几个铅笔日期，其中一个日期旁标注“白塔”；林越只扫了一眼，打算明天找机会再看",
+            "loop_type": "线索物件",
+            "unanswered_question": "笔记本上的日期与“白塔”对应何事？笔记本是否属于梅叔？",
+            "urgency": 65,
+            "planted_chapter": 1,
+            "expected_payoff": "林越再次翻阅笔记本并读出日期含义"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-011"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "event_type": "open_loop_created",
+          "subject": "林越",
+          "payload": {
+            "content": "林越在档案系统里查自己的调令，签发栏是空白的——没有人签字，没有人负责；旧站事故后他先被调到修复室，又被派到梅叔处修旧档",
+            "loop_type": "身世/阴谋线",
+            "unanswered_question": "调令为什么无人签发？是谁在背后安排林越的岗位变动？",
+            "urgency": 55,
+            "planted_chapter": 1,
+            "expected_payoff": "调令签发来源被追出"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-012"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "event_type": "world_rule_revealed",
+          "subject": "临汐城",
+          "payload": {
+            "rule_content": "临汐城的档案网络已铺到市政、能源、航运，但仍有角落维持纸质、未贴系统条码、未入网，由个人私下保管",
+            "rule_category": "城市与档案体系",
+            "scope": "临汐城全城"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-013"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "event_type": "artifact_obtained",
+          "subject": "林越",
+          "payload": {
+            "artifact_id": "纤维残根",
+            "name": "装订线夹缝中的纤维残根（沾深蓝色钢笔墨迹，仅剩半个笔画）",
+            "owner": "林越",
+            "detail": "林越用尖头镊子从装订线夹缝挑出，封进随身样本袋并藏入工具箱暗格"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-014"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      },
+      {
+        "content": {
+          "event_type": "world_rule_revealed",
+          "subject": "档案修复规程",
+          "payload": {
+            "rule_content": "档案修复规程要求：发现缺页须登记上报，由档案组判定性质；上报后该卷宗即脱离修复人手中",
+            "rule_category": "职业规程",
+            "scope": "修复室/档案组"
+          }
+        },
+        "semantic_role": "CANON",
+        "source_role": "COMMIT",
+        "source_ref": "commit:6",
+        "chapter": 6,
+        "provenance_status": "verified",
+        "evidence": [
+          "commit:6"
+        ],
+        "fact_key": [
+          "event",
+          "evt-ch1-015"
+        ],
+        "semantic_class": "CANON_FACT",
+        "owner": "COMMIT",
+        "source_relationship": "AUTHORITATIVE_SOURCE",
+        "source_identity": "commit:6",
+        "scope": "chapter:6"
+      }
+    ],
+    "appearing_characters": [
+      {
+        "entity_id": "林越",
+        "name": "林越",
+        "type": "角色",
+        "last_chapter": 10,
+        "total": 10,
+        "state": [
+          {
+            "field": "location.current",
+            "value": "梅叔的档案屋（临汐城旧巷）"
+          },
+          {
+            "field": "任务",
+            "value": "奉命在梅叔档案屋修复一批受潮旧档，工期七八天"
+          },
+          {
+            "field": "关系.乔宁",
+            "value": "有限合作：乔宁以三联工单署名担责并在上方守着，林越签见证；乔宁要求他尽快给出下一步，别把工单开成流水"
+          }
+        ]
+      },
+      {
+        "entity_id": "梅叔",
+        "name": "梅叔",
+        "type": "角色",
+        "last_chapter": 10,
+        "total": 10,
+        "state": [
+          {
+            "field": "对林越.态度",
+            "value": "否认缺页为人为并禁止林越触碰铁皮柜"
+          },
+          {
+            "field": "状态",
+            "value": "保管一批未数字化旧档案、行动不便"
+          },
+          {
+            "field": "身份",
+            "value": "退休档案员"
+          }
+        ]
+      },
+      {
+        "entity_id": "梅叔的档案屋",
+        "name": "梅叔的档案屋",
+        "type": "地点",
+        "last_chapter": 10,
+        "total": 10
+      },
+      {
+        "entity_id": "乔宁",
+        "name": "乔宁",
+        "type": "角色",
+        "last_chapter": 10,
+        "total": 3,
+        "state": [
+          {
+            "field": "关系.林越",
+            "value": "合作（以工单为凭）：'我帮你，但每次动这条路，得有一条解释得通的记录'"
+          },
+          {
+            "field": "状态",
+            "value": "以维护间工程师身份签署三联工单、为三通段路线担责，成为稳定合作方；同时被韩策当面提起安全阀旧案"
+          },
+          {
+            "field": "身份",
+            "value": "能源工程师"
+          }
+        ]
+      },
+      {
+        "entity_id": "旧维护轨道",
+        "name": "旧维护轨道",
+        "type": "地点",
+        "last_chapter": 10,
+        "total": 3
+      },
+      {
+        "entity_id": "三号泵房",
+        "name": "三号泵房",
+        "type": "地点",
+        "last_chapter": 10,
+        "total": 2
+      },
+      {
+        "entity_id": "巡防",
+        "name": "巡防",
+        "type": "组织",
+        "last_chapter": 10,
+        "total": 2
+      },
+      {
+        "entity_id": "三联维护工单",
+        "name": "三联维护工单",
+        "type": "物品",
+        "last_chapter": 10,
+        "total": 1
+      },
+      {
+        "entity_id": "十九号检修段隔断",
+        "name": "十九号检修段隔断",
+        "type": "地点",
+        "last_chapter": 10,
+        "total": 1
+      },
+      {
+        "entity_id": "新弹子锁",
+        "name": "新弹子锁",
+        "type": "物品",
+        "last_chapter": 10,
+        "total": 1
+      }
+    ]
+  }
+}
