@@ -1,0 +1,22 @@
+{
+  "chapter": 4,
+  "draft_status": "none",
+  "draft_id": null,
+  "draft_fingerprint": null,
+  "review_subject_fingerprint": null,
+  "has_writer_package": true,
+  "is_writer_package_stale": false,
+  "package_fingerprint": "d93a2fde6043671f1a8c0d78a3a0bf8ae842cd1ab5ea4d697615191a4a8b4d42",
+  "writing_skill_ids": [
+    "scene-sequel",
+    "character-agency",
+    "dialogue-subtext",
+    "reader-pull"
+  ],
+  "writing_skills_fingerprint": "1d98a1217e1a9d972e31d1a0f3cd584aeda89e803624352de6a4d948347c1631",
+  "commit_status": "none",
+  "durable_commit_exists": false,
+  "projection_status": {},
+  "can_retry_projection": false,
+  "human_decision_required": null
+}
