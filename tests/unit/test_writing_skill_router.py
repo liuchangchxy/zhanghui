@@ -170,12 +170,56 @@ def test_bundled_skills_are_all_loadable():
 
     skills = discover_writing_skills(roots=[PLUGIN_SKILLS_DIR])
     ids = {s["id"] for s in skills}
-    assert {"scene-sequel", "reader-pull", "information-gap", "character-agency", "dialogue-subtext", "voice-style"} <= ids
+    assert {
+        "scene-sequel",
+        "reader-pull",
+        "information-gap",
+        "character-agency",
+        "dialogue-subtext",
+        "voice-style",
+        "emotion-interiority",
+        "pov-distance",
+        "sensory-description",
+    } <= ids
     for skill in skills:
         assert skill["purpose"]
         assert skill["applies_when"]
         assert skill["avoid_when"]
         assert skill["guidance"]
+
+
+def test_voice_style_stays_inside_its_own_boundary():
+    """Emotion, POV and sensory detail belong to their own skills, not voice-style.
+
+    The old body told the Writer "只写身体，不写情绪结论", which forbade interiority
+    outright and overlapped two other skills. Guard the narrowing so it is not undone.
+    """
+    from data_modules.writing_skill_registry import PLUGIN_SKILLS_DIR
+
+    skills = {s["id"]: s for s in discover_writing_skills(roots=[PLUGIN_SKILLS_DIR])}
+    body = skills["voice-style"]["guidance"]
+    assert "只写身体" not in body
+    assert "叙事距离" not in body
+    assert "感官" not in body
+    # The narrowed skill still owns prose-level voice.
+    assert "句" in body and "比喻" in body
+
+
+def test_literary_skills_state_effects_not_execution_steps():
+    """The Writer used to turn these methods into literal prose structure.
+
+    Chapter 5 produced numbered criteria as subheads and a fully spelled-out reasoning
+    chain. The fix is wording: an arrow chain or "第一步/第二" reads as a checklist the
+    Writer must render, so the methods must describe the effect instead.
+    """
+    from data_modules.writing_skill_registry import PLUGIN_SKILLS_DIR
+
+    skills = {s["id"]: s for s in discover_writing_skills(roots=[PLUGIN_SKILLS_DIR])}
+    for skill_id in ("emotion-interiority", "pov-distance", "sensory-description"):
+        body = skills[skill_id]["guidance"]
+        assert "→" not in body, f"{skill_id} still chains steps with arrows"
+        assert "第一步" not in body and "第二步" not in body
+        assert "第一，" not in body and "第二，" not in body
 
 
 # --- Selection validation --------------------------------------------------------
