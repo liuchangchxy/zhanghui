@@ -1,0 +1,36 @@
+{
+  "chapter": 1,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.94,
+      "evidence": "LEFT让梅叔停针、警告和林越藏起纤维的动作自行传达紧张关系，RIGHT则反复补充人物反应的含义。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.86,
+      "evidence": "LEFT在黄铜钥匙和样本袋硌手的细节中保持悬念，RIGHT随后解释“今天做的事已经越了线”，削弱了读者自行揣摩的兴致。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.99,
+      "evidence": "RIGHT额外写出“梅叔刚才的反应不对劲”和“我知道你在想什么，适可而止”，LEFT均将这些判断留给动作与对话。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT的“七八天。够他把这册白塔事故档案的纸况从头到尾摸一遍”承接紧凑，RIGHT加入“林越算了算”等提示使节奏稍显拖沓。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.82,
+      "evidence": "两版都有暮光中的钥匙和指套勒出的汗，LEFT停留在样本袋硌手的身体感受上，RIGHT则接着转入对越线及警告含义的解释。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.99,
+      "evidence": "LEFT以梅叔说“那柜子里的东西，别动”和林越看钥匙的动作保留试探，RIGHT则直接写出老人暗含“我知道你在想什么，适可而止”。"
+    }
+  },
+  "overall_rationale": "两版共享扎实的修复细节、缺页线索和人物对峙，悬念基础相同。LEFT删去多处对动机和潜台词的复述，让停针、藏样本和柜钥匙等细节发挥作用，阅读节奏也更利落。"
+}

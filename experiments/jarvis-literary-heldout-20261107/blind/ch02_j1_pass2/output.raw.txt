@@ -1,0 +1,36 @@
+{
+  "chapter": 2,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.88,
+      "evidence": "LEFT让梅叔的目光、钥匙和最后晃动的窗合页自行制造悬念，RIGHT则多次补充判断和总结，削弱了余味。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.75,
+      "evidence": "LEFT以林越回头看见关上的门、听见合页一响收尾，留下笔记本与钥匙之间的悬念，比RIGHT再加一句“明天”更有牵引力。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.97,
+      "evidence": "RIGHT额外写出“这话等于没说”“问出来，就等于承认了”，LEFT则让对话和人物反应承担这些意思。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.84,
+      "evidence": "LEFT的“林越没戳破。钥匙躺在手心里”简洁顺畅，RIGHT加上“这借口连林越都不信”后语气稍显刻意。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.78,
+      "evidence": "LEFT停留在水珠滴落、凉茶和窗合页的具体感官中，RIGHT末尾对钥匙、笔记本和柜子的逐项总结略微打断现场感。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.95,
+      "evidence": "LEFT写林越察觉梅叔扫视工具箱后“没问”，保留了双方试探的空间；RIGHT以“问出来，就等于承认了”直接解释他的顾虑。"
+    }
+  },
+  "overall_rationale": "两版的场景、对话和主要悬念基本相同，区别主要在叙述是否替读者解释人物反应。LEFT更信任动作和停顿，让钥匙的交接与工具箱上的目光保持耐人寻味的张力；RIGHT新增的判断和结尾总结使部分潜台词变得明确。"
+}
