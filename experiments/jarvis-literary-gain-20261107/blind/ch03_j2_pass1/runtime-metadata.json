@@ -1,0 +1,16 @@
+{
+  "backend": "antigravity-agentapi",
+  "model_flag": "flash",
+  "human_runtime": "Gemini 3.8 Flash (Medium)",
+  "machine_runtime": "MODEL_PLACEHOLDER_M322",
+  "model_id_verifiability": "PARTIAL_INTERNAL_LABEL_ONLY",
+  "project": "outside-of-project",
+  "ls_address": "127.0.0.1:49193",
+  "conversation_id": "c683e8c0-9b53-4146-8a20-5ac54627e55a",
+  "input_tokens": 15752,
+  "output_tokens": 5768,
+  "elapsed_ms": 45404,
+  "attempt": 1,
+  "prompt_sha256": "610195eeaf3af24a7e1fbd0bc68a3e18d65ac8808c8ff03d6df00482f67c20de",
+  "created_at": "2026-11-07T06:38:22.209608+00:00"
+}

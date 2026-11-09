@@ -1,0 +1,36 @@
+{
+  "chapter": 3,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "RIGHT",
+      "confidence": 0.9,
+      "evidence": "RIGHT删去“理由太顺了”和“所有能作证的东西都不在”等重复判断，让对话与线索本身承担更多悬念。"
+    },
+    "READING_APPEAL": {
+      "winner": "RIGHT",
+      "confidence": 0.82,
+      "evidence": "庙中谈话后，RIGHT以“师父死了，原件没了，调令没登记”迅速收束疑点，比LEFT重新逐条回顾线索更有推进感。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "RIGHT",
+      "confidence": 0.98,
+      "evidence": "RIGHT保留韩策的动作和林越的反应，删去了LEFT中“说的不是问句”“像要确认他把话听到了什么程度”等直接解释。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "RIGHT",
+      "confidence": 0.84,
+      "evidence": "RIGHT的“握了手。力道实，时间短”和“韩策看着他。两三秒。然后点了下头”干脆利落，避免了LEFT在动作后追加评语。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "RIGHT",
+      "confidence": 0.7,
+      "evidence": "RIGHT让“手里的烟盒停了一下”和庙外板车的“哐”声直接呈现现场，较少用“一个凭空掉下来的名字”等总结打断场景。"
+    },
+    "SUBTEXT": {
+      "winner": "RIGHT",
+      "confidence": 0.95,
+      "evidence": "韩策说“不如先来问我”后，RIGHT只写林越“后脊梁发紧”，让这句话里的控制意味自行显露；LEFT则补说“理由太顺了”。"
+    }
+  },
+  "overall_rationale": "RIGHT保留了锁上的新刮痕、韩策反复摆弄烟盒等具体细节，同时减少对人物意图和线索意义的重复解说，读起来更紧，也更信任读者。两版仍共同存在信息交代较集中的段落，且都在林越已买鱼胶后又写他去取鱼胶，行动衔接略有含混。"
+}
