@@ -162,6 +162,33 @@ def test_character_stance_outranks_generic_belief(tmp_path: Path):
     assert ids.index("CH-xu_zhiyuan-stance-liang_mu") < len(ids)
 
 
+def test_one_stance_dict_cannot_hide_every_decision(tmp_path: Path):
+    """A protagonist with many stances must not crowd `decision` out of the digest.
+
+    `decision` is the field that says what he intends to do next — the most actionable pressure
+    in the file. Before the per-sub-field cap, three stances filled all four character slots and
+    the digest contained no decision at all, at the default limit.
+    """
+    from data_modules.story_pressure import build_story_pressures, pressure_ids
+
+    state = _state()
+    state["entity_state"]["xu_zhiyuan"]["stance"] = {
+        "anonymous_letter": "未上报；决定先自行核实",
+        "liang_mu": "承诺不写名字、不传话",
+        "zheng_pei": "确认郑培知情超出职位范围",
+        "lao_zhou": "老周拒绝交纸",
+    }
+    state["entity_state"]["xu_zhiyuan"]["decision"] = {
+        "verification_route": "去地方志办公室查公开《潮汐表》"
+    }
+    root = _write_project(tmp_path, state)
+    ids = pressure_ids(build_story_pressures(root, 3))  # default limit
+
+    assert "CH-xu_zhiyuan-decision-verification_route" in ids
+    # ...and the cap still leaves room for the most urgent stance.
+    assert any(i.startswith("CH-xu_zhiyuan-stance-") for i in ids)
+
+
 def test_project_without_state_yields_an_empty_digest(tmp_path: Path):
     from data_modules.story_pressure import build_story_pressures
 

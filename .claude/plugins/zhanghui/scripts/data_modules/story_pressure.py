@@ -93,6 +93,13 @@ _KIND_QUOTA = {
     "open_loop": 1,
 }
 
+# How many slots one *sub-field* of `entity_state` may take inside the `character` quota.
+# A protagonist with three `stance` entries would otherwise consume the whole character budget
+# and hide every `decision` — including the one that says what he plans to do next, which is the
+# most actionable pressure in the file. Two keeps the most important stances visible while
+# guaranteeing that a different field can still surface.
+_CHARACTER_FIELD_QUOTA = 2
+
 # Timed-lock statuses that are *not* covered by the foreshadow resolver above. A lock also has
 # domain-specific settlement words (`paid`, `fulfilled`) that the foreshadow vocabulary lacks, so
 # the two are checked together in `_is_active`.
@@ -117,6 +124,9 @@ class StoryPressure:
     remaining: Optional[int] = None
     related_chapters: List[int] = field(default_factory=list)
     priority: int = 0
+    # Which sub-field of `entity_state` this came from (`stance` / `decision` / ...). Used only to
+    # stop one sub-field from monopolising the character quota; empty for non-character pressures.
+    sub_field: str = ""
     # True when the deadline sits at or before the last accepted chapter but the source record is
     # still marked active. Whatever happened, happened in prose that is already frozen, so a future
     # chapter cannot act on it. We do **not** decide whether the obligation was met — that is a
@@ -137,6 +147,7 @@ class StoryPressure:
             "related_chapters": list(self.related_chapters),
             "priority": self.priority,
             "stale": self.stale,
+            "sub_field": self.sub_field,
         }
 
 
@@ -368,6 +379,7 @@ def _character_pressures(state: Dict[str, Any]) -> List[StoryPressure]:
                             text=f"{key}：{text}",
                             source=f"state.json:entity_state.{entity_id}.{field_name}",
                             priority=priority,
+                            sub_field=field_name,
                         )
                     )
             else:
@@ -380,6 +392,7 @@ def _character_pressures(state: Dict[str, Any]) -> List[StoryPressure]:
                             text=text,
                             source=f"state.json:entity_state.{entity_id}.{field_name}",
                             priority=priority,
+                            sub_field=field_name,
                         )
                     )
     return out
@@ -492,14 +505,23 @@ def build_pressures_from_state(
     collected = unique
 
     # Apply a per-kind quota so one rich entity cannot crowd out every other class of pressure.
-    # Whatever the quota drops stays counted in `total_available`, and the rendered block says so.
+    # Character pressures get a second, per-sub-field cap: without it a protagonist's `stance`
+    # dict fills every character slot and the planner never sees `decision` — the field that says
+    # what he intends to do next. Whatever the quotas drop stays counted in `total_available`.
     selected: List[StoryPressure] = []
     used: Dict[str, int] = {}
+    used_sub: Dict[str, int] = {}
     for item in collected:
         quota = _KIND_QUOTA.get(item.kind, 1)
         if used.get(item.kind, 0) >= quota:
             continue
+        if item.sub_field:
+            sub_key = f"{item.kind}:{item.sub_field}"
+            if used_sub.get(sub_key, 0) >= _CHARACTER_FIELD_QUOTA:
+                continue
         used[item.kind] = used.get(item.kind, 0) + 1
+        if item.sub_field:
+            used_sub[f"{item.kind}:{item.sub_field}"] = used_sub.get(f"{item.kind}:{item.sub_field}", 0) + 1
         selected.append(item)
         if len(selected) >= max(0, int(limit)):
             break
