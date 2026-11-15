@@ -34,6 +34,7 @@ Design notes:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -156,14 +157,29 @@ class StoryPressure:
 # --------------------------------------------------------------------------- #
 
 
+_ID_UNSAFE_RE = re.compile(r"[^A-Za-z0-9_.\-]")
+
+
 def _clip_id(text: Any, cap: int = 60) -> str:
-    """Bound an id built from user-supplied strings.
+    """Bound an id built from user-supplied strings, and keep it in the charset ids are read in.
 
     `LO-<loop_id>` / `CH-<entity>-<field>-<key>` interpolate arbitrary project data straight into
     an id, and ids reach the `plan-check` report and the outline declaration. A pathological key
     would otherwise propagate unbounded. The cap is far above any real entity or field name.
+
+    The charset matters as much as the length: `plan_consistency` reads declared ids with a
+    latin-only pattern (`CH-xu_zhiyuan-stance-liang_mu`). A Chinese entity id or a full-width
+    parenthesis would emit an id the parser could never match, so the planner's *correct*
+    declaration would come back as "declared nothing" — or, worse, as a truncated bogus id.
+    Latin runs are kept readable; anything else is folded to `_` and pinned with a short digest
+    of the original so two different Chinese names cannot collapse onto one declaration id.
     """
-    value = re.sub(r"\s+", "_", str(text or "")).strip()
+    raw = str(text or "").strip()
+    value = re.sub(r"\s+", "_", raw)
+    if _ID_UNSAFE_RE.search(value):
+        cleaned = re.sub(r"_{2,}", "_", _ID_UNSAFE_RE.sub("_", value)).strip("_")
+        digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:6]
+        value = f"{cleaned[: cap - 7]}-{digest}" if cleaned else digest
     return value[:cap]
 
 
@@ -254,7 +270,7 @@ def _accepted_through(state: Dict[str, Any]) -> int:
 def _timed_lock_pressures(state: Dict[str, Any], chapter: int) -> List[StoryPressure]:
     out: List[StoryPressure] = []
     locks = _section(state, "story_craft").get("timed_locks") or []
-    for lock in locks if isinstance(locks, list) else []:
+    for index, lock in enumerate(locks if isinstance(locks, list) else [], start=1):
         if not isinstance(lock, dict) or not _is_active(lock.get("status")):
             continue
         deadline = _as_int(lock.get("deadline_chapter"))
@@ -263,7 +279,10 @@ def _timed_lock_pressures(state: Dict[str, Any], chapter: int) -> List[StoryPres
             continue
         out.append(
             StoryPressure(
-                id=str(lock.get("id") or f"TL-{len(out) + 1:03d}"),
+                # Number from the *source* position, not from how many rows survived filtering:
+                # `len(out) + 1` restarts the count after a resolved lock and can mint an id that
+                # a later explicit `TL-002` already owns, which then silently dedupes away.
+                id=_clip_id(lock.get("id") or f"TL-{index:03d}"),
                 kind="deadline",
                 text=description,
                 source="state.json:story_craft.timed_locks",
@@ -535,6 +554,11 @@ def build_pressures_from_state(
             if len(selected) >= max(0, int(limit)):
                 break
     selected.sort(key=sort_key)
+    # Stale records are rendered (the planner should know the ledger is out of date) but they are
+    # not plannable debt. `actionable_available` is what a "you must engage something" check may
+    # key on: otherwise a project whose every derivable pressure is stale is nagged every chapter
+    # to engage entries the same digest labels 不可再规划.
+    actionable = [item for item in collected if not item.stale]
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -543,6 +567,7 @@ def build_pressures_from_state(
         "accepted_through": _accepted_through(state),
         "pressures": [item.to_dict() for item in selected],
         "total_available": len(collected),
+        "actionable_available": len(actionable),
         "truncated": len(collected) > len(selected),
         "source_note": (
             "自动从 state.json（story_craft / plot_threads / entity_state / chapter_meta）派生；"
@@ -583,6 +608,13 @@ def format_pressure_block(digest: Dict[str, Any]) -> str:
         lines.append(
             f"（另有 {digest.get('total_available', 0) - len(pressures)} 条较低优先级压力未列出；"
             "需要时可用 --limit 提高。）"
+        )
+    stale_count = sum(1 for item in pressures if item.get("stale"))
+    if stale_count:
+        lines.append("")
+        lines.append(
+            f"（其中 {stale_count} 条标着「记录未更新」：它们的截止章已 accepted，是本卷台账没跟着"
+            "正文更新，不是本章要还的债。）"
         )
     lines.append("")
     lines.append("规划时：写明本章承接了哪些压力 ID、为什么是现在、章末什么状态真的变了。")

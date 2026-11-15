@@ -419,7 +419,16 @@ def check_story_continuity(
             # may deliberately pick a lower-ranked pressure.
             full = build_pressures_from_state(root, state, chapter, limit=10**6)
             full_ids = pressure_ids(full)
-            unknown = [item for item in declared if item not in full_ids]
+            # An accepted chapter's prose is frozen: its pressure may have been paid off since,
+            # which legitimately removes the id from the current derivation. Telling the planner
+            # to "change it to an id that exists now" is advice nobody can act on, and the same
+            # noise would accumulate over every historical chapter as the story advances. The
+            # declaration is still counted above, so it keeps the volume in the convention.
+            unknown = (
+                [item for item in declared if item not in full_ids]
+                if chapter > accepted_through
+                else []
+            )
             if unknown:
                 findings.append(
                     Finding(
@@ -468,7 +477,7 @@ def check_story_continuity(
             # A project with no committed story state must not be nagged for not declaring.
             # Already-accepted chapters are exempt for the same reason the repeat check is: their
             # prose is frozen, so "add a 承接压力 line here" is not an action anyone can take.
-            if not engaged and digest.get("total_available") and chapter > accepted_through:
+            if not engaged and digest.get("actionable_available") and chapter > accepted_through:
                 undeclared.append(chapter)
 
         shape, cast = signatures[chapter]

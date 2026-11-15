@@ -160,6 +160,10 @@ def test_character_stance_outranks_generic_belief(tmp_path: Path):
     # The commitment must not be crowded out by descriptive beliefs.
     assert "CH-xu_zhiyuan-stance-liang_mu" in ids
     assert ids.index("CH-xu_zhiyuan-stance-liang_mu") < len(ids)
+    # ...and it must actually be *ranked* above them, not merely present.
+    assert not any(item.startswith("CH-xu_zhiyuan-belief-") for item in ids[: ids.index(
+        "CH-xu_zhiyuan-stance-liang_mu"
+    )])
 
 
 def test_one_stance_dict_cannot_hide_every_decision(tmp_path: Path):
@@ -334,17 +338,30 @@ def test_pressure_ids_are_unique(tmp_path: Path):
 
 
 def test_non_utf8_state_file_degrades_instead_of_raising(tmp_path: Path):
-    """编码错误的 state.json 不能让 plan-check 抛异常。"""
+    """编码错误的 state.json 不能让 plan-check 抛异常。
+
+    The payload must contain Chinese: `{"progress": {"current_chapter": 3}}` is pure ASCII, so its
+    GBK bytes are byte-identical to UTF-8 and the decode succeeds — a test written that way passes
+    even when the crash it names is present. This goes through `check_story_continuity`, the path
+    `plan-check` actually runs, not only the safe `build_story_pressures`.
+    """
+    from data_modules.plan_consistency import check_story_continuity
     from data_modules.story_pressure import build_story_pressures
 
     root = tmp_path / "book"
     (root / ".webnovel").mkdir(parents=True)
-    (root / ".webnovel" / "state.json").write_bytes(
-        json.dumps({"progress": {"current_chapter": 3}}, ensure_ascii=False).encode("gbk")
-    )
+    (root / "大纲").mkdir()
+    state = {
+        "progress": {"current_chapter": 3, "chapter_status": {"1": "chapter_committed"}},
+        "entity_state": {"xu_zhiyuan": {"stance": {"liang_mu": "许知远承诺不写梁沐的名字"}}},
+    }
+    raw = json.dumps(state, ensure_ascii=False).encode("gbk")
+    assert raw != json.dumps(state, ensure_ascii=False).encode("utf-8")  # the test is not a no-op
+    (root / ".webnovel" / "state.json").write_bytes(raw)
 
-    digest = build_story_pressures(root, 3)
-    assert digest["pressures"] == []
+    assert build_story_pressures(root, 3)["pressures"] == []
+    findings, _ = check_story_continuity(root, {1: "## 第1章：标题\n\n**目标**：x\n"})
+    assert findings == []
 
 
 @pytest.mark.parametrize("status", ["已解决", "完成", "complete", "已回收（第12章）"])
@@ -389,3 +406,81 @@ def test_duplicate_ids_keep_the_most_urgent_record(tmp_path: Path):
     by_id = {item["id"]: item for item in build_story_pressures(root, 3, limit=50)["pressures"]}
 
     assert by_id["TL-001"]["text"] == "本章就该到"
+
+
+@pytest.mark.parametrize(
+    "entity_id, key",
+    [
+        ("许知远", "梁沐"),
+        ("xu_zhiyuan", "科长（电话）"),
+        ("主角 甲", "承诺 一"),
+    ],
+)
+def test_ids_built_from_chinese_state_are_still_declarable(tmp_path: Path, entity_id: str, key: str):
+    """id 的字符集必须和声明解析器一致，否则「写对了」会被判成「没写」。
+
+    `entity_id` / `loop_id` come from commit payloads and hand-written state; nothing validates
+    them as ASCII. A CJK id used to be emitted verbatim, and `parse_declared_pressures` (which
+    matches `[A-Za-z0-9_.-]`) could never match it — the planner's correct declaration came back
+    as an empty list, and a full-width parenthesis produced a truncated bogus id instead.
+    """
+    from data_modules.plan_consistency import parse_declared_pressures
+    from data_modules.story_pressure import build_story_pressures
+
+    state = _state()
+    state["entity_state"] = {entity_id: {"stance": {key: "承诺不写名字"}}}
+    root = _write_project(tmp_path, state)
+    ids = [item["id"] for item in build_story_pressures(root, 3, limit=50)["pressures"]]
+    character_ids = [item for item in ids if item.startswith("CH-")]
+
+    assert len(character_ids) == 1
+    declared, _ = parse_declared_pressures(character_ids[0])
+    assert declared == character_ids  # the id the digest printed is the id the parser reads back
+
+
+def test_all_stale_pressures_do_not_demand_a_declaration(tmp_path: Path):
+    """整份清单都标着「不可再规划」时，不能同时要求规划者承接其中一条。"""
+    from data_modules.plan_consistency import check_story_continuity
+    from data_modules.story_pressure import build_story_pressures
+
+    state = _state()
+    state["progress"]["chapter_status"] = {str(n): "chapter_committed" for n in range(1, 8)}
+    state["story_craft"]["timed_locks"] = [
+        {"id": "TL-001", "description": "第6章就该到", "deadline_chapter": 6, "status": "active"}
+    ]
+    state["story_craft"]["foreshadow_chain"] = []
+    state["plot_threads"]["foreshadowing"] = []
+    state["entity_state"] = {}
+    state["chapter_meta"] = {}
+    root = _write_project(tmp_path, state)
+    (root / "大纲").mkdir(exist_ok=True)
+    (root / "大纲" / "第1卷-详细大纲.md").write_text(
+        "## 第8章：标题\n\n**目标**：x\n", encoding="utf-8"
+    )
+
+    digest = build_story_pressures(root, 8)
+    assert digest["total_available"] == 1  # still shown, so the stale ledger is visible
+    assert digest["actionable_available"] == 0
+
+    sections = {
+        7: "## 第7章：已写\n\n**目标**：y\n**承接压力**：无\n",  # flips on the convention
+        8: "## 第8章：标题\n\n**目标**：x\n",
+    }
+    findings, _ = check_story_continuity(root, sections)
+    assert [f for f in findings if f.code == "story_pressure_not_declared"] == []
+
+
+def test_a_wrapped_pressure_line_keeps_every_id():
+    """续行不能静默覆盖声明 —— 否则规划者写了 ID，检查器却看到空。"""
+    from chapter_outline_loader import parse_chapter_execution_directive
+    from data_modules.plan_consistency import parse_declared_pressures
+
+    section = (
+        "## 第7章：复算\n\n"
+        "**承接压力**：FS-006、PREV-6\n"
+        "（理由：第 6 章刚把前提补齐）\n"
+    )
+    directive = parse_chapter_execution_directive(section)
+    ids, _ = parse_declared_pressures(directive.get("story_pressures"))
+
+    assert ids == ["FS-006", "PREV-6"]

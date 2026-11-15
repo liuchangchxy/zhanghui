@@ -321,7 +321,13 @@ def _append_directive_value(target: Dict[str, Any], field: str, value: str) -> N
         # (`无（本章为过渡，暂缓：FS-006）`, `FS-006（第3章埋的）`); splitting on `，` would shred
         # those into junk "ids". `plan_consistency` extracts the real ids with a dedicated parser,
         # and keeping the raw text is what lets a bare `无` survive as a deliberate deferral.
-        target[field] = value
+        #
+        # Appended, not assigned. A wrapped line (`**承接压力**：FS-006` followed by an indented
+        # continuation) arrives here as a second value for the same field; overwriting would drop
+        # the ids silently, and the checker would then report "declared nothing" for a chapter
+        # that did declare. Joining with `；` keeps both halves readable to the id parser.
+        previous = target.get(field)
+        target[field] = f"{previous}；{value}" if previous else value
         return
     if value.lower() in _EMPTY_FIELD_VALUES:
         # 「无」「n/a」这类占位值不入账；否则 `foreshadow_paid_off：无` 会被当义务。
