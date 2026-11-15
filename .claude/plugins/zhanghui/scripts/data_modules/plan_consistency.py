@@ -320,7 +320,12 @@ def chapter_interaction_shape(directive: Dict[str, Any]) -> str:
 # `LO-<loop_id>`, `CH-<entity>-<field>[-<key>]`. Matching the shape (rather than splitting the
 # line on punctuation) is what lets a planner annotate freely — `FS-006（第3章埋的）`,
 # `无（本章为过渡，暂缓：FS-006）` — without producing junk "ids" and a false unknown-id warning.
-_DECLARED_ID_RE = re.compile(r"\b(?:TL|FS|PREV|LO|CH)-[A-Za-z0-9_.\-]+")
+#
+# No `\b` at the front. Python counts CJK ideographs as word characters, so `\b` does *not* match
+# between `见` and `F` — a planner writing `见FS-006` or `暂缓FS-006` (no space, no punctuation)
+# would get an empty id list and be reported as "never declared". `(?<![A-Za-z0-9])` is the
+# boundary we actually mean: don't start in the middle of a longer latin token like `XFS-006`.
+_DECLARED_ID_RE = re.compile(r"(?<![A-Za-z0-9])(?:TL|FS|PREV|LO|CH)-[A-Za-z0-9_.\-]+")
 
 
 def parse_declared_pressures(raw: Any) -> Tuple[List[str], bool]:

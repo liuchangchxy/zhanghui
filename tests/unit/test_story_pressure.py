@@ -233,6 +233,13 @@ def test_outline_declaration_is_parsed_and_kept_out_of_writer_notes():
         ("无（本章为过渡，暂缓：FS-006）", ["FS-006"], True),
         ("FS-006（第3章埋的）", ["FS-006"], False),
         ("CH-xu_zhiyuan-stance-liang_mu、TL-001", ["CH-xu_zhiyuan-stance-liang_mu", "TL-001"], False),
+        # No separator between Chinese text and the id. `\b` would refuse these: Python counts
+        # CJK ideographs as word characters, so there is no word boundary between `见` and `F`.
+        # A planner writing `见FS-006` means FS-006, and must not be told it declared nothing.
+        ("见FS-006", ["FS-006"], False),
+        ("承接压力FS-006", ["FS-006"], False),
+        # ...but a latin token that merely ends in the prefix is not an id.
+        ("XFS-006", [], False),
         ("", [], False),
         (None, [], False),
     ],
