@@ -332,12 +332,7 @@ def load_state(project_root: Path) -> Dict[str, Any]:
         return {}
     try:
         data = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        # `ValueError` covers `json.JSONDecodeError` *and* `UnicodeDecodeError`: a state.json
-        # written as GBK or UTF-16 (the file is full of Chinese, so this is the likeliest
-        # corruption) would otherwise traceback straight out of `plan-check`. Callers treat a
-        # missing state as "nothing to report", which is the same degradation
-        # `story_pressure._load_state` already performs on this same file.
+    except json.JSONDecodeError:
         return {}
     return data if isinstance(data, dict) else {}
 

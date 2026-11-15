@@ -209,10 +209,16 @@
   保留实现是因为第 1–3 条标准独立成立（可确定性派生、声明可机器验证、脱节能被检出）。
 - 证据：`experiments/story-pressure-bridge-20261115/REPORT.md`（第 9–13 节）。
 
-状态：观察中。实现已进生产（`data_modules/story_pressure.py` + `plan-check` advisory）。
+状态：观察中。**实现已回滚，未进生产。** 第 7 条（真实章节验证且无 Canon 越界）不满足，
+按该轮 goal 的收口规则「如果实际验证没有明显提升：回滚不必要改动，保留结论」，代码
+（`data_modules/story_pressure.py`、`plan-check` 的连续性检查、`story-pressure` 子命令、
+相应测试与 SKILL.md 说明）已全部撤出；只保留本节结论与
+`experiments/story-pressure-bridge-20261115/` 的实验记录。
 **可以宣称**：压力清单能从既有 state 确定性派生；声明可机器验证；脱节章节能被检出。
 **不得宣称**：它让章节结构变好（已被证伪）；它让 Canon 安全（已被证伪，两轮审计）；
 After 在真实章节上明显优于 Before（第 7 条不满足）；正文层面的效果（未验证）。
+**下次若重开**：仍然不要从「已有派生能力」直接推出「它值得进生产」——
+第 1–3、5–6 条成立并不等于整轮 goal 成立。
 
 约束：
 

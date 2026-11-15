@@ -22,13 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux only. The plugin has no `sys.platform == "darwin"` branch — every platform
-        # branch in scripts/ is `win32` (UTF-8 stdio) — so macOS ran byte-identical code and
-        # added no coverage. It has also been unschedulable since 2026-11-07: the job is
-        # cancelled with zero steps and the annotation `The configuration
-        # 'macos-14-arm64-us-default' is not supported`. A check that never runs is a red X,
-        # not a signal.
-        os: [ubuntu-22.04]
+        os: [ubuntu-22.04, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

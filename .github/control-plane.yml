@@ -33,12 +33,14 @@ reviewer:
       infrastructure_failure_conclusions:
         - timed_out
         - startup_failure
-    # `contract-tests (macos-14)` was removed here together with the job itself: since
-    # 2026-11-07 GitHub cancels that job with zero steps (`The configuration
-    # 'macos-14-arm64-us-default' is not supported`), and `cancelled` matched none of the
-    # conclusion lists below — so the control plane read it as a failed check on every run.
-    # Requiring a check that is never produced would instead wait for it forever.
-    # The plugin has no `darwin` code branch, so dropping it costs no coverage.
+    - name: contract-tests (macos-14)
+      accepted_conclusions:
+        - success
+      implementation_failure_conclusions:
+        - failure
+      infrastructure_failure_conclusions:
+        - timed_out
+        - startup_failure
 merge:
   native_auto_merge: true
   enable_native_auto_merge_by: reviewer

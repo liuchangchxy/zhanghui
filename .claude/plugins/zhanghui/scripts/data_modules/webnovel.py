@@ -1327,19 +1327,6 @@ def cmd_plan_check(args: argparse.Namespace) -> int:
     return 0 if report.get("ok") else 1
 
 
-def cmd_story_pressure(args: argparse.Namespace) -> int:
-    """Print the auto-derived Story Pressure digest for one chapter (read-only)."""
-    from .story_pressure import build_story_pressures, format_pressure_block
-
-    root = _resolve_root(args.project_root)
-    digest = build_story_pressures(root, int(args.chapter), limit=int(args.limit))
-    if args.format == "json":
-        print(json.dumps(digest, ensure_ascii=False, indent=2))
-    else:
-        print(format_pressure_block(digest))
-    return 0
-
-
 def cmd_chapter_intent(args: argparse.Namespace) -> int:
     """Inspect / refresh the derived `chapter_meta` copy against the authoritative outline."""
     from .chapter_intent_sync import build_report, format_report_text, load_state, sync_chapter_meta
@@ -2428,14 +2415,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_plan_check.add_argument("--chapters-range", default="", help="本卷计划章节范围，如 1-24")
     p_plan_check.add_argument("--format", choices=["json", "text"], default="json")
     p_plan_check.set_defaults(func=cmd_plan_check)
-
-    p_story_pressure = sub.add_parser(
-        "story-pressure", help="派生第 N 章规划前应当面对的故事压力清单（只读）"
-    )
-    p_story_pressure.add_argument("--chapter", type=int, required=True)
-    p_story_pressure.add_argument("--limit", type=int, default=8, help="最多列出多少条（默认 8）")
-    p_story_pressure.add_argument("--format", choices=["json", "text"], default="text")
-    p_story_pressure.set_defaults(func=cmd_story_pressure)
 
     p_chapter_intent = sub.add_parser(
         "chapter-intent", help="章节规划权威检查与派生副本刷新（章纲为准，chapter_meta 为派生）"
