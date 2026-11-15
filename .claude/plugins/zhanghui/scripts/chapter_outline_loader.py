@@ -207,6 +207,13 @@ _DIRECTIVE_FIELD_MAP = {
     "sequel_decision": "sequel_decision",
     "foreshadow_buried": "foreshadow_buried",
     "foreshadow_paid_off": "foreshadow_paid_off",
+    # Story Pressure hand-off: which derived pressures (see data_modules/story_pressure.py) this
+    # chapter deliberately engages. Planner-facing only — `render_chapter_structure` does not
+    # render it, so it never reaches the Writer. Registering it here is what keeps it out of
+    # `extract_outline_residual_notes`, which would otherwise paste it into the Writer prompt
+    # as unstructured author notes.
+    "承接压力": "story_pressures",
+    "story_pressures": "story_pressures",
     # 章节定位与类型
     "章节类型": "chapter_type",
     "本章类型": "chapter_type",
@@ -308,6 +315,13 @@ def _split_directive_values(value: str, field: str = "") -> list[str]:
 def _append_directive_value(target: Dict[str, Any], field: str, value: str) -> None:
     value = _clean_plot_line(value)
     if not value:
+        return
+    if field == "story_pressures":
+        # Kept **verbatim**, not split. A planner may annotate the line
+        # (`无（本章为过渡，暂缓：FS-006）`, `FS-006（第3章埋的）`); splitting on `，` would shred
+        # those into junk "ids". `plan_consistency` extracts the real ids with a dedicated parser,
+        # and keeping the raw text is what lets a bare `无` survive as a deliberate deferral.
+        target[field] = value
         return
     if value.lower() in _EMPTY_FIELD_VALUES:
         # 「无」「n/a」这类占位值不入账；否则 `foreshadow_paid_off：无` 会被当义务。

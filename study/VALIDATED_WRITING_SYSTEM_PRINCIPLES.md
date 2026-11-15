@@ -125,6 +125,62 @@
 - **不得现在修改 Prompt。**
 - 必须先看它是否在新的独立章节中复现；稳定复现后才修改机制。
 
+### O3 — 章节级「多个未来 → 单一章纲」的收敛点，与有限 Story Move 搜索的价值
+
+> 在冻结 Chapter Intent 之前生成少量 Story Move 候选再选一个，
+> 是否比现有规划产出更值得写的章节？
+
+当前证据（2026-11-15）：
+
+- **收敛点是结构性的**：`/webnovel-plan` Step 7 按 10 章/批、每章只写一个方案并直接落盘；
+  之后写前链路被明确禁止改故事（Context Agent「不改大纲、不造数据、不改节点」；
+  `attach-creative-brief` 封口）。全仓无候选/分支/评分机制。
+- **机器门禁不覆盖这一点**：对一份把第 6 章全部活压力排除在外的 24 章大纲，
+  `plan-check` 返回 `ok=True policy_action=ALLOW`。
+- **但「第一个方案差」不等于「模型不会想」**：同一 Canon 下，不生成候选的单方案
+  也能连续两次产出明显更好的方案；3 候选相对「七条标准 + 单方案」没有稳定优势，
+  成本约为其 1.8 倍，且两次采样中一次越界新造机构权限。
+- 证据：`experiments/story-move-search-20261115/REPORT.md`、`COMPARISON.md`、
+  `CURRENT_PLAN_AUDIT.md`。
+
+状态：观察中。**不得据此宣称 Story Move Search 有效。**
+
+下一轮若继续，优先验证「单章专注 + 把角色当前承诺显式喂进 Step 7」，
+不要先扩大候选数量或新增搜索层。
+
+### O4 — 「故事现在欠着什么」能否被自动派生，并真正约束下一章规划
+
+> 在决定下一章发生什么之前，自动从 `state.json` 派生一份紧凑的「故事压力」清单，
+> 并要求规划者在章纲里声明本章承接了哪几条 —— 是否会让章节真正承接已有故事？
+
+当前证据（2026-11-15）：
+
+- **可以确定性派生，且不需要新数据**。五个既有来源：`story_craft.timed_locks`、
+  `story_craft.foreshadow_chain`、`plot_threads.foreshadowing`、
+  `entity_state.<id>.stance/decision/belief/warning_status`、`chapter_meta.<prev>.sequel_decision`。
+  默认 8 条，第 7 章实跑 884 字。只读，不写回任何来源。
+- **派生物不能当判决用**。截止章已 accepted 却仍 `active` 的记录是**台账没更新**，
+  不是规划者要还的债 —— 必须标 `stale` 并与真实债务分开，否则会把已兑现的承诺报成逾期。
+- **声明可机器验证**：章纲写 `**承接压力**：<ID>`，检查器对照同一份派生结果验证 ID 是否
+  真实存在。写在「存在但不在前 8 条」的压力是允许的，只提醒确认。
+- **真实章节验证（第 7 章，n=3）**：三次采样都声明了真实存在的压力、组合各不相同、
+  结构都避开 Before 那种 `solo` 重复，章末都留下不可撤回的状态改变
+  （物证归属 / 签名责任 / 权力）。
+- **但它不保证 Canon 安全**：3 次采样中有 1 次越界（让老周交出 Canon 明写「不外拿」的
+  铁盒）。另外两次没有。压力清单提高的是「承接已有故事」的概率，不是事实正确率；
+  Canon 审查仍然必需，不能被这条桥替代。
+- **但归因未拆开**：After 臂比 Before 多了一份清单，也多了一段规划要求，
+  不能把提升单独归给清单。要拆开需要「同要求、无清单」对照臂，本轮未做。
+- 证据：`experiments/story-pressure-bridge-20261115/REPORT.md`。
+
+状态：观察中。实现已进生产（`data_modules/story_pressure.py` + `plan-check` advisory），
+但**不得据此宣称它稳定提升章节质量**；正文层面的效果未验证。
+
+约束：
+
+- 不要因为这一条成立就扩大成打分系统或多候选搜索。
+- 压力清单不进 Writer 提示词；它是规划判断的输入，不是写作清单。
+
 ---
 
 ## 4. 实验原则
@@ -185,6 +241,8 @@ Reviewer / Data Agent / commit / publish 等检查：
 | 一轮文学减法与 acceptance 边界 | `experiments/literary-finalizer-integration-20261107/report/REPORT.md`、`study/audits/2026-11-07-literary-finalizer-integration.md` |
 | Finalizer 收益与过度删减 | `experiments/finalizer-ab-20261107/REPORT.md`（实验目录，未入 main） |
 | 全新生产章节与 O1 / O2 | `e2e/real-chapter-acceptance-20261107` @ `fcd9276`：`experiments/real-chapter-e2e-20261107/REPORT.md`、`.../blind/SUMMARY.md` |
+| O3 Story Move 搜索 | `experiments/story-move-search-20261115/REPORT.md`、`COMPARISON.md`、`CURRENT_PLAN_AUDIT.md`（实验目录，未入 main） |
+| O4 Story Pressure 派生与章节承接 | `experiments/story-pressure-bridge-20261115/REPORT.md` |
 
 ---
 
