@@ -45,19 +45,23 @@
 每个 kind 有配额（`previous_consequence` 1 / `deadline` 2 / `character` 4 / `foreshadow` 2 /
 `open_loop` 1），防止一个字段很多的角色占满全部名额。默认 8 条，条目文本截断到 140 字。
 
-第 7 章实跑输出 884 字：
+第 7 章实跑输出（**当前代码**，含第 9 节末尾的子字段配额修复）：
 
 ```
 - **FS-006 · 剩 2 章**（foreshadow）旧潮位站值班记录本上多出一行十年前的笔迹
-- **CH-xu_zhiyuan-stance-anonymous_letter**（character）未上报；决定先自行核实
-- **CH-xu_zhiyuan-stance-liang_mu**（character）许知远承诺不写梁沐的名字…
-- **CH-xu_zhiyuan-stance-zheng_pei**（character）确认郑培知情程度超出职位应有范围…
-- **CH-xu_zhiyuan-warning_status**（character）科长电话警告：海事的事别掺和…
-- **PREV-6**（previous_consequence）梁沐说"那天潮位站该在检修期" → 下章目标
+- **CH-xu_zhiyuan-stance-anonymous_letter**（character）anonymous_letter：未上报；决定先自行核实
+- **CH-xu_zhiyuan-stance-liang_mu**（character）liang_mu：已建立只交换可核实信息的口头约定…
+- **CH-xu_zhiyuan-warning_status**（character）科长电话警告：清点单今天交齐；海事的事别掺和…
+- **CH-xu_zhiyuan-decision-monthly_report_check**（character）monthly_report_check：已核对：
+  后楼三层库房存档的 CW-2016-03 合订本确缺第 17 页…决定先走公开渠道独立复算…
+- **PREV-6**（previous_consequence）梁沐说"那天潮位站该在检修期"，检修期为什么会留下记录 → 下章目标
 - **TL-001 · 剩 5 章**（deadline）Midpoint 必须发生
 - **TL-002 · 剩 11 章**（deadline）All Is Lost 必须到达
-（另有 33 条较低优先级压力未列出）
+（另有 33 条较低优先级压力未列出；total_available 41）
 ```
+
+修复前的输出里第三条 `stance` 会挤掉 `decision`，所以旧样例中看不到
+`decision-monthly_report_check`——那正是他第 7 章要做的事。详见第 9 节末尾。
 
 清单**不进 Writer**：`render_chapter_structure` 不渲染 `story_pressures`，`extract_outline_residual_notes`
 也已把它当作已识别字段吞掉。它只服务规划与 `plan-check`。

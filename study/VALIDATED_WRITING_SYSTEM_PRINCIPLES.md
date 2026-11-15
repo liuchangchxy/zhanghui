@@ -158,7 +158,7 @@
 - **可以确定性派生，且不需要新数据**。五个既有来源：`story_craft.timed_locks`、
   `story_craft.foreshadow_chain`、`plot_threads.foreshadowing`、
   `entity_state.<id>.stance/decision/belief/warning_status`、`chapter_meta.<prev>.sequel_decision`。
-  默认 8 条，第 7 章实跑 884 字。只读，不写回任何来源。
+  默认 8 条，第 7 章实跑 966 字（含标题与说明段；条目本身更短）。只读，不写回任何来源。
 - **派生物不能当判决用**。截止章已 accepted 却仍 `active` 的记录是**台账没更新**，
   不是规划者要还的债 —— 必须标 `stale` 并与真实债务分开，否则会把已兑现的承诺报成逾期。
 - **声明可机器验证**：章纲写 `**承接压力**：<ID>`，检查器对照同一份派生结果验证 ID 是否
