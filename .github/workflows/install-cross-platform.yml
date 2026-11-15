@@ -15,7 +15,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14, windows-2022]
+        # macOS dropped for the same reason as in contract-tests.yml: since 2026-11-07 the
+        # macos-14 job is cancelled with zero steps (`The configuration
+        # 'macos-14-arm64-us-default' is not supported`), so it verified nothing while keeping
+        # the workflow red. Windows stays — it is the only OS with a real platform branch
+        # (`sys.platform == "win32"`) to install against.
+        os: [ubuntu-22.04, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
