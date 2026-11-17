@@ -125,6 +125,49 @@
 - **不得现在修改 Prompt。**
 - 必须先看它是否在新的独立章节中复现；稳定复现后才修改机制。
 
+### O3 — 「Brief 完成后、封口前只追加开场承接」能否在不重规划本章的前提下获得跨章因果收益
+
+> 在 Context Agent 按原章纲产出完整 Creative Brief 之后、Native Writer Package 封口之前，
+> 只追加两行「开场承接」（本章开场立刻回应上一章 durable accepted 的一件具体事），
+> 是否能让连续章节的跨章因果承接明显强于原流程，且不增加 Canon / 人物不变量冲突？
+
+当前证据（2026-11-17，新样本第 4–6 章，未参与该实现的设计）：
+
+- **判定 PASS**（五项预定义条件全部满足，报告见 `experiments/opening-bridge-20261117/REPORT.md`）。
+- **来源可验证**：三章承接均追溯到上一章 accepted commit 的 `sha256`；
+  上一章 rejected → `available=false` 且**不回退**到更早的 accepted 章节（有测试锁定）。
+  不使用未提交的 Data Agent 提取、临时摘要或规划者对上一章的预期。
+- **原任务书逐字节保留**：`split_composed_brief()` 拆出的原任务书与 Context Agent 原始输出
+  完全相同；两臂章纲 `sha256` 逐字相同；承接是唯一额外创作输入（2 行，≤220 字）。
+- **核心剧情不漂移**：两臂核心动作与对象相同，节点覆盖 `missed = 0`。
+- **因果承接**：3/3 独立盲评（含位置反转）判「加了承接」的一臂更强。
+- **Canon**：独立双审计硬冲突 2 vs 3（加承接的一臂不多）；承接正文本身未发明新的世界事实。
+- **必须记录的代价与副作用**：
+  1. 承接的形式强度不均匀——结构审计认为其中一章的开场回应者是本章才首次上页的角色，
+     严格口径下不算「已出场角色回应」；三章里只有两章成立。
+  2. **承接会放大 Writer 的普通事实错误**：为了让上一章的角色问出上一章的事，
+     Writer 自行补了副本准入规则、「原来的搭档放鸽子」、与上一章「室友还没回来」相抵的
+     幕后目击事件。这些不在承接正文里，是 Writer 依据承接展开的，属普通事实错误，
+     本轮按约束未修。
+  3. 另一章被判人物不变量硬冲突（主角独自定计划），但该判断来自 Context Agent 自己的
+     Brief，不是承接写的。
+- 状态：**已进生产**（`scripts/data_modules/opening_bridge.py`、`runtime opening-bridge`、
+  `attach-creative-brief --opening-bridge-file`、`webnovel-write` Step 1B3/1C、
+  `webnovel-fast-write` 2b）。
+- **可以宣称**：承接来源可以是 durable accepted commit 且无回退；原任务书可逐字节保留；
+  三章内跨章因果承接在盲评中稳定更强；硬冲突数不高于原流程。
+- **不得宣称**：它消除了 Writer 的普通事实错误（已证伪，见副作用 2）；
+  它消除了人物不变量越界；它在 n=1 之外稳定（每臂每章只生成一次，未估计 Writer 方差）；
+  它改善整体文学质量（本轮未测文学分差）。
+- **下次若重开**：先回答「承接带来的新场景触发，如何不把 Writer 推向补造准入规则/前情」。
+  不要因为 PASS 就扩大承接权限（例如让它改本章目标或结尾）。
+
+约束：
+
+- 承接只允许两行、≤220 字、只作用于开场；形状由封口时的 `_check_bridge_body` 强制
+  （恰好两行、必需前缀、不得含 `【…】` 段标题），不依赖编排纪律。
+- 不要为它新增 Gate、Reviewer、Planner 或第二份 Writer Prompt。
+
 ---
 
 ## 4. 实验原则
@@ -185,6 +228,7 @@ Reviewer / Data Agent / commit / publish 等检查：
 | 一轮文学减法与 acceptance 边界 | `experiments/literary-finalizer-integration-20261107/report/REPORT.md`、`study/audits/2026-11-07-literary-finalizer-integration.md` |
 | Finalizer 收益与过度删减 | `experiments/finalizer-ab-20261107/REPORT.md`（实验目录，未入 main） |
 | 全新生产章节与 O1 / O2 | `e2e/real-chapter-acceptance-20261107` @ `fcd9276`：`experiments/real-chapter-e2e-20261107/REPORT.md`、`.../blind/SUMMARY.md` |
+| O3 Brief 后开场承接 | `experiments/opening-bridge-20261117/REPORT.md` |
 
 ---
 

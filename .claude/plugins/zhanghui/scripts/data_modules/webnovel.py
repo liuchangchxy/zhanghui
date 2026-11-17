@@ -436,6 +436,27 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                 print(f"ERROR: {exc}", file=sys.stderr)
             return 1
 
+    if action == "opening-bridge":
+        from .opening_bridge import build_packet, format_packet_text
+
+        try:
+            packet = build_packet(root, chapter=args.chapter)
+            if args.format == "json":
+                print(json.dumps(packet, ensure_ascii=False, indent=2))
+            else:
+                text = format_packet_text(packet)
+                if text:
+                    print(text, end="")
+                elif not packet.get("available") and args.format == "text":
+                    print(f"NO OPENING BRIDGE chapter {args.chapter}: {packet.get('reason')}", file=sys.stderr)
+            return 0
+        except Exception as exc:
+            if args.format == "json":
+                print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False, indent=2))
+            else:
+                print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
     if action == "attach-creative-brief":
         try:
             brief = getattr(args, "brief", "") or ""
@@ -446,6 +467,17 @@ def cmd_runtime(args: argparse.Namespace) -> int:
                     brief = bf_p.read_text(encoding="utf-8")
             if not brief:
                 raise ValueError("Either --brief or --brief-file must be provided and non-empty")
+            bridge_file = getattr(args, "opening_bridge_file", "") or ""
+            bridge_body = ""
+            if bridge_file:
+                bridge_path = Path(bridge_file)
+                if not bridge_path.is_file():
+                    raise ValueError(f"opening bridge file not found: {bridge_file}")
+                bridge_body = bridge_path.read_text(encoding="utf-8").strip()
+            if bridge_body:
+                from .opening_bridge import compose_brief
+
+                brief = compose_brief(brief, bridge_body)
             pkg = runtime.attach_creative_brief(
                 chapter=args.chapter,
                 creative_brief=brief,
@@ -2104,6 +2136,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_rt_gov.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
     p_rt_gov.set_defaults(func=cmd_runtime)
 
+    p_rt_bridge = runtime_sub.add_parser(
+        "opening-bridge",
+        help="只读投影：上一章 durable accepted commit 的开场承接包（Step 1B 之后、Step 1C 之前使用）",
+    )
+    p_rt_bridge.add_argument("--chapter", type=int, required=True, help="章节号")
+    p_rt_bridge.add_argument("--format", choices=["json", "text"], default="json", help="输出格式")
+    p_rt_bridge.set_defaults(func=cmd_runtime)
+
     p_rt_rev = runtime_sub.add_parser("reviewer-context", help="获取 Reviewer 审查所需的受治理意图与 Craft 约束")
     p_rt_rev.add_argument("--chapter", type=int, required=True, help="章节号")
     p_rt_rev.add_argument("--max-chars", type=int, default=None, help="上下文最大字符限额预算")
@@ -2144,6 +2184,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_rt_brief.add_argument("--chapter", type=int, required=True, help="章节号")
     p_rt_brief.add_argument("--brief", default="", help="Creative Brief 文本")
     p_rt_brief.add_argument("--brief-file", default="", help="Creative Brief 文件路径")
+    p_rt_brief.add_argument(
+        "--opening-bridge-file",
+        default="",
+        help="开场承接正文文件：非空时在 Creative Brief 前追加【开场承接】块，原任务书正文逐字保留",
+    )
     p_rt_brief.add_argument("--skills-file", default="", help="Skill Router 选择 JSON 文件（选择后自动渲染本章创作方法）")
     p_rt_brief.add_argument("--skills-json", default="", help="Skill Router 选择 JSON 文本（与 --skills-file 二选一）")
     p_rt_brief.add_argument(

@@ -69,13 +69,29 @@ python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" ru
    `brief_file`），由它发现 `writing-skills/`、选择 2–5 个适用技巧、翻译成本章写法，并写出
    `.webnovel/tmp/writing_skills_{chapter_padded}.json`（内部已跑 `writing-skills validate`）。
    该步骤失败时记录原因并按“无 Skill”继续，不得伪造选择。
+2b. **Opening Bridge（开场承接）**：先跑只读投影，再决定是否生成承接：
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime opening-bridge \
+  --chapter {chapter_num} --format json > "${PROJECT_ROOT}/.webnovel/tmp/opening_bridge_{chapter_padded}.json"
+```
+   仅当 `available=true` 时，写一段不超过三句的承接正文到
+   `.webnovel/tmp/opening_bridge_{chapter_padded}.body.txt`：
+   `上一章 accepted：<已 accepted 的一件具体事>` / `本章开场：<已存在具名角色的当场回应>`。
+   它只影响开场，不重新规划本章、不改原任务书；投影 `available=false` 时**删除同名 body 文件**
+   （`rm -f`）并跳过，流程与原来一致。详见 `webnovel-write` Step 1B3 的硬要求
+   （同一契约，快车道不另立版本；两行格式由 Runtime 在封口时强制）。
 3. 调用 `runtime attach-creative-brief` 签名封口，生成唯一 Canonical Writer Prompt，并从同一封口包提取 `package_fingerprint`：
 ```bash
 # 签名封口并将 Canonical Writer Prompt 输出至临时文件供 Writer 消费
+# 1B3/2b 生成了开场承接时附加 --opening-bridge-file；空文件则不加
+BRIDGE_BODY="${PROJECT_ROOT}/.webnovel/tmp/opening_bridge_{chapter_padded}.body.txt"
+BRIDGE_ARG=""
+if [ -s "${BRIDGE_BODY}" ]; then BRIDGE_ARG="--opening-bridge-file ${BRIDGE_BODY}"; fi
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
   --chapter {chapter_num} \
   --brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt" \
   --skills-file "${PROJECT_ROOT}/.webnovel/tmp/writing_skills_{chapter_padded}.json" \
+  ${BRIDGE_ARG} \
   --scene-design --reader-pull \
   --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
 
