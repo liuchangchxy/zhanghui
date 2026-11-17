@@ -1,0 +1,12 @@
+{
+  "mapping": {
+    "X": "B",
+    "Y": "A"
+  },
+  "A_current_raw_sha256": "02b61026f47d4571d1345018a114cacea9989a4c91e75f26bcdc2da02e685809",
+  "B_jit_raw_sha256": "6e5795d02a79dba138ac3a8c95541124ebc5201ff786317a83020bed076a7ca9",
+  "A_prose_sha256": "cdb97f9570c807197e7b11a2eff20bc398a597bb5b7c75d8768eaeba2b15cbe0",
+  "B_prose_sha256": "8c98fc474fbee089ac91efa9d7118cf712158b84b03605194c865e1067ce5b28",
+  "A_prose_cjk": 2486,
+  "B_prose_cjk": 2498
+}
