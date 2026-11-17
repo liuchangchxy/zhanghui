@@ -56,8 +56,10 @@ jobs:
             tests/unit/test_prose_fact_fix_gate.py \
             tests/unit/test_writer_information_chain.py \
             tests/unit/test_plugin_release_version_sync.py \
+            tests/unit/test_opening_bridge_seal.py \
             .claude/plugins/zhanghui/scripts/tests/test_finding_closure_identity.py \
             .claude/plugins/zhanghui/scripts/data_modules/tests/test_protagonist_entity_identity.py \
+            .claude/plugins/zhanghui/scripts/data_modules/tests/test_opening_bridge.py \
             -q
       - name: Guard hook command contract
         run: |

@@ -348,16 +348,64 @@ python3 -X utf8 -c "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text(sys
 - Writer 只会看到“本章创作方法”编号列表；不得把 `reason`、id、分数、理论名写进正文 prompt。
 - 新增技巧只需放入 `writing-skills/<id>/SKILL.md`，不修改任何 Python 或本流程。
 
+#### 1B3. Opening Bridge（开场承接：只在上一章 durable accepted 时执行）
+
+本步只做一件事：让本章**开场立刻回应上一章已经 accepted 的一件事**。它不改章纲、不改原任务书主体、不重新规划本章；作用范围仅限开场。
+
+1. 只读投影（不写任何项目状态）：
+
+```bash
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime opening-bridge \
+  --chapter {chapter_num} --format json > "${PROJECT_ROOT}/.webnovel/tmp/opening_bridge_{chapter_padded}.json"
+python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime opening-bridge \
+  --chapter {chapter_num} --format text > "${PROJECT_ROOT}/.webnovel/tmp/opening_bridge_{chapter_padded}.txt"
+```
+
+- 投影来源**只有**上一章 `.story-system/commits/chapter_{N-1}.commit.json`，且 `meta.status=accepted`。
+  **禁止**使用未提交的 Data Agent 提取、临时摘要或 Planner 对上一章的预期。
+- 读 JSON 的 `available`：
+  - `false`（上一章尚未 accepted）→ **不生成开场承接**，直接进入 1C；流程与原来完全一致。
+    若上一轮遗留了同名 body 文件，先删除它（`rm -f .webnovel/tmp/opening_bridge_{chapter_padded}.body.txt`），
+    否则 1C 的 `-s` 判断会把旧承接重新封进去。
+  - `true` → 继续下一步。
+
+2. 由主流程（**不新增 Agent，也不回问 Context Agent**）依据该投影与
+   `.webnovel/tmp/creative_brief_{chapter_padded}.txt` 的开篇段落，写一段不超过三句的承接正文，
+   写入 `.webnovel/tmp/opening_bridge_{chapter_padded}.body.txt`，固定两行：
+
+```text
+上一章 accepted：<一件具体的、已 accepted 的事；直接引用投影里的具名事实，不添加细节>
+本章开场：<一个已经存在的具名角色，对这件事的当场回应；说清谁做了什么>
+```
+
+硬要求：
+- 只回答“上一章这件事在本章开场立刻引起什么回应”。不写本章目标、不写后续情节、不重述章纲、不设计整章。
+- 只能使用投影包里出现的实体、事实与数字；不得发明机构、栏目、流程、登记簿、定量数据或新人物。
+- 回应必须能自然接上原 Creative Brief 的开场；**不得要求或促使 Brief 改写**。
+- 投影里没有可承接的事实 → 写空文件（等同不生成）。
+- **格式由 Runtime 强制**（`compose_brief`）：必须恰好两行、以 `上一章 accepted：` 与 `本章开场：` 开头，
+  ≤220 字，且不得包含任何 `【…】` 段标题。超限或格式不符会在封口时 fail-closed，
+  这正是“承接只能是开场一句、不能变成第二份任务书”的机器保障。
+
+3. 该文件只通过 1C 的 `--opening-bridge-file` 传入。**严禁**直接改写 `creative_brief_{chapter_padded}.txt`；
+   原任务书正文由 Runtime 逐字保留在【原 Creative Brief】标题之后。
+
 #### 1C. Runtime 封口与唯一 Canonical Writer Prompt 生成（Seal Native Writer Package）
+
 将 Context Agent 输出的真实写作任务书回传给 Runtime 进行签名封口，生成唯一 Canonical Writer Prompt：
 
 ```bash
 # 将 Context Agent 输出的五段任务书作为参数传给 runtime attach-creative-brief
 # --format prompt 输出 Canonical Writer Prompt，重定向至临时文件供 Writer 消费
+# 1B3 生成了开场承接时，用 --opening-bridge-file 传入；文件为空/不存在则不加该参数
+BRIDGE_BODY="${PROJECT_ROOT}/.webnovel/tmp/opening_bridge_{chapter_padded}.body.txt"
+BRIDGE_ARG=""
+if [ -s "${BRIDGE_BODY}" ]; then BRIDGE_ARG="--opening-bridge-file ${BRIDGE_BODY}"; fi
 python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --project-root "${PROJECT_ROOT}" runtime attach-creative-brief \
   --chapter {chapter_num} \
   --brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt" \
   --skills-file "${PROJECT_ROOT}/.webnovel/tmp/writing_skills_{chapter_padded}.json" \
+  ${BRIDGE_ARG} \
   --scene-design --reader-pull \
   --format prompt > "${PROJECT_ROOT}/.webnovel/tmp/writer_prompt_{chapter_padded}.txt"
 
@@ -367,6 +415,7 @@ export PACKAGE_FINGERPRINT="$(python3 -X utf8 "${SCRIPTS_DIR}/webnovel.py" --pro
 （亦可将 brief 写入临时文件后使用 `--brief-file "${PROJECT_ROOT}/.webnovel/tmp/creative_brief_{chapter_padded}.txt"`）
 
 - **封口保证**：Runtime 计算 `creative_brief_fingerprint` 与 `package_fingerprint`，将任务书与受治理事实永久绑定为 `is_writer_ready=True` 的 Sealed Native Writer Package。
+- **开场承接封口**：传入 `--opening-bridge-file` 时，Runtime 只做一件事——在原任务书**前面**加 `【开场承接】` 与作用范围声明，再用 `【原 Creative Brief】` 引出逐字未改的原任务书；指纹与封口链完全不变，不会生成第二套 Writer Prompt。
 - **唯一输入渲染**：命令附带 `--format prompt` 将直接调用 `WriterPackage.to_writer_prompt()` 输出完整的 Canonical Writer Prompt。未提供 Brief 时该命令严格 fail-closed。
 - **指纹获取与绑定**：紧随封口调用 `runtime status --format json` 提取 `package_fingerprint`（Runtime 校验 `has_writer_package=true` 且 `is_writer_package_stale=false`）。严禁重复封口两次、严禁手动计算或伪造指纹、严禁重新拼装 Writer Prompt。
 
