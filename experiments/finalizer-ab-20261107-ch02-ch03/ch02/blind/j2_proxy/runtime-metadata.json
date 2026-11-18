@@ -1,0 +1,19 @@
+{
+  "backend": "local-anthropic-proxy",
+  "base_url": "http://127.0.0.1:3425",
+  "requested_model": "group/mac-deepseek4.1-gpt[1m]",
+  "response_model": "group/mac-deepseek4.1-gpt[1m]",
+  "temperature": 0.2,
+  "max_tokens": 32000,
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 4116,
+    "output_tokens": 5912,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0
+  },
+  "elapsed_ms": 40155,
+  "attempt": 1,
+  "prompt_sha256": "a46e943f401f47c1068d4109d1d82f2c30f687aeec45ea1bdec42618f946730b",
+  "created_at": "2026-11-07T14:13:50.533693+00:00"
+}

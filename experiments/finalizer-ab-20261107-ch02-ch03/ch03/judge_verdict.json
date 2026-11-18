@@ -1,0 +1,27 @@
+{
+  "schema_version": "semantic-judge/v1",
+  "kind": "verdict",
+  "chapter": 3,
+  "outcome": "STYLE_ONLY_SAFE",
+  "changes": [
+    {
+      "dimension": "motivation",
+      "before": "林川没有急着上去。他先看地形：",
+      "after": "他先看地形：",
+      "reason": "删除的是对林川行动节奏的叙述者说明；紧接的“他先看地形”已经展示同一行为，人物动机、判断与后续行动未变。",
+      "impact": "DISCOURSE"
+    },
+    {
+      "dimension": "causality",
+      "before": "林川没有再踩。他把鲁班机关术拖到插销上。",
+      "after": "他把鲁班机关术拖到插销上。",
+      "reason": "删除的是“不再重复踩制动杆”这一否定式过渡句；制动杆因插销锈死而失效、林川改用机关术拆插销的因果链仍由前文和后续动作完整承载。",
+      "impact": "DISCOURSE"
+    }
+  ],
+  "before_sha256": "de8575b3c7b1bb6b85c6ba382c1b7d3cbb841746aad4444fca91c082fab41faf",
+  "after_sha256": "9264f97f4e5628d0dd72858f0fc9cb59c1ef283b575d0f3c2aa52a5560ef5d68",
+  "request_id": "a5b9b2b5c406bbc17b9ab3943f30b2ca4c57576040ba4744f1aa2e95f66e33b3",
+  "source": "host",
+  "association": "request"
+}

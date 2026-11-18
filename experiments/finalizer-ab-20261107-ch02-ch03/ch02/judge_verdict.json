@@ -1,0 +1,62 @@
+{
+  "schema_version": "semantic-judge/v1",
+  "kind": "verdict",
+  "chapter": 2,
+  "outcome": "STYLE_ONLY_SAFE",
+  "changes": [
+    {
+      "dimension": "motivation",
+      "before": "他知道这种池子，前几次给的东西不会太好，但也不会太差，至少会让人愿意再抽一次。",
+      "after": "",
+      "reason": "删除的是叙述者对抽卡池心理机制的预判与总结。后文实际抽卡过程已经展示同一信息，未改变人物决定、动机或任何事件结果。",
+      "impact": "DISCOURSE"
+    },
+    {
+      "dimension": "event_outcome",
+      "before": "四次，四百碎片，没有一张带攻击。",
+      "after": "四次，没有一张带攻击。",
+      "reason": "删除“四百碎片”只是省略可由四次单抽直接算出的总额，抽卡次数、结果与余额变化均未改变。",
+      "impact": "DISCOURSE"
+    },
+    {
+      "dimension": "capability",
+      "before": "木盾能挡，但不能打。",
+      "after": "",
+      "reason": "删除的是对卡牌功能的解释句；卡面数据“防具 / 格挡 +1”且无攻击栏已经承载同一信息，卡牌能力与归属未变。",
+      "impact": "DISCOURSE"
+    },
+    {
+      "dimension": "motivation",
+      "before": "引导员在屏幕边上安静地站着，没有催他，也没有安慰他。",
+      "after": "引导员在屏幕边上安静地站着，没有催他。",
+      "reason": "删除“也没有安慰他”是对 NPC 非动作的叙述者解读，未改变引导员的行为、台词、职责或人物关系。",
+      "impact": "DISCOURSE"
+    },
+    {
+      "dimension": "epistemic",
+      "before": "凡俗、修仙、神权、科技、轮回、血脉、混沌。这七个词他闭着眼都能背出来。",
+      "after": "凡俗、修仙、神权、科技、轮回、血脉、混沌。",
+      "reason": "删除的是对林川熟悉程度的总结；后文“游戏设计课上拆过卡牌表”仍表明他掌握七大法则，人物知情状态未变。",
+      "impact": "DISCOURSE"
+    },
+    {
+      "dimension": "event_outcome",
+      "before": "屏幕右下角，首日新手池的倒计时还在走。他的余额是十八个碎片。",
+      "after": "屏幕右下角，首日新手池的倒计时还在走。",
+      "reason": "余额十八个碎片已在上一段“一百一十八，够一次，剩十八”中明确给出；删除的是重复转述，实际余额与消费结果未变。",
+      "impact": "DISCOURSE"
+    },
+    {
+      "dimension": "location_or_state",
+      "before": "第一格那个灰色空格还在，里面的东西没有名字，没有说明，他也没有点。",
+      "after": "第一格那个灰色空格还在，里面的东西没有名字，他也没有点。",
+      "reason": "删除“没有说明”只是省略对未归类物品状态的重复提醒；该物品仍在背包第一格、仍无名字与说明，人物行动未变。",
+      "impact": "DISCOURSE"
+    }
+  ],
+  "before_sha256": "830b41a2c5cb70ec47d3a15144533b199cc7e750a995bbdd35d2791ba5c7f0ce",
+  "after_sha256": "cedf0087fd79a6e09b422967c7046393f1097c793a8082657558f72a3b6df8a7",
+  "request_id": "2a5004060cd58b75c620d299eb9769a9d6b9949bc6bcbec9bcc9adb512cc4abb",
+  "source": "host",
+  "association": "request"
+}

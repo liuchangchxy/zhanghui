@@ -1,0 +1,26 @@
+{
+  "accepted": true,
+  "reasons": [],
+  "length_ratio": 0.993,
+  "before_body_chars": 2273,
+  "after_body_chars": 2257,
+  "missing_numbers": [],
+  "added_numbers": [],
+  "missing_dates": [],
+  "added_dates": [],
+  "missing_codes": [],
+  "added_codes": [],
+  "missing_terms": [],
+  "semantic_outcome": "STYLE_ONLY_SAFE",
+  "gate_status": "ACCEPTED",
+  "gate_details": {
+    "rollback_reason": null,
+    "staccato_score": -0.006263048016701575,
+    "edit_footprint_ratio": 0.0032,
+    "required_actions": [],
+    "discourse_only": false,
+    "allowed_changes": [],
+    "blocking_changes": []
+  },
+  "judge_binding": "bound_file:/Users/chang/Desktop/根源牌序/.webnovel/tmp/judge_verdict_0003.json"
+}

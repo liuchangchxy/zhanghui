@@ -1,0 +1,212 @@
+{
+  "chapter": 2,
+  "issues": [
+    {
+      "severity": "medium",
+      "category": "logic",
+      "location": "第7行、第31行",
+      "description": "订单账本不一致：第7行已有一单代练取消并退还40元订金，正文只剩一单在谈；第31行仍写“两单代练也还有救”，多算一单。",
+      "evidence": "第7行“订金退一下……转了四十过去”（一单已取消） vs 第31行“两单代练也还有救”",
+      "fix_hint": "改为“这一单代练也还有救”，或补一句说明第31行指新接订单／另一单并未取消。",
+      "blocking": false,
+      "checker_id": "llm_review",
+      "gate_id": null,
+      "authority": null,
+      "explicitness": null,
+      "subject_id": null,
+      "constraint_id": null,
+      "issue_id": null,
+      "source_ref": null,
+      "structured_evidence": null,
+      "score": null
+    },
+    {
+      "severity": "low",
+      "category": "timeline",
+      "location": "第5-7行；reviewer_context.chapter_planning.chapter_meta.time_anchor",
+      "description": "正文开场为10:20、10:42，章末仍说“下午的委托价要跌”，整体属上午；chapter_meta.time_anchor 仍标“2026-05-01 下午”。chapter_changes 已改为上午，但规划元数据未同步。",
+      "evidence": "正文“十点二十”“十点四十二”“下午的委托价要跌” vs time_anchor“2026-05-01 下午”",
+      "fix_hint": "将 time_anchor 改为“2026-05-01 上午”，或在正文补明确的午后时间标记。",
+      "blocking": false,
+      "checker_id": "llm_review",
+      "gate_id": null,
+      "authority": null,
+      "explicitness": null,
+      "subject_id": null,
+      "constraint_id": null,
+      "issue_id": null,
+      "source_ref": null,
+      "structured_evidence": null,
+      "score": null
+    },
+    {
+      "severity": "low",
+      "category": "timeline",
+      "location": "第27行、第147行",
+      "description": "同一界面元素的表述不一致：第27行写明是“关闭时间：首日新手池 23:59:59 关闭”（固定时点），第147行却称“首日新手池的倒计时还在走”，重新把它写成倒计时，两种读法对应不同的剩余时长。",
+      "evidence": "第27行“关闭时间：‘首日新手池 23:59:59 关闭’” vs 第147行“首日新手池的倒计时还在走”",
+      "fix_hint": "统一为固定关闭时点（如“关闭时间还挂在右下角”），或明确同时存在一个独立倒计时并给出与开服时间一致的剩余值。",
+      "blocking": false,
+      "checker_id": "llm_review",
+      "gate_id": null,
+      "authority": null,
+      "explicitness": null,
+      "subject_id": null,
+      "constraint_id": null,
+      "issue_id": null,
+      "source_ref": null,
+      "structured_evidence": null,
+      "score": null
+    },
+    {
+      "severity": "medium",
+      "category": "foreshadow_compliance",
+      "location": "chapter_changes.foreshadowing_actions",
+      "description": "本章新埋至少3条伏笔（地球法则卡牌、E-0001、引导员“不在当前引导数据内”／“解锁条件：继续探索”），foreshadowing_actions 仍为空数组；unresolved_questions 只登记了问题、章节和重要度，缺 urgency 与 expected_payoff，后续回收时限无法追踪。",
+      "evidence": "chapter_changes.foreshadowing_actions = []；unresolved_questions 4条均未含 urgency/expected_payoff",
+      "fix_hint": "为每条新伏笔补登 foreshadow_buried 五字段（内容/类型/未答问题/紧迫度/预期回收点），并与 unresolved_questions 对齐。",
+      "blocking": false,
+      "checker_id": "llm_review",
+      "gate_id": null,
+      "authority": "CRAFT_HEURISTIC",
+      "explicitness": "UNKNOWN",
+      "subject_id": null,
+      "constraint_id": null,
+      "issue_id": null,
+      "source_ref": null,
+      "structured_evidence": null,
+      "score": null
+    },
+    {
+      "severity": "low",
+      "category": "foreshadow_compliance",
+      "location": "chapter_planning.chapter_meta.hook_type",
+      "description": "章末 hook 已明示“承诺钩”，正文也落地了“继续探索可解锁更多”，但 hook_type 字段仍为空，未声明为6种钩型之一，影响钩子统计与后续节奏判断。",
+      "evidence": "hook=“承诺钩 - 系统提示：‘继续探索可解锁更多’”；hook_type=“”",
+      "fix_hint": "将 hook_type 填为“承诺钩”（或对应枚举值）。",
+      "blocking": false,
+      "checker_id": "llm_review",
+      "gate_id": null,
+      "authority": "CRAFT_HEURISTIC",
+      "explicitness": "UNKNOWN",
+      "subject_id": null,
+      "constraint_id": null,
+      "issue_id": null,
+      "source_ref": null,
+      "structured_evidence": null,
+      "score": null
+    }
+  ],
+  "issues_count": 5,
+  "blocking_count": 0,
+  "has_blocking": false,
+  "summary": "5个问题：0个 reviewer 自行赋予的阻断，0个高优/严重（2个 medium、3个 low）。chapter_changes 块仅1个且 JSON 合法；draft_fingerprint 与 review_subject_fingerprint 均与入参一致。上一轮审查闭环：resolved=3（余额结算、奖励时点、关闭时间数值）/ persistent=3（time_anchor、foreshadowing_actions、hook_type）；上一轮无 high/critical。prior_chapter: unavailable（上下文未提供跨章闭环块）。 结果文件：/Users/chang/Desktop/根源牌序/.webnovel/tmp/review_results.json",
+  "draft_id": "draft-002-d45cbd6f",
+  "draft_fingerprint": "c981aaed46f15067ddf220a32c802936295328fb1311ec0063e4d5aa456a9485",
+  "review_subject_fingerprint": "2ae118927ae6abd59ada3f0c9ab24fd6131a8d2babe0cb590e0e43935efa2968",
+  "review_mode": "full",
+  "dimension_results": [
+    {
+      "dimension": "setting",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "timeline",
+      "conclusion": "发现2个问题：chapter_meta 时间锚点为下午但正文为上午；第27行“关闭时间”与第147行“倒计时”表述不一致"
+    },
+    {
+      "dimension": "continuity",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "character",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "logic",
+      "conclusion": "发现1个问题：已取消一单后仍称“两单代练也还有救”"
+    },
+    {
+      "dimension": "beat_compliance",
+      "conclusion": "pass"
+    },
+    {
+      "dimension": "foreshadow_compliance",
+      "conclusion": "发现2个问题：foreshadowing_actions 为空；hook_type 为空"
+    },
+    {
+      "dimension": "do_not_copy_violation",
+      "conclusion": "pass"
+    }
+  ],
+  "draft_identity_source": "reviewer",
+  "convergence": {
+    "has_previous_review": true,
+    "previous_finding_count": 6,
+    "resolved_count": 0,
+    "persistent_count": 2,
+    "uncertain_count": 4,
+    "new_count": 2,
+    "finding_churn": 2,
+    "resolved": [],
+    "persistent": [
+      {
+        "category": "foreshadow_compliance",
+        "severity": "medium",
+        "description": "本章实际新埋至少3条伏笔（地球法则卡牌、E-0001编号、\"不在当前引导数据内\"/\"解锁条件：继续探索\"），但 foreshadowing_actions 为空数组，未按5字段登记，新增伏笔环将无法进入后续时限与回收追踪。",
+        "location": "chapter_changes.foreshadowing_actions",
+        "match_score": 0.794,
+        "matched_current_description": "本章新埋至少3条伏笔（地球法则卡牌、E-0001、引导员“不在当前引导数据内”／“解锁条件：继续探索”），foreshadowing_actions 仍为空数组；unresolved_questions 只登记了问题、章节和重要度，缺 urgency 与 expected_payoff，后续回收时限无法追踪。"
+      },
+      {
+        "category": "foreshadow_compliance",
+        "severity": "low",
+        "description": "章末 hook 已给出\"承诺钩\"，但 hook_type 字段为空，未声明为6种钩型之一，影响钩子统计与后续节奏判断。",
+        "location": "chapter_planning.chapter_meta.hook_type",
+        "match_score": 1.0,
+        "matched_current_description": "章末 hook 已明示“承诺钩”，正文也落地了“继续探索可解锁更多”，但 hook_type 字段仍为空，未声明为6种钩型之一，影响钩子统计与后续节奏判断。"
+      }
+    ],
+    "uncertain": [
+      {
+        "category": "logic",
+        "severity": "medium",
+        "description": "出售所得与余额不符：按正文成交价，草鞋9 + 火折子12 = 21，抽卡后余额100，合计应为121；陶碗明确仍挂在交易行未售出，不能计入。正文却写余额118，相差3碎片。若存在交易行手续费，正文未交代。",
+        "location": "第69-71行（交易行出售与余额结算）",
+        "uncertain_reason": "evidence_invalid:target_prose_fingerprint_mismatch:7093fdf8_vs_2ae11892"
+      },
+      {
+        "category": "logic",
+        "severity": "medium",
+        "description": "初始资源发放时点与规则表述矛盾：引导员说\"完成引导，可领取初始资源\"，奖励行标为\"引导完成：根源碎片 × 500\"，但林川在引导尚未完成（第133行进度条才到100%）时余额已是500并开始抽卡。奖励文案与到账时点不自洽。",
+        "location": "第13-27行（引导奖励发放时点）",
+        "uncertain_reason": "evidence_invalid:target_prose_fingerprint_mismatch:7093fdf8_vs_2ae11892"
+      },
+      {
+        "category": "timeline",
+        "severity": "low",
+        "description": "本章正文开场时间为10:20-10:42（直接承接第1章10:35），但章节规划的 time_anchor 写\"2026-05-01 下午\"；chapter_changes 又记为\"上午十点四十至午后，约两小时\"，正文没有任何跨过正午的时间标记。",
+        "location": "第5-7行；chapter_meta.time_anchor",
+        "match_score": 0.634,
+        "matched_current_description": "正文开场为10:20、10:42，章末仍说“下午的委托价要跌”，整体属上午；chapter_meta.time_anchor 仍标“2026-05-01 下午”。chapter_changes 已改为上午，但规划元数据未同步。",
+        "uncertain_reason": "partial_or_reworded_match"
+      },
+      {
+        "category": "timeline",
+        "severity": "low",
+        "description": "倒计时显示值与当前时间不符：开服约10:50，若\"首日\"池在当日23:59:59关闭，剩余应约13小时；若是开服后24小时倒计时，应约23小时9分。显示\"23:59:59\"两种解释都对不上。",
+        "location": "第27行（首日新手池倒计时）",
+        "uncertain_reason": "evidence_invalid:target_prose_fingerprint_mismatch:7093fdf8_vs_2ae11892"
+      }
+    ],
+    "new": [
+      "订单账本不一致：第7行已有一单代练取消并退还40元订金，正文只剩一单在谈；第31行仍写“两单代练也还有救”，多算一单。",
+      "同一界面元素的表述不一致：第27行写明是“关闭时间：首日新手池 23:59:59 关闭”（固定时点），第147行却称“首日新手池的倒计时还在走”，重新把它写成倒计时，两种读法对应不同的剩余时长。"
+    ],
+    "high_critical_closure": [],
+    "all_high_critical_closed": true,
+    "revision_evidence_path": "/Users/chang/Desktop/根源牌序/.webnovel/tmp/verify_minimal_edit.json",
+    "revision_evidence_found": true,
+    "previous_review_status": "loaded"
+  }
+}

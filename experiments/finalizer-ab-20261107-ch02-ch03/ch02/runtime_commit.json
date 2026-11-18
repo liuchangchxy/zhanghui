@@ -1,0 +1,693 @@
+Vector embedding: 0 stored, 20 skipped (embedding failed)
+[WARN] Embed error: Cannot connect to host 127.0.0.1:1234 ssl:default [Connect call failed ('127.0.0.1', 1234)], retrying in 1.0s (1/3)
+[WARN] Embed error: Cannot connect to host 127.0.0.1:1234 ssl:default [Connect call failed ('127.0.0.1', 1234)], retrying in 2.0s (2/3)
+[ERR] Embed: Cannot connect to host 127.0.0.1:1234 ssl:default [Connect call failed ('127.0.0.1', 1234)]
+[WARN] Embed batch 0 failed, marking 20 items as None
+{
+  "ok": true,
+  "chapter": 2,
+  "action": "ALLOW_WITH_ADVISORY",
+  "attempt_id": "runtime-ac786c2b",
+  "chapter_outcome": "accepted",
+  "gate_decision_ref": ".story-system/reviews/gate-decisions/chapter_002/runtime-ac786c2b.json",
+  "durable_commit_persisted": true,
+  "projection_status": {
+    "events": "done",
+    "amend_proposals": "done",
+    "state": "done",
+    "index": "done",
+    "summary": "done",
+    "memory": "done",
+    "vector": "skipped"
+  },
+  "projection_success": true,
+  "can_retry_projection": true,
+  "human_decision_required": null,
+  "error_code": null,
+  "error": null,
+  "commit_payload": {
+    "meta": {
+      "schema_version": "story-system/v1",
+      "chapter": 2,
+      "status": "accepted"
+    },
+    "contract_refs": {
+      "master": "MASTER_SETTING.json",
+      "volume": "volume_001.json",
+      "chapter": "chapter_002.json",
+      "review": "chapter_002.review.json"
+    },
+    "provenance": {
+      "write_fact_role": "chapter_commit",
+      "projection_role": "derived_read_models",
+      "legacy_state_role": "projection_only",
+      "reconciliation_schema": "story-reconciliation/v1",
+      "reconciliation_observed_sha256": "f09d3f6eae0fe1393f21458ad7afde7c17755b8b4997276294af1bbd6124d5bc",
+      "reconciliation_prose_sha256": "2ae118927ae6abd59ada3f0c9ab24fd6131a8d2babe0cb590e0e43935efa2968",
+      "reconciliation_proposed_sha256": "b108e8ceb6aa3cfc57b2d2a1c9c327a228d88652a9c1ba05ea21e0a3d1618511",
+      "reconciliation_chapter_sha256": "c981aaed46f15067ddf220a32c802936295328fb1311ec0063e4d5aa456a9485"
+    },
+    "outline_snapshot": {
+      "planned_nodes": [],
+      "covered_nodes": [],
+      "missed_nodes": [],
+      "extra_nodes": []
+    },
+    "review_result": {
+      "blocking_count": 0,
+      "chapter": 2,
+      "issues": [
+        {
+          "severity": "medium",
+          "category": "logic",
+          "location": "第7行、第31行",
+          "description": "订单账本不一致：第7行已有一单代练取消并退还40元订金，正文只剩一单在谈；第31行仍写“两单代练也还有救”，多算一单。",
+          "evidence": "第7行“订金退一下……转了四十过去”（一单已取消） vs 第31行“两单代练也还有救”",
+          "fix_hint": "改为“这一单代练也还有救”，或补一句说明第31行指新接订单／另一单并未取消。",
+          "blocking": false,
+          "checker_id": "llm_review",
+          "gate_id": null,
+          "authority": null,
+          "explicitness": null,
+          "subject_id": null,
+          "constraint_id": null,
+          "issue_id": null,
+          "source_ref": null,
+          "structured_evidence": null,
+          "score": null
+        },
+        {
+          "severity": "low",
+          "category": "timeline",
+          "location": "第5-7行；reviewer_context.chapter_planning.chapter_meta.time_anchor",
+          "description": "正文开场为10:20、10:42，章末仍说“下午的委托价要跌”，整体属上午；chapter_meta.time_anchor 仍标“2026-05-01 下午”。chapter_changes 已改为上午，但规划元数据未同步。",
+          "evidence": "正文“十点二十”“十点四十二”“下午的委托价要跌” vs time_anchor“2026-05-01 下午”",
+          "fix_hint": "将 time_anchor 改为“2026-05-01 上午”，或在正文补明确的午后时间标记。",
+          "blocking": false,
+          "checker_id": "llm_review",
+          "gate_id": null,
+          "authority": null,
+          "explicitness": null,
+          "subject_id": null,
+          "constraint_id": null,
+          "issue_id": null,
+          "source_ref": null,
+          "structured_evidence": null,
+          "score": null
+        },
+        {
+          "severity": "low",
+          "category": "timeline",
+          "location": "第27行、第147行",
+          "description": "同一界面元素的表述不一致：第27行写明是“关闭时间：首日新手池 23:59:59 关闭”（固定时点），第147行却称“首日新手池的倒计时还在走”，重新把它写成倒计时，两种读法对应不同的剩余时长。",
+          "evidence": "第27行“关闭时间：‘首日新手池 23:59:59 关闭’” vs 第147行“首日新手池的倒计时还在走”",
+          "fix_hint": "统一为固定关闭时点（如“关闭时间还挂在右下角”），或明确同时存在一个独立倒计时并给出与开服时间一致的剩余值。",
+          "blocking": false,
+          "checker_id": "llm_review",
+          "gate_id": null,
+          "authority": null,
+          "explicitness": null,
+          "subject_id": null,
+          "constraint_id": null,
+          "issue_id": null,
+          "source_ref": null,
+          "structured_evidence": null,
+          "score": null
+        },
+        {
+          "severity": "medium",
+          "category": "foreshadow_compliance",
+          "location": "chapter_changes.foreshadowing_actions",
+          "description": "本章新埋至少3条伏笔（地球法则卡牌、E-0001、引导员“不在当前引导数据内”／“解锁条件：继续探索”），foreshadowing_actions 仍为空数组；unresolved_questions 只登记了问题、章节和重要度，缺 urgency 与 expected_payoff，后续回收时限无法追踪。",
+          "evidence": "chapter_changes.foreshadowing_actions = []；unresolved_questions 4条均未含 urgency/expected_payoff",
+          "fix_hint": "为每条新伏笔补登 foreshadow_buried 五字段（内容/类型/未答问题/紧迫度/预期回收点），并与 unresolved_questions 对齐。",
+          "blocking": false,
+          "checker_id": "llm_review",
+          "gate_id": null,
+          "authority": "CRAFT_HEURISTIC",
+          "explicitness": "UNKNOWN",
+          "subject_id": null,
+          "constraint_id": null,
+          "issue_id": null,
+          "source_ref": null,
+          "structured_evidence": null,
+          "score": null
+        },
+        {
+          "severity": "low",
+          "category": "foreshadow_compliance",
+          "location": "chapter_planning.chapter_meta.hook_type",
+          "description": "章末 hook 已明示“承诺钩”，正文也落地了“继续探索可解锁更多”，但 hook_type 字段仍为空，未声明为6种钩型之一，影响钩子统计与后续节奏判断。",
+          "evidence": "hook=“承诺钩 - 系统提示：‘继续探索可解锁更多’”；hook_type=“”",
+          "fix_hint": "将 hook_type 填为“承诺钩”（或对应枚举值）。",
+          "blocking": false,
+          "checker_id": "llm_review",
+          "gate_id": null,
+          "authority": "CRAFT_HEURISTIC",
+          "explicitness": "UNKNOWN",
+          "subject_id": null,
+          "constraint_id": null,
+          "issue_id": null,
+          "source_ref": null,
+          "structured_evidence": null,
+          "score": null
+        }
+      ],
+      "issues_count": 5,
+      "has_blocking": false,
+      "summary": "5个问题：0个 reviewer 自行赋予的阻断，0个高优/严重（2个 medium、3个 low）。chapter_changes 块仅1个且 JSON 合法；draft_fingerprint 与 review_subject_fingerprint 均与入参一致。上一轮审查闭环：resolved=3（余额结算、奖励时点、关闭时间数值）/ persistent=3（time_anchor、foreshadowing_actions、hook_type）；上一轮无 high/critical。prior_chapter: unavailable（上下文未提供跨章闭环块）。 结果文件：/Users/chang/Desktop/根源牌序/.webnovel/tmp/review_results.json",
+      "draft_id": "draft-002-d45cbd6f",
+      "draft_fingerprint": "c981aaed46f15067ddf220a32c802936295328fb1311ec0063e4d5aa456a9485",
+      "review_subject_fingerprint": "2ae118927ae6abd59ada3f0c9ab24fd6131a8d2babe0cb590e0e43935efa2968",
+      "review_mode": "full",
+      "dimension_results": [
+        {
+          "dimension": "setting",
+          "conclusion": "pass"
+        },
+        {
+          "dimension": "timeline",
+          "conclusion": "发现2个问题：chapter_meta 时间锚点为下午但正文为上午；第27行“关闭时间”与第147行“倒计时”表述不一致"
+        },
+        {
+          "dimension": "continuity",
+          "conclusion": "pass"
+        },
+        {
+          "dimension": "character",
+          "conclusion": "pass"
+        },
+        {
+          "dimension": "logic",
+          "conclusion": "发现1个问题：已取消一单后仍称“两单代练也还有救”"
+        },
+        {
+          "dimension": "beat_compliance",
+          "conclusion": "pass"
+        },
+        {
+          "dimension": "foreshadow_compliance",
+          "conclusion": "发现2个问题：foreshadowing_actions 为空；hook_type 为空"
+        },
+        {
+          "dimension": "do_not_copy_violation",
+          "conclusion": "pass"
+        }
+      ],
+      "draft_identity_source": "reviewer",
+      "convergence": {
+        "has_previous_review": true,
+        "previous_finding_count": 6,
+        "resolved_count": 0,
+        "persistent_count": 2,
+        "uncertain_count": 4,
+        "new_count": 2,
+        "finding_churn": 2,
+        "resolved": [],
+        "persistent": [
+          {
+            "category": "foreshadow_compliance",
+            "severity": "medium",
+            "description": "本章实际新埋至少3条伏笔（地球法则卡牌、E-0001编号、\"不在当前引导数据内\"/\"解锁条件：继续探索\"），但 foreshadowing_actions 为空数组，未按5字段登记，新增伏笔环将无法进入后续时限与回收追踪。",
+            "location": "chapter_changes.foreshadowing_actions",
+            "match_score": 0.794,
+            "matched_current_description": "本章新埋至少3条伏笔（地球法则卡牌、E-0001、引导员“不在当前引导数据内”／“解锁条件：继续探索”），foreshadowing_actions 仍为空数组；unresolved_questions 只登记了问题、章节和重要度，缺 urgency 与 expected_payoff，后续回收时限无法追踪。"
+          },
+          {
+            "category": "foreshadow_compliance",
+            "severity": "low",
+            "description": "章末 hook 已给出\"承诺钩\"，但 hook_type 字段为空，未声明为6种钩型之一，影响钩子统计与后续节奏判断。",
+            "location": "chapter_planning.chapter_meta.hook_type",
+            "match_score": 1.0,
+            "matched_current_description": "章末 hook 已明示“承诺钩”，正文也落地了“继续探索可解锁更多”，但 hook_type 字段仍为空，未声明为6种钩型之一，影响钩子统计与后续节奏判断。"
+          }
+        ],
+        "uncertain": [
+          {
+            "category": "logic",
+            "severity": "medium",
+            "description": "出售所得与余额不符：按正文成交价，草鞋9 + 火折子12 = 21，抽卡后余额100，合计应为121；陶碗明确仍挂在交易行未售出，不能计入。正文却写余额118，相差3碎片。若存在交易行手续费，正文未交代。",
+            "location": "第69-71行（交易行出售与余额结算）",
+            "uncertain_reason": "evidence_invalid:target_prose_fingerprint_mismatch:7093fdf8_vs_2ae11892"
+          },
+          {
+            "category": "logic",
+            "severity": "medium",
+            "description": "初始资源发放时点与规则表述矛盾：引导员说\"完成引导，可领取初始资源\"，奖励行标为\"引导完成：根源碎片 × 500\"，但林川在引导尚未完成（第133行进度条才到100%）时余额已是500并开始抽卡。奖励文案与到账时点不自洽。",
+            "location": "第13-27行（引导奖励发放时点）",
+            "uncertain_reason": "evidence_invalid:target_prose_fingerprint_mismatch:7093fdf8_vs_2ae11892"
+          },
+          {
+            "category": "timeline",
+            "severity": "low",
+            "description": "本章正文开场时间为10:20-10:42（直接承接第1章10:35），但章节规划的 time_anchor 写\"2026-05-01 下午\"；chapter_changes 又记为\"上午十点四十至午后，约两小时\"，正文没有任何跨过正午的时间标记。",
+            "location": "第5-7行；chapter_meta.time_anchor",
+            "match_score": 0.634,
+            "matched_current_description": "正文开场为10:20、10:42，章末仍说“下午的委托价要跌”，整体属上午；chapter_meta.time_anchor 仍标“2026-05-01 下午”。chapter_changes 已改为上午，但规划元数据未同步。",
+            "uncertain_reason": "partial_or_reworded_match"
+          },
+          {
+            "category": "timeline",
+            "severity": "low",
+            "description": "倒计时显示值与当前时间不符：开服约10:50，若\"首日\"池在当日23:59:59关闭，剩余应约13小时；若是开服后24小时倒计时，应约23小时9分。显示\"23:59:59\"两种解释都对不上。",
+            "location": "第27行（首日新手池倒计时）",
+            "uncertain_reason": "evidence_invalid:target_prose_fingerprint_mismatch:7093fdf8_vs_2ae11892"
+          }
+        ],
+        "new": [
+          "订单账本不一致：第7行已有一单代练取消并退还40元订金，正文只剩一单在谈；第31行仍写“两单代练也还有救”，多算一单。",
+          "同一界面元素的表述不一致：第27行写明是“关闭时间：首日新手池 23:59:59 关闭”（固定时点），第147行却称“首日新手池的倒计时还在走”，重新把它写成倒计时，两种读法对应不同的剩余时长。"
+        ],
+        "high_critical_closure": [],
+        "all_high_critical_closed": true,
+        "revision_evidence_path": "/Users/chang/Desktop/根源牌序/.webnovel/tmp/verify_minimal_edit.json",
+        "revision_evidence_found": true,
+        "previous_review_status": "loaded"
+      }
+    },
+    "fulfillment_result": {
+      "planned_nodes": [],
+      "covered_nodes": [],
+      "missed_nodes": [],
+      "extra_nodes": []
+    },
+    "disambiguation_result": {
+      "pending": []
+    },
+    "extraction_result": {
+      "accepted_events": [
+        {
+          "event_id": "evt-ch2-001",
+          "chapter": 2,
+          "event_type": "character_state_changed",
+          "subject": "lin_chuan",
+          "payload": {
+            "field": "physical.hand_mark",
+            "old": "右手掌心浅红痕，右手发抖",
+            "new": "右手虎口仍发麻；掌心红痕已淡，只剩一条像被纸边划过的白印",
+            "reason": "第五抽前林川低头查看掌心，红痕已淡，只剩浅白印"
+          }
+        },
+        {
+          "event_id": "evt-ch2-002",
+          "chapter": 2,
+          "event_type": "character_state_changed",
+          "subject": "lin_chuan",
+          "payload": {
+            "field": "game_account.guide_status",
+            "old": null,
+            "new": "已完成",
+            "reason": "装备鲁班机关术后，引导员·零七头顶进度条走到百分之百并提示“新手引导已完成”"
+          }
+        },
+        {
+          "event_id": "evt-ch2-003",
+          "chapter": 2,
+          "event_type": "character_state_changed",
+          "subject": "lin_chuan",
+          "payload": {
+            "field": "game_account.deck",
+            "old": null,
+            "new": "已装备「相级·鲁班机关术」（第一卡槽，1张）",
+            "reason": "林川将新抽到的卡拖入卡组，确认装备后落入第一个卡槽"
+          }
+        },
+        {
+          "event_id": "evt-ch2-004",
+          "chapter": 2,
+          "event_type": "character_state_changed",
+          "subject": "lin_chuan",
+          "payload": {
+            "field": "game_account.fragments",
+            "old": null,
+            "new": 18,
+            "reason": "引导发放500；四次单抽花400；挂售草鞋9、火折子12（扣3手续费）回血27至118；第五次单抽再花100，章末余18"
+          }
+        },
+        {
+          "event_id": "evt-ch2-005",
+          "chapter": 2,
+          "event_type": "world_rule_revealed",
+          "subject": "genyuan_paixu",
+          "payload": {
+            "rule_content": "新账号没有卡组，不能接战斗任务；卡组至少需要一张战斗卡；战斗卡只能从卡池抽取。",
+            "rule_category": "新手/卡组规则",
+            "scope": "《根源牌序》新账号"
+          }
+        },
+        {
+          "event_id": "evt-ch2-006",
+          "chapter": 2,
+          "event_type": "world_rule_revealed",
+          "subject": "genyuan_paixu",
+          "payload": {
+            "rule_content": "七大法则（凡俗、修仙、神权、科技、轮回、血脉、混沌）各对应一套卡池与编号规则：凡俗为四位数加两位（如1027-03），科技以“T-”开头，轮回以“L-”开头；相级卡池·凡俗最高只能出相级战斗卡。",
+            "rule_category": "卡牌体系/法则与编号",
+            "scope": "《根源牌序》"
+          }
+        },
+        {
+          "event_id": "evt-ch2-007",
+          "chapter": 2,
+          "event_type": "artifact_obtained",
+          "subject": "lin_chuan",
+          "payload": {
+            "artifact_id": "luban_jiguan_card",
+            "name": "相级·鲁班机关术",
+            "owner": "lin_chuan",
+            "rarity": "相级",
+            "card_type": "造物/机关",
+            "law": "地球",
+            "number": "E-0001",
+            "attack": "1（可改造）",
+            "durability": "—/—",
+            "skill": "以绳墨取直，以榫卯受力。拆解任一机关类物件，复原其结构。",
+            "location": "卡组第一卡槽",
+            "equipped": true
+          }
+        },
+        {
+          "event_id": "evt-ch2-008",
+          "chapter": 2,
+          "event_type": "open_loop_created",
+          "subject": "luban_jiguan_card",
+          "payload": {
+            "content": "第五抽得到的「相级·鲁班机关术」卡框灰里透旧纸黄、边角磨损，来源、卡池、图鉴编号全空，技能文字像从旧书抄下；装备后引导系统称“该卡牌不在当前引导数据内”，随后详情页新出现“解锁条件：继续探索”。",
+            "loop_type": "金手指/卡牌来历悬念",
+            "unanswered_question": "这张卡从哪来？为什么不在引导数据内？“继续探索”会解锁什么？",
+            "urgency": 85,
+            "planted_chapter": 2,
+            "expected_payoff": "林川继续探索或首次使用机关术时"
+          }
+        },
+        {
+          "event_id": "evt-ch2-009",
+          "chapter": 2,
+          "event_type": "open_loop_created",
+          "subject": "earth_law",
+          "payload": {
+            "content": "「相级·鲁班机关术」的法则归属写作“地球”，编号为E-0001；七大法则各有卡池与编号规则（凡俗四位数加两位、科技“T-”、轮回“L-”），而“地球”与E-0001均不在其中，林川上网搜索也查不到任何资料。",
+            "loop_type": "世界观/法则悬念",
+            "unanswered_question": "“地球”是否是七大法则之外的第八种归属？E-0001意味着什么？",
+            "urgency": 80,
+            "planted_chapter": 2,
+            "expected_payoff": "地球法则或E系列卡牌再次出现时"
+          }
+        }
+      ],
+      "state_deltas": [
+        {
+          "entity_id": "lin_chuan",
+          "field": "physical.hand_mark",
+          "old": "右手掌心浅红痕，右手发抖",
+          "new": "右手虎口仍发麻；掌心红痕已淡，只剩一条像被纸边划过的白印"
+        },
+        {
+          "entity_id": "lin_chuan",
+          "field": "game_account.guide_status",
+          "old": null,
+          "new": "已完成"
+        },
+        {
+          "entity_id": "lin_chuan",
+          "field": "game_account.deck",
+          "old": null,
+          "new": "已装备「相级·鲁班机关术」（第一卡槽，1张）"
+        },
+        {
+          "entity_id": "lin_chuan",
+          "field": "game_account.fragments",
+          "old": null,
+          "new": 18
+        }
+      ],
+      "entity_deltas": [
+        {
+          "entity_id": "lin_chuan",
+          "action": "upsert",
+          "entity_type": "角色",
+          "is_protagonist": true,
+          "tier": "主角",
+          "canonical_name": "林川",
+          "desc": "游戏设计专业学生，做代练四年；《根源牌序》账号“归乡人”。本章退掉买家订金后完成新手引导，抽到法则归属“地球”、编号E-0001的相级·鲁班机关术；掌心血痕转淡，右手虎口仍发麻。",
+          "payload": {
+            "name": "林川",
+            "aliases": [
+              "归乡人"
+            ],
+            "is_protagonist": true,
+            "identity": "游戏设计专业学生/代练",
+            "game_id": "归乡人",
+            "game_fragments": 18,
+            "deck": [
+              "luban_jiguan_card"
+            ],
+            "guide_status": "已完成"
+          }
+        },
+        {
+          "entity_id": "guide_07",
+          "action": "upsert",
+          "entity_type": "角色",
+          "tier": "配角",
+          "canonical_name": "引导员·零七",
+          "desc": "《根源牌序》新手引导NPC，巴掌大的白色人影，无脸，头顶标“引导员·零七”，脚下有淡蓝光圈；讲解新手规则并发放五百根源碎片，在林川装备鲁班机关术后提示“该卡牌不在当前引导数据内”。",
+          "payload": {
+            "name": "引导员·零七",
+            "type": "新手引导NPC",
+            "location": "《根源牌序》第一服·新手引导界面",
+            "function": "讲解新手规则、发放初始资源",
+            "status": "新手引导已完成"
+          }
+        },
+        {
+          "entity_id": "luban_jiguan_card",
+          "action": "upsert",
+          "entity_type": "物品",
+          "tier": "关键物品",
+          "canonical_name": "相级·鲁班机关术",
+          "desc": "林川第五次单抽得到的相级卡牌，卡框灰里透旧纸黄、边角磨损；类型造物/机关，法则归属“地球”，编号E-0001，攻击1（可改造），耐久—/—，技能可拆解任一机关类物件并复原其结构。来源、卡池、图鉴编号均为空。",
+          "payload": {
+            "name": "相级·鲁班机关术",
+            "type": "卡牌",
+            "rarity": "相级",
+            "card_type": "造物/机关",
+            "law": "地球",
+            "number": "E-0001",
+            "attack": "1（可改造）",
+            "durability": "—/—",
+            "skill": "以绳墨取直，以榫卯受力。拆解任一机关类物件，复原其结构。",
+            "owner": "lin_chuan",
+            "equipped": true,
+            "slot": 1,
+            "unlock_condition": "继续探索",
+            "source": null,
+            "card_pool": null,
+            "catalog_number": null
+          }
+        },
+        {
+          "entity_id": "e_0001",
+          "action": "upsert",
+          "entity_type": "物品",
+          "tier": "装饰",
+          "canonical_name": "E-0001",
+          "desc": "相级·鲁班机关术卡背右下角的编号，格式为单字母“E”加四位数字，不符合凡俗四位数加两位、科技“T-”、轮回“L-”等七大法则编号规则。",
+          "payload": {
+            "name": "E-0001",
+            "type": "卡牌编号",
+            "format": "单字母E+四位数字",
+            "associated_card": "luban_jiguan_card",
+            "note": "不属于七大法则任何一套编号规则"
+          }
+        },
+        {
+          "entity_id": "earth_law",
+          "action": "upsert",
+          "entity_type": "势力",
+          "tier": "关键设定",
+          "canonical_name": "地球法则",
+          "desc": "相级·鲁班机关术的法则归属。不属于凡俗、修仙、神权、科技、轮回、血脉、混沌七大法则，没有对应卡池与编号规则，现实网络也搜不到相关资料。",
+          "payload": {
+            "name": "地球法则",
+            "type": "法则/卡池归属",
+            "first_seen_card": "luban_jiguan_card",
+            "note": "七大法则之外的未知归属",
+            "status": "未知"
+          }
+        }
+      ],
+      "entities_appeared": [
+        {
+          "id": "lin_chuan",
+          "type": "角色",
+          "mentions": [
+            "林川",
+            "他"
+          ],
+          "confidence": 0.99
+        },
+        {
+          "id": "chen_mo",
+          "type": "角色",
+          "mentions": [
+            "陈默"
+          ],
+          "confidence": 0.95,
+          "presence": "mentioned"
+        },
+        {
+          "id": "unclassified_item",
+          "type": "物品",
+          "mentions": [
+            "第一格那个灰色空格",
+            "里面的东西没有名字"
+          ],
+          "confidence": 0.85
+        },
+        {
+          "id": "guide_07",
+          "type": "角色",
+          "mentions": [
+            "引导员·零七",
+            "引导员"
+          ],
+          "confidence": 0.99
+        },
+        {
+          "id": "luban_jiguan_card",
+          "type": "物品",
+          "mentions": [
+            "相级·鲁班机关术",
+            "鲁班机关术",
+            "那张卡",
+            "新抽到的卡"
+          ],
+          "confidence": 0.99
+        },
+        {
+          "id": "earth_law",
+          "type": "势力",
+          "mentions": [
+            "地球",
+            "法则归属：地球"
+          ],
+          "confidence": 0.95
+        },
+        {
+          "id": "e_0001",
+          "type": "物品",
+          "mentions": [
+            "E-0001"
+          ],
+          "confidence": 0.95
+        },
+        {
+          "id": "genyuan_paixu",
+          "type": "物品",
+          "mentions": [
+            "《根源牌序》",
+            "根源牌序"
+          ],
+          "confidence": 0.9
+        }
+      ],
+      "scenes": [
+        {
+          "index": 1,
+          "start_line": 3,
+          "end_line": 9,
+          "location": "林川宿舍",
+          "summary": "买家私聊退单，林川退还四十订金，现实余额从四百三十七块六降到三百九十七块六；他嚼着陈默留下的隔夜饼干，回到游戏。",
+          "characters": [
+            "lin_chuan"
+          ],
+          "content": "“不用了，我另找了。订金退一下。”……余额从四百三十七块六变成三百九十七块六。"
+        },
+        {
+          "index": 2,
+          "start_line": 11,
+          "end_line": 27,
+          "location": "《根源牌序》第一服·新手引导界面（现实为林川宿舍）",
+          "summary": "引导员·零七讲三条规则：无卡组不能接战斗任务、卡组至少一张战斗卡、战斗卡只能抽；发放五百根源碎片，单抽一百、十连一千，首日池23:59:59关闭。",
+          "characters": [
+            "lin_chuan",
+            "guide_07"
+          ],
+          "content": "新账号没有卡组，不能接战斗任务；卡组至少需要一张战斗卡；战斗卡只能从卡池抽取。"
+        },
+        {
+          "index": 3,
+          "start_line": 29,
+          "end_line": 81,
+          "location": "相级卡池·凡俗 / 交易行",
+          "summary": "林川在相级卡池·凡俗四连抽得草鞋、陶碗、火折子、木盾，全是凡俗防具、容器、工具；他挂售三件回血，余额回到一百一十八，仍无攻击卡。",
+          "characters": [
+            "lin_chuan"
+          ],
+          "content": "相级·草鞋……相级·陶碗……相级·火折子……相级·木盾……四次，没有一张带攻击。"
+        },
+        {
+          "index": 4,
+          "start_line": 83,
+          "end_line": 145,
+          "location": "相级卡池·凡俗 / 游戏界面",
+          "summary": "第五抽出现相级·鲁班机关术：法则归属“地球”、编号E-0001、攻击1可改造；引导系统称“该卡牌不在当前引导数据内”，装备后引导完成。",
+          "characters": [
+            "lin_chuan",
+            "guide_07"
+          ],
+          "content": "`相级·鲁班机关术`……`法则归属：地球`……`E-0001`……“该卡牌不在当前引导数据内。”"
+        },
+        {
+          "index": 5,
+          "start_line": 147,
+          "end_line": 163,
+          "location": "林川宿舍 / 游戏界面",
+          "summary": "林川确认背包第一格灰色空格仍在，格内只剩木盾与新卡；详情页新浮出“解锁条件：继续探索”，他盯着页面没有关闭。",
+          "characters": [
+            "lin_chuan"
+          ],
+          "content": "`解锁条件：继续探索`……林川没有点关闭。"
+        }
+      ],
+      "chapter_meta": {
+        "title": "第一次抽卡",
+        "chapter": 2,
+        "time": "开服首日 10:42之后（首日新手池23:59:59关闭）",
+        "location": "林川宿舍 / 《根源牌序》第一服",
+        "characters": [
+          "林川",
+          "引导员·零七"
+        ]
+      },
+      "dominant_strand": "quest",
+      "summary_text": "开服首日，林川没退登录，先退了买家四十订金。引导员·零七发放五百根源碎片并讲明卡组规则；他在相级卡池·凡俗四连抽只得草鞋、陶碗、火折子、木盾，靠挂售回血到一百一十八。第五抽出现法则归属“地球”、编号E-0001的相级·鲁班机关术，系统称其不在引导数据内；装备后详情页浮出“解锁条件：继续探索”。",
+      "entities_new": [
+        "guide_07",
+        "luban_jiguan_card",
+        "e_0001",
+        "earth_law"
+      ]
+    },
+    "gate_decision_binding": {
+      "gate_decision_ref": ".story-system/reviews/gate-decisions/chapter_002/runtime-ac786c2b.json",
+      "input_fingerprint": "2dc3da28c31a5145075fdc111521151feb4831e0ce838637814d852713cf4901",
+      "policy_version": "phase6a-v1",
+      "final_action": "ALLOW_WITH_ADVISORY"
+    },
+    "projection_status": {
+      "events": "done",
+      "amend_proposals": "done",
+      "state": "done",
+      "index": "done",
+      "summary": "done",
+      "memory": "done",
+      "vector": "skipped"
+    }
+  },
+  "next_required_action": null,
+  "required_artifacts": null
+}
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x10bf87cb0>
