@@ -1,0 +1,30 @@
+{
+  "A": {
+    "hanzi": 2085,
+    "paragraphs": 58,
+    "dialogue_ratio": 0.066,
+    "emotion_words": {},
+    "body_templates": {},
+    "explain_markers": {},
+    "other_mind": {},
+    "diagnose": {
+      "total_chars": 2634,
+      "issue_counts_by_type": {},
+      "issue_total": 0
+    }
+  },
+  "B": {
+    "hanzi": 2113,
+    "paragraphs": 53,
+    "dialogue_ratio": 0.019,
+    "emotion_words": {},
+    "body_templates": {},
+    "explain_markers": {},
+    "other_mind": {},
+    "diagnose": {
+      "total_chars": 2611,
+      "issue_counts_by_type": {},
+      "issue_total": 0
+    }
+  }
+}

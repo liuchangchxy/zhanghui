@@ -13,6 +13,9 @@ writing-skills/
   character-agency/SKILL.md
   dialogue-subtext/SKILL.md
   voice-style/SKILL.md
+  emotion-interiority/SKILL.md
+  pov-distance/SKILL.md
+  sensory-description/SKILL.md
 ```
 
 项目级目录 `.webnovel/writing-skills/` 会被一起扫描；同 id 覆盖内置版本。
