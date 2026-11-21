@@ -1,0 +1,36 @@
+{
+  "chapter": 8,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.96,
+      "evidence": "LEFT让钥匙、封条与人情压力通过行动和对话累积，RIGHT则在结尾再次概括“料对得上、齿形对得上、年代对得上”，削弱了余味。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT在“两句话对不上”之后转入档案屋，留下封条疑点推动阅读；RIGHT接连列举可能性，又在结尾重述谜团，使悬念的节奏稍显停滞。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.99,
+      "evidence": "RIGHT增加了“方向有了”和“今天他能走到的地方就到这儿了”等总结，LEFT让笔记和未走进去的路自行呈现调查进展。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.93,
+      "evidence": "LEFT从“写完他把这页翻过去”转到窗外湿气，节奏舒展；RIGHT插入“乔宁的名字只出现在这一页上，也只留在这一页上”，与前文实际写下的内容衔接生硬。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.88,
+      "evidence": "LEFT让读者跟随林越感受掌心的铜温、路基上的铸铁牌和台灯下的齿影，RIGHT在这些细节之间插入案情梳理，打断了现场感。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.97,
+      "evidence": "LEFT用林越拒绝透露姓名和翻过笔记页暗示他对乔宁的保护，RIGHT额外写出“乔宁的名字只出现在这一页上，也只留在这一页上”，把这层意思说得更直白。"
+    }
+  },
+  "overall_rationale": "两版的场景骨架和对话基本相同，但LEFT更信任物件、停顿和人物选择，让封条疑点及韩策的压力自然留下回响。RIGHT补充的心理判断和案情总结虽更明确，却重复了已有信息，也削弱了结尾重新投入修复工作时的张力。"
+}

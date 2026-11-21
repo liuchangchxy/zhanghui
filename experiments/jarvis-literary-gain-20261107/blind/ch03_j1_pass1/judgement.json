@@ -1,0 +1,36 @@
+{
+  "chapter": 3,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.94,
+      "evidence": "LEFT保留了韩策提供线索后的疑点，又省去RIGHT对信息逐条复述和“问题在于”的解释，悬念更有余味。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.84,
+      "evidence": "LEFT从“师父死了，原件没了，调令没登记”迅速转到“韩策说得太完整了”，推进比RIGHT先复述线索再分析更利落。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.98,
+      "evidence": "RIGHT多出“林越听出了毛病”“问题在于每一条都刚好卡在没法核实的档口上”等提示，LEFT让相同疑点更多地由事实呈现。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.92,
+      "evidence": "LEFT以“握了手。力道实，时间短”收住描写，RIGHT再加“不拖泥带水”，使本已清楚的节奏显得累赘。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.8,
+      "evidence": "两版都有湿香灰、干橘皮和板车碾过石缝的细节，但LEFT较少用“一个凭空掉下来的名字”等概括打断场景。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.96,
+      "evidence": "LEFT让韩策看人、点头和握手的动作自行暗示分寸，RIGHT则补出“够用”“像林越说了什么很对的话”等解读。"
+    }
+  },
+  "overall_rationale": "两版的情节与场景基础相同，韩策主动透露线索、又要求林越瞒着梅叔，形成了有效的疑心。LEFT对动作和疑点的解释更克制，结尾以修补第67页收束，也比RIGHT补说“另一根弦绷着没松”更有余味。"
+}

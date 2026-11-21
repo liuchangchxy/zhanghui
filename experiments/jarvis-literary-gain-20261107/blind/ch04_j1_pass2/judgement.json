@@ -1,0 +1,36 @@
+{
+  "chapter": 4,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.91,
+      "evidence": "LEFT让乔宁戳破纸面的动作和医疗单上的线索自行发挥作用，结尾也更利落；RIGHT则补充解释人物情绪和线索关系，削弱了余味。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.78,
+      "evidence": "LEFT从封存门的两道锁直接转到林越手伤的隐瞒，悬念与眼前困境相互牵引；RIGHT在其间复述数字及对应物，略微放缓了结尾节奏。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.99,
+      "evidence": "RIGHT在“笔尖把纸戳出一个印子”后直接解释“不是怕……是烦”，又在结尾归纳“19”和“7”对应的门、阀及岗位变更，LEFT均未作这些说明。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.84,
+      "evidence": "LEFT用戳纸、警报亮起的连续动作推进场面；RIGHT插入“烦一个外人拿着半截话……”的解释，语势稍显拗涩。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.73,
+      "evidence": "两版共有白雾、锈味和烫伤等具体感官细节，但LEFT在封存门与手伤之间保持现场感，RIGHT插入线索盘点，使注意力短暂转向信息整理。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.96,
+      "evidence": "LEFT只写乔宁把纸戳出印子，让他的戒备与烦躁留在动作中；RIGHT明确判定“不是怕……是烦”，收窄了人物反应的解读空间。"
+    }
+  },
+  "overall_rationale": "两版的主要情节和场景细节相同，差别集中在RIGHT增加的情绪解释与结尾线索归纳。LEFT更信任读者从动作、编号和签认单中建立联系，因而人物关系更有张力，结尾也留下更充足的悬念。"
+}

@@ -1,0 +1,23 @@
+{
+  "frozen_at": "2026-11-07T06:28:27.593970+00:00",
+  "git_head": "a41ac353ffa2c5d9aba6f2e49e499db7208a3079",
+  "files": {
+    "SAMPLE_SELECTION.md": "973369bee73a71102553796fc36cfadf6e40a8bee759571c731856af62b17671",
+    "prompts/editor_zh.md": "926db7baf3952e3a6aca366d37f04d0c7fd735e49f647b74533130d979311b57",
+    "inputs/ch03_source.md": "2e4ee7c6f2e3f6ec8266e7a91feea49030e8f18573afc1ff237f9938ab3692bc",
+    "inputs/context/ch03_outline.md": "c8514440d34e4db0e977076db6bd062dc8b9e9b0ee453516d4e1f45c116288fe",
+    "inputs/ch04_source.md": "c7ea8ee0927c5aec1ea6baf210e8cb7e49d0f0b745900968b8abd0beb06ecf13",
+    "inputs/context/ch04_outline.md": "0684de535500af080b84bf3204c795065a97b19ead340bf4c6d698c0cbae1f05",
+    "inputs/ch05_source.md": "37d919bc49892526c8cb0f1b6908066c433a830587100d85ed2780d213151eb6",
+    "inputs/context/ch05_outline.md": "d477ed8ec8054999f64cd0a1ab6ab09c10602fa9bc5e846326f32cb5c93af681",
+    "inputs/ch08_source.md": "6e54df065924a65b926aca63a0e5c440864dad7818cf4110439525fd7e326572",
+    "inputs/context/ch08_outline.md": "d8f856cd6a5de38c6a600e0ec3b364bddbdce3085cf86d8c6c957574922b29fb"
+  },
+  "chapters": [
+    "ch03",
+    "ch04",
+    "ch05",
+    "ch08"
+  ],
+  "note": "Written before any editor generation. See SAMPLE_SELECTION.md for rules."
+}

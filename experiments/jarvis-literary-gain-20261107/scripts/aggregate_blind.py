@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Aggregate blind A/B results with mandatory position reversal."""
+from __future__ import annotations
+
+import json
+import sys
+from collections import Counter, defaultdict
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+BLIND = ROOT / "blind"
+DIMENSIONS = [
+    "OVERALL_PREFERENCE",
+    "READING_APPEAL",
+    "LOW_AUTHOR_EXPLANATION",
+    "SENTENCE_NATURALNESS",
+    "SCENE_IMMERSION",
+    "SUBTEXT",
+]
+CHAPTERS = ["ch03", "ch04", "ch05", "ch08"]
+JUDGES = ["j1", "j2"]
+
+
+def arm_of(winner: str, left_arm: str) -> str:
+    if winner == "TIE":
+        return "TIE"
+    return left_arm if winner == "LEFT" else ("B" if left_arm == "A" else "A")
+
+
+def main() -> None:
+    key = json.loads((BLIND / "blind_key.json").read_text(encoding="utf-8"))
+    verdicts = {}
+    raw_pass = {}
+    for ch in CHAPTERS:
+        verdicts[ch] = {}
+        for judge in JUDGES:
+            ck = f"{ch}_{judge}"
+            first_left = key[ck]["pass1_left"]
+            p1 = json.loads((BLIND / f"{ch}_{judge}_pass1/judgement.json").read_text(encoding="utf-8"))
+            p2 = json.loads((BLIND / f"{ch}_{judge}_pass2/judgement.json").read_text(encoding="utf-8"))
+            for dim in DIMENSIONS:
+                w1 = p1["dimensions"][dim]["winner"]
+                w2 = p2["dimensions"][dim]["winner"]
+                a1 = arm_of(w1, first_left)
+                a2 = arm_of(w2, "B" if first_left == "A" else "A")
+                if a1 == a2:
+                    v = a1
+                elif a1 == "TIE" and a2 == "TIE":
+                    v = "TIE"
+                else:
+                    v = "SPLIT"
+                verdicts[ch].setdefault(judge, {})[dim] = v
+                raw_pass[f"{ch}_{judge}_{dim}"] = {
+                    "pass1": a1, "pass2": a2, "verdict": v,
+                    "p1_evidence": p1["dimensions"][dim].get("evidence", ""),
+                    "p2_evidence": p2["dimensions"][dim].get("evidence", ""),
+                    "p1_conf": p1["dimensions"][dim].get("confidence"),
+                    "p2_conf": p2["dimensions"][dim].get("confidence"),
+                }
+
+    # per judge, per dimension counts
+    summary = {}
+    for judge in JUDGES:
+        summary[judge] = {}
+        for dim in DIMENSIONS:
+            c = Counter(verdicts[ch][judge][dim] for ch in CHAPTERS)
+            summary[judge][dim] = {k: c.get(k, 0) for k in ("A", "B", "SPLIT", "TIE")}
+    # both judges pooled: one vote per judge per chapter-dim
+    pooled = {}
+    for dim in DIMENSIONS:
+        c = Counter(verdicts[ch][j][dim] for ch in CHAPTERS for j in JUDGES)
+        pooled[dim] = {k: c.get(k, 0) for k in ("A", "B", "SPLIT", "TIE")}
+
+    out = {
+        "chapters": CHAPTERS,
+        "judges": JUDGES,
+        "dims": DIMENSIONS,
+        "verdicts": verdicts,
+        "summary_by_judge": summary,
+        "pooled": pooled,
+        "raw_pass": raw_pass,
+    }
+    (BLIND / "aggregate.json").write_text(
+        json.dumps(out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    lines = ["# Blind A/B aggregate", ""]
+    for judge in JUDGES:
+        lines += [f"## {judge}", "", "| dim | A original | B edited | SPLIT | TIE |", "|---|---:|---:|---:|---:|"]
+        for dim in DIMENSIONS:
+            s = summary[judge][dim]
+            lines.append(f"| {dim} | {s['A']} | {s['B']} | {s['SPLIT']} | {s['TIE']} |")
+        lines.append("")
+    lines += ["## pooled (both judges)", "", "| dim | A | B | SPLIT | TIE |", "|---|---:|---:|---:|---:|"]
+    for dim in DIMENSIONS:
+        s = pooled[dim]
+        lines.append(f"| {dim} | {s['A']} | {s['B']} | {s['SPLIT']} | {s['TIE']} |")
+    lines += ["", "## per chapter (J1 / J2)", ""]
+    for ch in CHAPTERS:
+        lines.append(f"### {ch}")
+        lines.append("")
+        lines.append("| dim | J1 | J2 |")
+        lines.append("|---|---|---|")
+        for dim in DIMENSIONS:
+            lines.append(f"| {dim} | {verdicts[ch]['j1'][dim]} | {verdicts[ch]['j2'][dim]} |")
+        lines.append("")
+    (BLIND / "aggregate.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines))
+
+
+if __name__ == "__main__":
+    main()

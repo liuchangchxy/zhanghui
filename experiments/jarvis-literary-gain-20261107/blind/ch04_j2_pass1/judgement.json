@@ -1,0 +1,36 @@
+{
+  "chapter": 4,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "RIGHT",
+      "confidence": 0.9,
+      "evidence": "RIGHT版删除了对乔宁心理的直白归纳及结尾对“19与7”线索的机械式复盘，叙事冷峻克制，阅读体验更纯粹连贯。"
+    },
+    "READING_APPEAL": {
+      "winner": "RIGHT",
+      "confidence": 0.85,
+      "evidence": "RIGHT版停在封存门与“左手一跳一跳地疼”的悬念中利落收尾，比起LEFT版停下替读者划重点（“现在有门，有阀”），更具紧迫感和追读欲。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "RIGHT",
+      "confidence": 0.95,
+      "evidence": "LEFT版直白解释“不是怕。林越看得出来，是烦”，并在尾声详述“签认单上的三样东西在他脑子里过了一遍”，RIGHT版完全剔除了这些作者越俎代庖的阐释与总结。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "RIGHT",
+      "confidence": 0.85,
+      "evidence": "RIGHT版从“戳出一个印子”紧接告警灯亮，结尾从手背的阵痛自然过渡到掩盖伤口的念头，语流一气呵成，没有LEFT版说理穿插带来的滞涩。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "RIGHT",
+      "confidence": 0.85,
+      "evidence": "RIGHT版将感知持续锚定在白雾、两道锁、积灰与伤口搏动的具体时空里，没有被LEFT版抽离肉身现场的脑内核对打断沉浸感。"
+    },
+    "SUBTEXT": {
+      "winner": "RIGHT",
+      "confidence": 0.9,
+      "evidence": "乔宁的烦躁已被“笔尖把纸戳出一个印子”充分呈现，数字线索也已由单据写明，RIGHT版未予说破，言外之意的张力远胜LEFT版。"
+    }
+  },
+  "overall_rationale": "两版情节框架完全一致，关键差异在于RIGHT版精准剔除了两处画蛇添足的解释性文字：一处是对乔宁情绪的直白心理定性（“不是怕……是烦”），另一处是结尾对“19”、“7”与岗位变更等线索的自我复盘。RIGHT版全凭环境、器物与动作传意，留白从容，悬疑张力与叙事质感均明显优于LEFT版。"
+}
