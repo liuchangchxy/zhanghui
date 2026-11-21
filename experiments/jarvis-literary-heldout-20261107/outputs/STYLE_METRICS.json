@@ -1,0 +1,320 @@
+{
+  "ch01": {
+    "A": {
+      "body_chars": 3148,
+      "paragraphs": 55,
+      "sentences": 160,
+      "avg_sentence_chars": 19.68,
+      "dialogue_chars": 405,
+      "dialogue_ratio": 0.1287,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 7,
+        "心里": 2,
+        "脑子里": 2,
+        "他知道": 1,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 12,
+      "marker_per_1000": 3.812
+    },
+    "B": {
+      "body_chars": 2943,
+      "paragraphs": 55,
+      "sentences": 153,
+      "avg_sentence_chars": 19.24,
+      "dialogue_chars": 405,
+      "dialogue_ratio": 0.1376,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 7,
+        "心里": 1,
+        "脑子里": 1,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 9,
+      "marker_per_1000": 3.058
+    },
+    "status": "ACCEPTED"
+  },
+  "ch02": {
+    "A": {
+      "body_chars": 1749,
+      "paragraphs": 54,
+      "sentences": 112,
+      "avg_sentence_chars": 15.62,
+      "dialogue_chars": 502,
+      "dialogue_ratio": 0.287,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 2,
+        "心里": 2,
+        "脑子里": 1,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 5,
+      "marker_per_1000": 2.859
+    },
+    "B": {
+      "body_chars": 1663,
+      "paragraphs": 51,
+      "sentences": 106,
+      "avg_sentence_chars": 15.69,
+      "dialogue_chars": 502,
+      "dialogue_ratio": 0.3019,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 2,
+        "心里": 2,
+        "脑子里": 1,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 5,
+      "marker_per_1000": 3.007
+    },
+    "status": "ACCEPTED"
+  },
+  "ch06": {
+    "A": {
+      "body_chars": 2928,
+      "paragraphs": 78,
+      "sentences": 173,
+      "avg_sentence_chars": 16.92,
+      "dialogue_chars": 742,
+      "dialogue_ratio": 0.2534,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 8,
+        "心里": 0,
+        "脑子里": 2,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 10,
+      "marker_per_1000": 3.415
+    },
+    "B": {
+      "body_chars": 2843,
+      "paragraphs": 76,
+      "sentences": 168,
+      "avg_sentence_chars": 16.92,
+      "dialogue_chars": 739,
+      "dialogue_ratio": 0.2599,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 7,
+        "心里": 0,
+        "脑子里": 2,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 9,
+      "marker_per_1000": 3.166
+    },
+    "status": "ACCEPTED"
+  },
+  "ch07": {
+    "A": {
+      "body_chars": 2381,
+      "paragraphs": 61,
+      "sentences": 131,
+      "avg_sentence_chars": 18.18,
+      "dialogue_chars": 792,
+      "dialogue_ratio": 0.3326,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 3,
+        "心里": 1,
+        "脑子里": 0,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 4,
+      "marker_per_1000": 1.68
+    },
+    "B": {
+      "body_chars": 2203,
+      "paragraphs": 59,
+      "sentences": 121,
+      "avg_sentence_chars": 18.21,
+      "dialogue_chars": 792,
+      "dialogue_ratio": 0.3595,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 3,
+        "心里": 1,
+        "脑子里": 0,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 4,
+      "marker_per_1000": 1.816
+    },
+    "status": "ACCEPTED"
+  },
+  "ch09": {
+    "A": {
+      "body_chars": 3483,
+      "paragraphs": 57,
+      "sentences": 177,
+      "avg_sentence_chars": 19.68,
+      "dialogue_chars": 1042,
+      "dialogue_ratio": 0.2992,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 2,
+        "心里": 0,
+        "脑子里": 1,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 3,
+      "marker_per_1000": 0.861
+    },
+    "B": {
+      "body_chars": 3280,
+      "paragraphs": 57,
+      "sentences": 169,
+      "avg_sentence_chars": 19.41,
+      "dialogue_chars": 1025,
+      "dialogue_ratio": 0.3125,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 2,
+        "心里": 0,
+        "脑子里": 0,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 2,
+      "marker_per_1000": 0.61
+    },
+    "status": "ACCEPTED"
+  },
+  "ch10": {
+    "A": {
+      "body_chars": 3754,
+      "paragraphs": 81,
+      "sentences": 193,
+      "avg_sentence_chars": 19.45,
+      "dialogue_chars": 1206,
+      "dialogue_ratio": 0.3213,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 1,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 6,
+        "心里": 1,
+        "脑子里": 1,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 9,
+      "marker_per_1000": 2.397
+    },
+    "B": {
+      "body_chars": 3680,
+      "paragraphs": 81,
+      "sentences": 191,
+      "avg_sentence_chars": 19.27,
+      "dialogue_chars": 1206,
+      "dialogue_ratio": 0.3277,
+      "marker_counts": {
+        "听懂了": 0,
+        "明白了": 0,
+        "意识到": 0,
+        "这说明": 0,
+        "这意味着": 0,
+        "看得出来": 0,
+        "不是怕": 0,
+        "不是": 6,
+        "心里": 0,
+        "脑子里": 1,
+        "他知道": 0,
+        "她觉得": 0,
+        "他觉得": 0
+      },
+      "marker_total": 7,
+      "marker_per_1000": 1.902
+    },
+    "status": "ACCEPTED"
+  }
+}

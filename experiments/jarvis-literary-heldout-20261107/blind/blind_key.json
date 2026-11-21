@@ -1,0 +1,86 @@
+{
+  "ch01_j1": {
+    "pass1_left": "B",
+    "chapter": 1,
+    "judge": "j1",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch01_j2": {
+    "pass1_left": "B",
+    "chapter": 1,
+    "judge": "j2",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch02_j1": {
+    "pass1_left": "A",
+    "chapter": 2,
+    "judge": "j1",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch02_j2": {
+    "pass1_left": "B",
+    "chapter": 2,
+    "judge": "j2",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch06_j1": {
+    "pass1_left": "B",
+    "chapter": 6,
+    "judge": "j1",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch06_j2": {
+    "pass1_left": "A",
+    "chapter": 6,
+    "judge": "j2",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch07_j1": {
+    "pass1_left": "B",
+    "chapter": 7,
+    "judge": "j1",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch07_j2": {
+    "pass1_left": "A",
+    "chapter": 7,
+    "judge": "j2",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch09_j1": {
+    "pass1_left": "B",
+    "chapter": 9,
+    "judge": "j1",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch09_j2": {
+    "pass1_left": "A",
+    "chapter": 9,
+    "judge": "j2",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch10_j1": {
+    "pass1_left": "A",
+    "chapter": 10,
+    "judge": "j1",
+    "A": "original",
+    "B": "edited"
+  },
+  "ch10_j2": {
+    "pass1_left": "B",
+    "chapter": 10,
+    "judge": "j2",
+    "A": "original",
+    "B": "edited"
+  }
+}

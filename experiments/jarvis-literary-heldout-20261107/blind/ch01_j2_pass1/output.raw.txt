@@ -1,0 +1,36 @@
+{
+  "chapter": 1,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.95,
+      "evidence": "LEFT 叙事冷峻克制，删繁就简，没有 RIGHT 频繁追加的画外音式解释，文学质感与阅读沉浸度显著更高。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.88,
+      "evidence": "LEFT 节奏干净利落，危机感随动作细节层层递进，而 RIGHT 插入多处心理垫字与自问自答，稀释了悬疑的紧迫感。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.98,
+      "evidence": "RIGHT 密集添加了‘名义上升了一级，实际是’、‘梅叔话少，规矩大’、‘报上去，等于交出去’等总结性交代，而 LEFT 全凭事件与细节说话。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT 句段长短起伏错落有致，RIGHT 增补的‘问题是’‘林越算了算’等口头过渡语破坏了原本干脆凝练的叙述节律。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.86,
+      "evidence": "LEFT 将张力完全锁死在汗湿指套、硬物触感和阴沉暮光中，RIGHT 尾段大段直白的心理反思将读者强行拉出了现场感。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.98,
+      "evidence": "梅叔警示柜子一幕，LEFT 借黄铜钥匙留白对峙，RIGHT 却直白写出‘老人不说破，但意思是：我知道你在想什么，适可而止’，彻底杀死了言外之意。"
+    }
+  },
+  "overall_rationale": "LEFT 展现了成熟小说所具备的冰山美学与叙事克制，通篇依靠纸张修复细节与不动声色的微动作传递政治悬疑感。RIGHT 则处处忍不住替读者总结概括与剖白心理，过多的解释性补丁与破译潜台词的操作严重损伤了文本的张力与文学质感。"
+}

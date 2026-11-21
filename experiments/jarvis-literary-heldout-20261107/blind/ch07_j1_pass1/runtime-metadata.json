@@ -1,0 +1,19 @@
+{
+  "backend": "local-anthropic-proxy",
+  "base_url": "http://127.0.0.1:3425",
+  "requested_model": "codex/gpt-6.1-terra",
+  "response_model": "codex/gpt-6.1-terra",
+  "temperature": 0.2,
+  "max_tokens": 8000,
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 4890,
+    "output_tokens": 579,
+    "cache_read_input_tokens": 3968,
+    "cache_creation_input_tokens": 0
+  },
+  "elapsed_ms": 13762,
+  "attempt": 1,
+  "prompt_sha256": "7a3ade0f435baa832bc173cd492c71268e1cd8f5b0f2bdb2762bdee931ab266d",
+  "created_at": "2026-11-07T07:37:24.039346+00:00"
+}

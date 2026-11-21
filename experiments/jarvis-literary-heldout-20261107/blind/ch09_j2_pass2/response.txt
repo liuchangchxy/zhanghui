@@ -1,0 +1,36 @@
+{
+  "chapter": 9,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.92,
+      "evidence": "LEFT 删除了多余的内心复盘与画外音式点题，叙事节奏紧凑利落，具有更沉着高级的文学质感。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.86,
+      "evidence": "LEFT 结尾利落收在风吹铁皮如指节叩击的悬疑意象上，比 RIGHT 拖泥带水地追加感官回想更能牵引读者的紧张感与追读欲。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.96,
+      "evidence": "RIGHT 插入了“封条、巡防、备案，全架在主入口上头…”与“脑子里翻来翻去是乔宁那句话…”两处大段替读者总结利害与线索的直白解释，而 LEFT 毫无赘语。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.88,
+      "evidence": "RIGHT 两次出现“翻来翻去”造成词汇重复，且结尾在精彩的铁皮比喻后又补上半句感官罗列，破坏了句段收束的劲道与节奏。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.84,
+      "evidence": "LEFT 始终将读者稳稳锚定在暗夜碎石、海风潮气和具体动作细节中，未像 RIGHT 那样被抽离式的线索清单打断现场感。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.92,
+      "evidence": "发现暗道时，LEFT 仅用“林越盯着那道方洞，没说话”便尽显暗流涌动，而 RIGHT 却直白说破“从根上就把那些东西甩开了”，折损了留白魅力。"
+    }
+  },
+  "overall_rationale": "LEFT 在文学控制力上显著胜出，严格遵循了“展现而非告知”的写作准则。相比 RIGHT 频繁替读者梳理线索、点破暗道价值以及在尾声拖泥带水的感官补笔，LEFT 留白从容，行动与意象更具张力，冷峻硬朗的叙事基调贯彻得更为纯粹彻底。"
+}

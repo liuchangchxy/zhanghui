@@ -1,0 +1,36 @@
+{
+  "chapter": 6,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT 叙事洗练冷峻，省去了 RIGHT 多处画蛇添足的说明与得失总结，留白与悬疑张力明显更强。"
+    },
+    "READING_APPEAL": {
+      "winner": "LEFT",
+      "confidence": 0.85,
+      "evidence": "LEFT 紧扣物象与对话推进，节奏干脆；RIGHT 增添的“只是有一件事”等过渡垫句冲淡了对峙的紧张窒息感。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "LEFT",
+      "confidence": 0.95,
+      "evidence": "RIGHT 频繁由叙述者越界定性与总结（如“不是问”“他不再是‘修纸的’了”“他换到的，比交出去的少”），而 LEFT 极为克制，毫无多余说教。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "LEFT",
+      "confidence": 0.85,
+      "evidence": "LEFT 的“工期剩几天”“林越没拦”短促有力，RIGHT 插入的“一圈绕下来”“可纸也在往上收”“他拦不住，也不想拦”显得繁复拖沓。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "LEFT",
+      "confidence": 0.8,
+      "evidence": "两版雨夜环境底色相同，但 LEFT 没有作者旁白打断视线，读者能自始至终沉浸于老库房旧纸与雨声的具体时空里。"
+    },
+    "SUBTEXT": {
+      "winner": "LEFT",
+      "confidence": 0.9,
+      "evidence": "LEFT 结尾径直落笔于“锁的是同一把锁”，不点破利害算计；对峙时也不明言身份转变，潜台词充沛深沉。"
+    }
+  },
+  "overall_rationale": "两版核心剧情与细节描写完全一致，差异全在数处增删。RIGHT 反复添加解释性与总结性句子（如“不是问”“他不再是‘修纸的’了”“他换到的，比交出去的少”），低估了读者的领悟力，破坏了冷硬克制的语境。LEFT 依靠利落的短句与适度的留白，展现出更出色的文学质感与阅读余味。"
+}

@@ -1,0 +1,206 @@
+{
+  "ch01": {
+    "chapter": 1,
+    "key": "ch01",
+    "title": "第一章",
+    "model": "group/mac-deepseek4.1-gpt[1m]",
+    "temperature": 0.4,
+    "max_tokens": 16000,
+    "prompt_sha256": "65cf86830af80e95fd09b10290c36294b097c6e4ccd05235da69ac395dc86cde",
+    "source_sha256": "6e6360082b88eebb617e43771c141e85268dfa572dd6167883ab5aac6bd1667f",
+    "attempts": [
+      {
+        "attempt": 1,
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 3610,
+          "output_tokens": 8049,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 0
+        },
+        "raw_sha256": "7a2b6192f1bcf64149356a0958232d1c37d6f5649b2efd7a9fd03532ed5e5c0e",
+        "elapsed_ms": 48815
+      }
+    ],
+    "status": "ACCEPTED",
+    "created_at": "2026-11-07T07:25:00.451643+00:00",
+    "source_body_chars": 3143,
+    "output_body_chars": 2938,
+    "length_ratio": 0.9348,
+    "output_sha256": "3470c6c966ff8354cee6ae4d3a959f249416a832fece43fa82ed44fd302557a6",
+    "cleanup_notes": {
+      "heading_prepended": false,
+      "dedup_removed_chars": 0
+    }
+  },
+  "ch02": {
+    "chapter": 2,
+    "key": "ch02",
+    "title": "第二章 钥匙",
+    "model": "group/mac-deepseek4.1-gpt[1m]",
+    "temperature": 0.4,
+    "max_tokens": 16000,
+    "prompt_sha256": "3d17a4c73f03704e64ae565bc6c15508a2d9e71bf16f3f9a3a9947039bb99c28",
+    "source_sha256": "7de16783a2d2c008baa4d9285d6f4d62a76d50605d35a5a3a211e3b6836c4c7e",
+    "attempts": [
+      {
+        "attempt": 1,
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 2626,
+          "output_tokens": 5039,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 0
+        },
+        "raw_sha256": "6fbd980fc0e7e8228d020ec057a94d4014b851dfa87b65c3fa332ed4f427b565",
+        "elapsed_ms": 30904
+      }
+    ],
+    "status": "ACCEPTED",
+    "created_at": "2026-11-07T07:25:31.360102+00:00",
+    "source_body_chars": 1742,
+    "output_body_chars": 1656,
+    "length_ratio": 0.9506,
+    "output_sha256": "95def58c1e96dc8541d37003d40beb0d88342bfd7b1b3f34c85bc6c304214227",
+    "cleanup_notes": {
+      "heading_prepended": false,
+      "dedup_removed_chars": 0
+    }
+  },
+  "ch06": {
+    "chapter": 6,
+    "key": "ch06",
+    "title": "第六章 那一夜",
+    "model": "group/mac-deepseek4.1-gpt[1m]",
+    "temperature": 0.4,
+    "max_tokens": 16000,
+    "prompt_sha256": "24e8ee7af5be7d43965b37ca868f6ccdf568f888d4f39fb03d5ea1e7dfc5ddc3",
+    "source_sha256": "9fa8c89917c36cad954af6689434f3970aa08daa27455b3595bb554541945f68",
+    "attempts": [
+      {
+        "attempt": 1,
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 3506,
+          "output_tokens": 9370,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 0
+        },
+        "raw_sha256": "833bb11a3649d4bc2a064edb1acdcd13cf62085c8e5f3333a809ec05b8d99980",
+        "elapsed_ms": 70899
+      }
+    ],
+    "status": "ACCEPTED",
+    "created_at": "2026-11-07T07:26:42.263306+00:00",
+    "source_body_chars": 2920,
+    "output_body_chars": 2835,
+    "length_ratio": 0.9709,
+    "output_sha256": "cd327ef597be3c31e775eb97f6409a5807758bfb7ef0477ff2d3c19e3a34a151",
+    "cleanup_notes": {
+      "heading_prepended": false,
+      "dedup_removed_chars": 0
+    }
+  },
+  "ch07": {
+    "chapter": 7,
+    "key": "ch07",
+    "title": "第7章 材质",
+    "model": "group/mac-deepseek4.1-gpt[1m]",
+    "temperature": 0.4,
+    "max_tokens": 16000,
+    "prompt_sha256": "28d3593769cba40c5d7b8d06af423a152d2d97e32c96a9119ae7c5a3bfa2361b",
+    "source_sha256": "8d1ed475567fe47577e2176b10f3e478313c05b9532e5e05bbbdbd957f0782e2",
+    "attempts": [
+      {
+        "attempt": 1,
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 3072,
+          "output_tokens": 6785,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 0
+        },
+        "raw_sha256": "a465d6cd32e718589178769008d90776e74a7ca177d4787fd535711587fdfbc8",
+        "elapsed_ms": 63783
+      }
+    ],
+    "status": "ACCEPTED",
+    "created_at": "2026-11-07T07:27:46.050289+00:00",
+    "source_body_chars": 2374,
+    "output_body_chars": 2196,
+    "length_ratio": 0.925,
+    "output_sha256": "16c7be0b2115a29e04b654c17351c70994807baa6e72f77b9ec8f55ae22f9261",
+    "cleanup_notes": {
+      "heading_prepended": false,
+      "dedup_removed_chars": 0
+    }
+  },
+  "ch09": {
+    "chapter": 9,
+    "key": "ch09",
+    "title": "第9章 切换盒",
+    "model": "group/mac-deepseek4.1-gpt[1m]",
+    "temperature": 0.4,
+    "max_tokens": 16000,
+    "prompt_sha256": "5302535ef616a0b7cf90ee033e71c94cd6bb287ef430c4b9ba6730bd97624d36",
+    "source_sha256": "250ba6eb999aab30603f8906e29a61b60f8a904f3f640657ca260080852a45e0",
+    "attempts": [
+      {
+        "attempt": 1,
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 3941,
+          "output_tokens": 8968,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 0
+        },
+        "raw_sha256": "75290901732dcac289f44d227993cf27d75dcce22ee3cb753b3cddb00023c06f",
+        "elapsed_ms": 50309
+      }
+    ],
+    "status": "ACCEPTED",
+    "created_at": "2026-11-07T07:28:36.363486+00:00",
+    "source_body_chars": 3475,
+    "output_body_chars": 3272,
+    "length_ratio": 0.9416,
+    "output_sha256": "11cfce4eef8cfd2270021c8afdcf4c453df394291705f8a3fc21fe2b9946060e",
+    "cleanup_notes": {
+      "heading_prepended": false,
+      "dedup_removed_chars": 0
+    }
+  },
+  "ch10": {
+    "chapter": 10,
+    "key": "ch10",
+    "title": "第10章 三通",
+    "model": "group/mac-deepseek4.1-gpt[1m]",
+    "temperature": 0.4,
+    "max_tokens": 16000,
+    "prompt_sha256": "1ce868548bf1fccba97b743a5a33e2787dc6d374f33b38bf3754194980e36b68",
+    "source_sha256": "6a9b2ba529795c60bd8dc0e0e30de5ab1648f39877de9e2231b88fe3685d8fa3",
+    "attempts": [
+      {
+        "attempt": 1,
+        "stop_reason": "end_turn",
+        "usage": {
+          "input_tokens": 4057,
+          "output_tokens": 8849,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 0
+        },
+        "raw_sha256": "d9144b2c6f85b329142cf1473b070c86aba76d62f55a190d93d33bfc2ad66dbb",
+        "elapsed_ms": 73348
+      }
+    ],
+    "status": "ACCEPTED",
+    "created_at": "2026-11-07T07:29:49.715850+00:00",
+    "source_body_chars": 3746,
+    "output_body_chars": 3672,
+    "length_ratio": 0.9802,
+    "output_sha256": "5629ecffd6f5007bfe9b6f86209f78fb59d64bfcaaca14c6eaa222bc57af4062",
+    "cleanup_notes": {
+      "heading_prepended": false,
+      "dedup_removed_chars": 0
+    }
+  }
+}

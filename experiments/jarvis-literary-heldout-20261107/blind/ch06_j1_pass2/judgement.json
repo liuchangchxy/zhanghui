@@ -1,0 +1,36 @@
+{
+  "chapter": 6,
+  "dimensions": {
+    "OVERALL_PREFERENCE": {
+      "winner": "RIGHT",
+      "confidence": 0.84,
+      "evidence": "RIGHT删去“他不再是‘修纸的’了”和“他换到的，比交出去的少”等总结，让人物处境和结尾线索自行发挥作用。"
+    },
+    "READING_APPEAL": {
+      "winner": "RIGHT",
+      "confidence": 0.72,
+      "evidence": "RIGHT从“林越没拦”直接转入监交栏的疑点，省去“只是有一件事”等预告，追查线索的推进更紧。"
+    },
+    "LOW_AUTHOR_EXPLANATION": {
+      "winner": "RIGHT",
+      "confidence": 0.95,
+      "evidence": "LEFT多出“不是问”“他不再是‘修纸的’了”和“他拦不住，也不想拦”等解释，RIGHT更多依靠对话和行动呈现。"
+    },
+    "SENTENCE_NATURALNESS": {
+      "winner": "RIGHT",
+      "confidence": 0.76,
+      "evidence": "RIGHT的“林越没拦。那一页他看过了，记住了”简洁顺畅，LEFT在其间补入“他拦不住，也不想拦”，节奏略显拖沓。"
+    },
+    "SCENE_IMMERSION": {
+      "winner": "RIGHT",
+      "confidence": 0.65,
+      "evidence": "两版都有雨水洇过门槛和梅叔锁柜的具体细节，RIGHT少了对人物身份变化的直接概括，更能让读者停留在屋内的紧张气氛中。"
+    },
+    "SUBTEXT": {
+      "winner": "RIGHT",
+      "confidence": 0.87,
+      "evidence": "RIGHT让“你在查白塔”及林越的重复回答自行显露双方心照不宣的对峙，LEFT另加“不是问”，把话里的意味说得更明。"
+    }
+  },
+  "overall_rationale": "RIGHT保留了雨夜、旧簿和雨衣线索所形成的悬念，同时减少了对人物处境与对话意味的代为说明，读起来更紧，也更信任读者。两版的核心场景和推理基本相同，差别主要体现在这些解释性语句对节奏和潜台词的影响上。"
+}
